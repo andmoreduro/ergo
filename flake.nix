@@ -32,6 +32,7 @@
       in
       {
         devShells.default = pkgs.mkShell {
+          name = "ergo";
           # Tools needed at build time
           nativeBuildInputs = with pkgs;[
             pkg-config
@@ -69,7 +70,15 @@
             export WEBKIT_DISABLE_COMPOSITING_MODE=1
             export WEBKIT_DISABLE_DMABUF_RENDERER=1
 
-            if [[ $- ==  *i* ]]; then
+            if [[ $- == *i* ]]; then
+                # 1. Clear Bash-specific prompt variables so they don't leak into Zed/subshells
+                unset PS1
+                unset PROMPT_COMMAND
+
+                # 2. Tell Zed (and other tools) to use fish as the default shell inside this environment
+                export SHELL=${pkgs.fish}/bin/fish
+
+                # 3. Start fish
                 exec fish
             fi
           '';
