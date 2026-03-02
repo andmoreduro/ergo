@@ -23,5 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-init.md
-user-stories.md
+*.md
+
+!README.md
