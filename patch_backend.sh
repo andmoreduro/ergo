@@ -1,0 +1,1 @@
+sed -i 's/pub fn patch_source/#[tauri::command]\npub fn write_source(state: tauri::State<'"'"'_'", TauriAppState>, path: String, text: String) -> Result<(), String> {\n    state.vfs.write_source(&path, text);\n    Ok(())\n}\n\n#[tauri::command]\npub fn patch_source/' src-tauri/src/compiler.rs

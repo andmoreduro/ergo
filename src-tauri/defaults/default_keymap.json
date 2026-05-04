@@ -1,0 +1,77 @@
+{
+  "keymap_profile": "Default",
+  "keymap_bindings": [
+    {
+      "action_id": "workspace::NewProject",
+      "context": "app",
+      "sequence": [{ "key": "n", "modifiers": ["Control"] }]
+    },
+    {
+      "action_id": "workspace::OpenProject",
+      "context": "app",
+      "sequence": [
+        { "key": "o", "modifiers": ["Control"] },
+        { "key": "o", "modifiers": ["Control"] }
+      ]
+    },
+    {
+      "action_id": "workspace::OpenRecentProject",
+      "context": "app",
+      "sequence": [
+        { "key": "o", "modifiers": ["Control"] },
+        { "key": "r", "modifiers": ["Control"] }
+      ]
+    },
+    {
+      "action_id": "workspace::SaveProject",
+      "context": "workspace && !input",
+      "sequence": [{ "key": "s", "modifiers": ["Control"] }]
+    },
+    {
+      "action_id": "workspace::CloseProject",
+      "context": "workspace",
+      "sequence": [{ "key": "w", "modifiers": ["Control", "Shift"] }]
+    },
+    {
+      "action_id": "view::OpenCommandPalette",
+      "context": "app",
+      "sequence": [{ "key": "p", "modifiers": ["Control", "Shift"] }]
+    },
+    {
+      "action_id": "edit::Undo",
+      "context": "workspace && !input",
+      "sequence": [{ "key": "z", "modifiers": ["Control"] }]
+    },
+    {
+      "action_id": "edit::Redo",
+      "context": "workspace && !input",
+      "sequence": [{ "key": "z", "modifiers": ["Control", "Shift"] }]
+    },
+    {
+      "action_id": "editor::InsertParagraph",
+      "context": "editor && !input",
+      "sequence": [{ "key": "p", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "editor && !input",
+      "sequence": [{ "key": "h", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::InsertTable",
+      "context": "editor && !input",
+      "sequence": [{ "key": "t", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::InsertEquation",
+      "context": "editor && !input",
+      "sequence": [{ "key": "e", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::InsertFigure",
+      "context": "editor && !input",
+      "sequence": [{ "key": "f", "modifiers": ["Control", "Alt"] }]
+    }
+  ],
+  "keymap_overrides": []
+}
