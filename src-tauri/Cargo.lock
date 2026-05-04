@@ -1274,6 +1274,7 @@ dependencies = [
  "ts-rs",
  "typst",
  "typst-assets",
+ "typst-ide",
  "typst-pdf",
  "typst-render",
  "typst-svg",
@@ -5842,6 +5843,22 @@ dependencies = [
  "typst-syntax",
  "typst-timing",
  "typst-utils",
+]
+
+[[package]]
+name = "typst-ide"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9411a123dff40c264101af99e043ef292b4b8bc638aa05b328359b859dabaf2a"
+dependencies = [
+ "comemo",
+ "ecow",
+ "pathdiff",
+ "rustc-hash",
+ "serde",
+ "typst",
+ "typst-eval",
+ "unscanny",
 ]
 
 [[package]]

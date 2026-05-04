@@ -13,6 +13,11 @@ import type {
     DocumentEvent,
     DocumentSessionStatus,
 } from "../types/documentSession";
+import type {
+    PreviewElementPositionsResult,
+    PreviewJumpResult,
+    PreviewSyncStatus,
+} from "../types/previewSync";
 import {
     COMPILE_DROPPED_EVENT,
     COMPILE_FAILED_EVENT,
@@ -79,8 +84,8 @@ export const TauriApi = {
         return invoke("trigger_compile");
     },
 
-    async enqueuePreviewCompile(): Promise<CompilationJob> {
-        return invoke("enqueue_preview_compile");
+    async enqueuePreviewCompile(debounceMs = 0): Promise<CompilationJob> {
+        return invoke("enqueue_preview_compile", { debounceMs });
     },
 
     async enqueueExport(format: ExportFormat): Promise<CompilationJob> {
@@ -105,6 +110,34 @@ export const TauriApi = {
 
     async readPreviewSvg(path: string): Promise<string> {
         return invoke("read_preview_svg", { path });
+    },
+
+    async jumpFromPreviewClick(
+        pageNumber: number,
+        xPt: number,
+        yPt: number,
+        sourceRevision: number,
+    ): Promise<PreviewJumpResult> {
+        return invoke("jump_from_preview_click", {
+            pageNumber,
+            xPt,
+            yPt,
+            sourceRevision,
+        });
+    },
+
+    async getPreviewPositionsForElement(
+        elementId: string,
+        sourceRevision: number,
+    ): Promise<PreviewElementPositionsResult> {
+        return invoke("get_preview_positions_for_element", {
+            elementId,
+            sourceRevision,
+        });
+    },
+
+    async getPreviewSyncStatus(): Promise<PreviewSyncStatus> {
+        return invoke("get_preview_sync_status");
     },
 
     async listenToCompileEvents(

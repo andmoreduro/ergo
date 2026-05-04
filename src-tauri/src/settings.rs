@@ -221,6 +221,8 @@ mod tests {
         let settings = load_global_settings_from_paths(&path, None).unwrap();
 
         assert_eq!(settings.theme_mode.as_deref(), Some("system"));
+        assert_eq!(settings.preview_debounce_enabled, Some(false));
+        assert_eq!(settings.preview_debounce_ms, Some(120));
         assert_eq!(settings.history_limit, Some(100));
     }
 
@@ -237,6 +239,7 @@ mod tests {
   "theme_mode": "dark",
   "locale": "es",
   "recent_projects": ["paper.ergproj"],
+  "preview_debounce_enabled": true,
   "preview_debounce_ms": 200,
   "history_limit": 42,
   "keymap_profile": "ShouldNotLeak"
@@ -249,6 +252,7 @@ mod tests {
         assert_eq!(settings.theme_mode.as_deref(), Some("dark"));
         assert_eq!(settings.locale.as_deref(), Some("es"));
         assert_eq!(settings.recent_projects, vec!["paper.ergproj"]);
+        assert_eq!(settings.preview_debounce_enabled, Some(true));
         assert_eq!(settings.preview_debounce_ms, Some(200));
         assert_eq!(settings.history_limit, Some(42));
         assert_eq!(settings.keymap_profile.as_deref(), Some("Default"));

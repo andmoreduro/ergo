@@ -9,6 +9,7 @@ interface UseCompilerResult {
     isCompiling: boolean;
     error: string | null;
     sourceMap: SourceMapEntry[];
+    previewRevision: SourceRevision | null;
 }
 
 interface TextPatch {
@@ -53,11 +54,15 @@ export const createTextPatch = (previous: string, next: string): TextPatch | nul
     };
 };
 
-export function useCompiler(ast: DocumentAST | null | undefined): UseCompilerResult {
+export function useCompiler(
+    ast: DocumentAST | null | undefined,
+    previewDebounceMs = 0,
+): UseCompilerResult {
     const [svgs, setSvgs] = useState<string[]>([]);
     const [isCompiling, setIsCompiling] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [sourceMap, setSourceMap] = useState<SourceMapEntry[]>([]);
+    const [previewRevision, setPreviewRevision] = useState<SourceRevision | null>(null);
     const desiredAstRef = useRef<DocumentAST | null>(null);
     const desiredTokenRef = useRef(0);
     const syncedTokenRef = useRef(0);
@@ -66,6 +71,9 @@ export function useCompiler(ast: DocumentAST | null | undefined): UseCompilerRes
     const syncRunningRef = useRef(false);
     const isMountedRef = useRef(false);
     const previewLoadTokenRef = useRef(0);
+    const svgsRef = useRef<string[]>([]);
+    const previewDebounceMsRef = useRef(previewDebounceMs);
+    previewDebounceMsRef.current = previewDebounceMs;
 
     const isLatestPreviewResult = (result: CompilationResult): boolean => {
         return (
@@ -81,12 +89,21 @@ export function useCompiler(ast: DocumentAST | null | undefined): UseCompilerRes
         const previewPages = result.preview_pages ?? [];
         let nextSvgs: string[];
         try {
-            nextSvgs =
-                previewPages.length > 0
-                    ? await Promise.all(
-                          previewPages.map((page) => TauriApi.readPreviewSvg(page.path)),
-                      )
-                    : result.svgs ?? [];
+            if (previewPages.length > 0) {
+                const currentSvgs = svgsRef.current;
+                nextSvgs = await Promise.all(
+                    previewPages.map((page) => {
+                        const current = currentSvgs[page.page_number - 1];
+                        if (!page.changed && current) {
+                            return current;
+                        }
+
+                        return TauriApi.readPreviewSvg(page.path);
+                    }),
+                );
+            } else {
+                nextSvgs = result.svgs ?? [];
+            }
         } catch (error: unknown) {
             if (result.svgs?.length) {
                 nextSvgs = result.svgs;
@@ -105,6 +122,8 @@ export function useCompiler(ast: DocumentAST | null | undefined): UseCompilerRes
             isLatestPreviewResult(result)
         ) {
             setSvgs(nextSvgs);
+            svgsRef.current = nextSvgs;
+            setPreviewRevision(result.source_revision);
             setError(null);
             setIsCompiling(false);
         }
@@ -143,7 +162,7 @@ export function useCompiler(ast: DocumentAST | null | undefined): UseCompilerRes
     };
 
     const enqueuePreview = async () => {
-        const job = await TauriApi.enqueuePreviewCompile();
+        const job = await TauriApi.enqueuePreviewCompile(previewDebounceMsRef.current);
         latestRevisionRef.current = job.source_revision;
         await applyImmediateSnapshot(job.source_revision);
     };
@@ -244,7 +263,9 @@ export function useCompiler(ast: DocumentAST | null | undefined): UseCompilerRes
         if (!ast) {
             desiredAstRef.current = null;
             setSvgs([]);
+            svgsRef.current = [];
             setSourceMap([]);
+            setPreviewRevision(null);
             return;
         }
 
@@ -255,5 +276,5 @@ export function useCompiler(ast: DocumentAST | null | undefined): UseCompilerRes
         void listenersReadyRef.current.then(syncLatestSnapshot);
     }, [ast]);
 
-    return { svgs, isCompiling, error, sourceMap };
+    return { svgs, isCompiling, error, sourceMap, previewRevision };
 }

@@ -12,7 +12,8 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     recent_projects: [],
     keymap_profile: "Default",
     keymap_overrides: [],
-    preview_debounce_ms: 300,
+    preview_debounce_enabled: false,
+    preview_debounce_ms: 120,
     history_limit: 100,
 };
 

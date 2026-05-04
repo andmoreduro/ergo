@@ -10,6 +10,35 @@ import { SettingsDialog } from "./SettingsDialog";
 
 import "@testing-library/jest-dom";
 
+const renderGlobalDialog = (
+    onGlobalSettingsChange = vi.fn(),
+    globalSettings = DEFAULT_GLOBAL_SETTINGS,
+) => {
+    const keymapSettings: KeymapSettings = {
+        keymap_profile: "Default",
+        keymap_bindings: [],
+        keymap_overrides: [],
+    };
+    const { keymap, conflicts } = createKeymapProfile(keymapSettings);
+
+    render(
+        <SettingsDialog
+            conflicts={conflicts}
+            globalSettings={globalSettings}
+            keymap={keymap}
+            keymapSettings={keymapSettings}
+            panel="global"
+            projectSettings={DEFAULT_PROJECT_SETTINGS}
+            onClose={vi.fn()}
+            onGlobalSettingsChange={onGlobalSettingsChange}
+            onKeymapSettingsChange={vi.fn()}
+            onProjectSettingsChange={vi.fn()}
+        />,
+    );
+
+    return onGlobalSettingsChange;
+};
+
 const renderKeymapDialog = (
     keymapSettings: KeymapSettings,
     onKeymapSettingsChange = vi.fn(),
@@ -33,6 +62,26 @@ const renderKeymapDialog = (
 
     return onKeymapSettingsChange;
 };
+
+describe("SettingsDialog global panel", () => {
+    it("keeps preview debounce disabled by default and enables the debounce time field from the UI", () => {
+        const handleGlobalSettingsChange = renderGlobalDialog();
+
+        expect(
+            screen.getByLabelText("Debounce preview compilation"),
+        ).not.toBeChecked();
+        expect(screen.getByLabelText("Preview debounce time (ms)")).toBeDisabled();
+
+        fireEvent.click(screen.getByLabelText("Debounce preview compilation"));
+
+        expect(handleGlobalSettingsChange).toHaveBeenCalledWith(
+            expect.objectContaining({
+                preview_debounce_enabled: true,
+                preview_debounce_ms: 120,
+            }),
+        );
+    });
+});
 
 describe("SettingsDialog keymap panel", () => {
     it("edits keymap shortcuts through user overrides", () => {

@@ -1,6 +1,8 @@
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::VecDeque;
+use std::hash::{Hash, Hasher};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
@@ -13,6 +15,7 @@ use typst::layout::PagedDocument;
 use typst::syntax::{FileId, VirtualPath};
 
 use crate::document_session::DocumentSession;
+use crate::preview_sync::PreviewSyncState;
 use crate::vfs::VirtualFileSystem;
 use crate::world::ErgoWorld;
 
@@ -22,12 +25,13 @@ pub const COMPILE_SUCCEEDED_EVENT: &str = "ergo-compile-succeeded";
 pub const COMPILE_FAILED_EVENT: &str = "ergo-compile-failed";
 pub const COMPILE_DROPPED_EVENT: &str = "ergo-compile-dropped";
 
-const DEFAULT_DEBOUNCE_MS: u64 = 120;
+const DEFAULT_DEBOUNCE_MS: u64 = 0;
 
 pub struct TauriAppState {
     pub vfs: Arc<VirtualFileSystem>,
     pub compilation_queue: Arc<CompilationQueue>,
     pub document_session: Arc<DocumentSession>,
+    pub preview_sync: Arc<PreviewSyncState>,
 }
 
 pub type SourceRevision = u64;
@@ -95,6 +99,9 @@ pub struct CompilationResult {
 pub struct PreviewPageFile {
     pub page_number: usize,
     pub path: String,
+    #[serde(default)]
+    pub changed: bool,
+    pub content_hash: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
@@ -116,12 +123,12 @@ struct CompilationQueueInner {
     preview_has_started: bool,
     latest_source_revision: SourceRevision,
     last_result: Option<CompilationResult>,
+    debounce: Duration,
 }
 
 pub struct CompilationQueue {
     inner: Mutex<CompilationQueueInner>,
     next_job_id: AtomicU64,
-    debounce: Duration,
 }
 
 impl CompilationQueue {
@@ -130,10 +137,13 @@ impl CompilationQueue {
     }
 
     fn with_debounce(debounce: Duration) -> Self {
-        Self {
-            inner: Mutex::new(CompilationQueueInner::default()),
-            next_job_id: AtomicU64::new(1),
+        let inner = CompilationQueueInner {
             debounce,
+            ..CompilationQueueInner::default()
+        };
+        Self {
+            inner: Mutex::new(inner),
+            next_job_id: AtomicU64::new(1),
         }
     }
 
@@ -155,6 +165,10 @@ impl CompilationQueue {
         inner.pending_preview = Some(job.clone());
         inner.last_result = Some(result_for_job(&job, CompilationStatus::Queued));
         job
+    }
+
+    pub fn set_debounce(&self, debounce: Duration) {
+        self.inner.lock().debounce = debounce;
     }
 
     pub fn enqueue_export(&self, format: ExportFormat) -> CompilationJob {
@@ -183,7 +197,13 @@ impl CompilationQueue {
         }
     }
 
-    pub fn ensure_worker(self: &Arc<Self>, app: AppHandle, vfs: Arc<VirtualFileSystem>) {
+    pub fn ensure_worker(
+        self: &Arc<Self>,
+        app: AppHandle,
+        vfs: Arc<VirtualFileSystem>,
+        document_session: Arc<DocumentSession>,
+        preview_sync: Arc<PreviewSyncState>,
+    ) {
         let should_spawn = {
             let mut inner = self.inner.lock();
             if inner.worker_running {
@@ -196,19 +216,25 @@ impl CompilationQueue {
 
         if should_spawn {
             let queue = Arc::clone(self);
-            thread::spawn(move || queue.run_worker(app, vfs));
+            thread::spawn(move || queue.run_worker(app, vfs, document_session, preview_sync));
         }
     }
 
-    fn run_worker(self: Arc<Self>, app: AppHandle, vfs: Arc<VirtualFileSystem>) {
+    fn run_worker(
+        self: Arc<Self>,
+        app: AppHandle,
+        vfs: Arc<VirtualFileSystem>,
+        document_session: Arc<DocumentSession>,
+        preview_sync: Arc<PreviewSyncState>,
+    ) {
         loop {
             if let Some(job) = self.take_debounced_preview_job() {
-                self.run_job(&app, &vfs, job);
+                self.run_job(&app, &vfs, &document_session, &preview_sync, job);
                 continue;
             }
 
             if let Some(job) = self.take_export_job() {
-                self.run_job(&app, &vfs, job);
+                self.run_job(&app, &vfs, &document_session, &preview_sync, job);
                 continue;
             }
 
@@ -232,11 +258,11 @@ impl CompilationQueue {
         let should_wait = {
             let inner = self.inner.lock();
             inner.pending_preview.as_ref()?;
-            inner.preview_has_started
+            inner.preview_has_started.then_some(inner.debounce)
         };
 
-        if should_wait {
-            thread::sleep(self.debounce);
+        if let Some(debounce) = should_wait.filter(|duration| !duration.is_zero()) {
+            thread::sleep(debounce);
         }
 
         let mut inner = self.inner.lock();
@@ -251,7 +277,14 @@ impl CompilationQueue {
         self.inner.lock().pending_exports.pop_front()
     }
 
-    fn run_job(&self, app: &AppHandle, vfs: &Arc<VirtualFileSystem>, job: CompilationJob) {
+    fn run_job(
+        &self,
+        app: &AppHandle,
+        vfs: &Arc<VirtualFileSystem>,
+        document_session: &DocumentSession,
+        preview_sync: &PreviewSyncState,
+        job: CompilationJob,
+    ) {
         self.update_result(result_for_job(&job, CompilationStatus::Started));
         emit_compile_event(
             app,
@@ -260,13 +293,19 @@ impl CompilationQueue {
         );
 
         let result = match &job.kind {
-            CompilationJobKind::PreviewSvg => match compile_svgs(Arc::clone(vfs)) {
-                Ok(svgs) => {
+            CompilationJobKind::PreviewSvg => match compile_document(Arc::clone(vfs)) {
+                Ok(document) => {
+                    let svgs = render_svgs(&document);
                     if self.is_stale_preview(&job) {
                         result_for_job(&job, CompilationStatus::Dropped)
                     } else {
                         let preview_dir = ".ergproj/preview/svg";
                         let preview_pages = write_svg_pages(vfs, preview_dir, &svgs);
+                        preview_sync.store_preview(
+                            job.source_revision,
+                            document,
+                            document_session.status().source_map,
+                        );
                         let mut result = result_for_job(&job, CompilationStatus::Succeeded);
                         result.svgs = Some(svgs);
                         result.preview_pages = Some(preview_pages);
@@ -358,7 +397,11 @@ fn compile_document(vfs: Arc<VirtualFileSystem>) -> Result<PagedDocument, String
 
 fn compile_svgs(vfs: Arc<VirtualFileSystem>) -> Result<Vec<String>, String> {
     let document = compile_document(vfs)?;
-    Ok(document.pages.iter().map(typst_svg::svg).collect())
+    Ok(render_svgs(&document))
+}
+
+fn render_svgs(document: &PagedDocument) -> Vec<String> {
+    document.pages.iter().map(typst_svg::svg).collect()
 }
 
 fn write_svg_pages(
@@ -366,19 +409,41 @@ fn write_svg_pages(
     directory: &str,
     svgs: &[String],
 ) -> Vec<PreviewPageFile> {
+    let mut changed_pages = Vec::with_capacity(svgs.len());
     for (index, svg) in svgs.iter().enumerate() {
-        vfs.write_source(
-            &format!("{}/page-{}.svg", directory, index + 1),
-            svg.clone(),
-        );
+        let path = format!("{}/page-{}.svg", directory, index + 1);
+        let existing = vfs.read_source(&path).ok();
+        let changed = existing.as_deref() != Some(svg.as_str());
+        if changed {
+            vfs.write_source(&path, svg.clone());
+        }
+        changed_pages.push(changed);
+    }
+
+    let mut stale_page_number = svgs.len() + 1;
+    loop {
+        let stale_path = format!("{}/page-{}.svg", directory, stale_page_number);
+        if !vfs.has_file(&stale_path) {
+            break;
+        }
+        vfs.remove_path(&stale_path);
+        stale_page_number += 1;
     }
 
     (0..svgs.len())
         .map(|index| PreviewPageFile {
+            changed: changed_pages[index],
+            content_hash: hash_svg(&svgs[index]),
             page_number: index + 1,
             path: format!("{}/page-{}.svg", directory, index + 1),
         })
         .collect()
+}
+
+fn hash_svg(svg: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    svg.hash(&mut hasher);
+    hasher.finish()
 }
 
 fn run_export_job(
@@ -471,7 +536,11 @@ pub fn trigger_compile(state: State<'_, TauriAppState>) -> Result<Vec<String>, S
 pub fn enqueue_preview_compile(
     app: AppHandle,
     state: State<'_, TauriAppState>,
+    debounce_ms: Option<usize>,
 ) -> Result<CompilationJob, String> {
+    state
+        .compilation_queue
+        .set_debounce(Duration::from_millis(debounce_ms.unwrap_or(0) as u64));
     let source_revision = state
         .document_session
         .status()
@@ -483,9 +552,12 @@ pub fn enqueue_preview_compile(
         COMPILE_QUEUED_EVENT,
         result_for_job(&job, CompilationStatus::Queued),
     );
-    state
-        .compilation_queue
-        .ensure_worker(app, state.vfs.clone());
+    state.compilation_queue.ensure_worker(
+        app,
+        state.vfs.clone(),
+        state.document_session.clone(),
+        state.preview_sync.clone(),
+    );
     Ok(job)
 }
 
@@ -501,9 +573,12 @@ pub fn enqueue_export(
         COMPILE_QUEUED_EVENT,
         result_for_job(&job, CompilationStatus::Queued),
     );
-    state
-        .compilation_queue
-        .ensure_worker(app, state.vfs.clone());
+    state.compilation_queue.ensure_worker(
+        app,
+        state.vfs.clone(),
+        state.document_session.clone(),
+        state.preview_sync.clone(),
+    );
     Ok(job)
 }
 
@@ -620,10 +695,14 @@ mod tests {
             pages,
             vec![
                 PreviewPageFile {
+                    changed: true,
+                    content_hash: hash_svg("<svg>uno</svg>"),
                     page_number: 1,
                     path: ".ergproj/preview/svg/page-1.svg".to_string(),
                 },
                 PreviewPageFile {
+                    changed: true,
+                    content_hash: hash_svg("<svg>dos</svg>"),
                     page_number: 2,
                     path: ".ergproj/preview/svg/page-2.svg".to_string(),
                 },
@@ -637,6 +716,27 @@ mod tests {
             vfs.read_source(".ergproj/preview/svg/page-2.svg").unwrap(),
             "<svg>dos</svg>"
         );
+    }
+
+    #[test]
+    fn marks_only_changed_preview_svg_pages() {
+        let vfs = VirtualFileSystem::new();
+
+        write_svg_pages(
+            &vfs,
+            ".ergproj/preview/svg",
+            &["<svg>uno</svg>".to_string(), "<svg>dos</svg>".to_string()],
+        );
+        let pages = write_svg_pages(
+            &vfs,
+            ".ergproj/preview/svg",
+            &["<svg>uno</svg>".to_string(), "<svg>tres</svg>".to_string()],
+        );
+
+        assert_eq!(pages[0].changed, false);
+        assert_eq!(pages[1].changed, true);
+        assert_eq!(pages[0].content_hash, hash_svg("<svg>uno</svg>"));
+        assert_eq!(pages[1].content_hash, hash_svg("<svg>tres</svg>"));
     }
 
     fn test_ast() -> DocumentAST {

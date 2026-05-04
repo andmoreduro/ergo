@@ -5,10 +5,12 @@ pub fn run() {
     let document_session = std::sync::Arc::new(document_session::DocumentSession::new(
         std::sync::Arc::clone(&vfs),
     ));
+    let preview_sync = std::sync::Arc::new(preview_sync::PreviewSyncState::default());
     let state = compiler::TauriAppState {
         vfs,
         compilation_queue,
         document_session,
+        preview_sync,
     };
 
     tauri::Builder::default()
@@ -31,6 +33,9 @@ pub fn run() {
             document_session::sync_document_event,
             document_session::get_document_session_status,
             document_session::read_preview_svg,
+            preview_sync::jump_from_preview_click,
+            preview_sync::get_preview_positions_for_element,
+            preview_sync::get_preview_sync_status,
             settings::load_global_settings,
             settings::save_global_settings,
             settings::load_keymap_settings,
@@ -46,6 +51,7 @@ pub mod archive;
 pub mod ast;
 pub mod compiler;
 pub mod document_session;
+pub mod preview_sync;
 pub mod settings;
 pub mod vfs;
 pub mod world;

@@ -30,6 +30,7 @@ uuid = { version = "1.23.1", features = ["v4"] }
 chrono = "0.4.44"
 parking_lot = "0.12.5"
 typst-svg = "0.14.2"
+typst-ide = "0.14.2"
 zip = "8.6.0"
 typst-pdf = "0.14.2"
 typst-render = "0.14.2"

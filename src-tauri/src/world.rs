@@ -5,6 +5,7 @@ use typst::syntax::{FileId, Source};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World};
+use typst_ide::IdeWorld;
 
 use crate::vfs::VirtualFileSystem;
 
@@ -79,5 +80,11 @@ impl World for ErgoWorld {
 
     fn font(&self, index: usize) -> Option<Font> {
         self.fonts.get(index).cloned()
+    }
+}
+
+impl IdeWorld for ErgoWorld {
+    fn upcast(&self) -> &dyn World {
+        self
     }
 }

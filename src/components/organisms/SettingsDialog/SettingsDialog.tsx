@@ -7,6 +7,7 @@ import type { KeyBinding, KeymapProfile } from "../../../commands/types";
 import { formatKeySequence } from "../../../settings/keymap";
 import { m } from "../../../paraglide/messages.js";
 import { Button } from "../../atoms/Button/Button";
+import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import styles from "./SettingsDialog.module.css";
 
 export type SettingsPanel = "global" | "project" | "keymap";
@@ -179,11 +180,30 @@ export const SettingsDialog = ({
                                 />
                             </label>
                             <label className={styles.field}>
-                                <span>{m.settings_preview_debounce()}</span>
+                                <Checkbox
+                                    checked={
+                                        globalSettings.preview_debounce_enabled ??
+                                        false
+                                    }
+                                    label={m.settings_preview_debounce_enabled()}
+                                    onChange={(event) =>
+                                        onGlobalSettingsChange({
+                                            ...globalSettings,
+                                            preview_debounce_enabled:
+                                                event.target.checked,
+                                        })
+                                    }
+                                />
+                            </label>
+                            <label className={styles.field}>
+                                <span>{m.settings_preview_debounce_ms()}</span>
                                 <input
                                     min="0"
                                     type="number"
-                                    value={globalSettings.preview_debounce_ms ?? 300}
+                                    disabled={
+                                        !(globalSettings.preview_debounce_enabled ?? false)
+                                    }
+                                    value={globalSettings.preview_debounce_ms ?? 120}
                                     onChange={(event) =>
                                         onGlobalSettingsChange({
                                             ...globalSettings,

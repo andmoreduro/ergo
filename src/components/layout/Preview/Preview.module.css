@@ -22,8 +22,25 @@
 }
 
 .page {
+    position: relative;
     background-color: white;
     box-shadow: var(--shadow-md);
+}
+
+.page[data-active-preview-page="true"] {
+    box-shadow:
+        0 0 0 2px var(--color-primary),
+        var(--shadow-md);
+}
+
+.syncMarker {
+    position: absolute;
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 2px solid var(--color-primary);
+    border-radius: 999px;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
 }
 
 .status {

@@ -80,6 +80,9 @@ const AppShellContent = () => {
     const dispatchAction = useActionDispatcher();
     const themeMode = normalizeThemeMode(globalSettings.theme_mode);
     const recentProjects = globalSettings.recent_projects;
+    const previewDebounceMs = globalSettings.preview_debounce_enabled
+        ? Math.max(0, globalSettings.preview_debounce_ms ?? 0)
+        : 0;
     const { keymap } = useMemo(
         () => createKeymapProfile(keymapSettings),
         [keymapSettings],
@@ -689,7 +692,7 @@ const AppShellContent = () => {
                 />
                 {hasActiveProject ? (
                     <ActionContextProvider id="workspace" contexts={["workspace"]}>
-                        <Workspace />
+                        <Workspace previewDebounceMs={previewDebounceMs} />
                     </ActionContextProvider>
                 ) : (
                     <ActionContextProvider id="welcome" contexts={["welcome"]}>

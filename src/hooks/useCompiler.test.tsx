@@ -179,7 +179,14 @@ describe("useCompiler source syncing", () => {
                 export_path: ".ergproj/preview/svg",
                 job_id: 1,
                 kind: { type: "previewSvg" },
-                preview_pages: [{ page_number: 1, path: ".ergproj/preview/svg/page-1.svg" }],
+                preview_pages: [
+                    {
+                        changed: true,
+                        content_hash: 1n,
+                        page_number: 1,
+                        path: ".ergproj/preview/svg/page-1.svg",
+                    },
+                ],
                 source_revision: 1,
                 status: "succeeded",
                 svgs: null,
@@ -194,6 +201,107 @@ describe("useCompiler source syncing", () => {
                 ".ergproj/preview/svg/page-1.svg",
             );
         });
+
+        unmount();
+    });
+
+    it("reuses unchanged preview SVG pages after incremental preview updates", async () => {
+        const ast = createDocumentWithTitle("Vista previa");
+        const updatedAst = createDocumentWithTitle("Vista previa actualizada");
+        let queuedRevision = 0;
+
+        tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
+        tauriApiMock.syncDocumentSnapshot.mockResolvedValue({
+            dirtyElementIds: [],
+            dirtySectionIds: [],
+            fragmentCount: 0,
+            layout: {
+                documentStatePath: ".ergproj/document_state.json",
+                mainPath: "main.typ",
+                projectSettingsPath: ".ergproj/project_settings.json",
+                referencesPath: "references.bib",
+                sectionPaths: [],
+                sourceMapPath: ".ergproj/source_map.json",
+                templatePath: ".ergproj/template.json",
+            },
+            sourceMap: [],
+            sourceRevision: 1,
+        });
+        tauriApiMock.enqueuePreviewCompile.mockImplementation(async () => {
+            queuedRevision += 1;
+            return {
+                job_id: queuedRevision,
+                kind: { type: "previewSvg" },
+                priority: "preview",
+                source_revision: queuedRevision,
+            };
+        });
+        tauriApiMock.getCompileStatus.mockImplementation(async () => ({
+            active_job_id: null,
+            latest_source_revision: queuedRevision,
+            queued_export_count: 0,
+            queued_preview_job_id: null,
+            last_result: {
+                diagnostics: [],
+                export_path: ".ergproj/preview/svg",
+                job_id: queuedRevision,
+                kind: { type: "previewSvg" },
+                preview_pages:
+                    queuedRevision === 1
+                        ? [
+                              {
+                                  changed: true,
+                                  content_hash: 1n,
+                                  page_number: 1,
+                                  path: ".ergproj/preview/svg/page-1.svg",
+                              },
+                              {
+                                  changed: true,
+                                  content_hash: 2n,
+                                  page_number: 2,
+                                  path: ".ergproj/preview/svg/page-2.svg",
+                              },
+                          ]
+                        : [
+                              {
+                                  changed: false,
+                                  content_hash: 1n,
+                                  page_number: 1,
+                                  path: ".ergproj/preview/svg/page-1.svg",
+                              },
+                              {
+                                  changed: true,
+                                  content_hash: 3n,
+                                  page_number: 2,
+                                  path: ".ergproj/preview/svg/page-2.svg",
+                              },
+                          ],
+                source_revision: queuedRevision,
+                status: "succeeded",
+                svgs: null,
+            },
+        }));
+        tauriApiMock.readPreviewSvg
+            .mockResolvedValueOnce("<svg>one</svg>")
+            .mockResolvedValueOnce("<svg>two</svg>")
+            .mockResolvedValueOnce("<svg>three</svg>");
+
+        const { rerender, unmount } = render(<CompilerHarness ast={ast} />);
+
+        await waitFor(() => {
+            expect(tauriApiMock.readPreviewSvg).toHaveBeenCalledTimes(2);
+        });
+
+        rerender(<CompilerHarness ast={updatedAst} />);
+
+        await waitFor(() => {
+            expect(tauriApiMock.readPreviewSvg).toHaveBeenCalledTimes(3);
+        });
+        expect(
+            tauriApiMock.readPreviewSvg.mock.calls.filter(
+                ([path]) => path === ".ergproj/preview/svg/page-1.svg",
+            ),
+        ).toHaveLength(1);
 
         unmount();
     });

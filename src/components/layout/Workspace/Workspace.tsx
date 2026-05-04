@@ -3,12 +3,16 @@ import { Editor } from "../Editor/Editor";
 import { Preview } from "../Preview/Preview";
 import styles from "./Workspace.module.css";
 
-export const Workspace = () => {
+export interface WorkspaceProps {
+    previewDebounceMs?: number;
+}
+
+export const Workspace = ({ previewDebounceMs = 0 }: WorkspaceProps) => {
     return (
         <div className={styles.workspace}>
             <Sidebar />
             <Editor />
-            <Preview />
+            <Preview previewDebounceMs={previewDebounceMs} />
         </div>
     );
 };

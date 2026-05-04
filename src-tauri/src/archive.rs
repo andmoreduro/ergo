@@ -108,6 +108,7 @@ mod tests {
     };
     use crate::compiler::CompilationQueue;
     use crate::document_session::DocumentSession;
+    use crate::preview_sync::PreviewSyncState;
     use crate::vfs::VirtualFileSystem;
     use std::collections::HashSet;
     use std::fs;
@@ -123,6 +124,7 @@ mod tests {
             vfs,
             compilation_queue,
             document_session,
+            preview_sync: Arc::new(PreviewSyncState::default()),
         }
     }
 
