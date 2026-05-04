@@ -3,6 +3,7 @@ import { TauriApi } from "../../../api/tauri";
 import { useDocument } from "../../../state/DocumentContext";
 import { useCompiler } from "../../../hooks/useCompiler";
 import type { PreviewElementPosition } from "../../../types/previewSync";
+import { focusEditorElement } from "../../../utils/editorFocus";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Preview.module.css";
 
@@ -88,6 +89,7 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
             .then((result) => {
                 if (result.status === "element") {
                     setActiveElementId(result.elementId);
+                    focusEditorElement(result.elementId);
                 }
             })
             .catch(() => undefined);

@@ -40,6 +40,10 @@ const renderPreview = (children: ReactNode = null) =>
     render(
         <DocumentProvider>
             {children}
+            <div data-element-id="heading-1">
+                <button type="button">Delete</button>
+                <input aria-label="Heading editor" />
+            </div>
             <Preview />
             <ActiveElementProbe />
         </DocumentProvider>,
@@ -98,6 +102,7 @@ describe("Preview sync", () => {
                 "heading-1",
             );
         });
+        expect(screen.getByLabelText("Heading editor")).toHaveFocus();
     });
 
     it("requests preview positions for the focused element without changing layout", async () => {

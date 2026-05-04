@@ -1,6 +1,5 @@
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tauri::State;
 use ts_rs::TS;
 use typst::layout::{Abs, PagedDocument, Point, Position};
@@ -9,8 +8,7 @@ use typst_ide::{jump_from_click, jump_from_cursor, Jump};
 
 use crate::compiler::{SourceRevision, TauriAppState};
 use crate::document_session::SourceMapEntry;
-use crate::vfs::VirtualFileSystem;
-use crate::world::ErgoWorld;
+use crate::world::{SnapshotWorld, WorldSourceSnapshot};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
 #[ts(export, export_to = "../../src/bindings/")]
@@ -93,6 +91,7 @@ struct RetainedPreviewDocument {
     source_revision: SourceRevision,
     document: PagedDocument,
     source_map: Vec<SourceMapEntry>,
+    source_snapshot: WorldSourceSnapshot,
     pages: Vec<PreviewPageMetrics>,
 }
 
@@ -107,6 +106,7 @@ impl PreviewSyncState {
         source_revision: SourceRevision,
         document: PagedDocument,
         source_map: Vec<SourceMapEntry>,
+        source_snapshot: WorldSourceSnapshot,
     ) {
         let pages = document
             .pages
@@ -126,6 +126,7 @@ impl PreviewSyncState {
             source_revision,
             document,
             source_map,
+            source_snapshot,
             pages,
         });
     }
@@ -146,7 +147,6 @@ impl PreviewSyncState {
 
     pub fn jump_from_click(
         &self,
-        vfs: Arc<VirtualFileSystem>,
         page_number: usize,
         x_pt: f64,
         y_pt: f64,
@@ -165,7 +165,7 @@ impl PreviewSyncState {
         };
 
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
-        let world = ErgoWorld::new(vfs, main_id);
+        let world = SnapshotWorld::new(preview.source_snapshot.clone(), main_id);
         let point = Point::new(Abs::pt(x_pt), Abs::pt(y_pt));
 
         match jump_from_click(&world, &preview.document, &page.frame, point) {
@@ -202,7 +202,6 @@ impl PreviewSyncState {
 
     pub fn positions_for_element(
         &self,
-        vfs: &VirtualFileSystem,
         element_id: &str,
         source_revision: SourceRevision,
     ) -> PreviewElementPositionsResult {
@@ -245,7 +244,7 @@ impl PreviewSyncState {
             };
         };
 
-        let source = match vfs.read_typst_source(&entry.file_path) {
+        let source = match preview.source_snapshot.source_for_path(&entry.file_path) {
             Ok(source) => source,
             Err(message) => {
                 return PreviewElementPositionsResult::Unavailable {
@@ -332,7 +331,7 @@ fn source_entry_for_offset<'a>(
     source_map
         .iter()
         .filter(|entry| {
-            entry.file_path == file_path && offset >= entry.byte_start && offset <= entry.byte_end
+            entry.file_path == file_path && offset >= entry.byte_start && offset < entry.byte_end
         })
         .min_by_key(|entry| entry.byte_end.saturating_sub(entry.byte_start))
 }
@@ -387,16 +386,7 @@ pub fn jump_from_preview_click(
     y_pt: f64,
     source_revision: SourceRevision,
 ) -> Result<PreviewJumpResult, String> {
-    let session_revision = state.document_session.status().source_revision;
-    if session_revision != source_revision {
-        return Ok(PreviewJumpResult::Unavailable {
-            source_revision: Some(session_revision),
-            reason: "The document has edits that are not in the displayed preview".to_string(),
-        });
-    }
-
     Ok(state.preview_sync.jump_from_click(
-        Arc::clone(&state.vfs),
         page_number,
         x_pt,
         y_pt,
@@ -410,17 +400,9 @@ pub fn get_preview_positions_for_element(
     element_id: String,
     source_revision: SourceRevision,
 ) -> Result<PreviewElementPositionsResult, String> {
-    let session_revision = state.document_session.status().source_revision;
-    if session_revision != source_revision {
-        return Ok(PreviewElementPositionsResult::Unavailable {
-            source_revision: Some(session_revision),
-            reason: "The document has edits that are not in the displayed preview".to_string(),
-        });
-    }
-
     Ok(state
         .preview_sync
-        .positions_for_element(&state.vfs, &element_id, source_revision))
+        .positions_for_element(&element_id, source_revision))
 }
 
 #[tauri::command]
@@ -439,6 +421,9 @@ mod tests {
         RichText,
     };
     use crate::document_session::DocumentSession;
+    use crate::vfs::VirtualFileSystem;
+    use crate::world::ErgoWorld;
+    use std::sync::Arc;
     use typst_ide::IdeWorld;
 
     fn test_ast() -> DocumentAST {
@@ -500,10 +485,11 @@ mod tests {
         source_map: Vec<SourceMapEntry>,
     ) -> PreviewSyncState {
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
-        let world = ErgoWorld::new(vfs, main_id);
+        let source_snapshot = WorldSourceSnapshot::from_vfs(&vfs);
+        let world = SnapshotWorld::new(source_snapshot.clone(), main_id);
         let document = typst::compile::<PagedDocument>(&world).output.unwrap();
         let state = PreviewSyncState::default();
-        state.store_preview(source_revision, document, source_map);
+        state.store_preview(source_revision, document, source_map, source_snapshot);
         state
     }
 
@@ -520,8 +506,8 @@ mod tests {
         let status = session.sync_snapshot(test_ast()).unwrap();
         let sync = compile_preview(Arc::clone(&vfs), status.source_revision, status.source_map);
 
-        let heading = sync.positions_for_element(&vfs, "heading-ñ", status.source_revision);
-        let paragraph = sync.positions_for_element(&vfs, "paragraph-emoji", status.source_revision);
+        let heading = sync.positions_for_element("heading-ñ", status.source_revision);
+        let paragraph = sync.positions_for_element("paragraph-emoji", status.source_revision);
 
         assert!(matches!(
             heading,
@@ -544,14 +530,12 @@ mod tests {
             status.source_map.clone(),
         );
 
-        let positions = match sync.positions_for_element(&vfs, "heading-ñ", status.source_revision)
-        {
+        let positions = match sync.positions_for_element("heading-ñ", status.source_revision) {
             PreviewElementPositionsResult::Matched { positions, .. } => positions,
             result => panic!("expected heading preview position, got {result:?}"),
         };
         let first = positions.first().unwrap();
         let result = sync.jump_from_click(
-            Arc::clone(&vfs),
             first.page_number,
             first.x_pt + 1.0,
             first.y_pt - 1.0,
@@ -567,13 +551,87 @@ mod tests {
     }
 
     #[test]
+    fn maps_preview_click_to_paragraph_element() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let status = session.sync_snapshot(test_ast()).unwrap();
+        let sync = compile_preview(
+            Arc::clone(&vfs),
+            status.source_revision,
+            status.source_map.clone(),
+        );
+
+        let positions =
+            match sync.positions_for_element("paragraph-emoji", status.source_revision) {
+                PreviewElementPositionsResult::Matched { positions, .. } => positions,
+                result => panic!("expected paragraph preview position, got {result:?}"),
+            };
+        let first = positions.first().unwrap();
+        let result = sync.jump_from_click(
+            first.page_number,
+            first.x_pt + 1.0,
+            first.y_pt - 1.0,
+            status.source_revision,
+        );
+
+        match result {
+            PreviewJumpResult::Element { element_id, .. } => {
+                assert_eq!(element_id, "paragraph-emoji");
+            }
+            result => panic!("expected paragraph element jump, got {result:?}"),
+        }
+    }
+
+    #[test]
+    fn preview_click_uses_retained_sources_after_document_edits() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let mut ast = test_ast();
+        let status = session.sync_snapshot(ast.clone()).unwrap();
+        let sync = compile_preview(
+            Arc::clone(&vfs),
+            status.source_revision,
+            status.source_map.clone(),
+        );
+
+        if let DocumentSection::Content(content) = &mut ast.sections[1] {
+            if let DocumentElement::Paragraph(paragraph) = &mut content.elements[1] {
+                paragraph.content[0].text = "Texto cambiado después del render.".to_string();
+            }
+        }
+
+        let edited_status = session.sync_snapshot(ast).unwrap();
+        assert_ne!(edited_status.source_revision, status.source_revision);
+
+        let positions = match sync.positions_for_element("paragraph-emoji", status.source_revision)
+        {
+            PreviewElementPositionsResult::Matched { positions, .. } => positions,
+            result => panic!("expected retained paragraph preview position, got {result:?}"),
+        };
+        let first = positions.first().unwrap();
+        let result = sync.jump_from_click(
+            first.page_number,
+            first.x_pt + 1.0,
+            first.y_pt - 1.0,
+            status.source_revision,
+        );
+
+        match result {
+            PreviewJumpResult::Element { element_id, .. } => {
+                assert_eq!(element_id, "paragraph-emoji");
+            }
+            result => panic!("expected retained paragraph element jump, got {result:?}"),
+        }
+    }
+
+    #[test]
     fn stale_revision_is_unavailable() {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
         let status = session.sync_snapshot(test_ast()).unwrap();
         let sync = compile_preview(Arc::clone(&vfs), status.source_revision, status.source_map);
 
-        let result = sync.positions_for_element(&vfs, "heading-ñ", status.source_revision + 1);
+        let result = sync.positions_for_element("heading-ñ", status.source_revision + 1);
 
         assert!(matches!(
             result,

@@ -43,7 +43,6 @@ export interface PreviewPageFile {
     page_number: number;
     path: string;
     changed: boolean;
-    content_hash: bigint;
 }
 
 export interface CompilationQueueSnapshot {
