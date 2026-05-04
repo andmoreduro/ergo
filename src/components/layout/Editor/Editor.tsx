@@ -1,5 +1,4 @@
 import { useDocument } from "../../../state/DocumentContext";
-import { useCommandDispatcher } from "../../../commands/CommandDispatcherContext";
 import {
     ActionContextProvider,
     useActionDispatcher,
@@ -14,7 +13,6 @@ import styles from "./Editor.module.css";
 
 export const Editor = () => {
     const { state, dispatch } = useDocument();
-    const dispatchCommand = useCommandDispatcher();
     const dispatchAction = useActionDispatcher();
 
     return (
@@ -189,7 +187,12 @@ export const Editor = () => {
                                     type="button"
                                     variant="secondary"
                                     size="small"
-                                    onClick={() => dispatchCommand("editor::InsertHeading")}
+                                    onClick={() =>
+                                        dispatchAction({
+                                            id: "editor::InsertHeading",
+                                            payload: null,
+                                        })
+                                    }
                                 >
                                     {m.editor_add_heading()}
                                 </Button>
@@ -198,7 +201,10 @@ export const Editor = () => {
                                     variant="secondary"
                                     size="small"
                                     onClick={() =>
-                                        dispatchCommand("editor::InsertParagraph")
+                                        dispatchAction({
+                                            id: "editor::InsertParagraph",
+                                            payload: null,
+                                        })
                                     }
                                 >
                                     {m.editor_add_paragraph()}
@@ -207,7 +213,12 @@ export const Editor = () => {
                                     type="button"
                                     variant="secondary"
                                     size="small"
-                                    onClick={() => dispatchCommand("editor::InsertTable")}
+                                    onClick={() =>
+                                        dispatchAction({
+                                            id: "editor::InsertTable",
+                                            payload: null,
+                                        })
+                                    }
                                 >
                                     {m.editor_add_table()}
                                 </Button>
@@ -215,7 +226,12 @@ export const Editor = () => {
                                     type="button"
                                     variant="secondary"
                                     size="small"
-                                    onClick={() => dispatchCommand("editor::InsertEquation")}
+                                    onClick={() =>
+                                        dispatchAction({
+                                            id: "editor::InsertEquation",
+                                            payload: null,
+                                        })
+                                    }
                                 >
                                     {m.editor_add_equation()}
                                 </Button>
@@ -223,7 +239,12 @@ export const Editor = () => {
                                     type="button"
                                     variant="secondary"
                                     size="small"
-                                    onClick={() => dispatchCommand("editor::InsertFigure")}
+                                    onClick={() =>
+                                        dispatchAction({
+                                            id: "editor::InsertFigure",
+                                            payload: null,
+                                        })
+                                    }
                                 >
                                     {m.editor_add_figure()}
                                 </Button>

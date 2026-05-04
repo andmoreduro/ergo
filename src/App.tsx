@@ -17,7 +17,6 @@ import { createDefaultDocumentAST, createId } from "./state/ast/defaults";
 import { getLocale, locales, setLocale } from "./paraglide/runtime.js";
 import type { Locale } from "./paraglide/runtime.js";
 import { m } from "./paraglide/messages.js";
-import { CommandDispatcherProvider } from "./commands/CommandDispatcherContext";
 import { createCommandRegistry } from "./commands/registry";
 import type { Command, CommandContext, CommandId } from "./commands/types";
 import {
@@ -669,17 +668,16 @@ const AppShellContent = () => {
     }, [commandContext, commandRegistry]);
 
     return (
-        <CommandDispatcherProvider dispatchCommand={runCommand}>
-            <ActionContextProvider
-                id="app"
-                contexts={["app"]}
-                handlers={appActionHandlers}
+        <ActionContextProvider
+            id="app"
+            contexts={["app"]}
+            handlers={appActionHandlers}
+        >
+            <div
+                className={styles.app}
+                key={locale}
+                data-theme={themeMode === "system" ? undefined : themeMode}
             >
-                <div
-                    className={styles.app}
-                    key={locale}
-                    data-theme={themeMode === "system" ? undefined : themeMode}
-                >
                 <Menubar
                     activeLocale={locale}
                     themeMode={themeMode}
@@ -789,9 +787,8 @@ const AppShellContent = () => {
                         onCreate={createNewProject}
                     />
                 )}
-                </div>
-            </ActionContextProvider>
-        </CommandDispatcherProvider>
+            </div>
+        </ActionContextProvider>
     );
 };
 

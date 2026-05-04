@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { Workspace } from "./Workspace";
 import { DocumentProvider } from "../../../state/DocumentContext";
-import { CommandDispatcherProvider } from "../../../commands/CommandDispatcherContext";
 
 import "@testing-library/jest-dom";
 
@@ -9,9 +8,7 @@ describe("Workspace component", () => {
     it("renders the Sidebar, Editor, and Preview columns", () => {
         render(
             <DocumentProvider>
-                <CommandDispatcherProvider dispatchCommand={() => undefined}>
-                    <Workspace />
-                </CommandDispatcherProvider>
+                <Workspace />
             </DocumentProvider>,
         );
 

@@ -1,11 +1,9 @@
 import type {
-    CommandContext,
     CommandId,
     CommandScope,
     KeyBinding,
     KeymapProfile,
 } from "./types";
-import type { CommandRegistry } from "./registry";
 
 const sequence = (keys: string) =>
     keys.split(/\s+/).flatMap((chord) => {
@@ -112,96 +110,6 @@ export interface KeymapConflict {
     scope: CommandScope;
     commandIds: CommandId[];
 }
-
-const normalizeKey = (key: string): string => {
-    if (key === " ") {
-        return "Space";
-    }
-
-    if (key.length === 1) {
-        return key.toUpperCase();
-    }
-
-    return key;
-};
-
-export const normalizeKeyChord = (event: KeyboardEvent): string => {
-    const parts = [
-        event.ctrlKey ? "Ctrl" : null,
-        event.metaKey ? "Meta" : null,
-        event.altKey ? "Alt" : null,
-        event.shiftKey ? "Shift" : null,
-        normalizeKey(event.key),
-    ].filter(Boolean);
-
-    return parts.join("+");
-};
-
-export const isEditableShortcutTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof HTMLElement)) {
-        return false;
-    }
-
-    return Boolean(
-        target.closest("input, textarea, select, [contenteditable='true']"),
-    );
-};
-
-export const commandScopeMatches = (
-    bindingScope: CommandScope,
-    context: CommandContext,
-    target: EventTarget | null,
-): boolean => {
-    if (bindingScope === "global") {
-        return true;
-    }
-
-    if (!context.hasActiveProject) {
-        return false;
-    }
-
-    if (bindingScope === "editor" && isEditableShortcutTarget(target)) {
-        return false;
-    }
-
-    return true;
-};
-
-const scopeSpecificity = (scope: CommandScope): number => {
-    if (scope === "editor") {
-        return 2;
-    }
-
-    if (scope === "project") {
-        return 1;
-    }
-
-    return 0;
-};
-
-export const findCommandForKeyboardEvent = (
-    event: KeyboardEvent,
-    bindings: KeyBinding[],
-    registry: CommandRegistry,
-    context: CommandContext,
-): CommandId | null => {
-    const chord = normalizeKeyChord(event);
-    const matchingBindings = bindings
-        .filter(
-            (item) =>
-                item.keys === chord &&
-                commandScopeMatches(item.scope, context, event.target),
-        )
-        .sort((left, right) => scopeSpecificity(right.scope) - scopeSpecificity(left.scope));
-
-    for (const binding of matchingBindings) {
-        if (registry.enabled(binding.commandId, context)) {
-            return binding.commandId;
-        }
-    }
-
-    return null;
-};
 
 export const detectKeymapConflicts = (
     bindings: KeyBinding[],
