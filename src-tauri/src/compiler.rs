@@ -1,8 +1,6 @@
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::VecDeque;
-use std::hash::{Hash, Hasher};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
@@ -17,7 +15,7 @@ use typst::syntax::{FileId, VirtualPath};
 use crate::document_session::DocumentSession;
 use crate::preview_sync::PreviewSyncState;
 use crate::vfs::VirtualFileSystem;
-use crate::world::ErgoWorld;
+use crate::world::{ErgoWorld, SnapshotWorld, WorldSourceSnapshot};
 
 pub const COMPILE_QUEUED_EVENT: &str = "ergo-compile-queued";
 pub const COMPILE_STARTED_EVENT: &str = "ergo-compile-started";
@@ -101,7 +99,6 @@ pub struct PreviewPageFile {
     pub path: String,
     #[serde(default)]
     pub changed: bool,
-    pub content_hash: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
@@ -293,10 +290,13 @@ impl CompilationQueue {
         );
 
         let result = match &job.kind {
-            CompilationJobKind::PreviewSvg => match compile_document(Arc::clone(vfs)) {
-                Ok(document) => {
+            CompilationJobKind::PreviewSvg => match compile_document_snapshot(vfs) {
+                Ok((document, source_snapshot)) => {
                     let svgs = render_svgs(&document);
-                    if self.is_stale_preview(&job) {
+                    let document_status = document_session.status();
+                    if self.is_stale_preview(&job)
+                        || document_status.source_revision != job.source_revision
+                    {
                         result_for_job(&job, CompilationStatus::Dropped)
                     } else {
                         let preview_dir = ".ergproj/preview/svg";
@@ -304,7 +304,8 @@ impl CompilationQueue {
                         preview_sync.store_preview(
                             job.source_revision,
                             document,
-                            document_session.status().source_map,
+                            document_status.source_map,
+                            source_snapshot,
                         );
                         let mut result = result_for_job(&job, CompilationStatus::Succeeded);
                         result.svgs = Some(svgs);
@@ -395,6 +396,19 @@ fn compile_document(vfs: Arc<VirtualFileSystem>) -> Result<PagedDocument, String
     }
 }
 
+fn compile_document_snapshot(
+    vfs: &Arc<VirtualFileSystem>,
+) -> Result<(PagedDocument, WorldSourceSnapshot), String> {
+    let main_id = FileId::new(None, VirtualPath::new("main.typ"));
+    let source_snapshot = WorldSourceSnapshot::from_vfs(vfs);
+    let world = SnapshotWorld::new(source_snapshot.clone(), main_id);
+
+    match typst::compile::<PagedDocument>(&world).output {
+        Ok(document) => Ok((document, source_snapshot)),
+        Err(errors) => Err(format!("{:?}", errors)),
+    }
+}
+
 fn compile_svgs(vfs: Arc<VirtualFileSystem>) -> Result<Vec<String>, String> {
     let document = compile_document(vfs)?;
     Ok(render_svgs(&document))
@@ -433,17 +447,10 @@ fn write_svg_pages(
     (0..svgs.len())
         .map(|index| PreviewPageFile {
             changed: changed_pages[index],
-            content_hash: hash_svg(&svgs[index]),
             page_number: index + 1,
             path: format!("{}/page-{}.svg", directory, index + 1),
         })
         .collect()
-}
-
-fn hash_svg(svg: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    svg.hash(&mut hasher);
-    hasher.finish()
 }
 
 fn run_export_job(
@@ -696,13 +703,11 @@ mod tests {
             vec![
                 PreviewPageFile {
                     changed: true,
-                    content_hash: hash_svg("<svg>uno</svg>"),
                     page_number: 1,
                     path: ".ergproj/preview/svg/page-1.svg".to_string(),
                 },
                 PreviewPageFile {
                     changed: true,
-                    content_hash: hash_svg("<svg>dos</svg>"),
                     page_number: 2,
                     path: ".ergproj/preview/svg/page-2.svg".to_string(),
                 },
@@ -735,8 +740,6 @@ mod tests {
 
         assert_eq!(pages[0].changed, false);
         assert_eq!(pages[1].changed, true);
-        assert_eq!(pages[0].content_hash, hash_svg("<svg>uno</svg>"));
-        assert_eq!(pages[1].content_hash, hash_svg("<svg>tres</svg>"));
     }
 
     fn test_ast() -> DocumentAST {

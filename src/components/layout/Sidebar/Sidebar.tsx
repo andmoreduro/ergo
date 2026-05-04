@@ -1,5 +1,6 @@
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import { useDocument } from "../../../state/DocumentContext";
+import { focusEditorElement } from "../../../utils/editorFocus";
 import { Accordion } from "../../molecules/Accordion/Accordion";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Sidebar.module.css";
@@ -35,15 +36,6 @@ const elementTitle = (element: DocumentElement): string => {
     return previewLabel(element.caption) || m.sidebar_figure();
 };
 
-const focusElement = (elementId: string) => {
-    const element = document.querySelector<HTMLElement>(
-        `[data-element-id="${CSS.escape(elementId)}"]`,
-    );
-
-    element?.scrollIntoView({ block: "center", behavior: "smooth" });
-    element?.querySelector<HTMLElement>("textarea, input, select, button")?.focus();
-};
-
 export const Sidebar = () => {
     const { state } = useDocument();
     const coverPage = state.sections.find((section) => section.type === "CoverPage");
@@ -59,7 +51,11 @@ export const Sidebar = () => {
             <Accordion title={m.sidebar_document_structure()} defaultOpen>
                 <div className={styles.navList}>
                     {coverPage && (
-                        <button className={styles.navItem} type="button">
+                        <button
+                            className={styles.navItem}
+                            type="button"
+                            onClick={() => focusEditorElement(coverPage.id)}
+                        >
                             <span>{m.sidebar_cover_page()}</span>
                             <small>{state.metadata.title}</small>
                         </button>
@@ -70,7 +66,7 @@ export const Sidebar = () => {
                                 className={styles.navItem}
                                 type="button"
                                 key={element.id}
-                                onClick={() => focusElement(element.id)}
+                                onClick={() => focusEditorElement(element.id)}
                             >
                                 <span>{elementTitle(element)}</span>
                                 <small>{element.type}</small>

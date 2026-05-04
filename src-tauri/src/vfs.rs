@@ -56,6 +56,18 @@ impl VirtualFileSystem {
             .ok_or_else(|| format!("File not found: {}", path))
     }
 
+    pub fn snapshot_sources(&self) -> HashMap<String, Source> {
+        self.memory_sources
+            .read()
+            .iter()
+            .map(|(path, file)| (path.clone(), file.source.clone()))
+            .collect()
+    }
+
+    pub fn snapshot_binary_files(&self) -> HashMap<String, Vec<u8>> {
+        self.memory_files.read().clone()
+    }
+
     pub fn read_text_file(&self, path: &str) -> Result<VirtualTextFile, String> {
         let path = normalize_path(path);
         self.memory_sources

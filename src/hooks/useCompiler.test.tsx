@@ -182,7 +182,6 @@ describe("useCompiler source syncing", () => {
                 preview_pages: [
                     {
                         changed: true,
-                        content_hash: 1n,
                         page_number: 1,
                         path: ".ergproj/preview/svg/page-1.svg",
                     },
@@ -251,13 +250,11 @@ describe("useCompiler source syncing", () => {
                         ? [
                               {
                                   changed: true,
-                                  content_hash: 1n,
                                   page_number: 1,
                                   path: ".ergproj/preview/svg/page-1.svg",
                               },
                               {
                                   changed: true,
-                                  content_hash: 2n,
                                   page_number: 2,
                                   path: ".ergproj/preview/svg/page-2.svg",
                               },
@@ -265,13 +262,11 @@ describe("useCompiler source syncing", () => {
                         : [
                               {
                                   changed: false,
-                                  content_hash: 1n,
                                   page_number: 1,
                                   path: ".ergproj/preview/svg/page-1.svg",
                               },
                               {
                                   changed: true,
-                                  content_hash: 3n,
                                   page_number: 2,
                                   path: ".ergproj/preview/svg/page-2.svg",
                               },

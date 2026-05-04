@@ -12,7 +12,7 @@ import { m } from "../../../paraglide/messages.js";
 import styles from "./Editor.module.css";
 
 export const Editor = () => {
-    const { state, dispatch } = useDocument();
+    const { state, dispatch, setActiveElementId } = useDocument();
     const dispatchAction = useActionDispatcher();
 
     return (
@@ -66,7 +66,9 @@ export const Editor = () => {
                     >
                         <section
                             className={styles.section}
+                            data-element-id={section.id}
                             data-section-id={section.id}
+                            onFocus={() => setActiveElementId(section.id)}
                         >
                             <h3>{m.editor_cover_page()}</h3>
                             <TextInput
