@@ -738,8 +738,8 @@ mod tests {
             &["<svg>uno</svg>".to_string(), "<svg>tres</svg>".to_string()],
         );
 
-        assert_eq!(pages[0].changed, false);
-        assert_eq!(pages[1].changed, true);
+        assert!(!pages[0].changed);
+        assert!(pages[1].changed);
     }
 
     fn test_ast() -> DocumentAST {

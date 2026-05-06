@@ -41,15 +41,15 @@ pub struct ErgoWorld {
     vfs: Arc<VirtualFileSystem>,
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
-    fonts: Vec<Font>,
+    fonts: Arc<Vec<Font>>,
     main: FileId,
 }
 
 impl ErgoWorld {
     pub fn new(vfs: Arc<VirtualFileSystem>, main: FileId) -> Self {
-        let fonts = bundled_fonts().to_vec();
+        let fonts = bundled_fonts();
         let mut book = FontBook::new();
-        for font in &fonts {
+        for font in fonts.iter() {
             book.push(font.info().clone());
         }
 
@@ -67,15 +67,15 @@ pub struct SnapshotWorld {
     snapshot: WorldSourceSnapshot,
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
-    fonts: Vec<Font>,
+    fonts: Arc<Vec<Font>>,
     main: FileId,
 }
 
 impl SnapshotWorld {
     pub fn new(snapshot: WorldSourceSnapshot, main: FileId) -> Self {
-        let fonts = bundled_fonts().to_vec();
+        let fonts = bundled_fonts();
         let mut book = FontBook::new();
-        for font in &fonts {
+        for font in fonts.iter() {
             book.push(font.info().clone());
         }
 
@@ -89,14 +89,18 @@ impl SnapshotWorld {
     }
 }
 
-fn bundled_fonts() -> &'static Vec<Font> {
-    static FONTS: OnceLock<Vec<Font>> = OnceLock::new();
+fn bundled_fonts() -> Arc<Vec<Font>> {
+    static FONTS: OnceLock<Arc<Vec<Font>>> = OnceLock::new();
 
-    FONTS.get_or_init(|| {
-        typst_assets::fonts()
-            .flat_map(|font| Font::iter(Bytes::new(font.to_vec())))
-            .collect()
-    })
+    FONTS
+        .get_or_init(|| {
+            Arc::new(
+                typst_assets::fonts()
+                    .flat_map(|font| Font::iter(Bytes::new(font.to_vec())))
+                    .collect(),
+            )
+        })
+        .clone()
 }
 
 impl World for ErgoWorld {

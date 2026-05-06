@@ -150,6 +150,9 @@ pub fn load_keymap_settings(app: AppHandle) -> Result<KeymapSettings, String> {
 
 #[tauri::command]
 pub fn save_keymap_settings(app: AppHandle, settings: KeymapSettings) -> Result<(), String> {
+    if let Some(state) = app.try_state::<crate::actions::ActionResolverState>() {
+        crate::actions::refresh_cached_keymap(&state, settings.clone());
+    }
     save_keymap_settings_to_path(&keymap_settings_path(&app)?, &settings)
 }
 
@@ -264,10 +267,12 @@ mod tests {
     #[test]
     fn persists_global_settings() {
         let path = temp_settings_path();
-        let mut settings = GlobalSettings::default();
-        settings.theme_mode = Some("dark".to_string());
-        settings.recent_projects = vec!["paper.ergproj".to_string()];
-        settings.keymap_profile = Some("Custom".to_string());
+        let settings = GlobalSettings {
+            theme_mode: Some("dark".to_string()),
+            recent_projects: vec!["paper.ergproj".to_string()],
+            keymap_profile: Some("Custom".to_string()),
+            ..Default::default()
+        };
 
         save_global_settings_to_path(&path, &settings).unwrap();
         let contents = fs::read_to_string(&path).unwrap();

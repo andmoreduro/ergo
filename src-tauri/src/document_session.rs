@@ -234,6 +234,7 @@ fn generate_project_sources(ast: &DocumentAST) -> GeneratedProjectSources {
         let file_path = section_path(&section_id);
         let mut source = String::new();
         let mut fragment_ids = Vec::new();
+        let mut char_offset = 0;
 
         match section {
             DocumentSection::CoverPage(cover_page) => {
@@ -245,10 +246,12 @@ fn generate_project_sources(ast: &DocumentAST) -> GeneratedProjectSources {
             }
             DocumentSection::Content(content) => {
                 for element in &content.elements {
-                    let start = source.len();
-                    let fragment = element_fragment(element, &content.id, &file_path, start);
+                    let start_byte = source.len();
+                    let start_char = char_offset;
+                    let fragment = element_fragment(element, &content.id, &file_path, start_byte, start_char);
                     if !fragment.source.is_empty() {
                         source.push_str(&fragment.source);
+                        char_offset += fragment.source.chars().count();
                         source_map.extend(fragment.source_map_ranges.clone());
                     }
                     fragment_ids.push(fragment.element_id.clone());
@@ -333,7 +336,7 @@ fn cover_page_fragment(
         let affiliations = cover_page
             .affiliations
             .iter()
-            .map(|affiliation| escape_typst_text(affiliation))
+            .map(escape_typst_text)
             .filter(|value| !value.is_empty())
             .collect::<Vec<_>>();
         let abstract_text = escape_typst_text(cover_page.abstract_text.trim());
@@ -366,7 +369,7 @@ fn cover_page_fragment(
         section_id: section_id.clone(),
         file_path,
         start: 0,
-        end: source.len(),
+        end: source.chars().count(),
         byte_start: 0,
         byte_end: source.len(),
         label,
@@ -388,7 +391,8 @@ fn element_fragment(
     element: &DocumentElement,
     section_id: &str,
     file_path: &str,
-    section_start: usize,
+    section_byte_start: usize,
+    section_char_start: usize,
 ) -> GeneratedFragment {
     let element_id = element_id(element);
     let kind = element_kind(element);
@@ -401,10 +405,10 @@ fn element_fragment(
             element_id: element_id.clone(),
             section_id: section_id.to_string(),
             file_path: file_path.to_string(),
-            start: section_start,
-            end: section_start + source.len(),
-            byte_start: section_start,
-            byte_end: section_start + source.len(),
+            start: section_char_start,
+            end: section_char_start + source.chars().count(),
+            byte_start: section_byte_start,
+            byte_end: section_byte_start + source.len(),
             label,
             page: None,
         }]
@@ -666,8 +670,6 @@ fn path_id_for_id(id: &str) -> String {
     for character in id.to_lowercase().chars() {
         let next = if character.is_ascii_alphanumeric() || character == '_' {
             Some(character)
-        } else if character == '-' {
-            Some('-')
         } else {
             Some('-')
         };

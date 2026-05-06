@@ -70,9 +70,9 @@ pub fn open_project_from_path(
         if file.is_file() {
             let mut content = Vec::new();
             file.read_to_end(&mut content).map_err(|e| e.to_string())?;
-            match String::from_utf8(content.clone()) {
+            match std::str::from_utf8(&content) {
                 Ok(text) => {
-                    state.vfs.write_source(&name, text);
+                    state.vfs.write_source(&name, text.to_owned());
                 }
                 Err(_) => state.vfs.write_file(&name, content),
             }
