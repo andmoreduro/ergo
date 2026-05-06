@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import styles from './Accordion.module.css';
 
 export interface AccordionProps {
@@ -17,7 +17,7 @@ export interface AccordionProps {
   defaultOpen?: boolean;
 }
 
-export const Accordion = ({
+export const Accordion = memo(({
   title,
   children,
   defaultOpen = false,
@@ -57,4 +57,4 @@ export const Accordion = ({
       {isOpen && <div className={styles.content}>{children}</div>}
     </div>
   );
-};
+});

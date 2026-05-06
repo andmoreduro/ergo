@@ -1,4 +1,4 @@
-import { InputHTMLAttributes, forwardRef, useId } from 'react';
+import { InputHTMLAttributes, forwardRef, useId, memo } from 'react';
 import styles from './TextInput.module.css';
 
 export interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -17,7 +17,7 @@ export interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
   fullWidth?: boolean;
 }
 
-export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
+export const TextInput = memo(forwardRef<HTMLInputElement, TextInputProps>(
   (
     {
       label,
@@ -73,6 +73,6 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
       </div>
     );
   }
-);
+));
 
 TextInput.displayName = 'TextInput';

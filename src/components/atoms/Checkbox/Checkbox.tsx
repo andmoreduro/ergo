@@ -1,11 +1,11 @@
-import { InputHTMLAttributes, forwardRef, useId } from 'react';
+import { InputHTMLAttributes, forwardRef, useId, memo } from 'react';
 import styles from './Checkbox.module.css';
 
 export interface CheckboxProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
 }
 
-export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
+export const Checkbox = memo(forwardRef<HTMLInputElement, CheckboxProps>(
   ({ label, className = '', id, disabled, ...props }, ref) => {
     const defaultId = useId();
     const inputId = id || defaultId;
@@ -47,6 +47,6 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
       </div>
     );
   }
-);
+));
 
 Checkbox.displayName = 'Checkbox';

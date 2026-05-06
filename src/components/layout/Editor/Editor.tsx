@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useDocument } from "../../../state/DocumentContext";
 import {
     ActionContextProvider,
@@ -24,37 +25,40 @@ export const Editor = () => {
                     return null;
                 }
 
-                const coverPageHandlers: ActionHandlerMap = {
-                    "editor::AddAuthor": () => {
-                        dispatch({
-                            type: "ADD_AUTHOR",
-                            payload: { sectionId: section.id },
-                        });
-                        return true;
-                    },
-                    "editor::RemoveAuthor": (invocation) => {
-                        const authorIndex =
-                            typeof invocation.payload === "object" &&
-                            invocation.payload !== null &&
-                            "authorIndex" in invocation.payload &&
-                            typeof invocation.payload.authorIndex === "number"
-                                ? invocation.payload.authorIndex
-                                : -1;
+                const coverPageHandlers: ActionHandlerMap = useMemo(
+                    () => ({
+                        "editor::AddAuthor": () => {
+                            dispatch({
+                                type: "ADD_AUTHOR",
+                                payload: { sectionId: section.id },
+                            });
+                            return true;
+                        },
+                        "editor::RemoveAuthor": (invocation) => {
+                            const authorIndex =
+                                typeof invocation.payload === "object" &&
+                                invocation.payload !== null &&
+                                "authorIndex" in invocation.payload &&
+                                typeof invocation.payload.authorIndex === "number"
+                                    ? invocation.payload.authorIndex
+                                    : -1;
 
-                        if (authorIndex < 0) {
-                            return false;
-                        }
+                            if (authorIndex < 0) {
+                                return false;
+                            }
 
-                        dispatch({
-                            type: "REMOVE_AUTHOR",
-                            payload: {
-                                sectionId: section.id,
-                                authorIndex,
-                            },
-                        });
-                        return true;
-                    },
-                };
+                            dispatch({
+                                type: "REMOVE_AUTHOR",
+                                payload: {
+                                    sectionId: section.id,
+                                    authorIndex,
+                                },
+                            });
+                            return true;
+                        },
+                    }),
+                    [dispatch, section.id],
+                );
 
                 return (
                     <ActionContextProvider
@@ -115,7 +119,7 @@ export const Editor = () => {
                             />
                             <div className={styles.authorList}>
                                 {section.authors.map((author, index) => (
-                                    <div className={styles.authorRow} key={index}>
+                                    <div className={styles.authorRow} key={author.name || `author-${index}`}>
                                         <TextInput
                                             fullWidth
                                             label={m.editor_author_name()}
