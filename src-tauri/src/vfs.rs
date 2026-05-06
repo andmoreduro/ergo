@@ -198,7 +198,7 @@ impl VirtualFileSystem {
 }
 
 fn file_id_for_path(path: &str) -> FileId {
-    FileId::new(None, VirtualPath::new(&normalize_path(path)))
+    FileId::new(None, VirtualPath::new(normalize_path(path)))
 }
 
 fn normalize_path(path: &str) -> String {

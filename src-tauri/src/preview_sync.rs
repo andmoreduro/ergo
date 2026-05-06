@@ -290,22 +290,30 @@ impl PreviewSyncState {
         &self,
         source_revision: SourceRevision,
     ) -> Result<RetainedPreviewDocument, PreviewJumpResult> {
-        let Some(preview) = self.inner.lock().clone() else {
+        let actual_revision = {
+            let guard = self.inner.lock();
+            guard.as_ref().map(|p| p.source_revision)
+        };
+        let Some(actual_revision) = actual_revision else {
             return Err(PreviewJumpResult::Unavailable {
                 source_revision: None,
                 reason: "No compiled preview is available".to_string(),
             });
         };
-
-        if preview.source_revision != source_revision {
+        if actual_revision != source_revision {
             return Err(PreviewJumpResult::Unavailable {
-                source_revision: Some(preview.source_revision),
+                source_revision: Some(actual_revision),
                 reason: "The displayed preview revision does not match the retained preview"
                     .to_string(),
             });
         }
-
-        Ok(preview)
+        self.inner
+            .lock()
+            .clone()
+            .ok_or_else(|| PreviewJumpResult::Unavailable {
+                source_revision: None,
+                reason: "No compiled preview is available".to_string(),
+            })
     }
 }
 

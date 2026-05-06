@@ -97,6 +97,11 @@ pub struct KeymapValidationResult {
 #[derive(Default)]
 pub struct ActionResolverState {
     pending: Mutex<HashMap<String, PendingSequence>>,
+    keymap_cache: parking_lot::Mutex<Option<KeymapSettings>>,
+}
+
+pub fn refresh_cached_keymap(state: &ActionResolverState, settings: KeymapSettings) {
+    *state.keymap_cache.lock() = Some(settings);
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +139,16 @@ pub fn resolve_key_event(
     event: LogicalKeyEvent,
     context_snapshot: ActionContextSnapshot,
 ) -> Result<ActionResolution, String> {
-    let settings = crate::settings::load_keymap_settings(app)?;
+    let settings = {
+        let mut cache = state.keymap_cache.lock();
+        if let Some(cached) = cache.clone() {
+            cached
+        } else {
+            let loaded = crate::settings::load_keymap_settings(app)?;
+            *cache = Some(loaded.clone());
+            loaded
+        }
+    };
     Ok(resolve_key_event_with_settings(
         &state,
         &settings,
