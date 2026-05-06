@@ -1,4 +1,4 @@
-import { SelectHTMLAttributes, forwardRef, useId } from 'react';
+import { SelectHTMLAttributes, forwardRef, useId, memo } from 'react';
 import styles from './Select.module.css';
 
 export interface SelectOption {
@@ -26,7 +26,7 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   options: SelectOption[];
 }
 
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(
+export const Select = memo(forwardRef<HTMLSelectElement, SelectProps>(
   (
     {
       label,
@@ -108,6 +108,6 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       </div>
     );
   }
-);
+));
 
 Select.displayName = 'Select';

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { Workspace } from "./components/layout/Workspace/Workspace";
 import { Menubar } from "./components/layout/Menubar/Menubar";
 import { WelcomeScreen } from "./components/screens/WelcomeScreen/WelcomeScreen";
+import { ErrorBoundary } from "./components/screens/ErrorBoundary/ErrorBoundary";
 import {
     SettingsDialog,
     type SettingsPanel,
@@ -67,6 +68,7 @@ const AppShellContent = () => {
         DEFAULT_KEYMAP_SETTINGS,
     );
     const [settingsLoaded, setSettingsLoaded] = useState(false);
+    const initialSettingsRef = useRef(true);
     const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
     const [newProjectInitialName, setNewProjectInitialName] = useState<
         string | null
@@ -80,6 +82,10 @@ const AppShellContent = () => {
     const dispatchAction = useActionDispatcher();
     const themeMode = normalizeThemeMode(globalSettings.theme_mode);
     const recentProjects = globalSettings.recent_projects;
+    const recentProjectsRef = useRef(recentProjects);
+    recentProjectsRef.current = recentProjects;
+    const stateRef = useRef(state);
+    stateRef.current = state;
     const previewDebounceMs = globalSettings.preview_debounce_enabled
         ? Math.max(0, globalSettings.preview_debounce_ms ?? 0)
         : 0;
@@ -157,7 +163,8 @@ const AppShellContent = () => {
     }, [themeMode]);
 
     useEffect(() => {
-        if (!settingsLoaded) {
+        if (!settingsLoaded || initialSettingsRef.current) {
+            initialSettingsRef.current = false;
             return;
         }
 
@@ -165,7 +172,7 @@ const AppShellContent = () => {
     }, [globalSettings, settingsLoaded]);
 
     useEffect(() => {
-        if (!settingsLoaded) {
+        if (!settingsLoaded || initialSettingsRef.current) {
             return;
         }
 
@@ -350,7 +357,7 @@ const AppShellContent = () => {
         }
 
         const timeoutId = window.setTimeout(() => {
-            void TauriApi.saveProject(currentProjectPath, state)
+            void TauriApi.saveProject(currentProjectPath, stateRef.current)
                 .then(() => {
                     rememberProject(currentProjectPath);
                     markSaved();
@@ -365,7 +372,6 @@ const AppShellContent = () => {
         isDirty,
         markSaved,
         rememberProject,
-        state,
     ]);
 
     const insertElement = useCallback((elementType: "heading" | "paragraph" | "table" | "equation" | "figure") => {
@@ -447,8 +453,11 @@ const AppShellContent = () => {
                 id: "workspace::OpenRecentProject",
                 label: m.action_workspace_open_recent_project(),
                 scope: "global",
-                run: () => openProject(recentProjects[0]),
-                isEnabled: () => recentProjects.length > 0,
+                run: () => {
+                    const recent = recentProjectsRef.current[0];
+                    if (recent) void openProject(recent);
+                },
+                isEnabled: () => recentProjectsRef.current.length > 0,
             },
             {
                 id: "workspace::SaveProject",
@@ -617,7 +626,6 @@ const AppShellContent = () => {
             insertElement,
             openProject,
             redo,
-            recentProjects,
             saveProject,
             showNewProjectDialog,
             undo,
@@ -647,8 +655,9 @@ const AppShellContent = () => {
             };
         });
     }, [actionCatalog, commandRegistry]);
+    const deferredCommandQuery = useDeferredValue(commandQuery);
     const filteredCommands = paletteCommands.filter((command) =>
-        command.label.toLowerCase().includes(commandQuery.toLowerCase()),
+        command.label.toLowerCase().includes(deferredCommandQuery.toLowerCase()),
     );
 
     const runCommand = useCallback((commandId: CommandId) => {
@@ -797,7 +806,9 @@ const AppShellContent = () => {
 
 const AppShell = () => (
     <ActionRuntimeProvider>
-        <AppShellContent />
+        <ErrorBoundary>
+            <AppShellContent />
+        </ErrorBoundary>
     </ActionRuntimeProvider>
 );
 

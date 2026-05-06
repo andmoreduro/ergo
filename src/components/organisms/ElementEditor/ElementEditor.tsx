@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from "react";
 import { useDocument } from "../../../state/DocumentContext";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import {
@@ -57,86 +58,89 @@ export const ElementEditor = ({ element }: ElementEditorProps) => {
     const { dispatch, setActiveElementId } = useDocument();
     const dispatchAction = useActionDispatcher();
 
-    const handleDelete = () => {
+    const handleDelete = useCallback(() => {
         if (window.confirm(m.element_delete_confirm())) {
             dispatch({ type: "REMOVE_ELEMENT", payload: { elementId: element.id } });
         }
-    };
+    }, [dispatch, element.id]);
 
-    const elementHandlers: ActionHandlerMap = {
-        "editor::DeleteElement": () => {
-            handleDelete();
-            return true;
-        },
-        "editor::AddTableRow": () => {
-            if (element.type !== "Table") {
-                return false;
-            }
+    const elementHandlers: ActionHandlerMap = useMemo(
+        () => ({
+            "editor::DeleteElement": () => {
+                handleDelete();
+                return true;
+            },
+            "editor::AddTableRow": () => {
+                if (element.type !== "Table") {
+                    return false;
+                }
 
-            dispatch({
-                type: "ADD_TABLE_ROW",
-                payload: { tableId: element.id },
-            });
-            return true;
-        },
-        "editor::AddTableColumn": () => {
-            if (element.type !== "Table") {
-                return false;
-            }
+                dispatch({
+                    type: "ADD_TABLE_ROW",
+                    payload: { tableId: element.id },
+                });
+                return true;
+            },
+            "editor::AddTableColumn": () => {
+                if (element.type !== "Table") {
+                    return false;
+                }
 
-            dispatch({
-                type: "ADD_TABLE_COLUMN",
-                payload: { tableId: element.id },
-            });
-            return true;
-        },
-        "editor::RemoveTableRow": (invocation) => {
-            if (element.type !== "Table") {
-                return false;
-            }
+                dispatch({
+                    type: "ADD_TABLE_COLUMN",
+                    payload: { tableId: element.id },
+                });
+                return true;
+            },
+            "editor::RemoveTableRow": (invocation) => {
+                if (element.type !== "Table") {
+                    return false;
+                }
 
-            const payload = invocation.payload;
-            const rowIndex =
-                typeof payload === "object" &&
-                payload !== null &&
-                "rowIndex" in payload &&
-                typeof payload.rowIndex === "number"
-                    ? payload.rowIndex
-                    : element.rows - 1;
+                const payload = invocation.payload;
+                const rowIndex =
+                    typeof payload === "object" &&
+                    payload !== null &&
+                    "rowIndex" in payload &&
+                    typeof payload.rowIndex === "number"
+                        ? payload.rowIndex
+                        : element.rows - 1;
 
-            dispatch({
-                type: "REMOVE_TABLE_ROW",
-                payload: {
-                    tableId: element.id,
-                    rowIndex,
-                },
-            });
-            return true;
-        },
-        "editor::RemoveTableColumn": (invocation) => {
-            if (element.type !== "Table") {
-                return false;
-            }
+                dispatch({
+                    type: "REMOVE_TABLE_ROW",
+                    payload: {
+                        tableId: element.id,
+                        rowIndex,
+                    },
+                });
+                return true;
+            },
+            "editor::RemoveTableColumn": (invocation) => {
+                if (element.type !== "Table") {
+                    return false;
+                }
 
-            const payload = invocation.payload;
-            const colIndex =
-                typeof payload === "object" &&
-                payload !== null &&
-                "colIndex" in payload &&
-                typeof payload.colIndex === "number"
-                    ? payload.colIndex
-                    : element.cols - 1;
+                const payload = invocation.payload;
+                const colIndex =
+                    typeof payload === "object" &&
+                    payload !== null &&
+                    "colIndex" in payload &&
+                    typeof payload.colIndex === "number"
+                        ? payload.colIndex
+                        : element.cols - 1;
 
-            dispatch({
-                type: "REMOVE_TABLE_COLUMN",
-                payload: {
-                    tableId: element.id,
-                    colIndex,
-                },
-            });
-            return true;
-        },
-    };
+                dispatch({
+                    type: "REMOVE_TABLE_COLUMN",
+                    payload: {
+                        tableId: element.id,
+                        colIndex,
+                    },
+                });
+                return true;
+            },
+        }),
+        [dispatch, element.id, element.type, handleDelete],
+    );
 
     const renderContent = () => {
         if (element.type === "Heading") {
@@ -252,10 +256,10 @@ export const ElementEditor = ({ element }: ElementEditorProps) => {
                     </div>
                     <div className={styles.tableGrid}>
                         {element.cells.map((row, rowIndex) => (
-                            <div className={styles.tableRow} key={rowIndex}>
+                            <div className={styles.tableRow} key={`row-${rowIndex}`}>
                                 {row.map((cell, colIndex) => (
                                     <TextInput
-                                        key={colIndex}
+                                        key={`cell-${rowIndex}-${colIndex}`}
                                         value={cell.content}
                                         aria-label={m.editor_table_cell_label({
                                             row: rowIndex + 1,

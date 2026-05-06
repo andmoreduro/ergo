@@ -1,4 +1,4 @@
-import { TextareaHTMLAttributes, forwardRef, useId } from 'react';
+import { TextareaHTMLAttributes, forwardRef, useId, memo } from 'react';
 import styles from './Textarea.module.css';
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -17,7 +17,7 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
   fullWidth?: boolean;
 }
 
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
+export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
   (
     {
       label,
@@ -73,6 +73,6 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       </div>
     );
   }
-);
+));
 
 Textarea.displayName = 'Textarea';
