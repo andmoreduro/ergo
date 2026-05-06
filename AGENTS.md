@@ -4,14 +4,13 @@
 
 The `context/` folder holds the canonical design documents. Before proposing or changing code, read:
 
-1. `context/init.md` — AI operating prompt, architectural baseline, implementation rules
-2. `context/component-diagram.md` — container/component architecture
-3. `context/class-diagrams.md` — domain models, Rust structs, IPC types
-4. `context/sequence-diagrams.md` — editing, compile, save, export, sync flows
-5. `context/collaboration-diagrams.md` — message passing between runtime objects
-6. `context/state-diagrams.md` — frontend, backend, compile queue, key sequence state machines
-7. `context/distribution-diagram.md` — deployment, archive layout, storage boundaries
-8. `context/user-stories.md` / `context/user-story-map.md` — feature scope and priority
+1. `context/component-diagram.md` — container/component architecture
+2. `context/class-diagrams.md` — domain models, Rust structs, IPC types
+3. `context/sequence-diagrams.md` — editing, compile, save, export, sync flows
+4. `context/collaboration-diagrams.md` — message passing between runtime objects
+5. `context/state-diagrams.md` — frontend, backend, compile queue, key sequence state machines
+6. `context/distribution-diagram.md` — deployment, archive layout, storage boundaries
+7. `context/user-stories.md` / `context/user-story-map.md` — feature scope and priority
 
 When implementation and design docs conflict, preserve working code and update the design docs deliberately.
 
@@ -44,11 +43,28 @@ When implementation and design docs conflict, preserve working code and update t
 |---------|-------------|
 | `pnpm dev` | Vite dev server (port 1420, strict port) |
 | `pnpm test` | Compile paraglide, then `vitest run` |
-| `pnpm test -- path/to/file.test.ts` | Run a single test file |
 | `pnpm build` | paraglide compile → `tsc` → `vite build` |
 | `pnpm storybook` | Storybook dev server (port 6006) |
 | `pnpm tauri dev` | Full Tauri desktop app (runs `pnpm dev` internally) |
-| `cargo test` | Run Rust tests (from `src-tauri/`) |
+| `cargo test` | Run all Rust tests (from `src-tauri/`) |
+
+### Focused testing
+
+The full test suite grows with the project. Run only tests relevant to your change:
+
+```bash
+# Frontend — single file, directory, or name pattern
+pnpm test -- path/to/file.test.ts
+pnpm test -- path/to/dir/
+pnpm test -- -t "test name pattern"
+
+# Backend — single test, module, or filtered
+cargo test test_fn_name
+cargo test module_name::
+cargo test -- pattern_filter
+```
+
+Before merging, run the full `pnpm test` + `cargo test` suites.
 
 ## Critical: paraglide compile must run first
 
