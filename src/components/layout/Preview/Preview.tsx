@@ -3,7 +3,7 @@ import { TauriApi } from "../../../api/tauri";
 import { useDocument } from "../../../state/DocumentContext";
 import { useCompiler } from "../../../hooks/useCompiler";
 import type { PreviewElementPosition } from "../../../types/previewSync";
-import { focusEditorElement } from "../../../utils/editorFocus";
+import { useActionDispatcher } from "../../../actions/runtime";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Preview.module.css";
 
@@ -12,7 +12,8 @@ export interface PreviewProps {
 }
 
 export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
-    const { state, activeElementId, setActiveElementId } = useDocument();
+    const { state, documentFocus } = useDocument();
+    const dispatchAction = useActionDispatcher();
     const { svgs, error, sourceMap, previewRevision } = useCompiler(
         state,
         previewDebounceMs,
@@ -21,21 +22,24 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
     const [highlightedPosition, setHighlightedPosition] =
         useState<PreviewElementPosition | null>(null);
     const activeSource = sourceMap.find(
-        (entry) => entry.elementId === activeElementId,
+        (entry) => entry.elementId === documentFocus.elementId,
     );
 
     useEffect(() => {
-        if (!activeElementId || previewRevision === null) {
+        if (!documentFocus.elementId || previewRevision === null) {
             setHighlightedPosition(null);
             return;
         }
 
         let isCancelled = false;
+        const target = {
+            elementId: documentFocus.elementId,
+            fieldId: documentFocus.fieldId,
+            caretUtf16Offset: documentFocus.caretUtf16Offset,
+            sourceRevision: previewRevision,
+        };
 
-        void TauriApi.getPreviewPositionsForElement(
-            activeElementId,
-            previewRevision,
-        )
+        void TauriApi.getPreviewPositionsForFocus(target, previewRevision)
             .then((result) => {
                 if (isCancelled) {
                     return;
@@ -62,7 +66,12 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
         return () => {
             isCancelled = true;
         };
-    }, [activeElementId, previewRevision]);
+    }, [
+        documentFocus.caretUtf16Offset,
+        documentFocus.elementId,
+        documentFocus.fieldId,
+        previewRevision,
+    ]);
 
     const handlePreviewClick = (event: MouseEvent<HTMLElement>) => {
         if (previewRevision === null || !(event.target instanceof Element)) {
@@ -87,9 +96,24 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
             previewRevision,
         )
             .then((result) => {
+                if (result.status === "field") {
+                    void dispatchAction({
+                        id: "editor::FocusField",
+                        payload: result.target,
+                    });
+                    return;
+                }
+
                 if (result.status === "element") {
-                    setActiveElementId(result.elementId);
-                    focusEditorElement(result.elementId);
+                    void dispatchAction({
+                        id: "editor::FocusField",
+                        payload: {
+                            elementId: result.elementId,
+                            fieldId: null,
+                            caretUtf16Offset: null,
+                            sourceRevision: result.sourceRevision,
+                        },
+                    });
                 }
             })
             .catch(() => undefined);

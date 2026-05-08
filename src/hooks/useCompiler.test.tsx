@@ -116,9 +116,11 @@ describe("useCompiler source syncing", () => {
                         referencesPath: "references.bib",
                         sectionPaths: [],
                         sourceMapPath: ".ergproj/source_map.json",
+                        fieldSourceMapPath: ".ergproj/field_source_map.json",
                         templatePath: ".ergproj/template.json",
                     },
                     sourceMap: [],
+                    fieldSourceMap: [],
                     sourceRevision: syncedTitles.length,
                 };
             },
@@ -158,9 +160,11 @@ describe("useCompiler source syncing", () => {
                 referencesPath: "references.bib",
                 sectionPaths: [],
                 sourceMapPath: ".ergproj/source_map.json",
+                fieldSourceMapPath: ".ergproj/field_source_map.json",
                 templatePath: ".ergproj/template.json",
             },
             sourceMap: [],
+            fieldSourceMap: [],
             sourceRevision: 1,
         });
         tauriApiMock.enqueuePreviewCompile.mockResolvedValue({
@@ -221,9 +225,11 @@ describe("useCompiler source syncing", () => {
                 referencesPath: "references.bib",
                 sectionPaths: [],
                 sourceMapPath: ".ergproj/source_map.json",
+                fieldSourceMapPath: ".ergproj/field_source_map.json",
                 templatePath: ".ergproj/template.json",
             },
             sourceMap: [],
+            fieldSourceMap: [],
             sourceRevision: 1,
         });
         tauriApiMock.enqueuePreviewCompile.mockImplementation(async () => {

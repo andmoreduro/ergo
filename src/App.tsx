@@ -42,10 +42,75 @@ import {
     ensureErgprojExtension,
     projectPathInDirectory,
 } from "./project/paths";
+import {
+    coverTitleFieldId,
+    defaultFieldIdForElement,
+} from "./editor/fieldIds";
 import styles from "./App.module.css";
 
 const isLocale = (value: string | null): value is Locale =>
     locales.includes(value as Locale);
+
+interface FocusFieldPayload {
+    elementId: string;
+    fieldId: string | null;
+    caretUtf16Offset: number | null;
+    sourceRevision: number | null;
+}
+
+const parseFocusFieldPayload = (payload: unknown): FocusFieldPayload | null => {
+    if (typeof payload !== "object" || payload === null) {
+        return null;
+    }
+
+    const record = payload as Record<string, unknown>;
+    const elementId = readString(record.elementId);
+    if (!elementId) {
+        return null;
+    }
+
+    return {
+        elementId,
+        fieldId: readString(record.fieldId),
+        caretUtf16Offset: readNumber(record.caretUtf16Offset),
+        sourceRevision: readNumber(record.sourceRevision),
+    };
+};
+
+const readString = (value: unknown): string | null =>
+    typeof value === "string" && value.length > 0 ? value : null;
+
+const readNumber = (value: unknown): number | null => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+    }
+
+    if (typeof value === "bigint") {
+        return Number(value);
+    }
+
+    return null;
+};
+
+const defaultFieldIdForFocus = (
+    state: ReturnType<typeof createDefaultDocumentAST>,
+    elementId: string,
+): string | null => {
+    for (const section of state.sections) {
+        if (section.type === "CoverPage" && section.id === elementId) {
+            return coverTitleFieldId(section.id);
+        }
+
+        if (section.type === "Content") {
+            const element = section.elements.find((entry) => entry.id === elementId);
+            if (element) {
+                return defaultFieldIdForElement(element);
+            }
+        }
+    }
+
+    return null;
+};
 
 const AppShellContent = () => {
     const {
@@ -57,6 +122,8 @@ const AppShellContent = () => {
         undo,
         redo,
         markSaved,
+        documentFocus,
+        setDocumentFocus,
     } = useDocument();
     const [hasActiveProject, setHasActiveProject] = useState(false);
     const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
@@ -430,9 +497,9 @@ const AppShellContent = () => {
     const commandContext = useMemo<CommandContext>(
         () => ({
             hasActiveProject,
-            focusedElementId: null,
+            focusedElementId: documentFocus.elementId,
         }),
-        [hasActiveProject],
+        [documentFocus.elementId, hasActiveProject],
     );
 
     const commands = useMemo<Command[]>(
@@ -669,6 +736,25 @@ const AppShellContent = () => {
     const appActionHandlers = useMemo<ActionHandlerMap>(() => {
         const handlers: ActionHandlerMap = {};
 
+        handlers["editor::FocusField"] = (invocation) => {
+            const target = parseFocusFieldPayload(invocation.payload);
+            if (!target) {
+                return false;
+            }
+
+            const fieldId =
+                target.fieldId ??
+                defaultFieldIdForFocus(stateRef.current, target.elementId);
+            setDocumentFocus({
+                elementId: target.elementId,
+                fieldId,
+                caretUtf16Offset: target.caretUtf16Offset,
+                sourceRevision: target.sourceRevision,
+                focusSource: "preview",
+            });
+            return true;
+        };
+
         for (const command of commandRegistry.all()) {
             handlers[command.id] = () => {
                 void commandRegistry.run(command.id, commandContext);
@@ -677,7 +763,7 @@ const AppShellContent = () => {
         }
 
         return handlers;
-    }, [commandContext, commandRegistry]);
+    }, [commandContext, commandRegistry, setDocumentFocus]);
 
     return (
         <ActionContextProvider

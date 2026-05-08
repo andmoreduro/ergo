@@ -143,8 +143,10 @@ stateDiagram-v2
 
     Retained --> ResolvingClick : jump_from_preview_click
     Retained --> ResolvingElement : get_preview_positions_for_element
+    Retained --> ResolvingFocus : get_preview_positions_for_focus
     ResolvingClick --> Retained : element / position / no match
     ResolvingElement --> Retained : positions / no match
+    ResolvingFocus --> Retained : positions / no match
 
     StaleForDocument --> Unavailable : sync request
     Unavailable --> StaleForDocument
@@ -152,10 +154,10 @@ stateDiagram-v2
 
 ### Notes
 
-- The retained preview state contains the compiled `PagedDocument`, source-map snapshot, Typst source snapshot, source revision, and page metrics.
+- The retained preview state contains the compiled `PagedDocument`, element source-map snapshot, field source-map snapshot, Typst source snapshot, source revision, and page metrics.
 - Preview sync accepts requests for the retained preview revision. The current document-session revision may be newer while the displayed preview waits for the next successful compile.
-- Backward sync resolves clicks with Typst IDE frame hit testing and maps file offsets to `SourceMapEntry` ranges.
-- Forward sync resolves active elements with Typst IDE cursor-to-preview mapping.
+- Backward sync resolves clicks with Typst IDE frame hit testing and maps file offsets to `FieldSourceMapEntry` ranges, falling back to `SourceMapEntry` ranges.
+- Forward sync resolves focused fields with Typst IDE cursor-to-preview mapping.
 
 ## 6. Key Sequence Resolver Lifecycle
 

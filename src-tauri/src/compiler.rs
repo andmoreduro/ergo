@@ -305,6 +305,7 @@ impl CompilationQueue {
                             job.source_revision,
                             document,
                             document_status.source_map,
+                            document_status.field_source_map,
                             source_snapshot,
                         );
                         let mut result = result_for_job(&job, CompilationStatus::Succeeded);

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { useEffect, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
@@ -7,8 +7,10 @@ import "@testing-library/jest-dom";
 const useCompilerMock = vi.hoisted(() => vi.fn());
 const tauriApiMock = vi.hoisted(() => ({
     getPreviewPositionsForElement: vi.fn(),
+    getPreviewPositionsForFocus: vi.fn(),
     jumpFromPreviewClick: vi.fn(),
 }));
+const dispatchActionMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../../hooks/useCompiler", () => ({
     useCompiler: useCompilerMock,
@@ -18,21 +20,26 @@ vi.mock("../../../api/tauri", () => ({
     TauriApi: tauriApiMock,
 }));
 
+vi.mock("../../../actions/runtime", () => ({
+    useActionDispatcher: () => dispatchActionMock,
+}));
+
 import { Preview } from "./Preview";
 
 const svgPage =
     '<svg viewBox="0 0 100 50" width="100" height="50"><text x="10" y="20">Título</text></svg>';
 
-const ActiveElementProbe = () => {
-    const { activeElementId } = useDocument();
-    return <span data-testid="active-element">{activeElementId}</span>;
-};
-
 const FocusElement = ({ elementId }: { elementId: string }) => {
-    const { setActiveElementId } = useDocument();
+    const { setDocumentFocus } = useDocument();
     useEffect(() => {
-        setActiveElementId(elementId);
-    }, [elementId, setActiveElementId]);
+        setDocumentFocus({
+            elementId,
+            fieldId: "heading-1:text",
+            caretUtf16Offset: 0,
+            sourceRevision: null,
+            focusSource: "native",
+        });
+    }, [elementId, setDocumentFocus]);
     return null;
 };
 
@@ -45,7 +52,6 @@ const renderPreview = (children: ReactNode = null) =>
                 <input aria-label="Heading editor" />
             </div>
             <Preview />
-            <ActiveElementProbe />
         </DocumentProvider>,
     );
 
@@ -59,18 +65,23 @@ describe("Preview sync", () => {
             sourceMap: [],
             svgs: [svgPage],
         });
-        tauriApiMock.getPreviewPositionsForElement.mockResolvedValue({
+        tauriApiMock.getPreviewPositionsForFocus.mockResolvedValue({
             positions: [],
             sourceRevision: 4,
             status: "noMatch",
         });
     });
 
-    it("converts SVG clicks to Typst preview coordinates and focuses the matched element", async () => {
+    it("converts SVG clicks to Typst preview coordinates and dispatches field focus", async () => {
         tauriApiMock.jumpFromPreviewClick.mockResolvedValue({
-            elementId: "heading-1",
+            target: {
+                caretUtf16Offset: 0,
+                elementId: "heading-1",
+                fieldId: "heading-1:text",
+                sourceRevision: 4,
+            },
             sourceRevision: 4,
-            status: "element",
+            status: "field",
         });
 
         const { container } = renderPreview();
@@ -98,18 +109,25 @@ describe("Preview sync", () => {
             );
         });
         await waitFor(() => {
-            expect(screen.getByTestId("active-element")).toHaveTextContent(
-                "heading-1",
-            );
+            expect(dispatchActionMock).toHaveBeenCalledWith({
+                id: "editor::FocusField",
+                payload: {
+                    caretUtf16Offset: 0,
+                    elementId: "heading-1",
+                    fieldId: "heading-1:text",
+                    sourceRevision: 4,
+                },
+            });
         });
-        expect(screen.getByLabelText("Heading editor")).toHaveFocus();
     });
 
     it("requests preview positions for the focused element without changing layout", async () => {
-        tauriApiMock.getPreviewPositionsForElement.mockResolvedValue({
+        tauriApiMock.getPreviewPositionsForFocus.mockResolvedValue({
             positions: [
                 {
+                    caretUtf16Offset: 0,
                     elementId: "heading-1",
+                    fieldId: "heading-1:text",
                     pageNumber: 1,
                     sourceRevision: 4,
                     xPt: 25,
@@ -123,8 +141,13 @@ describe("Preview sync", () => {
         const { container } = renderPreview(<FocusElement elementId="heading-1" />);
 
         await waitFor(() => {
-            expect(tauriApiMock.getPreviewPositionsForElement).toHaveBeenCalledWith(
-                "heading-1",
+            expect(tauriApiMock.getPreviewPositionsForFocus).toHaveBeenCalledWith(
+                {
+                    caretUtf16Offset: 0,
+                    elementId: "heading-1",
+                    fieldId: "heading-1:text",
+                    sourceRevision: 4,
+                },
                 4,
             );
         });

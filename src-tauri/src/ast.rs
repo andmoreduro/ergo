@@ -153,6 +153,8 @@ pub enum ActionId {
     EditorRemoveTableRow,
     #[serde(rename = "editor::RemoveTableColumn")]
     EditorRemoveTableColumn,
+    #[serde(rename = "editor::FocusField")]
+    EditorFocusField,
     #[serde(rename = "view::OpenCommandPalette")]
     ViewOpenCommandPalette,
     #[serde(rename = "view::ZoomIn")]
@@ -203,6 +205,7 @@ impl ActionId {
             ActionId::EditorAddTableColumn => "editor::AddTableColumn",
             ActionId::EditorRemoveTableRow => "editor::RemoveTableRow",
             ActionId::EditorRemoveTableColumn => "editor::RemoveTableColumn",
+            ActionId::EditorFocusField => "editor::FocusField",
             ActionId::ViewOpenCommandPalette => "view::OpenCommandPalette",
             ActionId::ViewZoomIn => "view::ZoomIn",
             ActionId::ViewZoomOut => "view::ZoomOut",
@@ -255,6 +258,7 @@ impl FromStr for ActionId {
             "editor::RemoveTableColumn" | "edit.removeTableColumn" => {
                 Ok(ActionId::EditorRemoveTableColumn)
             }
+            "editor::FocusField" | "edit.focusField" => Ok(ActionId::EditorFocusField),
             "view::OpenCommandPalette" | "view.commandPalette" => {
                 Ok(ActionId::ViewOpenCommandPalette)
             }

@@ -1,11 +1,21 @@
 import { useCallback, useMemo } from "react";
 import { useDocument } from "../../../state/DocumentContext";
+import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import {
     ActionContextProvider,
     useActionDispatcher,
     type ActionHandlerMap,
 } from "../../../actions/runtime";
+import {
+    equationSourceFieldId,
+    figureBodyFieldId,
+    figureCaptionFieldId,
+    figurePlacementFieldId,
+    richTextFieldId,
+    tableCellFieldId,
+    tableColumnSizeFieldId,
+} from "../../../editor/fieldIds";
 import { Button } from "../../atoms/Button/Button";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { Select } from "../../atoms/Select/Select";
@@ -18,7 +28,12 @@ export interface ElementEditorProps {
     element: DocumentElement;
 }
 
-type RichTextElement = Extract<DocumentElement, { type: "Heading" | "Paragraph" }>;
+type HeadingElement = Extract<DocumentElement, { type: "Heading" }>;
+type ParagraphElement = Extract<DocumentElement, { type: "Paragraph" }>;
+type EquationElement = Extract<DocumentElement, { type: "Equation" }>;
+type TableElement = Extract<DocumentElement, { type: "Table" }>;
+type FigureElement = Extract<DocumentElement, { type: "Figure" }>;
+type RichTextElement = HeadingElement | ParagraphElement;
 
 const richTextToString = (element: RichTextElement) =>
     element.content.map((richText) => richText.text).join("");
@@ -55,8 +70,10 @@ const elementLabel = (element: DocumentElement): string => {
 };
 
 export const ElementEditor = ({ element }: ElementEditorProps) => {
-    const { dispatch, setActiveElementId } = useDocument();
+    const { dispatch } = useDocument();
     const dispatchAction = useActionDispatcher();
+    const tableRows = element.type === "Table" ? element.rows : 0;
+    const tableCols = element.type === "Table" ? element.cols : 0;
 
     const handleDelete = useCallback(() => {
         if (window.confirm(m.element_delete_confirm())) {
@@ -104,7 +121,7 @@ export const ElementEditor = ({ element }: ElementEditorProps) => {
                     "rowIndex" in payload &&
                     typeof payload.rowIndex === "number"
                         ? payload.rowIndex
-                        : element.rows - 1;
+                        : tableRows - 1;
 
                 dispatch({
                     type: "REMOVE_TABLE_ROW",
@@ -127,7 +144,7 @@ export const ElementEditor = ({ element }: ElementEditorProps) => {
                     "colIndex" in payload &&
                     typeof payload.colIndex === "number"
                         ? payload.colIndex
-                        : element.cols - 1;
+                        : tableCols - 1;
 
                 dispatch({
                     type: "REMOVE_TABLE_COLUMN",
@@ -139,265 +156,8 @@ export const ElementEditor = ({ element }: ElementEditorProps) => {
                 return true;
             },
         }),
-        [dispatch, element.id, element.type, handleDelete],
+        [dispatch, element.id, element.type, handleDelete, tableCols, tableRows],
     );
-
-    const renderContent = () => {
-        if (element.type === "Heading") {
-            return (
-                <>
-                    <Select
-                        fullWidth
-                        label={m.editor_heading_level()}
-                        value={String(element.level)}
-                        options={headingLevels}
-                        onChange={(event) =>
-                            dispatch({
-                                type: "UPDATE_HEADING",
-                                payload: {
-                                    headingId: element.id,
-                                    level: Number(event.target.value),
-                                },
-                            })
-                        }
-                    />
-                    <Textarea
-                        fullWidth
-                        value={richTextToString(element)}
-                        onChange={(event) =>
-                            dispatch({
-                                type: "UPDATE_HEADING",
-                                payload: {
-                                    headingId: element.id,
-                                    text: event.target.value,
-                                },
-                            })
-                        }
-                    />
-                </>
-            );
-        }
-
-        if (element.type === "Paragraph") {
-            return (
-                <Textarea
-                    fullWidth
-                    value={richTextToString(element)}
-                    onChange={(event) =>
-                        dispatch({
-                            type: "UPDATE_PARAGRAPH_TEXT",
-                            payload: {
-                                paragraphId: element.id,
-                                text: event.target.value,
-                            },
-                        })
-                    }
-                />
-            );
-        }
-
-        if (element.type === "Equation") {
-            return (
-                <>
-                    <Textarea
-                        fullWidth
-                        label={m.editor_equation_source()}
-                        value={element.latex_source}
-                        onChange={(event) =>
-                            dispatch({
-                                type: "UPDATE_EQUATION",
-                                payload: {
-                                    equationId: element.id,
-                                    latexSource: event.target.value,
-                                },
-                            })
-                        }
-                    />
-                    <Checkbox
-                        label={m.editor_equation_block()}
-                        checked={element.is_block}
-                        onChange={(event) =>
-                            dispatch({
-                                type: "UPDATE_EQUATION",
-                                payload: {
-                                    equationId: element.id,
-                                    isBlock: event.target.checked,
-                                },
-                            })
-                        }
-                    />
-                </>
-            );
-        }
-
-        if (element.type === "Table") {
-            return (
-                <>
-                    <div className={styles.columnSizes}>
-                        {element.column_sizes.map((size, colIndex) => (
-                            <TextInput
-                                key={colIndex}
-                                label={m.editor_table_column_size({
-                                    index: colIndex + 1,
-                                })}
-                                value={size}
-                                onChange={(event) =>
-                                    dispatch({
-                                        type: "UPDATE_TABLE_COLUMN_SIZE",
-                                        payload: {
-                                            tableId: element.id,
-                                            colIndex,
-                                            size: event.target.value,
-                                        },
-                                    })
-                                }
-                            />
-                        ))}
-                    </div>
-                    <div className={styles.tableGrid}>
-                        {element.cells.map((row, rowIndex) => (
-                            <div className={styles.tableRow} key={`row-${rowIndex}`}>
-                                {row.map((cell, colIndex) => (
-                                    <TextInput
-                                        key={`cell-${rowIndex}-${colIndex}`}
-                                        value={cell.content}
-                                        aria-label={m.editor_table_cell_label({
-                                            row: rowIndex + 1,
-                                            column: colIndex + 1,
-                                        })}
-                                        onChange={(event) =>
-                                            dispatch({
-                                                type: "UPDATE_TABLE_CELL",
-                                                payload: {
-                                                    tableId: element.id,
-                                                    rowIndex,
-                                                    colIndex,
-                                                    text: event.target.value,
-                                                },
-                                            })
-                                        }
-                                    />
-                                ))}
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="small"
-                                    disabled={element.rows <= 1}
-                                    onClick={() =>
-                                        dispatchAction({
-                                            id: "editor::RemoveTableRow",
-                                            payload: { rowIndex },
-                                        })
-                                    }
-                                >
-                                    {m.editor_table_remove_row()}
-                                </Button>
-                            </div>
-                        ))}
-                    </div>
-                    <div className={styles.tableActions}>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="small"
-                            onClick={() =>
-                                dispatchAction({
-                                    id: "editor::AddTableRow",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            {m.editor_table_add_row()}
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="small"
-                            onClick={() =>
-                                dispatchAction({
-                                    id: "editor::AddTableColumn",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            {m.editor_table_add_column()}
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="small"
-                            disabled={element.cols <= 1}
-                            onClick={() =>
-                                dispatchAction({
-                                    id: "editor::RemoveTableColumn",
-                                    payload: { colIndex: element.cols - 1 },
-                                })
-                            }
-                        >
-                            {m.editor_table_remove_column()}
-                        </Button>
-                    </div>
-                </>
-            );
-        }
-
-        if (element.type === "Figure") {
-            const bodyText =
-                element.content.type === "Paragraph"
-                    ? richTextToString(element.content)
-                    : "";
-
-            return (
-                <>
-                    <Textarea
-                        fullWidth
-                        label={m.editor_figure_body()}
-                        value={bodyText}
-                        onChange={(event) =>
-                            dispatch({
-                                type: "UPDATE_FIGURE",
-                                payload: {
-                                    figureId: element.id,
-                                    bodyText: event.target.value,
-                                },
-                            })
-                        }
-                    />
-                    <TextInput
-                        fullWidth
-                        label={m.editor_figure_caption()}
-                        value={element.caption}
-                        onChange={(event) =>
-                            dispatch({
-                                type: "UPDATE_FIGURE",
-                                payload: {
-                                    figureId: element.id,
-                                    caption: event.target.value,
-                                },
-                            })
-                        }
-                    />
-                    <Select
-                        fullWidth
-                        label={m.editor_figure_placement()}
-                        value={element.placement}
-                        options={getPlacementOptions()}
-                        onChange={(event) =>
-                            dispatch({
-                                type: "UPDATE_FIGURE",
-                                payload: {
-                                    figureId: element.id,
-                                    placement: event.target.value,
-                                },
-                            })
-                        }
-                    />
-                </>
-            );
-        }
-
-        return null;
-    };
 
     return (
         <ActionContextProvider
@@ -409,11 +169,7 @@ export const ElementEditor = ({ element }: ElementEditorProps) => {
             }}
             handlers={elementHandlers}
         >
-            <div
-                className={styles.container}
-                data-element-id={element.id}
-                onFocus={() => setActiveElementId(element.id)}
-            >
+            <div className={styles.container} data-element-id={element.id}>
                 <div className={styles.header}>
                     <span className={styles.title}>{elementLabel(element)}</span>
                     <div className={styles.actions}>
@@ -432,8 +188,373 @@ export const ElementEditor = ({ element }: ElementEditorProps) => {
                         </Button>
                     </div>
                 </div>
-                <div className={styles.content}>{renderContent()}</div>
+                <div className={styles.content}>
+                    <ElementContent element={element} />
+                </div>
             </div>
         </ActionContextProvider>
+    );
+};
+
+const ElementContent = ({ element }: { element: DocumentElement }) => {
+    if (element.type === "Heading") {
+        return <HeadingEditor element={element} />;
+    }
+
+    if (element.type === "Paragraph") {
+        return <ParagraphEditor element={element} />;
+    }
+
+    if (element.type === "Equation") {
+        return <EquationEditor element={element} />;
+    }
+
+    if (element.type === "Table") {
+        return <TableEditor element={element} />;
+    }
+
+    return <FigureEditor element={element} />;
+};
+
+const HeadingEditor = ({ element }: { element: HeadingElement }) => {
+    const { dispatch } = useDocument();
+    const textField = useEditorFieldBinding<HTMLTextAreaElement>({
+        elementId: element.id,
+        fieldId: richTextFieldId(element.id),
+    });
+
+    return (
+        <>
+            <Select
+                fullWidth
+                label={m.editor_heading_level()}
+                value={String(element.level)}
+                options={headingLevels}
+                onChange={(event) =>
+                    dispatch({
+                        type: "UPDATE_HEADING",
+                        payload: {
+                            headingId: element.id,
+                            level: Number(event.target.value),
+                        },
+                    })
+                }
+            />
+            <Textarea
+                {...textField}
+                fullWidth
+                value={richTextToString(element)}
+                onChange={(event) =>
+                    dispatch({
+                        type: "UPDATE_HEADING",
+                        payload: {
+                            headingId: element.id,
+                            text: event.target.value,
+                        },
+                    })
+                }
+            />
+        </>
+    );
+};
+
+const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
+    const { dispatch } = useDocument();
+    const textField = useEditorFieldBinding<HTMLTextAreaElement>({
+        elementId: element.id,
+        fieldId: richTextFieldId(element.id),
+    });
+
+    return (
+        <Textarea
+            {...textField}
+            fullWidth
+            value={richTextToString(element)}
+            onChange={(event) =>
+                dispatch({
+                    type: "UPDATE_PARAGRAPH_TEXT",
+                    payload: {
+                        paragraphId: element.id,
+                        text: event.target.value,
+                    },
+                })
+            }
+        />
+    );
+};
+
+const EquationEditor = ({ element }: { element: EquationElement }) => {
+    const { dispatch } = useDocument();
+    const sourceField = useEditorFieldBinding<HTMLTextAreaElement>({
+        elementId: element.id,
+        fieldId: equationSourceFieldId(element.id),
+    });
+
+    return (
+        <>
+            <Textarea
+                {...sourceField}
+                fullWidth
+                label={m.editor_equation_source()}
+                value={element.latex_source}
+                onChange={(event) =>
+                    dispatch({
+                        type: "UPDATE_EQUATION",
+                        payload: {
+                            equationId: element.id,
+                            latexSource: event.target.value,
+                        },
+                    })
+                }
+            />
+            <Checkbox
+                label={m.editor_equation_block()}
+                checked={element.is_block}
+                onChange={(event) =>
+                    dispatch({
+                        type: "UPDATE_EQUATION",
+                        payload: {
+                            equationId: element.id,
+                            isBlock: event.target.checked,
+                        },
+                    })
+                }
+            />
+        </>
+    );
+};
+
+const TableEditor = ({ element }: { element: TableElement }) => {
+    const dispatchAction = useActionDispatcher();
+
+    return (
+        <>
+            <div className={styles.columnSizes}>
+                {element.column_sizes.map((size, colIndex) => (
+                    <TableColumnSizeEditor
+                        colIndex={colIndex}
+                        element={element}
+                        key={colIndex}
+                        size={size}
+                    />
+                ))}
+            </div>
+            <div className={styles.tableGrid}>
+                {element.cells.map((row, rowIndex) => (
+                    <div className={styles.tableRow} key={`row-${rowIndex}`}>
+                        {row.map((cell, colIndex) => (
+                            <TableCellEditor
+                                cellContent={cell.content}
+                                colIndex={colIndex}
+                                element={element}
+                                key={`cell-${rowIndex}-${colIndex}`}
+                                rowIndex={rowIndex}
+                            />
+                        ))}
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="small"
+                            disabled={element.rows <= 1}
+                            onClick={() =>
+                                dispatchAction({
+                                    id: "editor::RemoveTableRow",
+                                    payload: { rowIndex },
+                                })
+                            }
+                        >
+                            {m.editor_table_remove_row()}
+                        </Button>
+                    </div>
+                ))}
+            </div>
+            <div className={styles.tableActions}>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    onClick={() =>
+                        dispatchAction({
+                            id: "editor::AddTableRow",
+                            payload: null,
+                        })
+                    }
+                >
+                    {m.editor_table_add_row()}
+                </Button>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    onClick={() =>
+                        dispatchAction({
+                            id: "editor::AddTableColumn",
+                            payload: null,
+                        })
+                    }
+                >
+                    {m.editor_table_add_column()}
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="small"
+                    disabled={element.cols <= 1}
+                    onClick={() =>
+                        dispatchAction({
+                            id: "editor::RemoveTableColumn",
+                            payload: { colIndex: element.cols - 1 },
+                        })
+                    }
+                >
+                    {m.editor_table_remove_column()}
+                </Button>
+            </div>
+        </>
+    );
+};
+
+const TableColumnSizeEditor = ({
+    colIndex,
+    element,
+    size,
+}: {
+    colIndex: number;
+    element: TableElement;
+    size: string;
+}) => {
+    const { dispatch } = useDocument();
+    const columnField = useEditorFieldBinding<HTMLInputElement>({
+        elementId: element.id,
+        fieldId: tableColumnSizeFieldId(element.id, colIndex),
+    });
+
+    return (
+        <TextInput
+            {...columnField}
+            label={m.editor_table_column_size({
+                index: colIndex + 1,
+            })}
+            value={size}
+            onChange={(event) =>
+                dispatch({
+                    type: "UPDATE_TABLE_COLUMN_SIZE",
+                    payload: {
+                        tableId: element.id,
+                        colIndex,
+                        size: event.target.value,
+                    },
+                })
+            }
+        />
+    );
+};
+
+const TableCellEditor = ({
+    cellContent,
+    colIndex,
+    element,
+    rowIndex,
+}: {
+    cellContent: string;
+    colIndex: number;
+    element: TableElement;
+    rowIndex: number;
+}) => {
+    const { dispatch } = useDocument();
+    const cellField = useEditorFieldBinding<HTMLInputElement>({
+        elementId: element.id,
+        fieldId: tableCellFieldId(element.id, rowIndex, colIndex),
+    });
+
+    return (
+        <TextInput
+            {...cellField}
+            value={cellContent}
+            aria-label={m.editor_table_cell_label({
+                row: rowIndex + 1,
+                column: colIndex + 1,
+            })}
+            onChange={(event) =>
+                dispatch({
+                    type: "UPDATE_TABLE_CELL",
+                    payload: {
+                        tableId: element.id,
+                        rowIndex,
+                        colIndex,
+                        text: event.target.value,
+                    },
+                })
+            }
+        />
+    );
+};
+
+const FigureEditor = ({ element }: { element: FigureElement }) => {
+    const { dispatch } = useDocument();
+    const bodyText =
+        element.content.type === "Paragraph" ? richTextToString(element.content) : "";
+    const bodyField = useEditorFieldBinding<HTMLTextAreaElement>({
+        elementId: element.id,
+        fieldId: figureBodyFieldId(element.id),
+    });
+    const captionField = useEditorFieldBinding<HTMLInputElement>({
+        elementId: element.id,
+        fieldId: figureCaptionFieldId(element.id),
+    });
+    const placementField = useEditorFieldBinding<HTMLSelectElement>({
+        elementId: element.id,
+        fieldId: figurePlacementFieldId(element.id),
+    });
+
+    return (
+        <>
+            <Textarea
+                {...bodyField}
+                fullWidth
+                label={m.editor_figure_body()}
+                value={bodyText}
+                onChange={(event) =>
+                    dispatch({
+                        type: "UPDATE_FIGURE",
+                        payload: {
+                            figureId: element.id,
+                            bodyText: event.target.value,
+                        },
+                    })
+                }
+            />
+            <TextInput
+                {...captionField}
+                fullWidth
+                label={m.editor_figure_caption()}
+                value={element.caption}
+                onChange={(event) =>
+                    dispatch({
+                        type: "UPDATE_FIGURE",
+                        payload: {
+                            figureId: element.id,
+                            caption: event.target.value,
+                        },
+                    })
+                }
+            />
+            <Select
+                {...placementField}
+                fullWidth
+                label={m.editor_figure_placement()}
+                value={element.placement}
+                options={getPlacementOptions()}
+                onChange={(event) =>
+                    dispatch({
+                        type: "UPDATE_FIGURE",
+                        payload: {
+                            figureId: element.id,
+                            placement: event.target.value,
+                        },
+                    })
+                }
+            />
+        </>
     );
 };

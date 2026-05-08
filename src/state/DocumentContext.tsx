@@ -18,13 +18,26 @@ export type DocumentEvent = {
     timestamp: number;
 };
 
+export type DocumentFocusSource = "native" | "preview" | "programmatic";
+
+export interface DocumentFocusState {
+    elementId: string | null;
+    fieldId: string | null;
+    caretUtf16Offset: number | null;
+    sourceRevision: number | null;
+    focusSource: DocumentFocusSource;
+    requestId: number;
+}
+
+export type DocumentFocusInput = Omit<DocumentFocusState, "requestId">;
+
 interface DocumentSessionState {
     ast: DocumentAST;
     past: DocumentAST[];
     future: DocumentAST[];
     events: DocumentEvent[];
     isDirty: boolean;
-    activeElementId: string | null;
+    documentFocus: DocumentFocusState;
 }
 
 type DocumentSessionAction =
@@ -32,7 +45,7 @@ type DocumentSessionAction =
     | { type: "UNDO" }
     | { type: "REDO" }
     | { type: "MARK_SAVED" }
-    | { type: "SET_ACTIVE_ELEMENT"; elementId: string | null };
+    | { type: "SET_DOCUMENT_FOCUS"; focus: DocumentFocusInput };
 
 interface DocumentContextType {
     state: DocumentAST;
@@ -40,12 +53,12 @@ interface DocumentContextType {
     isDirty: boolean;
     canUndo: boolean;
     canRedo: boolean;
-    activeElementId: string | null;
+    documentFocus: DocumentFocusState;
     events: DocumentEvent[];
     undo: () => void;
     redo: () => void;
     markSaved: () => void;
-    setActiveElementId: (elementId: string | null) => void;
+    setDocumentFocus: (focus: DocumentFocusInput) => void;
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(
@@ -63,7 +76,14 @@ const createInitialSessionState = (): DocumentSessionState => ({
     future: [],
     events: [],
     isDirty: false,
-    activeElementId: null,
+    documentFocus: {
+        elementId: null,
+        fieldId: null,
+        caretUtf16Offset: null,
+        sourceRevision: null,
+        focusSource: "programmatic",
+        requestId: 0,
+    },
 });
 
 const createSessionReducer =
@@ -109,10 +129,13 @@ const createSessionReducer =
             };
         }
 
-        if (action.type === "SET_ACTIVE_ELEMENT") {
+        if (action.type === "SET_DOCUMENT_FOCUS") {
             return {
                 ...state,
-                activeElementId: action.elementId,
+                documentFocus: {
+                    ...action.focus,
+                    requestId: state.documentFocus.requestId + 1,
+                },
             };
         }
 
@@ -165,9 +188,9 @@ export const DocumentProvider = ({
         () => sessionDispatch({ type: "MARK_SAVED" }),
         [],
     );
-    const setActiveElementId = useCallback(
-        (elementId: string | null) =>
-            sessionDispatch({ type: "SET_ACTIVE_ELEMENT", elementId }),
+    const setDocumentFocus = useCallback(
+        (focus: DocumentFocusInput) =>
+            sessionDispatch({ type: "SET_DOCUMENT_FOCUS", focus }),
         [],
     );
 
@@ -179,12 +202,12 @@ export const DocumentProvider = ({
                 isDirty: sessionState.isDirty,
                 canUndo: sessionState.past.length > 0,
                 canRedo: sessionState.future.length > 0,
-                activeElementId: sessionState.activeElementId,
+                documentFocus: sessionState.documentFocus,
                 events: sessionState.events,
                 undo,
                 redo,
                 markSaved,
-                setActiveElementId,
+                setDocumentFocus,
             }}
         >
             {children}

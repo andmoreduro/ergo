@@ -268,6 +268,7 @@ sequenceDiagram
     participant World as SnapshotWorld / IdeWorld
     participant TypstIDE as typst-ide jump APIs
     participant Session as DocumentSession
+    participant Runtime as Action Runtime
     participant Editor as Form Editor
 
     User->>Preview: Clicks visible SVG page
@@ -278,13 +279,15 @@ sequenceDiagram
     TypstIDE->>World: Resolve source spans
     World-->>TypstIDE: Retained preview Source
     TypstIDE-->>Sync: Jump::File(file_id, offset)
-    Sync->>Sync: Map file offset to SourceMapEntry
-    Sync-->>API: element_id or no match
+    Sync->>Sync: Map file offset to FieldSourceMapEntry, fallback SourceMapEntry
+    Sync-->>API: PreviewFocusTarget or element fallback / no match
     API-->>Preview: PreviewJumpResult
-    Preview->>Editor: setActiveElementId(element_id) and focus matching form control
+    Preview->>Runtime: dispatch editor::FocusField(target)
+    Runtime->>Editor: update DocumentFocusState
+    Editor->>Editor: registered field applies focus and caret in layout effect
 ```
 
-Forward sync starts from the form editor's active element:
+Forward sync starts from the form editor's focused field:
 
 ```mermaid
 sequenceDiagram
@@ -297,9 +300,9 @@ sequenceDiagram
     participant VFS as VirtualFileSystem
     participant TypstIDE as typst-ide jump APIs
 
-    Editor->>Preview: activeElementId changes
-    Preview->>API: get_preview_positions_for_element(element_id, displayed_revision)
-    API->>Sync: Resolve element if displayed revision matches retained preview
+    Editor->>Preview: DocumentFocusState changes
+    Preview->>API: get_preview_positions_for_focus(target, displayed_revision)
+    API->>Sync: Resolve field or element if displayed revision matches retained preview
     Sync->>Sync: Read retained section Source from preview snapshot
     Sync->>TypstIDE: jump_from_cursor(PagedDocument, Source, source-map offset)
     TypstIDE-->>Sync: Preview page positions
@@ -315,6 +318,9 @@ sequenceDiagram
 - Newly added or newly rendered content cannot sync until a successful preview compile includes it.
 - `Jump::Url` does not focus a form field in v1.
 - Source-map byte ranges are half-open. This prevents adjacent fragments such as a heading followed by a paragraph from both owning the same byte offset when Typst reports a boundary click.
-- V1 sync focuses the owning form element's primary editable control. Destructive/action buttons inside the element card are fallback targets only when no editable control exists.
-- Exact character-offset cursor placement requires richer source-map ranges for escaped/generated text and is not part of the current sync contract.
+- Backward sync resolves clicks with Typst IDE frame hit testing and maps file offsets to field ranges first, then to element ranges.
+- `editor::FocusField` is an action. Preview clicks, sidebar navigation, and other command-like focus surfaces dispatch the same `ActionInvocation`.
+- `DocumentFocusState` stores `elementId`, `fieldId`, optional UTF-16 caret offset, preview revision, focus source, and a request id.
+- Registered editor fields apply focus and caret placement from React state inside `useLayoutEffect`; preview sync does not mutate DOM selection directly.
+- Plain text fields can receive UTF-16 caret placement. Generated wrappers, references, inline equations, and rich segments that do not map to raw field text fall back to field-level focus with a safe caret offset.
 - Typst labels remain stable source identifiers, but SVG output is not expected to contain Érgo-specific HTML data attributes.
