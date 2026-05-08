@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && vitest run",
+    "test:changed": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && vitest run --changed",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
