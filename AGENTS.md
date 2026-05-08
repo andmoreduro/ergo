@@ -42,29 +42,35 @@ When implementation and design docs conflict, preserve working code and update t
 | Command | What it does |
 |---------|-------------|
 | `pnpm dev` | Vite dev server (port 1420, strict port) |
-| `pnpm test` | Compile paraglide, then `vitest run` |
+| `pnpm test` | Compile paraglide, then `vitest run` (full suite) |
+| `pnpm test:changed` | Compile paraglide, then `vitest run --changed` (only tests affected by working-tree diff) |
 | `pnpm build` | paraglide compile → `tsc` → `vite build` |
 | `pnpm storybook` | Storybook dev server (port 6006) |
 | `pnpm tauri dev` | Full Tauri desktop app (runs `pnpm dev` internally) |
-| `cargo test` | Run all Rust tests (from `src-tauri/`) |
+| `cargo nextest run` | Run all Rust tests via nextest (from `src-tauri/`) |
 
-### Focused testing
+### Fast iteration
 
-The full test suite grows with the project. Run only tests relevant to your change:
+Use impact analysis to run only tests affected by your changes:
 
 ```bash
-# Frontend — single file, directory, or name pattern
-pnpm test -- path/to/file.test.ts
-pnpm test -- path/to/dir/
-pnpm test -- -t "test name pattern"
+# Frontend — only tests whose dependencies changed (vs HEAD)
+pnpm test:changed
 
-# Backend — single test, module, or filtered
-cargo test test_fn_name
-cargo test module_name::
-cargo test -- pattern_filter
+# Frontend — only tests whose dependencies changed (vs main)
+pnpm test -- --changed main
+
+# Backend — nextest is 60-80% faster than cargo test
+cargo nextest run
+
+# Backend — single test or module with nextest
+cargo nextest run test_fn_name
+cargo nextest run -E "test(module_name::)"
 ```
 
-Before merging, run the full `pnpm test` + `cargo test` suites.
+Install `cargo-nextest` once: `cargo binstall cargo-nextest` (or `cargo install cargo-nextest`).
+
+Before merging, run the full `pnpm test` + `cargo nextest run` suites.
 
 ## Critical: paraglide compile must run first
 
@@ -157,7 +163,7 @@ TypeScript strict mode (`noUnusedLocals`, `noUnusedParameters`) is the only enfo
 4. Run focused tests first, then broader gates:
    - `pnpm test` (frontend)
    - `pnpm build` (typecheck)
-   - `cargo test` (backend)
+   - `cargo nextest run` (backend)
 5. Every design or behavior change must update the relevant `context/` design file in the same change.
 6. Preserve immutable IDs on every document section and element — they power labels, references, source maps, and sync.
 7. Preserve user changes in the working tree — do not revert unrelated files.
