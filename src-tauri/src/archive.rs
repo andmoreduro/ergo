@@ -205,6 +205,7 @@ mod tests {
         assert!(names.contains(".ergproj/project_settings.json"));
         assert!(names.contains(".ergproj/template.json"));
         assert!(names.contains(".ergproj/source_map.json"));
+        assert!(names.contains(".ergproj/field_source_map.json"));
         assert!(!names.contains(".ergproj/preview/svg/page-1.svg"));
         assert!(!names.contains(".ergproj/exports/document.pdf"));
     }

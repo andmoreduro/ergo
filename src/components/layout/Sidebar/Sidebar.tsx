@@ -1,6 +1,10 @@
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import { useDocument } from "../../../state/DocumentContext";
-import { focusEditorElement } from "../../../utils/editorFocus";
+import { useActionDispatcher } from "../../../actions/runtime";
+import {
+    coverTitleFieldId,
+    defaultFieldIdForElement,
+} from "../../../editor/fieldIds";
 import { Accordion } from "../../molecules/Accordion/Accordion";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Sidebar.module.css";
@@ -38,6 +42,7 @@ const elementTitle = (element: DocumentElement): string => {
 
 export const Sidebar = () => {
     const { state } = useDocument();
+    const dispatchAction = useActionDispatcher();
     const coverPage = state.sections.find((section) => section.type === "CoverPage");
     const contentSections = state.sections.filter(
         (section) => section.type === "Content",
@@ -54,7 +59,17 @@ export const Sidebar = () => {
                         <button
                             className={styles.navItem}
                             type="button"
-                            onClick={() => focusEditorElement(coverPage.id)}
+                            onClick={() =>
+                                dispatchAction({
+                                    id: "editor::FocusField",
+                                    payload: {
+                                        elementId: coverPage.id,
+                                        fieldId: coverTitleFieldId(coverPage.id),
+                                        caretUtf16Offset: null,
+                                        sourceRevision: null,
+                                    },
+                                })
+                            }
                         >
                             <span>{m.sidebar_cover_page()}</span>
                             <small>{state.metadata.title}</small>
@@ -66,7 +81,17 @@ export const Sidebar = () => {
                                 className={styles.navItem}
                                 type="button"
                                 key={element.id}
-                                onClick={() => focusEditorElement(element.id)}
+                                onClick={() =>
+                                    dispatchAction({
+                                        id: "editor::FocusField",
+                                        payload: {
+                                            elementId: element.id,
+                                            fieldId: defaultFieldIdForElement(element),
+                                            caretUtf16Offset: null,
+                                            sourceRevision: null,
+                                        },
+                                    })
+                                }
                             >
                                 <span>{elementTitle(element)}</span>
                                 <small>{element.type}</small>

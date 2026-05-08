@@ -8,9 +8,18 @@ export interface PreviewPageMetrics {
 
 export interface PreviewElementPosition {
     elementId: string | null;
+    fieldId: string | null;
+    caretUtf16Offset: number | null;
     pageNumber: number;
     xPt: number;
     yPt: number;
+    sourceRevision: SourceRevision;
+}
+
+export interface PreviewFocusTarget {
+    elementId: string;
+    fieldId: string | null;
+    caretUtf16Offset: number | null;
     sourceRevision: SourceRevision;
 }
 
@@ -20,6 +29,11 @@ export interface PreviewSyncStatus {
 }
 
 export type PreviewJumpResult =
+    | {
+          status: "field";
+          target: PreviewFocusTarget;
+          sourceRevision: SourceRevision;
+      }
     | {
           status: "element";
           elementId: string;

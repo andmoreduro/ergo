@@ -19,6 +19,7 @@ const DEPENDENCY_MANIFEST_PATH: &str = ".ergproj/dependency_manifest.json";
 const PROJECT_SETTINGS_PATH: &str = ".ergproj/project_settings.json";
 const TEMPLATE_PATH: &str = ".ergproj/template.json";
 const SOURCE_MAP_PATH: &str = ".ergproj/source_map.json";
+const FIELD_SOURCE_MAP_PATH: &str = ".ergproj/field_source_map.json";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[ts(export, export_to = "../../src/bindings/")]
@@ -39,6 +40,31 @@ pub struct SourceMapEntry {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[ts(export, export_to = "../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
+pub struct FieldTextSegment {
+    pub source_byte_start: usize,
+    pub source_byte_end: usize,
+    pub field_utf16_start: usize,
+    pub field_utf16_end: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct FieldSourceMapEntry {
+    pub element_id: String,
+    pub section_id: String,
+    pub field_id: String,
+    pub file_path: String,
+    pub byte_start: usize,
+    pub byte_end: usize,
+    pub segments: Vec<FieldTextSegment>,
+    #[serde(default)]
+    pub fallback_caret_utf16_offset: Option<usize>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
+#[serde(rename_all = "camelCase")]
 pub struct GeneratedFragment {
     pub element_id: String,
     pub section_id: String,
@@ -47,6 +73,7 @@ pub struct GeneratedFragment {
     pub source_hash: u64,
     pub dependencies: Vec<String>,
     pub source_map_ranges: Vec<SourceMapEntry>,
+    pub field_source_map_ranges: Vec<FieldSourceMapEntry>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
@@ -68,6 +95,7 @@ pub struct ProjectSourceLayout {
     pub section_paths: Vec<String>,
     pub references_path: String,
     pub source_map_path: String,
+    pub field_source_map_path: String,
     pub document_state_path: String,
     pub project_settings_path: String,
     pub template_path: String,
@@ -80,6 +108,7 @@ pub struct DocumentSessionStatus {
     pub source_revision: u64,
     pub layout: ProjectSourceLayout,
     pub source_map: Vec<SourceMapEntry>,
+    pub field_source_map: Vec<FieldSourceMapEntry>,
     pub dirty_section_ids: Vec<String>,
     pub dirty_element_ids: Vec<String>,
     pub fragment_count: usize,
@@ -98,6 +127,7 @@ struct DocumentSessionInner {
     fragments: HashMap<String, GeneratedFragment>,
     sections: HashMap<String, SectionSource>,
     source_map: Vec<SourceMapEntry>,
+    field_source_map: Vec<FieldSourceMapEntry>,
     last_status: Option<DocumentSessionStatus>,
 }
 
@@ -112,7 +142,153 @@ struct GeneratedProjectSources {
     sections: Vec<SectionSource>,
     fragments: HashMap<String, GeneratedFragment>,
     source_map: Vec<SourceMapEntry>,
+    field_source_map: Vec<FieldSourceMapEntry>,
     layout: ProjectSourceLayout,
+}
+
+#[derive(Clone, Debug)]
+struct LocalFieldSourceMapEntry {
+    element_id: String,
+    field_id: String,
+    byte_start: usize,
+    byte_end: usize,
+    segments: Vec<FieldTextSegment>,
+    fallback_caret_utf16_offset: Option<usize>,
+}
+
+#[derive(Default)]
+struct SourceBuilder {
+    source: String,
+    field_ranges: Vec<LocalFieldSourceMapEntry>,
+}
+
+impl SourceBuilder {
+    fn push_literal(&mut self, value: &str) {
+        self.source.push_str(value);
+    }
+
+    fn push_builder(&mut self, mut other: SourceBuilder) {
+        let base = self.source.len();
+        self.source.push_str(&other.source);
+        for entry in &mut other.field_ranges {
+            entry.byte_start += base;
+            entry.byte_end += base;
+            for segment in &mut entry.segments {
+                segment.source_byte_start += base;
+                segment.source_byte_end += base;
+            }
+        }
+        self.field_ranges.extend(other.field_ranges);
+    }
+
+    fn push_escaped_field(
+        &mut self,
+        element_id: &str,
+        field_id: &str,
+        value: &str,
+        field_utf16_start: usize,
+    ) {
+        self.push_field(element_id, field_id, value, field_utf16_start, true);
+    }
+
+    fn push_raw_field(
+        &mut self,
+        element_id: &str,
+        field_id: &str,
+        value: &str,
+        field_utf16_start: usize,
+    ) {
+        self.push_field(element_id, field_id, value, field_utf16_start, false);
+    }
+
+    fn push_generated_field_marker(
+        &mut self,
+        element_id: &str,
+        field_id: &str,
+        generated: &str,
+        fallback_caret_utf16_offset: usize,
+    ) {
+        let byte_start = self.source.len();
+        self.source.push_str(generated);
+        let byte_end = self.source.len();
+        self.field_ranges.push(LocalFieldSourceMapEntry {
+            element_id: element_id.to_string(),
+            field_id: field_id.to_string(),
+            byte_start,
+            byte_end,
+            segments: Vec::new(),
+            fallback_caret_utf16_offset: Some(fallback_caret_utf16_offset),
+        });
+    }
+
+    fn into_absolute_field_ranges(
+        self,
+        section_id: &str,
+        file_path: &str,
+        section_byte_start: usize,
+    ) -> Vec<FieldSourceMapEntry> {
+        self.field_ranges
+            .into_iter()
+            .map(|entry| FieldSourceMapEntry {
+                element_id: entry.element_id,
+                section_id: section_id.to_string(),
+                field_id: entry.field_id,
+                file_path: file_path.to_string(),
+                byte_start: section_byte_start + entry.byte_start,
+                byte_end: section_byte_start + entry.byte_end,
+                segments: entry
+                    .segments
+                    .into_iter()
+                    .map(|segment| FieldTextSegment {
+                        source_byte_start: section_byte_start + segment.source_byte_start,
+                        source_byte_end: section_byte_start + segment.source_byte_end,
+                        field_utf16_start: segment.field_utf16_start,
+                        field_utf16_end: segment.field_utf16_end,
+                    })
+                    .collect(),
+                fallback_caret_utf16_offset: entry.fallback_caret_utf16_offset,
+            })
+            .collect()
+    }
+
+    fn push_field(
+        &mut self,
+        element_id: &str,
+        field_id: &str,
+        value: &str,
+        field_utf16_start: usize,
+        escape: bool,
+    ) {
+        let byte_start = self.source.len();
+        let mut segments = Vec::new();
+        let mut utf16_offset = field_utf16_start;
+
+        for character in value.chars() {
+            let source_byte_start = self.source.len();
+            if escape && should_escape_typst_text_character(character) {
+                self.source.push('\\');
+            }
+            self.source.push(character);
+            let source_byte_end = self.source.len();
+            let next_utf16_offset = utf16_offset + character.len_utf16();
+            segments.push(FieldTextSegment {
+                source_byte_start,
+                source_byte_end,
+                field_utf16_start: utf16_offset,
+                field_utf16_end: next_utf16_offset,
+            });
+            utf16_offset = next_utf16_offset;
+        }
+
+        self.field_ranges.push(LocalFieldSourceMapEntry {
+            element_id: element_id.to_string(),
+            field_id: field_id.to_string(),
+            byte_start,
+            byte_end: self.source.len(),
+            segments,
+            fallback_caret_utf16_offset: Some(field_utf16_start),
+        });
+    }
 }
 
 impl DocumentSession {
@@ -189,11 +365,17 @@ impl DocumentSession {
             .to_string(),
         );
         write_json_source(&self.vfs, SOURCE_MAP_PATH, &generated.source_map)?;
+        write_json_source(
+            &self.vfs,
+            FIELD_SOURCE_MAP_PATH,
+            &generated.field_source_map,
+        )?;
 
         let status = DocumentSessionStatus {
             source_revision: self.vfs.latest_revision(),
             layout: generated.layout,
             source_map: generated.source_map.clone(),
+            field_source_map: generated.field_source_map.clone(),
             dirty_section_ids,
             dirty_element_ids,
             fragment_count: generated.fragments.len(),
@@ -203,6 +385,7 @@ impl DocumentSession {
         inner.fragments = generated.fragments;
         inner.sections = next_sections;
         inner.source_map = generated.source_map;
+        inner.field_source_map = generated.field_source_map;
         inner.last_status = Some(status.clone());
 
         Ok(status)
@@ -217,6 +400,7 @@ impl DocumentSession {
                 source_revision: self.vfs.latest_revision(),
                 layout: default_layout(Vec::new()),
                 source_map: Vec::new(),
+                field_source_map: Vec::new(),
                 dirty_section_ids: Vec::new(),
                 dirty_element_ids: Vec::new(),
                 fragment_count: 0,
@@ -228,6 +412,7 @@ fn generate_project_sources(ast: &DocumentAST) -> GeneratedProjectSources {
     let mut sections = Vec::new();
     let mut fragments = HashMap::new();
     let mut source_map = Vec::new();
+    let mut field_source_map = Vec::new();
 
     for section in &ast.sections {
         let section_id = section_id(section);
@@ -241,6 +426,7 @@ fn generate_project_sources(ast: &DocumentAST) -> GeneratedProjectSources {
                 let fragment = cover_page_fragment(ast, cover_page.id.clone(), file_path.clone());
                 source.push_str(&fragment.source);
                 source_map.extend(fragment.source_map_ranges.clone());
+                field_source_map.extend(fragment.field_source_map_ranges.clone());
                 fragment_ids.push(fragment.element_id.clone());
                 fragments.insert(fragment.element_id.clone(), fragment);
             }
@@ -248,11 +434,13 @@ fn generate_project_sources(ast: &DocumentAST) -> GeneratedProjectSources {
                 for element in &content.elements {
                     let start_byte = source.len();
                     let start_char = char_offset;
-                    let fragment = element_fragment(element, &content.id, &file_path, start_byte, start_char);
+                    let fragment =
+                        element_fragment(element, &content.id, &file_path, start_byte, start_char);
                     if !fragment.source.is_empty() {
                         source.push_str(&fragment.source);
                         char_offset += fragment.source.chars().count();
                         source_map.extend(fragment.source_map_ranges.clone());
+                        field_source_map.extend(fragment.field_source_map_ranges.clone());
                     }
                     fragment_ids.push(fragment.element_id.clone());
                     fragments.insert(fragment.element_id.clone(), fragment);
@@ -283,6 +471,7 @@ fn generate_project_sources(ast: &DocumentAST) -> GeneratedProjectSources {
         sections,
         fragments,
         source_map,
+        field_source_map,
         layout,
     }
 }
@@ -306,11 +495,6 @@ fn cover_page_fragment(
     section_id: String,
     file_path: String,
 ) -> GeneratedFragment {
-    let title = escape_typst_text(if ast.metadata.title.trim().is_empty() {
-        "Untitled Document"
-    } else {
-        ast.metadata.title.trim()
-    });
     let label = label_for_id(&section_id);
 
     let cover_page = ast.sections.iter().find_map(|section| match section {
@@ -318,51 +502,88 @@ fn cover_page_fragment(
         _ => None,
     });
 
-    let source = if let Some(cover_page) = cover_page {
-        let authors = cover_page
-            .authors
-            .iter()
-            .map(|author| {
-                let email = author
-                    .email
-                    .as_ref()
-                    .filter(|value| !value.trim().is_empty())
-                    .map(|email| format!(" ({email})"))
-                    .unwrap_or_default();
-                escape_typst_text(format!("{}{}", author.name, email).trim())
-            })
-            .filter(|value| !value.is_empty())
-            .collect::<Vec<_>>();
-        let affiliations = cover_page
+    let mut builder = SourceBuilder::default();
+    builder.push_literal("#align(center)[\n  #text(size: 18pt, weight: \"bold\")[");
+    push_trimmed_or_generated_field(
+        &mut builder,
+        &section_id,
+        &cover_title_field_id(&section_id),
+        &ast.metadata.title,
+        "Untitled Document",
+    );
+    builder.push_literal("]");
+
+    if let Some(cover_page) = cover_page {
+        for (index, author) in cover_page.authors.iter().enumerate() {
+            let name = author.name.trim();
+            let email = author.email.as_deref().unwrap_or("").trim();
+            if name.is_empty() && email.is_empty() {
+                continue;
+            }
+
+            builder.push_literal("\n\n  ");
+            if name.is_empty() {
+                builder.push_generated_field_marker(
+                    &section_id,
+                    &cover_author_name_field_id(&section_id, index),
+                    "",
+                    0,
+                );
+            } else {
+                builder.push_escaped_field(
+                    &section_id,
+                    &cover_author_name_field_id(&section_id, index),
+                    name,
+                    0,
+                );
+            }
+            if !email.is_empty() {
+                builder.push_literal(" (");
+                builder.push_escaped_field(
+                    &section_id,
+                    &cover_author_email_field_id(&section_id, index),
+                    email,
+                    0,
+                );
+                builder.push_literal(")");
+            }
+        }
+
+        let mut affiliation_utf16_offset = 0;
+        for affiliation in cover_page
             .affiliations
             .iter()
-            .map(escape_typst_text)
+            .map(|value| value.trim())
             .filter(|value| !value.is_empty())
-            .collect::<Vec<_>>();
-        let abstract_text = escape_typst_text(cover_page.abstract_text.trim());
+        {
+            builder.push_literal("\n\n  ");
+            builder.push_escaped_field(
+                &section_id,
+                &cover_affiliations_field_id(&section_id),
+                affiliation,
+                affiliation_utf16_offset,
+            );
+            affiliation_utf16_offset += affiliation.chars().map(char::len_utf16).sum::<usize>() + 1;
+        }
+    }
 
-        let mut lines = vec![format!("#text(size: 18pt, weight: \"bold\")[{title}]")];
-        lines.extend(authors);
-        lines.extend(affiliations);
+    builder.push_literal(&format!("\n] <{}>\n\n", label));
 
-        let abstract_block = if abstract_text.is_empty() {
-            String::new()
-        } else {
-            format!("#block[\n  #strong[Abstract]\n\n  {abstract_text}\n]\n\n")
-        };
+    if let Some(cover_page) = cover_page {
+        if !cover_page.abstract_text.trim().is_empty() {
+            builder.push_literal("#block[\n  #strong[Abstract]\n\n  ");
+            builder.push_escaped_field(
+                &section_id,
+                &cover_abstract_field_id(&section_id),
+                cover_page.abstract_text.trim(),
+                0,
+            );
+            builder.push_literal("\n]\n\n");
+        }
+    }
 
-        format!(
-            "#align(center)[\n  {}\n] <{}>\n\n{}",
-            lines.join("\n\n  "),
-            label,
-            abstract_block
-        )
-    } else {
-        format!(
-            "#align(center)[#text(size: 18pt, weight: \"bold\")[{title}]] <{}>\n\n",
-            label
-        )
-    };
+    let source = builder.source.clone();
+    let field_source_map_ranges = builder.into_absolute_field_ranges(&section_id, &file_path, 0);
 
     let source_map_entry = SourceMapEntry {
         element_id: section_id.clone(),
@@ -384,6 +605,7 @@ fn cover_page_fragment(
         source,
         dependencies: Vec::new(),
         source_map_ranges: vec![source_map_entry],
+        field_source_map_ranges,
     }
 }
 
@@ -397,7 +619,10 @@ fn element_fragment(
     let element_id = element_id(element);
     let kind = element_kind(element);
     let label = label_for_id(&element_id);
-    let source = generate_element_typst(element, &label);
+    let builder = generate_element_typst(element, &label);
+    let source = builder.source.clone();
+    let field_source_map_ranges =
+        builder.into_absolute_field_ranges(section_id, file_path, section_byte_start);
     let source_map_ranges = if source.is_empty() {
         Vec::new()
     } else {
@@ -422,40 +647,53 @@ fn element_fragment(
         source,
         dependencies: Vec::new(),
         source_map_ranges,
+        field_source_map_ranges,
     }
 }
 
-fn generate_element_typst(element: &DocumentElement, label: &str) -> String {
+fn generate_element_typst(element: &DocumentElement, label: &str) -> SourceBuilder {
+    let mut builder = SourceBuilder::default();
     match element {
         DocumentElement::Heading(heading) => {
             let level = heading.level.clamp(1, 5) as usize;
             let marker = "=".repeat(level);
-            let title = rich_text_to_typst(&heading.content);
-            let title = if title.trim().is_empty() {
-                "Untitled heading".to_string()
-            } else {
-                title.trim().to_string()
-            };
+            let element_id = &heading.id;
+            let field_id = rich_text_field_id(element_id);
+            builder.push_literal(&format!("{marker} "));
 
-            format!("{marker} {title} <{label}>\n\n")
+            let mut title = SourceBuilder::default();
+            push_rich_text_field(&mut title, element_id, &field_id, &heading.content);
+            if title.source.trim().is_empty() {
+                builder.push_generated_field_marker(element_id, &field_id, "Untitled heading", 0);
+            } else {
+                builder.push_builder(title);
+            }
+            builder.push_literal(&format!(" <{label}>\n\n"));
         }
         DocumentElement::Paragraph(paragraph) => {
-            let body = rich_text_to_typst(&paragraph.content);
-            let body = body.trim();
-            if body.is_empty() {
-                String::new()
+            let element_id = &paragraph.id;
+            let field_id = rich_text_field_id(element_id);
+            push_rich_text_field(&mut builder, element_id, &field_id, &paragraph.content);
+            if builder.source.trim().is_empty() {
+                builder.source.clear();
+                builder.field_ranges.clear();
             } else {
-                format!("{body} <{label}>\n\n")
+                builder.push_literal(&format!(" <{label}>\n\n"));
             }
         }
         DocumentElement::Equation(equation) => {
             let source = normalize_math_source(&equation.latex_source);
-            if source.is_empty() {
-                String::new()
-            } else if equation.is_block {
-                format!("$ {source} $ <{label}>\n\n")
-            } else {
-                format!("${source}$ <{label}>\n\n")
+            if !source.is_empty() {
+                let field_id = equation_source_field_id(&equation.id);
+                if equation.is_block {
+                    builder.push_literal("$ ");
+                    builder.push_raw_field(&equation.id, &field_id, &source, 0);
+                    builder.push_literal(&format!(" $ <{label}>\n\n"));
+                } else {
+                    builder.push_literal("$");
+                    builder.push_raw_field(&equation.id, &field_id, &source, 0);
+                    builder.push_literal(&format!("$ <{label}>\n\n"));
+                }
             }
         }
         DocumentElement::Table(table) => {
@@ -470,24 +708,33 @@ fn generate_element_typst(element: &DocumentElement, label: &str) -> String {
             } else {
                 columns
             };
-            let cells = table
-                .cells
-                .iter()
-                .flat_map(|row| {
-                    row.iter()
-                        .map(|cell| format!("[{}]", escape_typst_text(&cell.content)))
-                })
-                .collect::<Vec<_>>()
-                .join(",\n  ");
 
-            format!("#table(\n  columns: ({columns}),\n  {cells}\n) <{label}>\n\n")
+            builder.push_literal(&format!("#table(\n  columns: ({columns})"));
+            for (row_index, row) in table.cells.iter().enumerate() {
+                for (col_index, cell) in row.iter().enumerate() {
+                    builder.push_literal(",\n  [");
+                    builder.push_escaped_field(
+                        &table.id,
+                        &table_cell_field_id(&table.id, row_index, col_index),
+                        &cell.content,
+                        0,
+                    );
+                    builder.push_literal("]");
+                }
+            }
+            builder.push_literal(&format!("\n) <{label}>\n\n"));
         }
         DocumentElement::Figure(figure) => {
-            let body = match &figure.content {
-                DocumentElement::Paragraph(paragraph) => rich_text_to_typst(&paragraph.content),
-                _ => String::new(),
-            };
-            let caption = escape_typst_text(figure.caption.trim());
+            let mut body = SourceBuilder::default();
+            if let DocumentElement::Paragraph(paragraph) = &figure.content {
+                push_rich_text_field(
+                    &mut body,
+                    &figure.id,
+                    &figure_body_field_id(&figure.id),
+                    &paragraph.content,
+                );
+            }
+            let caption = figure.caption.trim();
             let placement = sanitize_placement(&figure.placement);
             let asset_path = figure
                 .asset_id
@@ -495,30 +742,43 @@ fn generate_element_typst(element: &DocumentElement, label: &str) -> String {
                 .filter(|asset_id| !asset_id.trim().is_empty())
                 .map(|asset_id| format!("assets/{}", path_id_for_id(asset_id)));
 
-            if body.trim().is_empty() && caption.is_empty() && asset_path.is_none() {
-                return String::new();
+            if body.source.trim().is_empty() && caption.is_empty() && asset_path.is_none() {
+                return builder;
             }
 
-            let caption_line = if caption.is_empty() {
-                String::new()
+            builder.push_literal("#figure(\n  [");
+            if let Some(path) = asset_path {
+                builder.push_generated_field_marker(
+                    &figure.id,
+                    &figure_body_field_id(&figure.id),
+                    &format!("#image(\"{}\")", escape_typst_string(&path)),
+                    0,
+                );
+            } else if body.source.trim().is_empty() {
+                builder.push_generated_field_marker(
+                    &figure.id,
+                    &figure_body_field_id(&figure.id),
+                    "Figure content",
+                    0,
+                );
             } else {
-                format!(",\n  caption: [{caption}]")
-            };
-            let figure_body = asset_path
-                .map(|path| format!("#image(\"{}\")", escape_typst_string(&path)))
-                .unwrap_or_else(|| {
-                    if body.trim().is_empty() {
-                        "Figure content".to_string()
-                    } else {
-                        body.trim().to_string()
-                    }
-                });
-
-            format!(
-                "#figure(\n  [{figure_body}]{caption_line},\n  placement: {placement}\n) <{label}>\n\n"
-            )
+                builder.push_builder(body);
+            }
+            builder.push_literal("]");
+            if !caption.is_empty() {
+                builder.push_literal(",\n  caption: [");
+                builder.push_escaped_field(
+                    &figure.id,
+                    &figure_caption_field_id(&figure.id),
+                    caption,
+                    0,
+                );
+                builder.push_literal("]");
+            }
+            builder.push_literal(&format!(",\n  placement: {placement}\n) <{label}>\n\n"));
         }
-    }
+    };
+    builder
 }
 
 fn generate_preamble_typst(settings: &ProjectSettings) -> String {
@@ -564,34 +824,67 @@ fn generate_references_bib(references: &[ReferenceEntry]) -> String {
     source
 }
 
-fn rich_text_to_typst(content: &[RichText]) -> String {
-    content.iter().map(rich_text_span_to_typst).collect()
+fn push_trimmed_or_generated_field(
+    builder: &mut SourceBuilder,
+    element_id: &str,
+    field_id: &str,
+    value: &str,
+    fallback: &str,
+) {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        builder.push_generated_field_marker(element_id, field_id, fallback, 0);
+    } else {
+        builder.push_escaped_field(element_id, field_id, trimmed, 0);
+    }
 }
 
-fn rich_text_span_to_typst(span: &RichText) -> String {
-    if span.kind.as_deref() == Some("reference") {
-        if let Some(reference_id) = span.reference_id.as_deref() {
-            return format!("@{}", label_for_id(reference_id));
-        }
-    }
+fn push_rich_text_field(
+    builder: &mut SourceBuilder,
+    element_id: &str,
+    field_id: &str,
+    content: &[RichText],
+) {
+    let mut field_utf16_offset = 0;
 
-    if span.kind.as_deref() == Some("inlineEquation") {
-        if let Some(equation_source) = span.equation_source.as_deref() {
-            let source = normalize_math_source(equation_source);
-            return if source.is_empty() {
-                String::new()
-            } else {
-                format!("${source}$")
-            };
+    for span in content {
+        if span.kind.as_deref() == Some("reference") {
+            if let Some(reference_id) = span.reference_id.as_deref() {
+                builder.push_generated_field_marker(
+                    element_id,
+                    field_id,
+                    &format!("@{}", label_for_id(reference_id)),
+                    field_utf16_offset,
+                );
+            }
+            continue;
         }
-    }
 
-    let text = escape_typst_text(&span.text);
-    match (span.bold.unwrap_or(false), span.italic.unwrap_or(false)) {
-        (true, true) => format!("*_{text}_*"),
-        (true, false) => format!("*{text}*"),
-        (false, true) => format!("_{text}_"),
-        (false, false) => text,
+        if span.kind.as_deref() == Some("inlineEquation") {
+            if let Some(equation_source) = span.equation_source.as_deref() {
+                let source = normalize_math_source(equation_source);
+                if !source.is_empty() {
+                    builder.push_generated_field_marker(
+                        element_id,
+                        field_id,
+                        &format!("${source}$"),
+                        field_utf16_offset,
+                    );
+                }
+            }
+            continue;
+        }
+
+        let (prefix, suffix) = match (span.bold.unwrap_or(false), span.italic.unwrap_or(false)) {
+            (true, true) => ("*_", "_*"),
+            (true, false) => ("*", "*"),
+            (false, true) => ("_", "_"),
+            (false, false) => ("", ""),
+        };
+        builder.push_literal(prefix);
+        builder.push_escaped_field(element_id, field_id, &span.text, field_utf16_offset);
+        builder.push_literal(suffix);
+        field_utf16_offset += span.text.chars().map(char::len_utf16).sum::<usize>();
     }
 }
 
@@ -617,6 +910,7 @@ fn default_layout(section_paths: Vec<String>) -> ProjectSourceLayout {
         section_paths,
         references_path: REFERENCES_PATH.to_string(),
         source_map_path: SOURCE_MAP_PATH.to_string(),
+        field_source_map_path: FIELD_SOURCE_MAP_PATH.to_string(),
         document_state_path: DOCUMENT_STATE_PATH.to_string(),
         project_settings_path: PROJECT_SETTINGS_PATH.to_string(),
         template_path: TEMPLATE_PATH.to_string(),
@@ -663,6 +957,46 @@ fn label_for_id(id: &str) -> String {
     }
 }
 
+fn rich_text_field_id(element_id: &str) -> String {
+    format!("{element_id}:text")
+}
+
+fn cover_title_field_id(section_id: &str) -> String {
+    format!("{section_id}:title")
+}
+
+fn cover_abstract_field_id(section_id: &str) -> String {
+    format!("{section_id}:abstract")
+}
+
+fn cover_affiliations_field_id(section_id: &str) -> String {
+    format!("{section_id}:affiliations")
+}
+
+fn cover_author_name_field_id(section_id: &str, author_index: usize) -> String {
+    format!("{section_id}:author:{author_index}:name")
+}
+
+fn cover_author_email_field_id(section_id: &str, author_index: usize) -> String {
+    format!("{section_id}:author:{author_index}:email")
+}
+
+fn equation_source_field_id(element_id: &str) -> String {
+    format!("{element_id}:latexSource")
+}
+
+fn table_cell_field_id(element_id: &str, row_index: usize, col_index: usize) -> String {
+    format!("{element_id}:cell:{row_index}:{col_index}")
+}
+
+fn figure_body_field_id(element_id: &str) -> String {
+    format!("{element_id}:body")
+}
+
+fn figure_caption_field_id(element_id: &str) -> String {
+    format!("{element_id}:caption")
+}
+
 fn path_id_for_id(id: &str) -> String {
     let mut normalized = String::new();
     let mut previous_was_dash = false;
@@ -690,17 +1024,11 @@ fn path_id_for_id(id: &str) -> String {
     normalized.trim_matches('-').to_string()
 }
 
-fn escape_typst_text(value: impl AsRef<str>) -> String {
-    value
-        .as_ref()
-        .chars()
-        .flat_map(|character| match character {
-            '\\' | '#' | '$' | '%' | '&' | '_' | '^' | '{' | '}' | '[' | ']' => {
-                vec!['\\', character]
-            }
-            _ => vec![character],
-        })
-        .collect()
+fn should_escape_typst_text_character(character: char) -> bool {
+    matches!(
+        character,
+        '\\' | '#' | '$' | '%' | '&' | '_' | '^' | '{' | '}' | '[' | ']'
+    )
 }
 
 fn escape_typst_string(value: &str) -> String {
@@ -853,6 +1181,57 @@ mod tests {
             .iter()
             .any(|entry| entry.element_id == "heading-1"
                 && entry.file_path == "sections/content-section.typ"));
+    }
+
+    #[test]
+    fn status_includes_field_source_map_for_heading_text() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+
+        let status = session.sync_snapshot(test_ast()).unwrap();
+        let status_json = serde_json::to_value(status).unwrap();
+        let field_map = status_json
+            .get("fieldSourceMap")
+            .and_then(serde_json::Value::as_array)
+            .unwrap_or_else(|| panic!("fieldSourceMap missing from document session status"));
+
+        assert!(field_map.iter().any(|entry| {
+            entry.get("elementId") == Some(&serde_json::json!("heading-1"))
+                && entry.get("fieldId") == Some(&serde_json::json!("heading-1:text"))
+                && entry.get("filePath") == Some(&serde_json::json!("sections/content-section.typ"))
+        }));
+    }
+
+    #[test]
+    fn field_source_map_tracks_escaped_text_and_utf16_offsets() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let mut ast = test_ast();
+
+        if let DocumentSection::Content(content) = &mut ast.sections[1] {
+            if let DocumentElement::Heading(heading) = &mut content.elements[0] {
+                heading.content[0].text = "#Niñez 🌍".to_string();
+            }
+        }
+
+        let status = session.sync_snapshot(ast).unwrap();
+        let field_entry = status
+            .field_source_map
+            .iter()
+            .find(|entry| entry.field_id == "heading-1:text")
+            .unwrap();
+
+        assert_eq!(
+            vfs.read_source("sections/content-section.typ").unwrap(),
+            "== \\#Niñez 🌍 <ergo-heading-1>\n\n"
+        );
+        assert_eq!(
+            field_entry
+                .segments
+                .last()
+                .map(|segment| segment.field_utf16_end),
+            Some("#Niñez 🌍".encode_utf16().count())
+        );
     }
 
     #[test]

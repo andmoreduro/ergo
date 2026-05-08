@@ -15,6 +15,7 @@ import type {
 } from "../types/documentSession";
 import type {
     PreviewElementPositionsResult,
+    PreviewFocusTarget,
     PreviewJumpResult,
     PreviewSyncStatus,
 } from "../types/previewSync";
@@ -132,6 +133,16 @@ export const TauriApi = {
     ): Promise<PreviewElementPositionsResult> {
         return invoke("get_preview_positions_for_element", {
             elementId,
+            sourceRevision,
+        });
+    },
+
+    async getPreviewPositionsForFocus(
+        target: PreviewFocusTarget,
+        sourceRevision: number,
+    ): Promise<PreviewElementPositionsResult> {
+        return invoke("get_preview_positions_for_focus", {
+            target,
             sourceRevision,
         });
     },

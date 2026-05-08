@@ -35,6 +35,7 @@ pub fn run() {
             document_session::read_preview_svg,
             preview_sync::jump_from_preview_click,
             preview_sync::get_preview_positions_for_element,
+            preview_sync::get_preview_positions_for_focus,
             preview_sync::get_preview_sync_status,
             settings::load_global_settings,
             settings::save_global_settings,

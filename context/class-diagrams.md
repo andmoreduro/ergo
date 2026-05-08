@@ -248,6 +248,7 @@ classDiagram
             +UInt64 source_hash
             +String[] dependencies
             +SourceMapEntry[] source_map_ranges
+            +FieldSourceMapEntry[] field_source_map_ranges
         }
 
         class SectionSource {
@@ -270,11 +271,30 @@ classDiagram
             +Int? page
         }
 
+        class FieldTextSegment {
+            +Int source_byte_start
+            +Int source_byte_end
+            +Int field_utf16_start
+            +Int field_utf16_end
+        }
+
+        class FieldSourceMapEntry {
+            +String element_id
+            +String section_id
+            +String field_id
+            +String file_path
+            +Int byte_start
+            +Int byte_end
+            +FieldTextSegment[] segments
+            +Int? fallback_caret_utf16_offset
+        }
+
         class ProjectSourceLayout {
             +String main_path
             +String[] section_paths
             +String references_path
             +String source_map_path
+            +String field_source_map_path
             +String document_state_path
             +String project_settings_path
             +String template_path
@@ -338,9 +358,10 @@ classDiagram
         }
 
         class PreviewSyncState {
-            +store_preview(source_revision: UInt64, document: PagedDocument, source_map: SourceMapEntry[])
+            +store_preview(source_revision: UInt64, document: PagedDocument, source_map: SourceMapEntry[], field_source_map: FieldSourceMapEntry[])
             +jump_from_click(page: Int, x_pt: Float, y_pt: Float, revision: UInt64) PreviewJumpResult
             +positions_for_element(element_id: String, revision: UInt64) PreviewElementPositionsResult
+            +positions_for_focus(target: PreviewFocusTarget, revision: UInt64) PreviewElementPositionsResult
             +status() PreviewSyncStatus
         }
 
@@ -348,6 +369,7 @@ classDiagram
             +UInt64 source_revision
             +PagedDocument document
             +SourceMapEntry[] source_map
+            +FieldSourceMapEntry[] field_source_map
             +PreviewPageMetrics[] pages
         }
 
@@ -359,14 +381,24 @@ classDiagram
 
         class PreviewElementPosition {
             +String? element_id
+            +String? field_id
+            +Int? caret_utf16_offset
             +Int page_number
             +Float x_pt
             +Float y_pt
             +UInt64 source_revision
         }
 
+        class PreviewFocusTarget {
+            +String element_id
+            +String? field_id
+            +Int? caret_utf16_offset
+            +UInt64 source_revision
+        }
+
         class PreviewJumpResult {
             <<enum>>
+            Field
             Element
             Position
             NoMatch
@@ -404,6 +436,7 @@ classDiagram
     PreviewSyncState "1" *-- "0..1" RetainedPreviewDocument
     RetainedPreviewDocument "1" *-- "0..*" PreviewPageMetrics
     RetainedPreviewDocument "1" *-- "0..*" SourceMapEntry
+    RetainedPreviewDocument "1" *-- "0..*" FieldSourceMapEntry
     PreviewSyncState ..> ErgoWorld : resolves jumps with
     ErgoWorld "1" o-- "1" VirtualFileSystem
     CompilationResult "1" *-- "0..*" PreviewPageFile
@@ -414,13 +447,14 @@ classDiagram
 - Frontend document elements do not generate Typst source directly as the canonical path. Rust `DocumentSession` owns canonical source materialization.
 - `main.typ` is generated as a small entry point. Each enabled document section is generated as `sections/{section-id}.typ`.
 - `GeneratedFragment` is an internal cache record for one element or section-level fragment. It supports dirty detection and source-map generation but is not persisted as a separate file in v1.
+- `FieldSourceMapEntry` maps generated Typst byte ranges back to editor field IDs. Plain text segments track UTF-16 offsets because browser text selection APIs use UTF-16 code units.
 - `RetainedTextFile.source` represents a retained Typst `Source`. The public `VirtualTextFile` status type exposes text and revision metadata, not the internal Typst source object.
 - VFS edits should update retained sources with `Source::replace` or `Source::edit` to benefit from Typst incremental parsing.
 - `CompilationResult.preview_pages` is the preferred preview contract. Each preview page reports whether its SVG file changed. `svgs` exists for compatibility and export payloads.
 - `PreviewSyncState` keeps only runtime sync data. It is not persisted inside `.ergproj` archives.
-- The retained preview keeps the compiled `PagedDocument`, source-map snapshot, Typst source snapshot, source revision, and page metrics together.
+- The retained preview keeps the compiled `PagedDocument`, element source-map snapshot, field source-map snapshot, Typst source snapshot, source revision, and page metrics together.
 - Preview sync returns `Unavailable` when the requested revision is not the retained preview revision.
 - `SourceMapEntry` byte ranges use half-open ownership: `byte_start` is included and `byte_end` is excluded. Adjacent generated fragments must not both claim the same boundary byte.
-- Backward sync maps `typst_ide::Jump::File` offsets to `SourceMapEntry` ranges. Forward sync maps an Érgo element ID to Typst preview positions with `jump_from_cursor`.
+- Backward sync maps `typst_ide::Jump::File` offsets to field ranges first and element ranges second. Forward sync maps `PreviewFocusTarget` values to Typst preview positions with `jump_from_cursor`.
 - Keymap preference files use typed `action_id` values such as `workspace::OpenProject`, a context expression such as `editor && !input`, and a logical-key `sequence` array. Older `command_id`, `keys`, and `scope` entries may be read only for migration.
 - React owns `ActionContextNode` registration and action handlers. Rust owns `ActionDescriptor`, keymap validation, context-expression matching, sequence state, and `ActionResolution`.

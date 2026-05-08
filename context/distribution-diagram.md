@@ -74,6 +74,7 @@ references.bib
 - `.ergproj/project_settings.json`: per-project settings overrides.
 - `.ergproj/template.json`: template identity and template metadata needed to reopen/generate the project.
 - `.ergproj/source_map.json`: generated mapping from Érgo IDs to Typst source ranges.
+- `.ergproj/field_source_map.json`: generated mapping from Érgo field IDs to Typst source byte ranges and UTF-16 field offsets.
 
 Generated preview and export artifacts may exist under these VFS paths:
 
@@ -84,7 +85,7 @@ Generated preview and export artifacts may exist under these VFS paths:
 
 These are cache/output artifacts. They can be regenerated from the canonical source-of-truth files and must not be required to reopen the project.
 
-Runtime preview sync state is not part of the archive. The backend retains the latest successful, non-stale compiled `PagedDocument`, page metrics, source-map snapshot, and Typst source snapshot in memory so editor-preview sync can use Typst IDE jump APIs against the same sources that produced the displayed preview. Saving or reopening a project regenerates that runtime state through the normal preview compile path.
+Runtime preview sync state is not part of the archive. The backend retains the latest successful, non-stale compiled `PagedDocument`, page metrics, element source-map snapshot, field source-map snapshot, and Typst source snapshot in memory so editor-preview sync can use Typst IDE jump APIs against the same sources that produced the displayed preview. Saving or reopening a project regenerates that runtime state through the normal preview compile path.
 
 ## Online And Offline Modes
 

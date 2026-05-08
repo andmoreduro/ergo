@@ -7,7 +7,7 @@ use typst::syntax::{FileId, VirtualPath};
 use typst_ide::{jump_from_click, jump_from_cursor, Jump};
 
 use crate::compiler::{SourceRevision, TauriAppState};
-use crate::document_session::SourceMapEntry;
+use crate::document_session::{FieldSourceMapEntry, SourceMapEntry};
 use crate::world::{SnapshotWorld, WorldSourceSnapshot};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
@@ -24,9 +24,25 @@ pub struct PreviewPageMetrics {
 #[serde(rename_all = "camelCase")]
 pub struct PreviewElementPosition {
     pub element_id: Option<String>,
+    #[serde(default)]
+    pub field_id: Option<String>,
+    #[serde(default)]
+    pub caret_utf16_offset: Option<usize>,
     pub page_number: usize,
     pub x_pt: f64,
     pub y_pt: f64,
+    pub source_revision: SourceRevision,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewFocusTarget {
+    pub element_id: String,
+    #[serde(default)]
+    pub field_id: Option<String>,
+    #[serde(default)]
+    pub caret_utf16_offset: Option<usize>,
     pub source_revision: SourceRevision,
 }
 
@@ -46,6 +62,10 @@ pub struct PreviewSyncStatus {
     rename_all_fields = "camelCase"
 )]
 pub enum PreviewJumpResult {
+    Field {
+        target: PreviewFocusTarget,
+        source_revision: SourceRevision,
+    },
     Element {
         element_id: String,
         source_revision: SourceRevision,
@@ -91,6 +111,7 @@ struct RetainedPreviewDocument {
     source_revision: SourceRevision,
     document: PagedDocument,
     source_map: Vec<SourceMapEntry>,
+    field_source_map: Vec<FieldSourceMapEntry>,
     source_snapshot: WorldSourceSnapshot,
     pages: Vec<PreviewPageMetrics>,
 }
@@ -106,6 +127,7 @@ impl PreviewSyncState {
         source_revision: SourceRevision,
         document: PagedDocument,
         source_map: Vec<SourceMapEntry>,
+        field_source_map: Vec<FieldSourceMapEntry>,
         source_snapshot: WorldSourceSnapshot,
     ) {
         let pages = document
@@ -126,6 +148,7 @@ impl PreviewSyncState {
             source_revision,
             document,
             source_map,
+            field_source_map,
             source_snapshot,
             pages,
         });
@@ -172,6 +195,19 @@ impl PreviewSyncState {
             Some(Jump::File(file_id, offset)) => {
                 let file_path = path_from_file_id(file_id);
                 if let Some(entry) =
+                    field_entry_for_offset(&preview.field_source_map, &file_path, offset)
+                {
+                    return PreviewJumpResult::Field {
+                        target: focus_target_for_field_offset(
+                            entry,
+                            preview.source_revision,
+                            offset,
+                        ),
+                        source_revision: preview.source_revision,
+                    };
+                }
+
+                if let Some(entry) =
                     source_entry_for_offset(&preview.source_map, &file_path, offset)
                 {
                     PreviewJumpResult::Element {
@@ -186,7 +222,7 @@ impl PreviewSyncState {
                 }
             }
             Some(Jump::Position(position)) => PreviewJumpResult::Position {
-                position: preview_position(position, None, preview.source_revision),
+                position: preview_position(position, None, None, None, preview.source_revision),
                 source_revision: preview.source_revision,
             },
             Some(Jump::Url(_)) => PreviewJumpResult::NoMatch {
@@ -223,7 +259,9 @@ impl PreviewSyncState {
                         source_revision,
                         reason,
                     },
-                    PreviewJumpResult::Element { .. } | PreviewJumpResult::Position { .. } => {
+                    PreviewJumpResult::Field { .. }
+                    | PreviewJumpResult::Element { .. }
+                    | PreviewJumpResult::Position { .. } => {
                         PreviewElementPositionsResult::NoMatch {
                             source_revision: None,
                             reason: "Preview sync is not available".to_string(),
@@ -262,6 +300,8 @@ impl PreviewSyncState {
                     preview_position(
                         position,
                         Some(element_id.to_string()),
+                        None,
+                        None,
                         preview.source_revision,
                     )
                 })
@@ -277,6 +317,110 @@ impl PreviewSyncState {
             PreviewElementPositionsResult::NoMatch {
                 source_revision: Some(preview.source_revision),
                 reason: "Element does not have a resolved preview position".to_string(),
+            }
+        } else {
+            PreviewElementPositionsResult::Matched {
+                positions,
+                source_revision: preview.source_revision,
+            }
+        }
+    }
+
+    pub fn positions_for_focus(
+        &self,
+        target: &PreviewFocusTarget,
+        source_revision: SourceRevision,
+    ) -> PreviewElementPositionsResult {
+        if target.source_revision != source_revision {
+            return PreviewElementPositionsResult::Unavailable {
+                source_revision: Some(source_revision),
+                reason: "The focus target does not belong to the displayed preview revision"
+                    .to_string(),
+            };
+        }
+
+        let Some(field_id) = target.field_id.as_deref() else {
+            return self.positions_for_element(&target.element_id, source_revision);
+        };
+
+        let preview = match self.preview_for_revision(source_revision) {
+            Ok(preview) => preview,
+            Err(result) => {
+                return match result {
+                    PreviewJumpResult::Unavailable {
+                        source_revision,
+                        reason,
+                    } => PreviewElementPositionsResult::Unavailable {
+                        source_revision,
+                        reason,
+                    },
+                    PreviewJumpResult::NoMatch {
+                        source_revision,
+                        reason,
+                    } => PreviewElementPositionsResult::NoMatch {
+                        source_revision,
+                        reason,
+                    },
+                    PreviewJumpResult::Field { .. }
+                    | PreviewJumpResult::Element { .. }
+                    | PreviewJumpResult::Position { .. } => {
+                        PreviewElementPositionsResult::NoMatch {
+                            source_revision: None,
+                            reason: "Preview sync is not available".to_string(),
+                        }
+                    }
+                };
+            }
+        };
+
+        let entries = field_entries_for_target(&preview.field_source_map, target);
+        let Some(entry) = entries
+            .iter()
+            .copied()
+            .find(|entry| !entry.segments.is_empty())
+            .or_else(|| entries.first().copied())
+        else {
+            return self.positions_for_element(&target.element_id, source_revision);
+        };
+
+        let source = match preview.source_snapshot.source_for_path(&entry.file_path) {
+            Ok(source) => source,
+            Err(message) => {
+                return PreviewElementPositionsResult::Unavailable {
+                    source_revision: Some(preview.source_revision),
+                    reason: message,
+                };
+            }
+        };
+
+        let offset = target
+            .caret_utf16_offset
+            .and_then(|caret| source_offset_for_caret(entry, caret))
+            .or_else(|| {
+                entry
+                    .segments
+                    .first()
+                    .map(|segment| segment.source_byte_start)
+            })
+            .unwrap_or(entry.byte_start);
+
+        let positions = jump_from_cursor(&preview.document, &source, offset)
+            .into_iter()
+            .map(|position| {
+                preview_position(
+                    position,
+                    Some(target.element_id.clone()),
+                    Some(field_id.to_string()),
+                    target.caret_utf16_offset,
+                    preview.source_revision,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        if positions.is_empty() {
+            PreviewElementPositionsResult::NoMatch {
+                source_revision: Some(preview.source_revision),
+                reason: "Field does not have a resolved preview position".to_string(),
             }
         } else {
             PreviewElementPositionsResult::Matched {
@@ -320,10 +464,14 @@ impl PreviewSyncState {
 fn preview_position(
     position: Position,
     element_id: Option<String>,
+    field_id: Option<String>,
+    caret_utf16_offset: Option<usize>,
     source_revision: SourceRevision,
 ) -> PreviewElementPosition {
     PreviewElementPosition {
         element_id,
+        field_id,
+        caret_utf16_offset,
         page_number: position.page.get(),
         x_pt: position.point.x.to_pt(),
         y_pt: position.point.y.to_pt(),
@@ -342,6 +490,96 @@ fn source_entry_for_offset<'a>(
             entry.file_path == file_path && offset >= entry.byte_start && offset < entry.byte_end
         })
         .min_by_key(|entry| entry.byte_end.saturating_sub(entry.byte_start))
+}
+
+fn field_entry_for_offset<'a>(
+    field_source_map: &'a [FieldSourceMapEntry],
+    file_path: &str,
+    offset: usize,
+) -> Option<&'a FieldSourceMapEntry> {
+    field_source_map
+        .iter()
+        .filter(|entry| {
+            entry.file_path == file_path && offset >= entry.byte_start && offset < entry.byte_end
+        })
+        .min_by_key(|entry| entry.byte_end.saturating_sub(entry.byte_start))
+        .or_else(|| {
+            field_source_map
+                .iter()
+                .filter(|entry| entry.file_path == file_path && offset == entry.byte_end)
+                .min_by_key(|entry| entry.byte_end.saturating_sub(entry.byte_start))
+        })
+}
+
+fn field_entries_for_target<'a>(
+    field_source_map: &'a [FieldSourceMapEntry],
+    target: &PreviewFocusTarget,
+) -> Vec<&'a FieldSourceMapEntry> {
+    let Some(field_id) = target.field_id.as_deref() else {
+        return Vec::new();
+    };
+
+    field_source_map
+        .iter()
+        .filter(|entry| entry.element_id == target.element_id && entry.field_id == field_id)
+        .collect()
+}
+
+fn focus_target_for_field_offset(
+    entry: &FieldSourceMapEntry,
+    source_revision: SourceRevision,
+    offset: usize,
+) -> PreviewFocusTarget {
+    PreviewFocusTarget {
+        element_id: entry.element_id.clone(),
+        field_id: Some(entry.field_id.clone()),
+        caret_utf16_offset: caret_for_source_offset(entry, offset),
+        source_revision,
+    }
+}
+
+fn caret_for_source_offset(entry: &FieldSourceMapEntry, offset: usize) -> Option<usize> {
+    for segment in &entry.segments {
+        if offset == segment.source_byte_end {
+            return Some(segment.field_utf16_end);
+        }
+        if offset >= segment.source_byte_start && offset < segment.source_byte_end {
+            return Some(segment.field_utf16_start);
+        }
+    }
+
+    if offset == entry.byte_end {
+        return entry
+            .segments
+            .last()
+            .map(|segment| segment.field_utf16_end)
+            .or(entry.fallback_caret_utf16_offset);
+    }
+
+    entry.fallback_caret_utf16_offset
+}
+
+fn source_offset_for_caret(
+    entry: &FieldSourceMapEntry,
+    caret_utf16_offset: usize,
+) -> Option<usize> {
+    for segment in &entry.segments {
+        if caret_utf16_offset == segment.field_utf16_start {
+            return Some(segment.source_byte_start);
+        }
+        if caret_utf16_offset > segment.field_utf16_start
+            && caret_utf16_offset <= segment.field_utf16_end
+        {
+            return Some(segment.source_byte_end);
+        }
+    }
+
+    entry
+        .segments
+        .last()
+        .filter(|segment| caret_utf16_offset >= segment.field_utf16_end)
+        .map(|_| entry.byte_end)
+        .or(entry.fallback_caret_utf16_offset.map(|_| entry.byte_start))
 }
 
 fn candidate_offsets(text: &str, start: usize, end: usize) -> Vec<usize> {
@@ -394,12 +632,9 @@ pub fn jump_from_preview_click(
     y_pt: f64,
     source_revision: SourceRevision,
 ) -> Result<PreviewJumpResult, String> {
-    Ok(state.preview_sync.jump_from_click(
-        page_number,
-        x_pt,
-        y_pt,
-        source_revision,
-    ))
+    Ok(state
+        .preview_sync
+        .jump_from_click(page_number, x_pt, y_pt, source_revision))
 }
 
 #[tauri::command]
@@ -411,6 +646,17 @@ pub fn get_preview_positions_for_element(
     Ok(state
         .preview_sync
         .positions_for_element(&element_id, source_revision))
+}
+
+#[tauri::command]
+pub fn get_preview_positions_for_focus(
+    state: State<'_, TauriAppState>,
+    target: PreviewFocusTarget,
+    source_revision: SourceRevision,
+) -> Result<PreviewElementPositionsResult, String> {
+    Ok(state
+        .preview_sync
+        .positions_for_focus(&target, source_revision))
 }
 
 #[tauri::command]
@@ -428,7 +674,7 @@ mod tests {
         DocumentSection, GlobalSettings, Heading, Paragraph, ProjectMetadata, ProjectSettings,
         RichText,
     };
-    use crate::document_session::DocumentSession;
+    use crate::document_session::{DocumentSession, FieldSourceMapEntry};
     use crate::vfs::VirtualFileSystem;
     use crate::world::ErgoWorld;
     use std::sync::Arc;
@@ -491,13 +737,20 @@ mod tests {
         vfs: Arc<VirtualFileSystem>,
         source_revision: SourceRevision,
         source_map: Vec<SourceMapEntry>,
+        field_source_map: Vec<FieldSourceMapEntry>,
     ) -> PreviewSyncState {
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
         let source_snapshot = WorldSourceSnapshot::from_vfs(&vfs);
         let world = SnapshotWorld::new(source_snapshot.clone(), main_id);
         let document = typst::compile::<PagedDocument>(&world).output.unwrap();
         let state = PreviewSyncState::default();
-        state.store_preview(source_revision, document, source_map, source_snapshot);
+        state.store_preview(
+            source_revision,
+            document,
+            source_map,
+            field_source_map,
+            source_snapshot,
+        );
         state
     }
 
@@ -512,7 +765,12 @@ mod tests {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
         let status = session.sync_snapshot(test_ast()).unwrap();
-        let sync = compile_preview(Arc::clone(&vfs), status.source_revision, status.source_map);
+        let sync = compile_preview(
+            Arc::clone(&vfs),
+            status.source_revision,
+            status.source_map,
+            status.field_source_map,
+        );
 
         let heading = sync.positions_for_element("heading-ñ", status.source_revision);
         let paragraph = sync.positions_for_element("paragraph-emoji", status.source_revision);
@@ -536,6 +794,7 @@ mod tests {
             Arc::clone(&vfs),
             status.source_revision,
             status.source_map.clone(),
+            status.field_source_map.clone(),
         );
 
         let positions = match sync.positions_for_element("heading-ñ", status.source_revision) {
@@ -551,11 +810,82 @@ mod tests {
         );
 
         match result {
-            PreviewJumpResult::Element { element_id, .. } => {
-                assert_eq!(element_id, "heading-ñ");
+            PreviewJumpResult::Field { target, .. } => {
+                assert_eq!(target.element_id, "heading-ñ");
             }
-            result => panic!("expected heading element jump, got {result:?}"),
+            result => panic!("expected heading field jump, got {result:?}"),
         }
+    }
+
+    #[test]
+    fn maps_preview_click_to_heading_field_target() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let status = session.sync_snapshot(test_ast()).unwrap();
+        let sync = compile_preview(
+            Arc::clone(&vfs),
+            status.source_revision,
+            status.source_map.clone(),
+            status.field_source_map.clone(),
+        );
+
+        let positions = match sync.positions_for_element("heading-ñ", status.source_revision) {
+            PreviewElementPositionsResult::Matched { positions, .. } => positions,
+            result => panic!("expected heading preview position, got {result:?}"),
+        };
+        let first = positions.first().unwrap();
+        let result = sync.jump_from_click(
+            first.page_number,
+            first.x_pt + 1.0,
+            first.y_pt - 1.0,
+            status.source_revision,
+        );
+        let result_json = serde_json::to_value(result).unwrap();
+
+        assert_eq!(
+            result_json,
+            serde_json::json!({
+                "status": "field",
+                "target": {
+                    "elementId": "heading-ñ",
+                    "fieldId": "heading-ñ:text",
+                    "caretUtf16Offset": 0,
+                    "sourceRevision": status.source_revision,
+                },
+                "sourceRevision": status.source_revision,
+            })
+        );
+    }
+
+    #[test]
+    fn returns_preview_position_for_field_focus_target() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let status = session.sync_snapshot(test_ast()).unwrap();
+        let sync = compile_preview(
+            Arc::clone(&vfs),
+            status.source_revision,
+            status.source_map.clone(),
+            status.field_source_map.clone(),
+        );
+
+        let result = sync.positions_for_focus(
+            &PreviewFocusTarget {
+                element_id: "heading-ñ".to_string(),
+                field_id: Some("heading-ñ:text".to_string()),
+                caret_utf16_offset: Some(0),
+                source_revision: status.source_revision,
+            },
+            status.source_revision,
+        );
+
+        assert!(matches!(
+            result,
+            PreviewElementPositionsResult::Matched { ref positions, .. }
+                if positions
+                    .iter()
+                    .any(|position| position.field_id.as_deref() == Some("heading-ñ:text"))
+        ));
     }
 
     #[test]
@@ -567,13 +897,14 @@ mod tests {
             Arc::clone(&vfs),
             status.source_revision,
             status.source_map.clone(),
+            status.field_source_map.clone(),
         );
 
-        let positions =
-            match sync.positions_for_element("paragraph-emoji", status.source_revision) {
-                PreviewElementPositionsResult::Matched { positions, .. } => positions,
-                result => panic!("expected paragraph preview position, got {result:?}"),
-            };
+        let positions = match sync.positions_for_element("paragraph-emoji", status.source_revision)
+        {
+            PreviewElementPositionsResult::Matched { positions, .. } => positions,
+            result => panic!("expected paragraph preview position, got {result:?}"),
+        };
         let first = positions.first().unwrap();
         let result = sync.jump_from_click(
             first.page_number,
@@ -583,10 +914,10 @@ mod tests {
         );
 
         match result {
-            PreviewJumpResult::Element { element_id, .. } => {
-                assert_eq!(element_id, "paragraph-emoji");
+            PreviewJumpResult::Field { target, .. } => {
+                assert_eq!(target.element_id, "paragraph-emoji");
             }
-            result => panic!("expected paragraph element jump, got {result:?}"),
+            result => panic!("expected paragraph field jump, got {result:?}"),
         }
     }
 
@@ -600,6 +931,7 @@ mod tests {
             Arc::clone(&vfs),
             status.source_revision,
             status.source_map.clone(),
+            status.field_source_map.clone(),
         );
 
         if let DocumentSection::Content(content) = &mut ast.sections[1] {
@@ -625,10 +957,10 @@ mod tests {
         );
 
         match result {
-            PreviewJumpResult::Element { element_id, .. } => {
-                assert_eq!(element_id, "paragraph-emoji");
+            PreviewJumpResult::Field { target, .. } => {
+                assert_eq!(target.element_id, "paragraph-emoji");
             }
-            result => panic!("expected retained paragraph element jump, got {result:?}"),
+            result => panic!("expected retained paragraph field jump, got {result:?}"),
         }
     }
 
@@ -637,7 +969,12 @@ mod tests {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
         let status = session.sync_snapshot(test_ast()).unwrap();
-        let sync = compile_preview(Arc::clone(&vfs), status.source_revision, status.source_map);
+        let sync = compile_preview(
+            Arc::clone(&vfs),
+            status.source_revision,
+            status.source_map,
+            status.field_source_map,
+        );
 
         let result = sync.positions_for_element("heading-ñ", status.source_revision + 1);
 
