@@ -28,6 +28,7 @@ When implementation and design docs conflict, preserve working code and update t
 - **Do not start a dev server automatically.** User runs `pnpm tauri dev` manually.
 - **Keep preview layout stable.** No visible compile-status text that shifts the preview while typing.
 - **Sanitize user input in generated Typst.** User text must not inject raw Typst markup (unless explicitly a trusted-raw feature).
+- **No branches for unreleased formats.** Érgo is pre-release; keep current schemas strict instead of preserving old JSON/archive shapes.
 
 ## Stack
 
@@ -47,6 +48,7 @@ When implementation and design docs conflict, preserve working code and update t
 | `pnpm build` | paraglide compile → `tsc` → `vite build` |
 | `pnpm storybook` | Storybook dev server (port 6006) |
 | `pnpm tauri dev` | Full Tauri desktop app (runs `pnpm dev` internally) |
+| `cargo run --release --bin backend_profile -- --scenario typing-title --iterations 200` | Profile the backend preview pipeline without Tauri/WebView |
 | `cargo nextest run` | Run all Rust tests via nextest (from `src-tauri/`) |
 
 ### Fast iteration
@@ -71,6 +73,19 @@ cargo nextest run -E "test(module_name::)"
 Install `cargo-nextest` once: `cargo binstall cargo-nextest` (or `cargo install cargo-nextest`).
 
 Before merging, run the full `pnpm test` + `cargo nextest run` suites.
+
+### Backend profiling
+
+Use the backend profiling harness when isolating Rust source generation, Typst compilation, SVG rendering, and VFS preview writes from Tauri IPC, React, and WebView rendering:
+
+```bash
+cd src-tauri
+cargo build --release --bin backend_profile
+cargo run --release --bin backend_profile -- --scenario typing-title --iterations 200
+cargo run --release --bin backend_profile -- --scenario large-document --iterations 100 --json
+```
+
+Available scenarios are `small-document`, `typing-title`, and `large-document`. Release builds are required for meaningful profiler captures.
 
 ## Critical: paraglide compile must run first
 
@@ -159,7 +174,7 @@ TypeScript strict mode (`noUnusedLocals`, `noUnusedParameters`) is the only enfo
 
 1. Read context files and relevant source before coding.
 2. Prefer existing architecture and source patterns over inventing new systems.
-3. Add or update tests alongside new behavior (especially VFS patching, document session generation, command/keymap logic, settings, source maps, archive migration, compile queue).
+3. Add or update tests alongside new behavior (especially VFS patching, document session generation, command/keymap logic, settings, source maps, archive save/open, compile queue).
 4. Run focused tests first, then broader gates:
    - `pnpm test` (frontend)
    - `pnpm build` (typecheck)
