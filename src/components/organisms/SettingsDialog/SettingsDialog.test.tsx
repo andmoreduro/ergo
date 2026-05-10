@@ -81,6 +81,32 @@ describe("SettingsDialog global panel", () => {
             }),
         );
     });
+
+    it("edits interval and event-driven autosave settings", () => {
+        const handleGlobalSettingsChange = renderGlobalDialog();
+
+        expect(screen.getByLabelText("Autosave")).toBeChecked();
+        expect(screen.getByLabelText("Autosave interval (ms)")).toHaveValue(30000);
+        expect(screen.getByLabelText("Save when app loses focus")).toBeChecked();
+        expect(screen.getByLabelText("Save before app closes")).toBeChecked();
+        expect(screen.getByLabelText("Save before project closes")).toBeChecked();
+
+        fireEvent.change(screen.getByLabelText("Autosave interval (ms)"), {
+            target: { value: "45000" },
+        });
+        fireEvent.click(screen.getByLabelText("Save when app loses focus"));
+
+        expect(handleGlobalSettingsChange).toHaveBeenCalledWith(
+            expect.objectContaining({
+                autosave_interval_ms: 45000,
+            }),
+        );
+        expect(handleGlobalSettingsChange).toHaveBeenCalledWith(
+            expect.objectContaining({
+                autosave_on_window_blur: false,
+            }),
+        );
+    });
 });
 
 describe("SettingsDialog keymap panel", () => {
@@ -90,8 +116,8 @@ describe("SettingsDialog keymap panel", () => {
             keymap_bindings: [
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "Ctrl+O",
-                    scope: "global",
+                    context: "app",
+                    sequence: [{ key: "o", modifiers: ["Control"] }],
                 },
             ],
             keymap_overrides: [],
@@ -133,15 +159,15 @@ describe("SettingsDialog keymap panel", () => {
             keymap_bindings: [
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "Ctrl+O",
-                    scope: "global",
+                    context: "app",
+                    sequence: [{ key: "o", modifiers: ["Control"] }],
                 },
             ],
             keymap_overrides: [
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "Ctrl+Alt+O",
-                    scope: "global",
+                    context: "app",
+                    sequence: [{ key: "o", modifiers: ["Control", "Alt"] }],
                 },
             ],
         };
@@ -166,8 +192,8 @@ describe("SettingsDialog keymap panel", () => {
             keymap_bindings: [
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "Ctrl+O",
-                    scope: "global",
+                    context: "app",
+                    sequence: [{ key: "o", modifiers: ["Control"] }],
                 },
             ],
             keymap_overrides: [],

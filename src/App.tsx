@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Workspace } from "./components/layout/Workspace/Workspace";
 import { Menubar } from "./components/layout/Menubar/Menubar";
 import { WelcomeScreen } from "./components/screens/WelcomeScreen/WelcomeScreen";
@@ -153,6 +154,13 @@ const AppShellContent = () => {
     recentProjectsRef.current = recentProjects;
     const stateRef = useRef(state);
     stateRef.current = state;
+    const hasActiveProjectRef = useRef(hasActiveProject);
+    hasActiveProjectRef.current = hasActiveProject;
+    const currentProjectPathRef = useRef(currentProjectPath);
+    currentProjectPathRef.current = currentProjectPath;
+    const isDirtyRef = useRef(isDirty);
+    isDirtyRef.current = isDirty;
+    const isClosingWindowRef = useRef(false);
     const previewDebounceMs = globalSettings.preview_debounce_enabled
         ? Math.max(0, globalSettings.preview_debounce_ms ?? 0)
         : 0;
@@ -283,6 +291,40 @@ const AppShellContent = () => {
         });
     }, []);
 
+    const saveActiveProject = useCallback(async (): Promise<boolean> => {
+        const projectPath = currentProjectPathRef.current;
+        if (
+            !hasActiveProjectRef.current ||
+            !projectPath ||
+            !isDirtyRef.current
+        ) {
+            return false;
+        }
+
+        await TauriApi.saveProject(projectPath, stateRef.current);
+        rememberProject(projectPath);
+        markSaved();
+        return true;
+    }, [markSaved, rememberProject]);
+
+    const saveBeforeProjectBoundary = useCallback(async (): Promise<boolean> => {
+        if (!(globalSettings.autosave_on_project_close ?? true)) {
+            return true;
+        }
+
+        try {
+            await saveActiveProject();
+            return true;
+        } catch (error) {
+            window.alert(
+                m.project_save_failed({
+                    message: error instanceof Error ? error.message : String(error),
+                }),
+            );
+            return false;
+        }
+    }, [globalSettings.autosave_on_project_close, saveActiveProject]);
+
     const handleLocaleChange = (nextLocale: Locale) => {
         setLocale(nextLocale, { reload: false });
         setActiveLocale(nextLocale);
@@ -312,6 +354,10 @@ const AppShellContent = () => {
         projectFileName,
         projectLocation,
     }: NewProjectDialogValues) => {
+        if (!(await saveBeforeProjectBoundary())) {
+            return;
+        }
+
         const ast = createDefaultDocumentAST();
         ast.metadata.title = projectName;
         const projectPath = projectPathInDirectory(projectLocation, projectFileName);
@@ -335,7 +381,7 @@ const AppShellContent = () => {
                 }),
             );
         }
-    }, [dispatch, markSaved, rememberProject]);
+    }, [dispatch, markSaved, rememberProject, saveBeforeProjectBoundary]);
 
     const chooseNewProjectLocation = useCallback(async () => {
         const selectedDirectory = await openDialog({
@@ -362,6 +408,10 @@ const AppShellContent = () => {
             return;
         }
 
+        if (!(await saveBeforeProjectBoundary())) {
+            return;
+        }
+
         try {
             const ast = await TauriApi.openProject(projectPath);
             dispatch({ type: "LOAD_DOCUMENT", payload: { ast } });
@@ -375,7 +425,7 @@ const AppShellContent = () => {
                 }),
             );
         }
-    }, [dispatch, rememberProject]);
+    }, [dispatch, rememberProject, saveBeforeProjectBoundary]);
 
     const saveProject = useCallback(async () => {
         if (!hasActiveProject) {
@@ -409,37 +459,96 @@ const AppShellContent = () => {
         }
     }, [currentProjectPath, hasActiveProject, markSaved, rememberProject, state]);
 
-    const closeProject = useCallback(() => {
+    const closeProject = useCallback(async () => {
+        if (!(await saveBeforeProjectBoundary())) {
+            return;
+        }
+
         setHasActiveProject(false);
         setCurrentProjectPath(null);
         dispatch({
             type: "LOAD_DOCUMENT",
             payload: { ast: createDefaultDocumentAST() },
         });
-    }, [dispatch]);
+    }, [dispatch, saveBeforeProjectBoundary]);
 
     useEffect(() => {
-        if (!hasActiveProject || !currentProjectPath || !isDirty) {
+        if (!(globalSettings.autosave_enabled ?? true)) {
             return;
         }
 
-        const timeoutId = window.setTimeout(() => {
-            void TauriApi.saveProject(currentProjectPath, stateRef.current)
-                .then(() => {
-                    rememberProject(currentProjectPath);
-                    markSaved();
-                })
-                .catch(() => undefined);
-        }, 1200);
+        const intervalMs = Math.max(
+            1000,
+            globalSettings.autosave_interval_ms ?? 30_000,
+        );
+        const intervalId = window.setInterval(() => {
+            void saveActiveProject().catch(() => undefined);
+        }, intervalMs);
 
-        return () => window.clearTimeout(timeoutId);
+        return () => window.clearInterval(intervalId);
     }, [
-        currentProjectPath,
-        hasActiveProject,
-        isDirty,
-        markSaved,
-        rememberProject,
+        globalSettings.autosave_enabled,
+        globalSettings.autosave_interval_ms,
+        saveActiveProject,
     ]);
+
+    useEffect(() => {
+        if (!(globalSettings.autosave_on_window_blur ?? true)) {
+            return;
+        }
+
+        const saveOnBlur = () => {
+            void saveActiveProject().catch(() => undefined);
+        };
+
+        window.addEventListener("blur", saveOnBlur);
+        return () => window.removeEventListener("blur", saveOnBlur);
+    }, [globalSettings.autosave_on_window_blur, saveActiveProject]);
+
+    useEffect(() => {
+        let unlisten: (() => void) | null = null;
+        const appWindow = getCurrentWindow();
+
+        void appWindow
+            .onCloseRequested(async (event) => {
+                if (isClosingWindowRef.current) {
+                    return;
+                }
+
+                if (
+                    !(globalSettings.autosave_on_app_close ?? true) ||
+                    !hasActiveProjectRef.current ||
+                    !currentProjectPathRef.current ||
+                    !isDirtyRef.current
+                ) {
+                    return;
+                }
+
+                event.preventDefault();
+                try {
+                    await saveActiveProject();
+                    isClosingWindowRef.current = true;
+                    await appWindow.close();
+                } catch (error) {
+                    window.alert(
+                        m.project_save_failed({
+                            message:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        }),
+                    );
+                }
+            })
+            .then((nextUnlisten) => {
+                unlisten = nextUnlisten;
+            })
+            .catch(() => undefined);
+
+        return () => {
+            unlisten?.();
+        };
+    }, [globalSettings.autosave_on_app_close, saveActiveProject]);
 
     const insertElement = useCallback((elementType: "heading" | "paragraph" | "table" | "equation" | "figure") => {
         const contentSection = state.sections.find(

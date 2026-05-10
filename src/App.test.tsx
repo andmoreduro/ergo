@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "@testing-library/jest-dom";
 
@@ -19,9 +19,41 @@ const tauriApiMock = vi.hoisted(() => ({
     documentDir: vi.fn(),
 }));
 
+const windowApiMock = vi.hoisted(() => {
+    const closeHandlers: Array<(event: { preventDefault: () => void }) => void | Promise<void>> = [];
+    const close = vi.fn();
+    const onCloseRequested = vi.fn(
+        async (
+            handler: (event: { preventDefault: () => void }) => void | Promise<void>,
+        ) => {
+            closeHandlers.push(handler);
+            return () => {
+                const index = closeHandlers.indexOf(handler);
+                if (index !== -1) {
+                    closeHandlers.splice(index, 1);
+                }
+            };
+        },
+    );
+
+    return {
+        close,
+        closeHandlers,
+        getCurrentWindow: vi.fn(() => ({
+            close,
+            onCloseRequested,
+        })),
+        onCloseRequested,
+    };
+});
+
 vi.mock("@tauri-apps/plugin-dialog", () => ({
     open: dialogMock.open,
     save: dialogMock.save,
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+    getCurrentWindow: windowApiMock.getCurrentWindow,
 }));
 
 vi.mock("./api/tauri", () => ({
@@ -53,7 +85,9 @@ const astMatcherForTitle = (title: string) => expect.objectContaining({
 
 describe("App project lifecycle", () => {
     beforeEach(() => {
+        vi.useRealTimers();
         vi.clearAllMocks();
+        windowApiMock.closeHandlers.length = 0;
         document.documentElement.removeAttribute("data-theme");
 
         tauriApiMock.loadGlobalSettings.mockResolvedValue({
@@ -78,6 +112,27 @@ describe("App project lifecycle", () => {
             source_revision: 0,
         });
     });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const createProjectAndInsertParagraph = async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: /New Project/ }),
+        );
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Create Project" }),
+        );
+        await waitFor(() =>
+            expect(tauriApiMock.saveProject).toHaveBeenCalledTimes(1),
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Insert" }));
+        fireEvent.click(screen.getByRole("menuitem", { name: "Paragraph" }));
+    };
 
     it("creates a new .ergproj archive inside the selected folder", async () => {
         dialogMock.open.mockResolvedValue("C:\\Users\\ada\\Documents");
@@ -245,5 +300,100 @@ describe("App project lifecycle", () => {
             "C:\\Users\\ada\\Documents\\untitled_document.ergproj",
             astMatcherForTitle("Untitled Document"),
         );
+    });
+
+    it("autosaves dirty projects on the configured interval instead of immediately", async () => {
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+        tauriApiMock.loadGlobalSettings.mockResolvedValue({
+            ...DEFAULT_GLOBAL_SETTINGS,
+            autosave_enabled: true,
+            autosave_interval_ms: 60_000,
+            autosave_on_window_blur: false,
+            autosave_on_app_close: false,
+            autosave_on_project_close: false,
+            keymap_overrides: [],
+            recent_projects: [],
+        });
+
+        await createProjectAndInsertParagraph();
+
+        await act(async () => {
+            vi.advanceTimersByTime(59_999);
+        });
+        expect(tauriApiMock.saveProject).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            vi.advanceTimersByTime(1);
+        });
+
+        await waitFor(() =>
+            expect(tauriApiMock.saveProject).toHaveBeenCalledTimes(2),
+        );
+    });
+
+    it("saves dirty projects when the window loses focus if configured", async () => {
+        tauriApiMock.loadGlobalSettings.mockResolvedValue({
+            ...DEFAULT_GLOBAL_SETTINGS,
+            autosave_enabled: false,
+            autosave_on_window_blur: true,
+            keymap_overrides: [],
+            recent_projects: [],
+        });
+
+        await createProjectAndInsertParagraph();
+
+        window.dispatchEvent(new Event("blur"));
+
+        await waitFor(() =>
+            expect(tauriApiMock.saveProject).toHaveBeenCalledTimes(2),
+        );
+    });
+
+    it("saves dirty projects before closing the active project if configured", async () => {
+        tauriApiMock.loadGlobalSettings.mockResolvedValue({
+            ...DEFAULT_GLOBAL_SETTINGS,
+            autosave_enabled: false,
+            autosave_on_project_close: true,
+            keymap_overrides: [],
+            recent_projects: [],
+        });
+
+        await createProjectAndInsertParagraph();
+
+        fireEvent.click(screen.getByRole("button", { name: "File" }));
+        fireEvent.click(screen.getByRole("menuitem", { name: "Close Project" }));
+
+        await waitFor(() =>
+            expect(tauriApiMock.saveProject).toHaveBeenCalledTimes(2),
+        );
+        await waitFor(() =>
+            expect(screen.queryByTestId("workspace")).not.toBeInTheDocument(),
+        );
+    });
+
+    it("saves dirty projects before app window close if configured", async () => {
+        tauriApiMock.loadGlobalSettings.mockResolvedValue({
+            ...DEFAULT_GLOBAL_SETTINGS,
+            autosave_enabled: false,
+            autosave_on_app_close: true,
+            keymap_overrides: [],
+            recent_projects: [],
+        });
+
+        await createProjectAndInsertParagraph();
+        await waitFor(() =>
+            expect(windowApiMock.onCloseRequested).toHaveBeenCalled(),
+        );
+
+        const event = { preventDefault: vi.fn() };
+        await act(async () => {
+            await windowApiMock.closeHandlers[0](event);
+        });
+
+        expect(event.preventDefault).toHaveBeenCalled();
+        await waitFor(() =>
+            expect(tauriApiMock.saveProject).toHaveBeenCalledTimes(2),
+        );
+        expect(windowApiMock.close).toHaveBeenCalled();
     });
 });

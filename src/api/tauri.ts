@@ -76,15 +76,6 @@ export const TauriApi = {
         return invoke("patch_source", { path, start, end, text });
     },
 
-    /**
-     * Triggers the embedded Typst compiler to render the current VFS state.
-     *
-     * @returns An array of SVG strings, where each string represents a rendered page.
-     */
-    async triggerCompile(): Promise<string[]> {
-        return invoke("trigger_compile");
-    },
-
     async enqueuePreviewCompile(debounceMs = 0): Promise<CompilationJob> {
         return invoke("enqueue_preview_compile", { debounceMs });
     },

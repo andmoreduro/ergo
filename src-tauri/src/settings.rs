@@ -227,6 +227,11 @@ mod tests {
         assert_eq!(settings.preview_debounce_enabled, Some(false));
         assert_eq!(settings.preview_debounce_ms, Some(120));
         assert_eq!(settings.history_limit, Some(100));
+        assert_eq!(settings.autosave_enabled, Some(true));
+        assert_eq!(settings.autosave_interval_ms, Some(30_000));
+        assert_eq!(settings.autosave_on_window_blur, Some(true));
+        assert_eq!(settings.autosave_on_app_close, Some(true));
+        assert_eq!(settings.autosave_on_project_close, Some(true));
     }
 
     #[test]
@@ -245,6 +250,11 @@ mod tests {
   "preview_debounce_enabled": true,
   "preview_debounce_ms": 200,
   "history_limit": 42,
+  "autosave_enabled": false,
+  "autosave_interval_ms": 45000,
+  "autosave_on_window_blur": false,
+  "autosave_on_app_close": true,
+  "autosave_on_project_close": false,
   "keymap_profile": "ShouldNotLeak"
 }"#,
         )
@@ -258,10 +268,37 @@ mod tests {
         assert_eq!(settings.preview_debounce_enabled, Some(true));
         assert_eq!(settings.preview_debounce_ms, Some(200));
         assert_eq!(settings.history_limit, Some(42));
+        assert_eq!(settings.autosave_enabled, Some(false));
+        assert_eq!(settings.autosave_interval_ms, Some(45_000));
+        assert_eq!(settings.autosave_on_window_blur, Some(false));
+        assert_eq!(settings.autosave_on_app_close, Some(true));
+        assert_eq!(settings.autosave_on_project_close, Some(false));
         assert_eq!(settings.keymap_profile.as_deref(), Some("Default"));
         assert!(settings.keymap_overrides.is_empty());
 
         let _ = fs::remove_file(default_path);
+    }
+
+    #[test]
+    fn rejects_extra_global_settings_fields() {
+        let path = temp_settings_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(
+            &path,
+            r#"{
+  "theme_mode": "system",
+  "unknown_setting": true
+}"#,
+        )
+        .unwrap();
+
+        let error = load_global_settings_from_paths(&path, None).unwrap_err();
+
+        assert!(error.contains("unknown field"));
+
+        let _ = fs::remove_file(path);
     }
 
     #[test]
@@ -334,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn loads_legacy_keymap_command_id_as_action_id() {
+    fn rejects_old_keymap_fields() {
         let path = temp_keymap_path();
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).unwrap();
@@ -354,18 +391,38 @@ mod tests {
         )
         .unwrap();
 
-        let settings = load_keymap_settings_from_paths(&path, None).unwrap();
+        let error = load_keymap_settings_from_paths(&path, None).unwrap_err();
 
-        assert_eq!(settings.keymap_profile.as_deref(), Some("Migrated"));
-        assert_eq!(
-            settings.keymap_overrides[0].action_id,
-            ActionId::WorkspaceOpenProject
-        );
-        assert_eq!(settings.keymap_overrides[0].context, "app");
-        assert_eq!(
-            settings.keymap_overrides[0].sequence,
-            parse_key_sequence("Ctrl+Alt+O").unwrap()
-        );
+        assert!(error.contains("action_id"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rejects_extra_keymap_fields() {
+        let path = temp_keymap_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(
+            &path,
+            r#"{
+  "keymap_profile": "Strict",
+  "keymap_overrides": [
+    {
+      "action_id": "workspace::OpenProject",
+      "context": "app",
+      "sequence": [{ "key": "o", "modifiers": ["Control"] }],
+      "keys": "Ctrl+O"
+    }
+  ]
+}"#,
+        )
+        .unwrap();
+
+        let error = load_keymap_settings_from_paths(&path, None).unwrap_err();
+
+        assert!(error.contains("unknown field"));
 
         let _ = fs::remove_file(path);
     }

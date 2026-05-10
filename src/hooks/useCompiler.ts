@@ -12,48 +12,6 @@ interface UseCompilerResult {
     previewRevision: SourceRevision | null;
 }
 
-interface TextPatch {
-    start: number;
-    end: number;
-    text: string;
-}
-
-export const createTextPatch = (previous: string, next: string): TextPatch | null => {
-    if (previous === next) {
-        return null;
-    }
-
-    const previousChars = Array.from(previous);
-    const nextChars = Array.from(next);
-    let start = 0;
-
-    while (
-        start < previousChars.length &&
-        start < nextChars.length &&
-        previousChars[start] === nextChars[start]
-    ) {
-        start += 1;
-    }
-
-    let previousEnd = previousChars.length;
-    let nextEnd = nextChars.length;
-
-    while (
-        previousEnd > start &&
-        nextEnd > start &&
-        previousChars[previousEnd - 1] === nextChars[nextEnd - 1]
-    ) {
-        previousEnd -= 1;
-        nextEnd -= 1;
-    }
-
-    return {
-        start,
-        end: previousEnd,
-        text: nextChars.slice(start, nextEnd).join(""),
-    };
-};
-
 export function useCompiler(
     ast: DocumentAST | null | undefined,
     previewDebounceMs = 0,
@@ -102,18 +60,14 @@ export function useCompiler(
                     }),
                 );
             } else {
-                nextSvgs = result.svgs ?? [];
+                nextSvgs = [];
             }
         } catch (error: unknown) {
-            if (result.svgs?.length) {
-                nextSvgs = result.svgs;
-            } else {
-                if (isMountedRef.current && isLatestPreviewResult(result)) {
-                    setError(error instanceof Error ? error.message : String(error));
-                    setIsCompiling(false);
-                }
-                return;
+            if (isMountedRef.current && isLatestPreviewResult(result)) {
+                setError(error instanceof Error ? error.message : String(error));
+                setIsCompiling(false);
             }
+            return;
         }
 
         if (

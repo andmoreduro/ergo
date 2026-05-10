@@ -25,7 +25,6 @@ pub fn run() {
             actions::validate_keymap_settings,
             compiler::write_source,
             compiler::patch_source,
-            compiler::trigger_compile,
             compiler::enqueue_preview_compile,
             compiler::enqueue_export,
             compiler::get_compile_status,
@@ -50,6 +49,7 @@ pub fn run() {
 pub mod actions;
 pub mod archive;
 pub mod ast;
+pub mod backend_profile;
 pub mod compiler;
 pub mod document_session;
 pub mod preview_sync;

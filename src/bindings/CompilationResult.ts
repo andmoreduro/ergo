@@ -3,4 +3,4 @@ import type { CompilationJobKind } from "./CompilationJobKind";
 import type { CompilationStatus } from "./CompilationStatus";
 import type { PreviewPageFile } from "./PreviewPageFile";
 
-export type CompilationResult = { job_id: bigint, kind: CompilationJobKind, source_revision: bigint, status: CompilationStatus, svgs: Array<string> | null, preview_pages: Array<PreviewPageFile> | null, export_path: string | null, diagnostics: Array<string>, };
+export type CompilationResult = { job_id: bigint, kind: CompilationJobKind, source_revision: bigint, status: CompilationStatus, preview_pages: Array<PreviewPageFile> | null, export_path: string | null, diagnostics: Array<string>, };
