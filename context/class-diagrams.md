@@ -1,12 +1,14 @@
-# Class Diagram
+# Class Diagrams
 
 This document describes the core domain models and backend structs that define Érgo's architecture. Rust structs that cross the Tauri IPC boundary must be exported to TypeScript with `ts-rs`.
 
-## Class Diagram
+The diagrams are split by responsibility so each view answers one question without requiring the full system to fit in a single graph.
+
+## Project Metadata, Settings, And Resources
 
 ```mermaid
 classDiagram
-    namespace Document_AST_Domain {
+    namespace Project_Document_Root {
         class DocumentAST {
             +String version
             +ProjectMetadata metadata
@@ -30,6 +32,11 @@ classDiagram
             +Boolean? preview_debounce_enabled
             +Int? preview_debounce_ms
             +Int? history_limit
+            +Boolean? autosave_enabled
+            +Int? autosave_interval_ms
+            +Boolean? autosave_on_window_blur
+            +Boolean? autosave_on_app_close
+            +Boolean? autosave_on_project_close
         }
 
         class ProjectSettings {
@@ -43,8 +50,19 @@ classDiagram
             +TemplateOverride[] template_overrides
         }
 
+        class TemplateOverride {
+            +String key
+            +String value
+        }
+
         class DependencyManifest {
             +Package[] packages
+        }
+
+        class Package {
+            +String namespace
+            +String name
+            +String version
         }
 
         class ReferenceEntry {
@@ -59,7 +77,24 @@ classDiagram
             +String kind
             +String? caption
         }
+    }
 
+    DocumentAST "1" *-- "1" ProjectMetadata
+    DocumentAST "1" *-- "1" DependencyManifest
+    DocumentAST "1" *-- "0..*" ReferenceEntry
+    DocumentAST "1" *-- "0..*" AssetEntry
+    DocumentAST "1" *-- "1..*" DocumentSection
+    ProjectMetadata "1" *-- "1" ProjectSettings
+    ProjectMetadata "1" *-- "1" GlobalSettings
+    ProjectSettings "1" *-- "0..*" TemplateOverride
+    DependencyManifest "1" *-- "0..*" Package
+```
+
+## Document Sections And Elements
+
+```mermaid
+classDiagram
+    namespace Document_Content_Model {
         class DocumentSection {
             <<abstract>>
             +String id
@@ -77,6 +112,11 @@ classDiagram
             +String abstract_text
         }
 
+        class Author {
+            +String name
+            +String? email
+        }
+
         class DocumentElement {
             <<abstract>>
             +String id
@@ -92,11 +132,26 @@ classDiagram
             +RichText[] content
         }
 
+        class RichText {
+            +String text
+            +Boolean? bold
+            +Boolean? italic
+            +String? kind
+            +String? reference_id
+            +String? equation_source
+        }
+
         class Table {
             +Int rows
             +Int cols
             +TableCell[][] cells
             +String[] column_sizes
+        }
+
+        class TableCell {
+            +String content
+            +Int? row_span
+            +Int? col_span
         }
 
         class Equation {
@@ -112,12 +167,25 @@ classDiagram
         }
     }
 
-    DocumentAST "1" *-- "1" ProjectMetadata
-    DocumentAST "1" *-- "1" DependencyManifest
-    DocumentAST "1" *-- "0..*" ReferenceEntry
-    DocumentAST "1" *-- "0..*" AssetEntry
-    DocumentAST "1" *-- "1..*" DocumentSection
+    DocumentSection <|-- ContentSection
+    DocumentSection <|-- CoverPageSection
+    CoverPageSection "1" *-- "0..*" Author
+    ContentSection "1" *-- "0..*" DocumentElement
+    DocumentElement <|-- Heading
+    DocumentElement <|-- Paragraph
+    DocumentElement <|-- Table
+    DocumentElement <|-- Equation
+    DocumentElement <|-- Figure
+    Heading "1" *-- "0..*" RichText
+    Paragraph "1" *-- "0..*" RichText
+    Table "1" *-- "0..*" TableCell
+    Figure "1" *-- "1" DocumentElement
+```
 
+## Action And Keymap Domain
+
+```mermaid
+classDiagram
     namespace Command_Action_Domain {
         class ActionId {
             <<enum>>
@@ -210,24 +278,25 @@ classDiagram
         }
     }
 
-    KeymapSettings "1" *-- "0..*" KeyBindingPreference
-    KeymapProfile "1" *-- "0..*" KeyBinding
-    KeyBinding "1" --> "1" ActionId
-    KeyBinding "1" *-- "1..*" KeyStroke
-    KeyBinding "1" --> "1" ContextExpression
     ActionDescriptor "1" --> "1" ActionId
     ActionInvocation "1" --> "1" ActionId
     ActionContextSnapshot "1" *-- "0..*" ActionContextNode
-    DocumentSection <|-- ContentSection
-    DocumentSection <|-- CoverPageSection
-    ContentSection "1" *-- "0..*" DocumentElement
-    DocumentElement <|-- Heading
-    DocumentElement <|-- Paragraph
-    DocumentElement <|-- Table
-    DocumentElement <|-- Equation
-    DocumentElement <|-- Figure
+    LogicalKeyEvent "1" *-- "0..*" KeyModifier
+    KeyStroke "1" *-- "0..*" KeyModifier
+    KeyBinding "1" --> "1" ActionId
+    KeyBinding "1" --> "1" ContextExpression
+    KeyBinding "1" *-- "1..*" KeyStroke
+    KeyBindingPreference "1" --> "1" ActionId
+    KeyBindingPreference "1" *-- "0..*" KeyStroke
+    KeymapProfile "1" *-- "0..*" KeyBinding
+    KeymapSettings "1" *-- "0..*" KeyBindingPreference
+```
 
-    namespace Backend_Core {
+## Document Session, Source Maps, And VFS
+
+```mermaid
+classDiagram
+    namespace Backend_Document_Source {
         class TauriAppState {
             +Arc~VirtualFileSystem~ vfs
             +Arc~CompilationQueue~ compilation_queue
@@ -238,6 +307,21 @@ classDiagram
         class DocumentSession {
             +sync_snapshot(ast: DocumentAST) Result~DocumentSessionStatus~
             +status() DocumentSessionStatus
+        }
+
+        class DocumentSessionStatus {
+            +UInt64 source_revision
+            +ProjectSourceLayout layout
+            +SourceMapEntry[] source_map
+            +FieldSourceMapEntry[] field_source_map
+            +String[] dirty_section_ids
+            +String[] dirty_element_ids
+            +Int fragment_count
+        }
+
+        class DocumentEvent {
+            <<enum>>
+            SnapshotSynced
         }
 
         class GeneratedFragment {
@@ -325,12 +409,43 @@ classDiagram
             +UInt64 revision
             +UInt64 last_modified
         }
+    }
 
+    TauriAppState "1" *-- "1" VirtualFileSystem
+    TauriAppState "1" *-- "1" DocumentSession
+    DocumentSession "1" o-- "1" VirtualFileSystem
+    DocumentSession "1" *-- "0..*" GeneratedFragment
+    DocumentSession "1" *-- "0..*" SectionSource
+    DocumentSessionStatus "1" *-- "1" ProjectSourceLayout
+    DocumentSessionStatus "1" *-- "0..*" SourceMapEntry
+    DocumentSessionStatus "1" *-- "0..*" FieldSourceMapEntry
+    DocumentEvent ..> DocumentAST
+    SectionSource "1" *-- "0..*" GeneratedFragment
+    GeneratedFragment "1" *-- "0..*" SourceMapEntry
+    GeneratedFragment "1" *-- "0..*" FieldSourceMapEntry
+    FieldSourceMapEntry "1" *-- "0..*" FieldTextSegment
+    VirtualFileSystem "1" *-- "0..*" RetainedTextFile
+    VirtualFileSystem "1" *-- "0..*" VirtualTextFile
+```
+
+## Compilation Queue
+
+```mermaid
+classDiagram
+    namespace Backend_Compile_Queue {
         class CompilationQueue {
             +enqueue_preview(source_revision: UInt64) CompilationJob
             +enqueue_export(format: ExportFormat) CompilationJob
             +mark_source_revision(source_revision: UInt64)
             +snapshot() CompilationQueueSnapshot
+        }
+
+        class CompilationQueueSnapshot {
+            +UInt64 latest_source_revision
+            +UInt64? active_job_id
+            +UInt64? queued_preview_job_id
+            +Int queued_export_count
+            +CompilationResult? last_result
         }
 
         class CompilationJob {
@@ -340,12 +455,39 @@ classDiagram
             +UInt64 source_revision
         }
 
+        class CompilationJobKind {
+            <<enum>>
+            PreviewSvg
+            Export
+        }
+
+        class CompilationPriority {
+            <<enum>>
+            Preview
+            Export
+        }
+
+        class CompilationStatus {
+            <<enum>>
+            Queued
+            Started
+            Succeeded
+            Failed
+            Dropped
+        }
+
+        class ExportFormat {
+            <<enum>>
+            Svg
+            Pdf
+            Png
+        }
+
         class CompilationResult {
             +UInt64 job_id
             +CompilationJobKind kind
             +UInt64 source_revision
             +CompilationStatus status
-            +String[]? svgs
             +PreviewPageFile[]? preview_pages
             +String? export_path
             +String[] diagnostics
@@ -357,6 +499,34 @@ classDiagram
             +Boolean changed
         }
 
+        class ErgoWorld {
+            +Arc~VirtualFileSystem~ vfs
+            +FileId main
+            +Source source(id: FileId)
+            +Bytes file(id: FileId)
+            +Font font(index: Int)
+            +World upcast()
+        }
+    }
+
+    TauriAppState "1" *-- "1" CompilationQueue
+    CompilationQueue "1" *-- "0..*" CompilationJob
+    CompilationQueue "1" --> "1" CompilationQueueSnapshot
+    CompilationQueue ..> ErgoWorld : compiles with
+    CompilationJob "1" --> "1" CompilationJobKind
+    CompilationJob "1" --> "1" CompilationPriority
+    CompilationResult "1" --> "1" CompilationStatus
+    CompilationResult "1" --> "1" CompilationJobKind
+    CompilationResult "1" *-- "0..*" PreviewPageFile
+    CompilationQueueSnapshot "1" --> "0..1" CompilationResult
+    ErgoWorld "1" o-- "1" VirtualFileSystem
+```
+
+## Preview Sync
+
+```mermaid
+classDiagram
+    namespace Backend_Preview_Sync {
         class PreviewSyncState {
             +store_preview(source_revision: UInt64, document: PagedDocument, source_map: SourceMapEntry[], field_source_map: FieldSourceMapEntry[])
             +jump_from_click(page: Int, x_pt: Float, y_pt: Float, revision: UInt64) PreviewJumpResult
@@ -412,6 +582,11 @@ classDiagram
             Unavailable
         }
 
+        class PreviewSyncStatus {
+            +UInt64? source_revision
+            +PreviewPageMetrics[] pages
+        }
+
         class ErgoWorld {
             +Arc~VirtualFileSystem~ vfs
             +FileId main
@@ -422,24 +597,52 @@ classDiagram
         }
     }
 
-    TauriAppState "1" *-- "1" VirtualFileSystem
-    TauriAppState "1" *-- "1" CompilationQueue
-    TauriAppState "1" *-- "1" DocumentSession
     TauriAppState "1" *-- "1" PreviewSyncState
-    DocumentSession "1" o-- "1" VirtualFileSystem
-    DocumentSession "1" *-- "0..*" GeneratedFragment
-    DocumentSession "1" *-- "0..*" SectionSource
-    SectionSource "1" *-- "0..*" GeneratedFragment
-    VirtualFileSystem "1" *-- "0..*" RetainedTextFile
-    CompilationQueue ..> ErgoWorld : compiles with
     CompilationQueue --> PreviewSyncState : stores successful preview
     PreviewSyncState "1" *-- "0..1" RetainedPreviewDocument
+    PreviewSyncState "1" --> "1" PreviewSyncStatus
     RetainedPreviewDocument "1" *-- "0..*" PreviewPageMetrics
     RetainedPreviewDocument "1" *-- "0..*" SourceMapEntry
     RetainedPreviewDocument "1" *-- "0..*" FieldSourceMapEntry
+    PreviewElementPosition "1" --> "1" PreviewPageMetrics
     PreviewSyncState ..> ErgoWorld : resolves jumps with
     ErgoWorld "1" o-- "1" VirtualFileSystem
-    CompilationResult "1" *-- "0..*" PreviewPageFile
+```
+
+## Cross-Domain Ownership
+
+```mermaid
+classDiagram
+    class ReactRuntime {
+        +ActionContextNode[] context_tree
+        +DocumentAST local_ast
+        +DocumentFocusState focus_state
+        +dispatch(action: ActionInvocation)
+    }
+
+    class TauriAppState {
+        +Arc~VirtualFileSystem~ vfs
+        +Arc~CompilationQueue~ compilation_queue
+        +Arc~DocumentSession~ document_session
+        +Arc~PreviewSyncState~ preview_sync
+    }
+
+    class DocumentAST
+    class ActionInvocation
+    class ActionContextNode
+    class DocumentSession
+    class CompilationQueue
+    class PreviewSyncState
+    class VirtualFileSystem
+
+    ReactRuntime "1" *-- "1" DocumentAST
+    ReactRuntime "1" *-- "0..*" ActionContextNode
+    ReactRuntime ..> ActionInvocation : dispatches
+    ReactRuntime ..> TauriAppState : invokes commands
+    TauriAppState "1" *-- "1" DocumentSession
+    TauriAppState "1" *-- "1" CompilationQueue
+    TauriAppState "1" *-- "1" PreviewSyncState
+    TauriAppState "1" *-- "1" VirtualFileSystem
 ```
 
 ## Model Notes
@@ -448,13 +651,13 @@ classDiagram
 - `main.typ` is generated as a small entry point. Each enabled document section is generated as `sections/{section-id}.typ`.
 - `GeneratedFragment` is an internal cache record for one element or section-level fragment. It supports dirty detection and source-map generation but is not persisted as a separate file in v1.
 - `FieldSourceMapEntry` maps generated Typst byte ranges back to editor field IDs. Plain text segments track UTF-16 offsets because browser text selection APIs use UTF-16 code units.
-- `RetainedTextFile.source` represents a retained Typst `Source`. The public `VirtualTextFile` status type exposes text and revision metadata, not the internal Typst source object.
+- `RetainedTextFile.source` represents a retained Typst `Source`. The public `VirtualTextFile` status type exposes text and revision metadata, not the internal Typst source object. Generated preview SVGs are stored as VFS file bytes, not retained text sources.
 - VFS edits should update retained sources with `Source::replace` or `Source::edit` to benefit from Typst incremental parsing.
-- `CompilationResult.preview_pages` is the preferred preview contract. Each preview page reports whether its SVG file changed. `svgs` exists for compatibility and export payloads.
+- `CompilationResult.preview_pages` is the preview contract. Each preview page reports whether its SVG file changed.
 - `PreviewSyncState` keeps only runtime sync data. It is not persisted inside `.ergproj` archives.
 - The retained preview keeps the compiled `PagedDocument`, element source-map snapshot, field source-map snapshot, Typst source snapshot, source revision, and page metrics together.
 - Preview sync returns `Unavailable` when the requested revision is not the retained preview revision.
 - `SourceMapEntry` byte ranges use half-open ownership: `byte_start` is included and `byte_end` is excluded. Adjacent generated fragments must not both claim the same boundary byte.
 - Backward sync maps `typst_ide::Jump::File` offsets to field ranges first and element ranges second. Forward sync maps `PreviewFocusTarget` values to Typst preview positions with `jump_from_cursor`.
-- Keymap preference files use typed `action_id` values such as `workspace::OpenProject`, a context expression such as `editor && !input`, and a logical-key `sequence` array. Older `command_id`, `keys`, and `scope` entries may be read only for migration.
+- Keymap preference files use typed `action_id` values such as `workspace::OpenProject`, a context expression such as `editor && !input`, and a logical-key `sequence` array. The persisted keymap schema is strict.
 - React owns `ActionContextNode` registration and action handlers. Rust owns `ActionDescriptor`, keymap validation, context-expression matching, sequence state, and `ActionResolution`.

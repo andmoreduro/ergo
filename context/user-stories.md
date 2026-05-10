@@ -50,7 +50,7 @@ This document categorizes the core functionalities of Érgo into specific Epics 
 
 - **US5.1 - Real-Time Document Rendering:** As a user, I want the document preview to update instantly as I type so that I get immediate visual feedback on my edits.
 - **US5.2 - Live Preview Prioritization:** As a user, I want the live visual preview to be prioritized over full document exports so that the interface remains incredibly fast and responsive during active typing.
-- **US5.3 - Seamless Background Saving:** As a user, I want the application to automatically save my progress in the background without causing the interface to freeze or stutter so that my data is safe without interrupting my workflow.
+- **US5.3 - Seamless Background Saving:** As a user, I want the application to automatically save my progress at a configurable interval and at configured moments such as app focus loss, app close, or project close so that my data is safe without interrupting my workflow.
 
 ## Epic 6: Bi-directional Synchronization
 
