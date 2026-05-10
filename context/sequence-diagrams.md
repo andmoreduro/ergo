@@ -50,7 +50,7 @@ sequenceDiagram
     World-->>Typst: Source
 
     Typst-->>Queue: PagedDocument
-    Queue->>VFS: compare and write changed .ergproj/preview/svg/page-N.svg files
+    Queue->>VFS: compare and write changed .ergproj/preview/svg/page-N.svg file bytes
     Queue->>Sync: store_preview(revision, PagedDocument, sourceMap, sourceSnapshot)
     Queue-->>API: emit succeeded with preview_pages(changed)
     API->>VFS: read_preview_svg(page path)
@@ -62,12 +62,12 @@ sequenceDiagram
 ### Flow Notes
 
 - The frontend does not own canonical full Typst source generation.
-- `patch_source` remains a lower-level VFS command for compatibility and focused source edits, but normal document editing syncs AST snapshots/events to `DocumentSession`.
+- `patch_source` remains a lower-level VFS command for focused source edits, but normal document editing syncs AST snapshots/events to `DocumentSession`.
 - The preview result must be rejected if its source revision is stale.
 - Preview SVG files under `.ergproj/preview/svg/` are generated artifacts, not authoritative document state.
 - Frontend Typst generation utilities must not be used in the compile path. Backend `DocumentSession` is the only canonical source generator.
 - The retained preview document is runtime state only. It contains the compiled `PagedDocument`, source-map snapshot, Typst source snapshot, and page metrics. It is kept for sync and discarded/replaced when a newer non-stale preview compile succeeds.
-- Preview page SVG writes are page-granular. The backend compares rendered SVG text with the VFS file, writes only changed pages, and marks each `PreviewPageFile.changed` value. The frontend keeps unchanged page SVG strings in memory and reloads only changed pages.
+- Preview page SVG writes are page-granular. The backend compares rendered SVG text with the VFS file bytes, writes only changed pages as generated file artifacts, and marks each `PreviewPageFile.changed` value. The frontend keeps unchanged page SVG strings in memory and reloads only changed pages.
 - Preview debounce is disabled by default. When enabled in global settings, `preview_debounce_ms` controls the backend delay used to coalesce pending preview jobs.
 
 ## 2. Archive Save
@@ -145,7 +145,7 @@ The canonical archive state is:
 
 Generated preview/export files may exist in the VFS, but they should be treated as cache artifacts and can be regenerated.
 
-## 3. Archive Open And Migration
+## 3. Archive Open
 
 ```mermaid
 sequenceDiagram
@@ -172,11 +172,55 @@ sequenceDiagram
     API-->>UI: load AST into frontend state
 ```
 
-### Migration Rule
+### Open Rule
 
-If an archive has `.ergproj/document_state.json` but no `sections/`, the backend regenerates the canonical multi-file Typst layout from the AST. If an archive only contains a monolithic `main.typ` and no document state, it is a legacy Typst-only archive and cannot be loaded as a structured Érgo project without an import feature.
+`.ergproj/document_state.json` is required. The backend mounts archive files into the VFS, reads the structured document state, and materializes `main.typ`, section files, source maps, and metadata from that document state.
 
-## 4. Export Queue
+## 4. Autosave And Close Events
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    participant Settings as Global Settings
+    participant UI as React UI
+    participant State as Document State
+    participant Autosave as Autosave Scheduler
+    participant API as Tauri API Client
+    participant Archive as Archive Manager
+    participant Window as Tauri Window
+
+    Settings-->>Autosave: interval and event toggles
+    State-->>Autosave: dirty state, current project path, latest AST
+
+    alt periodic autosave enabled
+        Autosave->>Autosave: wait autosave_interval_ms
+        Autosave->>API: save_project(current path, latest AST) when dirty
+        API->>Archive: write .ergproj archive
+        Archive-->>State: save complete / mark saved
+    end
+
+    alt save on window blur enabled
+        Window-->>Autosave: app window loses focus
+        Autosave->>API: save_project(current path, latest AST) when dirty
+    end
+
+    alt save on project close enabled
+        UI->>Autosave: close current project / open another project / create another project
+        Autosave->>API: save_project(current path, latest AST) when dirty
+        API-->>UI: continue project boundary after save succeeds
+    end
+
+    alt save on app close enabled
+        Window-->>Autosave: close requested
+        Autosave->>Window: prevent close while dirty save runs
+        Autosave->>API: save_project(current path, latest AST)
+        API-->>Autosave: save complete
+        Autosave->>Window: close window
+    end
+```
+
+## 5. Export Queue
 
 ```mermaid
 sequenceDiagram
@@ -204,7 +248,7 @@ sequenceDiagram
 
 Export jobs must not overtake pending preview jobs. Preview freshness is prioritized while the user is actively editing.
 
-## 5. Keymap Resolution
+## 6. Keymap Resolution
 
 ```mermaid
 sequenceDiagram
@@ -249,11 +293,11 @@ sequenceDiagram
 
 Every mouse-performable command-like operation should have a matching action. Action IDs use namespace-style names such as `workspace::OpenProject`; the namespace describes ownership, while the action context expression decides where the shortcut is valid. Raw typing inside form fields remains native input and document events, not actions.
 
-Keymap settings are loaded from and saved to the app config file `keymap.json`, separate from general app settings in `settings.json`. The user config folder is named `Ergo`; bundled defaults live under the installed app resources as `defaults/default_keymap.json` and `defaults/default_settings.json`. The bundled keymap file owns default action bindings, while the user file persists profile selection and overrides. The keymap settings UI edits those overrides directly, so JSON customization and UI customization use the same model.
+Keymap settings are loaded from and saved to the app config file `keymap.json`, separate from general app settings in `settings.json`. The user config folder is named `Ergo`; bundled defaults live under the installed app resources as `defaults/default_keymap.json` and `defaults/default_settings.json`. The bundled keymap file owns default action bindings, while the user file persists profile selection and overrides. The keymap settings UI edits those overrides directly, so JSON customization and UI customization use the same strict schema.
 
 There is no frontend fallback shortcut resolver. Keyboard events are normalized in React only to form `LogicalKeyEvent`; matching, pending-sequence state, fallback timeout decisions, and context-expression evaluation belong to Rust.
 
-## 6. Preview And Editor Sync
+## 7. Preview And Editor Sync
 
 Backward sync uses Typst's compiled frame tree rather than SVG attributes:
 

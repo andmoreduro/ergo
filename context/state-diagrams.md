@@ -24,8 +24,8 @@ stateDiagram-v2
     Syncing --> SyncPending : newer AST exists
     Syncing --> Error : sync failed
 
-    ActiveProject --> Saving : manual save / autosave
-    Editing --> Saving : autosave
+    ActiveProject --> Saving : manual save / autosave interval / configured save event
+    Editing --> Saving : autosave interval / window blur / project close / app close
     Saving --> ActiveProject : archive written
     Saving --> Error : save failed
 
@@ -37,6 +37,7 @@ stateDiagram-v2
 - React state updates immediately during `Editing`.
 - Backend sync is asynchronous and coalesces to the latest AST snapshot.
 - The frontend does not wait for compilation before letting users continue editing.
+- Autosave is governed by global settings. Periodic autosave uses the configured interval and save-event toggles cover window blur, app close, and project close.
 
 ## 2. Backend DocumentSession Lifecycle
 
@@ -117,7 +118,6 @@ stateDiagram-v2
     WaitingForPreview --> ReusingSvgFiles : unchanged preview_pages
     LoadingSvgFiles --> ShowingPreview : read_preview_svg complete
     ReusingSvgFiles --> ShowingPreview : keep cached SVG text
-    LoadingSvgFiles --> ShowingFallback : inline SVG compatibility payload available
     LoadingSvgFiles --> Error : SVG file read failed
     ShowingPreview --> LoadingSvgFiles : newer compile result
     ShowingPreview --> ResolvingSync : click page / active editor element

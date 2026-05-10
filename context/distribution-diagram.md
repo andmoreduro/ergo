@@ -92,8 +92,6 @@ Runtime preview sync state is not part of the archive. The backend retains the l
 - **Online mode:** The archive stores dependency metadata and relies on the local Typst package cache, downloading missing packages when needed.
 - **Offline mode:** The archive bundles required package sources/assets so the project can compile without internet access.
 
-The initial implementation may only partially support offline bundling. When implementing archive work, keep the layout compatible with both modes.
-
 ## Storage Notes
 
 - Global settings are app-level preferences and live outside project archives.
@@ -104,6 +102,7 @@ The initial implementation may only partially support offline bundling. When imp
 - `settings.json`
 - `keymap.json`
 - Preview debounce is disabled by default. When enabled, the app reads `preview_debounce_ms` from global settings and passes that delay to the backend preview queue.
+- Autosave is enabled by default. Global settings control `autosave_interval_ms`, `autosave_on_window_blur`, `autosave_on_app_close`, and `autosave_on_project_close`.
 - Bundled default configuration is installed with the app resources:
   - `defaults/default_settings.json`
   - `defaults/default_keymap.json`, including the default action bindings
@@ -112,8 +111,8 @@ The initial implementation may only partially support offline bundling. When imp
   - `context`: expression such as `app`, `workspace && !input`, or `element && element.kind == "Table"`
   - `sequence`: ordered logical key strokes using `key` from `KeyboardEvent.key` and modifiers `Control`, `Alt`, `Shift`, `Meta`
 - Bundled defaults should reserve prefix strokes for sequences. The default open-project binding is `Ctrl+O Ctrl+O`, while open-recent is `Ctrl+O Ctrl+R`; a bare `Ctrl+O` is not assigned by default.
-- Keymap overrides can be customized either by editing `keymap.json` or through the keymap settings UI; both paths persist to the same user file. Older `keys`/`scope` entries are migrated when loaded and saved back using the new schema.
+- Keymap overrides can be customized either by editing `keymap.json` or through the keymap settings UI; both paths persist to the same user file and use the same strict schema.
 - Project settings live inside `.ergproj/project_settings.json`.
 - The VFS is the active in-memory compile surface. Disk archives are persistence snapshots.
-- Preview SVG page files are updated page-by-page. The backend compares rendered SVG text with the VFS copy, writes changed pages, and reports `changed` in preview page metadata.
+- Preview SVG page files are updated page-by-page. The backend compares rendered SVG text with the VFS file-byte copy, writes changed pages as generated artifacts rather than retained Typst sources, and reports `changed` in preview page metadata.
 - Paths inside the archive and VFS should use `/` separators, even on Windows.

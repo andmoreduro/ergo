@@ -34,6 +34,7 @@ flowchart TB
         Keymap["Shortcut Recorder UI"]:::comp
         DocState["Document State + History"]:::comp
         SettingsUI["Settings UI"]:::comp
+        Autosave["Autosave Scheduler"]:::comp
         Preview["SVG Preview Renderer"]:::comp
         TauriClient["Typed Tauri API Client"]:::comp
 
@@ -41,6 +42,8 @@ flowchart TB
         Keymap --> Commands
         Commands --> DocState
         SettingsUI --> TauriClient
+        Autosave --> TauriClient
+        DocState --> Autosave
         DocState --> TauriClient
         Preview --> TauriClient
     end
@@ -107,10 +110,11 @@ flowchart TB
 - Key bindings use logical keys from `KeyboardEvent.key`, not physical key positions. Multi-stroke sequences such as `Ctrl+O Ctrl+O` and `Ctrl+O Ctrl+R` are supported. Default keymaps must avoid assigning an action to a prefix stroke that is also used by longer sequences; users may intentionally create that ambiguity in settings, in which case the resolver waits for the sequence timeout before running the prefix fallback. If more than one binding matches, the most specific active context expression wins.
 - The frontend must not keep a separate shortcut resolver or canonical Typst generator. It may keep a small action-handler adapter for UI labels, enablement, and React-owned side effects until those pieces are fully derived from the Rust action catalog.
 - **Settings Store** reads installed default JSON resources first and persists user overrides under the platform config root's `Ergo` folder. Bundled defaults live at `defaults/default_settings.json` and `defaults/default_keymap.json`; user settings live at `settings.json` and `keymap.json`. Default keymap bindings come from bundled resources; user keymap files and the keymap settings UI store overrides.
-- **VirtualFileSystem** stores text files as retained Typst `Source` objects plus revisions. It stores binary files as bytes. Paths are normalized to `/` so Typst includes work consistently across Windows and Linux.
+- **Autosave Scheduler** is controlled by global settings. It saves dirty projects on a configurable interval, and it can also save when the app window loses focus, when the app window is closing, or when the active project is closing because the user closes it or opens/creates another project.
+- **VirtualFileSystem** stores canonical Typst/text sources as retained Typst `Source` objects plus revisions. It stores generated preview SVGs, exports, assets, and other non-source artifacts as file bytes. Paths are normalized to `/` so Typst includes work consistently across Windows and Linux.
 - **CompilationQueue** is the only scheduler for preview and export compilation. Preview SVG jobs have priority over export jobs.
 - Preview debounce is disabled by default. Global settings can enable it and provide the debounce time sent to the queue when preview work is enqueued.
 - **ErgoWorld** implements Typst's `World` trait for compilation and Typst IDE's `IdeWorld` trait for source-to-preview mapping.
 - **PreviewSyncState** retains the latest successful, non-stale `PagedDocument` plus element source-map, field source-map, Typst source snapshot, and page metrics. Preview clicks call Typst IDE jump APIs on that retained document and retained sources, then map returned file offsets to Érgo field targets.
-- **Preview Renderer** treats SVG page files as canonical preview output. Inline SVG payloads may exist as compatibility data, but preview page paths are the preferred interface. It reloads only page files marked as changed by the backend, converts click positions from SVG viewBox space into Typst page coordinates, and dispatches `editor::FocusField` when backend sync returns an Érgo focus target.
-- **Archive Manager** writes and opens `.ergproj` archives. It regenerates canonical section files from `.ergproj/document_state.json` when opening older archives that do not contain `sections/`.
+- **Preview Renderer** treats SVG page files as canonical preview output. It reloads only page files marked as changed by the backend, converts click positions from SVG viewBox space into Typst page coordinates, and dispatches `editor::FocusField` when backend sync returns an Érgo focus target.
+- **Archive Manager** writes and opens `.ergproj` archives. `.ergproj/document_state.json` is required, and source files are materialized from that structured document state on open.
