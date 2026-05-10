@@ -33,7 +33,6 @@ export interface CompilationResult {
     kind: CompilationJobKind;
     source_revision: SourceRevision;
     status: CompilationStatus;
-    svgs: string[] | null;
     preview_pages: PreviewPageFile[] | null;
     export_path: string | null;
     diagnostics: string[];

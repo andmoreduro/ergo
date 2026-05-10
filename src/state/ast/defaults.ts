@@ -125,6 +125,11 @@ export const createDefaultDocumentAST = (): DocumentAST => ({
             preview_debounce_enabled: false,
             preview_debounce_ms: 120,
             history_limit: 100,
+            autosave_enabled: true,
+            autosave_interval_ms: 30_000,
+            autosave_on_window_blur: true,
+            autosave_on_app_close: true,
+            autosave_on_project_close: true,
         },
     },
     dependencies: {

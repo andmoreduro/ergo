@@ -10,8 +10,8 @@ describe("createKeymapProfile", () => {
             keymap_overrides: [
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "Ctrl+Alt+O",
-                    scope: "global",
+                    context: "app",
+                    sequence: [{ key: "o", modifiers: ["Control", "Alt"] }],
                 },
             ],
         };
@@ -34,15 +34,15 @@ describe("createKeymapProfile", () => {
             keymap_profile: "Custom",
             keymap_bindings: [],
             keymap_overrides: [
-                {
+                ({
                     action_id: "unknown.action",
-                    keys: "Ctrl+Alt+O",
-                    scope: "global",
-                },
+                    context: "app",
+                    sequence: [{ key: "o", modifiers: ["Control", "Alt"] }],
+                } as never),
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "Ctrl+Alt+O",
-                    scope: "unknown",
+                    context: "",
+                    sequence: [{ key: "o", modifiers: ["Control", "Alt"] }],
                 },
             ],
         };
@@ -60,8 +60,8 @@ describe("createKeymapProfile", () => {
             keymap_bindings: [
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "Ctrl+O",
-                    scope: "global",
+                    context: "app",
+                    sequence: [{ key: "o", modifiers: ["Control"] }],
                 },
             ],
             keymap_overrides: [],
@@ -85,15 +85,15 @@ describe("createKeymapProfile", () => {
             keymap_bindings: [
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "Ctrl+O",
-                    scope: "global",
+                    context: "app",
+                    sequence: [{ key: "o", modifiers: ["Control"] }],
                 },
             ],
             keymap_overrides: [
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "Ctrl+Alt+O",
-                    scope: "global",
+                    context: "app",
+                    sequence: [{ key: "o", modifiers: ["Control", "Alt"] }],
                 },
             ],
         };
@@ -116,15 +116,15 @@ describe("createKeymapProfile", () => {
             keymap_bindings: [
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "Ctrl+O",
-                    scope: "global",
+                    context: "app",
+                    sequence: [{ key: "o", modifiers: ["Control"] }],
                 },
             ],
             keymap_overrides: [
                 {
                     action_id: "workspace::OpenProject",
-                    keys: "",
-                    scope: "global",
+                    context: "app",
+                    sequence: [],
                 },
             ],
         };
@@ -143,28 +143,23 @@ describe("createKeymapProfile", () => {
         expect(conflicts).toEqual([]);
     });
 
-    it("maps legacy command ids to action ids for existing user keymaps", () => {
+    it("ignores old keymap fields from unreleased formats", () => {
         const settings: KeymapSettings = {
             keymap_profile: "Migrated",
             keymap_bindings: [],
             keymap_overrides: [
-                {
-                    action_id: "project.open",
+                ({
+                    command_id: "project.open",
                     keys: "Ctrl+Alt+O",
                     scope: "global",
-                },
+                } as never),
             ],
         };
 
         const { keymap } = createKeymapProfile(settings);
 
-        expect(keymap.bindings).toContainEqual(
-            expect.objectContaining({
-                commandId: "workspace::OpenProject",
-                context: "app",
-                keys: "Ctrl+Alt+O",
-                scope: "global",
-            }),
-        );
+        expect(
+            keymap.bindings.some((binding) => binding.keys === "Ctrl+Alt+O"),
+        ).toBe(false);
     });
 });

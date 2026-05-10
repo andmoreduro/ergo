@@ -1107,11 +1107,16 @@ pub fn get_document_session_status(
 
 #[tauri::command]
 pub fn read_preview_svg(state: State<'_, TauriAppState>, path: String) -> Result<String, String> {
+    read_preview_svg_from_vfs(&state.vfs, &path)
+}
+
+fn read_preview_svg_from_vfs(vfs: &VirtualFileSystem, path: &str) -> Result<String, String> {
     if !path.starts_with(".ergproj/preview/svg/") {
         return Err("Preview SVG path must be inside .ergproj/preview/svg".to_string());
     }
 
-    state.vfs.read_source(&path)
+    let bytes = vfs.read_file(path)?;
+    String::from_utf8(bytes).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -1232,6 +1237,19 @@ mod tests {
                 .map(|segment| segment.field_utf16_end),
             Some("#Niñez 🌍".encode_utf16().count())
         );
+    }
+
+    #[test]
+    fn reads_preview_svg_from_generated_file_storage() {
+        let vfs = VirtualFileSystem::new();
+        vfs.write_file(
+            ".ergproj/preview/svg/page-1.svg",
+            "<svg>Vista previa ñ</svg>".as_bytes().to_vec(),
+        );
+
+        let svg = read_preview_svg_from_vfs(&vfs, ".ergproj/preview/svg/page-1.svg").unwrap();
+
+        assert_eq!(svg, "<svg>Vista previa ñ</svg>");
     }
 
     #[test]

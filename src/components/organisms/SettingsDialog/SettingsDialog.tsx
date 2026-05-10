@@ -36,23 +36,9 @@ const removeKeymapOverride = (
 ): KeymapSettings => ({
     ...settings,
     keymap_overrides: settings.keymap_overrides.filter(
-        (override) => {
-            const legacyScope = (override as { scope?: string }).scope;
-            const overrideContext =
-                override.context ??
-                (legacyScope === "global"
-                    ? "app"
-                    : legacyScope === "project"
-                      ? "workspace && !input"
-                      : legacyScope === "editor"
-                        ? "editor && !input"
-                        : null);
-
-            return (
-                override.action_id !== binding.commandId ||
-                overrideContext !== binding.context
-            );
-        },
+        (override) =>
+            override.action_id !== binding.commandId ||
+            override.context !== binding.context,
     ),
 });
 
@@ -179,6 +165,80 @@ export const SettingsDialog = ({
                                     }
                                 />
                             </label>
+                            <div className={styles.field}>
+                                <Checkbox
+                                    checked={globalSettings.autosave_enabled ?? true}
+                                    label={m.settings_autosave_enabled()}
+                                    onChange={(event) =>
+                                        onGlobalSettingsChange({
+                                            ...globalSettings,
+                                            autosave_enabled: event.target.checked,
+                                        })
+                                    }
+                                />
+                            </div>
+                            <label className={styles.field}>
+                                <span>{m.settings_autosave_interval_ms()}</span>
+                                <input
+                                    min="1000"
+                                    type="number"
+                                    disabled={!(globalSettings.autosave_enabled ?? true)}
+                                    value={globalSettings.autosave_interval_ms ?? 30000}
+                                    onChange={(event) =>
+                                        onGlobalSettingsChange({
+                                            ...globalSettings,
+                                            autosave_interval_ms: toOptionalNumber(
+                                                event.target.value,
+                                            ),
+                                        })
+                                    }
+                                />
+                            </label>
+                            <div className={styles.field}>
+                                <Checkbox
+                                    checked={
+                                        globalSettings.autosave_on_window_blur ?? true
+                                    }
+                                    label={m.settings_autosave_on_window_blur()}
+                                    onChange={(event) =>
+                                        onGlobalSettingsChange({
+                                            ...globalSettings,
+                                            autosave_on_window_blur:
+                                                event.target.checked,
+                                        })
+                                    }
+                                />
+                            </div>
+                            <div className={styles.field}>
+                                <Checkbox
+                                    checked={
+                                        globalSettings.autosave_on_app_close ?? true
+                                    }
+                                    label={m.settings_autosave_on_app_close()}
+                                    onChange={(event) =>
+                                        onGlobalSettingsChange({
+                                            ...globalSettings,
+                                            autosave_on_app_close: event.target.checked,
+                                        })
+                                    }
+                                />
+                            </div>
+                            <div className={styles.field}>
+                                <Checkbox
+                                    checked={
+                                        globalSettings.autosave_on_project_close ??
+                                        true
+                                    }
+                                    label={m.settings_autosave_on_project_close()}
+                                    onChange={(event) =>
+                                        onGlobalSettingsChange({
+                                            ...globalSettings,
+                                            autosave_on_project_close:
+                                                event.target.checked,
+                                        })
+                                    }
+                                />
+                            </div>
                             <label className={styles.field}>
                                 <Checkbox
                                     checked={

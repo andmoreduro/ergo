@@ -104,6 +104,7 @@ impl VirtualFileSystem {
     pub fn write_source(&self, path: &str, content: String) -> u64 {
         let path = normalize_path(path);
         let revision = self.next_revision.fetch_add(1, Ordering::SeqCst);
+        self.memory_files.write().remove(&path);
         let mut sources = self.memory_sources.write();
 
         if let Some(file) = sources.get_mut(&path) {
@@ -137,10 +138,15 @@ impl VirtualFileSystem {
             .ok_or_else(|| format!("File not found: {}", path))
     }
 
+    pub fn has_retained_source(&self, path: &str) -> bool {
+        let path = normalize_path(path);
+        self.memory_sources.read().contains_key(&path)
+    }
+
     pub fn write_file(&self, path: &str, content: Vec<u8>) {
-        self.memory_files
-            .write()
-            .insert(normalize_path(path), content);
+        let path = normalize_path(path);
+        self.memory_sources.write().remove(&path);
+        self.memory_files.write().insert(path, content);
     }
 
     pub fn apply_patch(

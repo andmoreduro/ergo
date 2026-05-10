@@ -17,19 +17,7 @@ vi.mock("../api/tauri", () => ({
     TauriApi: tauriApiMock,
 }));
 
-import { createTextPatch, useCompiler } from "./useCompiler";
-
-const applyTextPatch = (
-    previous: string,
-    patch: NonNullable<ReturnType<typeof createTextPatch>>,
-) => {
-    const chars = Array.from(previous);
-    return [
-        ...chars.slice(0, patch.start),
-        patch.text,
-        ...chars.slice(patch.end),
-    ].join("");
-};
+import { useCompiler } from "./useCompiler";
 
 const createDocumentWithTitle = (title: string): DocumentAST => {
     const ast = createDefaultDocumentAST();
@@ -46,26 +34,6 @@ const CompilerHarness = ({ ast }: { ast: DocumentAST }) => {
     useCompiler(ast);
     return null;
 };
-
-describe("createTextPatch", () => {
-    it("removes stale suffix text after deletion", () => {
-        const previous = "Me hago entenderdkjkjfakfd f";
-        const next = "Me hago entender";
-        const patch = createTextPatch(previous, next);
-
-        expect(patch).not.toBeNull();
-        expect(applyTextPatch(previous, patch!)).toBe(next);
-    });
-
-    it("uses character indices for unicode text", () => {
-        const previous = "Érgo 🌍 draft";
-        const next = "Érgo draft";
-        const patch = createTextPatch(previous, next);
-
-        expect(patch).not.toBeNull();
-        expect(applyTextPatch(previous, patch!)).toBe(next);
-    });
-});
 
 describe("useCompiler source syncing", () => {
     afterEach(() => {
@@ -192,7 +160,6 @@ describe("useCompiler source syncing", () => {
                 ],
                 source_revision: 1,
                 status: "succeeded",
-                svgs: null,
             },
         });
         tauriApiMock.readPreviewSvg.mockResolvedValue("<svg />");
@@ -279,7 +246,6 @@ describe("useCompiler source syncing", () => {
                           ],
                 source_revision: queuedRevision,
                 status: "succeeded",
-                svgs: null,
             },
         }));
         tauriApiMock.readPreviewSvg

@@ -82,10 +82,7 @@ pub fn open_project_from_path(
     let json_ast = state
         .vfs
         .read_source(".ergproj/document_state.json")
-        .map_err(|_| {
-            "Legacy Typst-only .ergproj archives without document_state.json are not supported yet"
-                .to_string()
-        })?;
+        .map_err(|_| ".ergproj/document_state.json is required".to_string())?;
     let ast: DocumentAST = serde_json::from_str(&json_ast).map_err(|e| e.to_string())?;
     let status = state.document_session.sync_snapshot(ast.clone())?;
     state
@@ -211,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn open_project_regenerates_missing_section_files_from_document_state() {
+    fn open_project_materializes_section_files_from_document_state() {
         let state = test_state();
         let path = temp_project_path();
         let file = File::create(&path).unwrap();
@@ -222,7 +219,7 @@ mod tests {
         zip.write_all(serde_json::to_string(&test_ast()).unwrap().as_bytes())
             .unwrap();
         zip.start_file("main.typ", options).unwrap();
-        zip.write_all(b"Legacy monolithic file").unwrap();
+        zip.write_all(b"= Unused source").unwrap();
         zip.finish().unwrap();
 
         let ast = open_project_from_path(&state, &path).unwrap();
@@ -263,5 +260,23 @@ mod tests {
             state.vfs.read_file("assets/image.png").unwrap(),
             vec![137, 80, 78, 71]
         );
+    }
+
+    #[test]
+    fn open_project_requires_document_state() {
+        let state = test_state();
+        let path = temp_project_path();
+        let file = File::create(&path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file("main.typ", options).unwrap();
+        zip.write_all(b"= Raw Typst").unwrap();
+        zip.finish().unwrap();
+
+        let error = open_project_from_path(&state, &path).unwrap_err();
+        fs::remove_file(&path).ok();
+
+        assert!(error.contains(".ergproj/document_state.json"));
+        assert_eq!(error, ".ergproj/document_state.json is required");
     }
 }

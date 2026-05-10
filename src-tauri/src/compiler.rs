@@ -86,7 +86,6 @@ pub struct CompilationResult {
     pub kind: CompilationJobKind,
     pub source_revision: SourceRevision,
     pub status: CompilationStatus,
-    pub svgs: Option<Vec<String>>,
     pub preview_pages: Option<Vec<PreviewPageFile>>,
     pub export_path: Option<String>,
     pub diagnostics: Vec<String>,
@@ -309,7 +308,6 @@ impl CompilationQueue {
                             source_snapshot,
                         );
                         let mut result = result_for_job(&job, CompilationStatus::Succeeded);
-                        result.svgs = Some(svgs);
                         result.preview_pages = Some(preview_pages);
                         result.export_path = Some(preview_dir.to_string());
                         result
@@ -370,7 +368,6 @@ fn result_for_job(job: &CompilationJob, status: CompilationStatus) -> Compilatio
         kind: job.kind.clone(),
         source_revision: job.source_revision,
         status,
-        svgs: None,
         preview_pages: None,
         export_path: None,
         diagnostics: Vec::new(),
@@ -397,7 +394,7 @@ fn compile_document(vfs: Arc<VirtualFileSystem>) -> Result<PagedDocument, String
     }
 }
 
-fn compile_document_snapshot(
+pub(crate) fn compile_document_snapshot(
     vfs: &Arc<VirtualFileSystem>,
 ) -> Result<(PagedDocument, WorldSourceSnapshot), String> {
     let main_id = FileId::new(None, VirtualPath::new("main.typ"));
@@ -415,11 +412,11 @@ fn compile_svgs(vfs: Arc<VirtualFileSystem>) -> Result<Vec<String>, String> {
     Ok(render_svgs(&document))
 }
 
-fn render_svgs(document: &PagedDocument) -> Vec<String> {
+pub(crate) fn render_svgs(document: &PagedDocument) -> Vec<String> {
     document.pages.iter().map(typst_svg::svg).collect()
 }
 
-fn write_svg_pages(
+pub(crate) fn write_svg_pages(
     vfs: &VirtualFileSystem,
     directory: &str,
     svgs: &[String],
@@ -427,10 +424,11 @@ fn write_svg_pages(
     let mut changed_pages = Vec::with_capacity(svgs.len());
     for (index, svg) in svgs.iter().enumerate() {
         let path = format!("{}/page-{}.svg", directory, index + 1);
-        let existing = vfs.read_source(&path).ok();
-        let changed = existing.as_deref() != Some(svg.as_str());
-        if changed {
-            vfs.write_source(&path, svg.clone());
+        let svg_bytes = svg.as_bytes();
+        let existing = vfs.read_file(&path).ok();
+        let changed = existing.as_deref() != Some(svg_bytes);
+        if changed || vfs.has_retained_source(&path) {
+            vfs.write_file(&path, svg_bytes.to_vec());
         }
         changed_pages.push(changed);
     }
@@ -466,7 +464,6 @@ fn run_export_job(
                 write_svg_pages(vfs, export_dir, &svgs);
 
                 let mut result = result_for_job(job, CompilationStatus::Succeeded);
-                result.svgs = Some(svgs);
                 result.export_path = Some(export_dir.to_string());
                 result
             }
@@ -533,11 +530,6 @@ pub fn patch_source(
         .compilation_queue
         .mark_source_revision(state.vfs.latest_revision());
     Ok(())
-}
-
-#[tauri::command]
-pub fn trigger_compile(state: State<'_, TauriAppState>) -> Result<Vec<String>, String> {
-    compile_svgs(state.vfs.clone())
 }
 
 #[tauri::command]
@@ -715,17 +707,21 @@ mod tests {
             ]
         );
         assert_eq!(
-            vfs.read_source(".ergproj/preview/svg/page-1.svg").unwrap(),
-            "<svg>uno</svg>"
+            vfs.read_file(".ergproj/preview/svg/page-1.svg").unwrap(),
+            b"<svg>uno</svg>"
         );
         assert_eq!(
-            vfs.read_source(".ergproj/preview/svg/page-2.svg").unwrap(),
-            "<svg>dos</svg>"
+            vfs.read_file(".ergproj/preview/svg/page-2.svg").unwrap(),
+            b"<svg>dos</svg>"
+        );
+        assert!(
+            vfs.read_source(".ergproj/preview/svg/page-1.svg").is_err(),
+            "preview SVG artifacts should not be retained as Typst Source values"
         );
     }
 
     #[test]
-    fn marks_only_changed_preview_svg_pages() {
+    fn marks_only_changed_preview_svg_files_without_retained_sources() {
         let vfs = VirtualFileSystem::new();
 
         write_svg_pages(
@@ -741,6 +737,43 @@ mod tests {
 
         assert!(!pages[0].changed);
         assert!(pages[1].changed);
+        assert_eq!(
+            vfs.read_file(".ergproj/preview/svg/page-1.svg").unwrap(),
+            b"<svg>uno</svg>"
+        );
+        assert_eq!(
+            vfs.read_file(".ergproj/preview/svg/page-2.svg").unwrap(),
+            b"<svg>tres</svg>"
+        );
+        assert!(
+            vfs.read_source(".ergproj/preview/svg/page-2.svg").is_err(),
+            "changed preview SVG artifacts should not be retained as Typst Source values"
+        );
+    }
+
+    #[test]
+    fn writes_preview_svg_as_file_when_no_file_artifact_exists() {
+        let vfs = VirtualFileSystem::new();
+        vfs.write_source(
+            ".ergproj/preview/svg/page-1.svg",
+            "<svg>uno</svg>".to_string(),
+        );
+
+        let pages = write_svg_pages(
+            &vfs,
+            ".ergproj/preview/svg",
+            &["<svg>uno</svg>".to_string()],
+        );
+
+        assert!(!pages[0].changed);
+        assert_eq!(
+            vfs.read_file(".ergproj/preview/svg/page-1.svg").unwrap(),
+            b"<svg>uno</svg>"
+        );
+        assert!(
+            vfs.read_source(".ergproj/preview/svg/page-1.svg").is_err(),
+            "preview SVG artifacts should be stored as generated file bytes"
+        );
     }
 
     fn test_ast() -> DocumentAST {

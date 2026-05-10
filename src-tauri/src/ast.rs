@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 use ts_rs::TS;
 
@@ -26,6 +26,7 @@ pub struct ProjectMetadata {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 #[ts(export, export_to = "../../src/bindings/")]
 pub struct GlobalSettings {
     pub default_font: Option<String>,
@@ -46,6 +47,16 @@ pub struct GlobalSettings {
     pub preview_debounce_ms: Option<usize>,
     #[serde(default)]
     pub history_limit: Option<usize>,
+    #[serde(default)]
+    pub autosave_enabled: Option<bool>,
+    #[serde(default)]
+    pub autosave_interval_ms: Option<usize>,
+    #[serde(default)]
+    pub autosave_on_window_blur: Option<bool>,
+    #[serde(default)]
+    pub autosave_on_app_close: Option<bool>,
+    #[serde(default)]
+    pub autosave_on_project_close: Option<bool>,
 }
 
 impl Default for GlobalSettings {
@@ -61,6 +72,11 @@ impl Default for GlobalSettings {
             preview_debounce_enabled: Some(false),
             preview_debounce_ms: Some(120),
             history_limit: Some(100),
+            autosave_enabled: Some(true),
+            autosave_interval_ms: Some(30_000),
+            autosave_on_window_blur: Some(true),
+            autosave_on_app_close: Some(true),
+            autosave_on_project_close: Some(true),
         }
     }
 }
@@ -233,46 +249,40 @@ impl FromStr for ActionId {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "workspace::NewProject" | "project.new" => Ok(ActionId::WorkspaceNewProject),
-            "workspace::OpenProject" | "project.open" => Ok(ActionId::WorkspaceOpenProject),
-            "workspace::OpenRecentProject" | "project.openRecent" => {
-                Ok(ActionId::WorkspaceOpenRecentProject)
-            }
-            "workspace::SaveProject" | "project.save" => Ok(ActionId::WorkspaceSaveProject),
-            "workspace::CloseProject" | "project.close" => Ok(ActionId::WorkspaceCloseProject),
-            "workspace::ExportSvg" | "project.export.svg" => Ok(ActionId::WorkspaceExportSvg),
-            "edit::Undo" | "edit.undo" => Ok(ActionId::EditUndo),
-            "edit::Redo" | "edit.redo" => Ok(ActionId::EditRedo),
-            "editor::DeleteElement" | "edit.deleteElement" => Ok(ActionId::EditorDeleteElement),
-            "editor::InsertParagraph" | "insert.paragraph" => Ok(ActionId::EditorInsertParagraph),
-            "editor::InsertHeading" | "insert.heading" => Ok(ActionId::EditorInsertHeading),
-            "editor::InsertTable" | "insert.table" => Ok(ActionId::EditorInsertTable),
-            "editor::InsertFigure" | "insert.figure" => Ok(ActionId::EditorInsertFigure),
-            "editor::InsertEquation" | "insert.equation" => Ok(ActionId::EditorInsertEquation),
-            "editor::InsertReference" | "insert.reference" => Ok(ActionId::EditorInsertReference),
-            "editor::AddAuthor" | "edit.addAuthor" => Ok(ActionId::EditorAddAuthor),
-            "editor::RemoveAuthor" | "edit.removeAuthor" => Ok(ActionId::EditorRemoveAuthor),
-            "editor::AddTableRow" | "edit.addTableRow" => Ok(ActionId::EditorAddTableRow),
-            "editor::AddTableColumn" | "edit.addTableColumn" => Ok(ActionId::EditorAddTableColumn),
-            "editor::RemoveTableRow" | "edit.removeTableRow" => Ok(ActionId::EditorRemoveTableRow),
-            "editor::RemoveTableColumn" | "edit.removeTableColumn" => {
-                Ok(ActionId::EditorRemoveTableColumn)
-            }
-            "editor::FocusField" | "edit.focusField" => Ok(ActionId::EditorFocusField),
-            "view::OpenCommandPalette" | "view.commandPalette" => {
-                Ok(ActionId::ViewOpenCommandPalette)
-            }
-            "view::ZoomIn" | "view.zoomIn" => Ok(ActionId::ViewZoomIn),
-            "view::ZoomOut" | "view.zoomOut" => Ok(ActionId::ViewZoomOut),
-            "theme::UseSystem" | "view.theme.system" => Ok(ActionId::ThemeUseSystem),
-            "theme::UseLight" | "view.theme.light" => Ok(ActionId::ThemeUseLight),
-            "theme::UseDark" | "view.theme.dark" => Ok(ActionId::ThemeUseDark),
-            "settings::OpenGlobal" | "settings.global" => Ok(ActionId::SettingsOpenGlobal),
-            "settings::OpenProject" | "settings.project" => Ok(ActionId::SettingsOpenProject),
-            "settings::OpenKeymap" | "settings.keymap" => Ok(ActionId::SettingsOpenKeymap),
-            "settings::Close" | "settings.close" => Ok(ActionId::SettingsClose),
-            "help::OpenDocumentation" | "help.documentation" => Ok(ActionId::HelpOpenDocumentation),
-            "help::OpenAbout" | "help.about" => Ok(ActionId::HelpOpenAbout),
+            "workspace::NewProject" => Ok(ActionId::WorkspaceNewProject),
+            "workspace::OpenProject" => Ok(ActionId::WorkspaceOpenProject),
+            "workspace::OpenRecentProject" => Ok(ActionId::WorkspaceOpenRecentProject),
+            "workspace::SaveProject" => Ok(ActionId::WorkspaceSaveProject),
+            "workspace::CloseProject" => Ok(ActionId::WorkspaceCloseProject),
+            "workspace::ExportSvg" => Ok(ActionId::WorkspaceExportSvg),
+            "edit::Undo" => Ok(ActionId::EditUndo),
+            "edit::Redo" => Ok(ActionId::EditRedo),
+            "editor::DeleteElement" => Ok(ActionId::EditorDeleteElement),
+            "editor::InsertParagraph" => Ok(ActionId::EditorInsertParagraph),
+            "editor::InsertHeading" => Ok(ActionId::EditorInsertHeading),
+            "editor::InsertTable" => Ok(ActionId::EditorInsertTable),
+            "editor::InsertFigure" => Ok(ActionId::EditorInsertFigure),
+            "editor::InsertEquation" => Ok(ActionId::EditorInsertEquation),
+            "editor::InsertReference" => Ok(ActionId::EditorInsertReference),
+            "editor::AddAuthor" => Ok(ActionId::EditorAddAuthor),
+            "editor::RemoveAuthor" => Ok(ActionId::EditorRemoveAuthor),
+            "editor::AddTableRow" => Ok(ActionId::EditorAddTableRow),
+            "editor::AddTableColumn" => Ok(ActionId::EditorAddTableColumn),
+            "editor::RemoveTableRow" => Ok(ActionId::EditorRemoveTableRow),
+            "editor::RemoveTableColumn" => Ok(ActionId::EditorRemoveTableColumn),
+            "editor::FocusField" => Ok(ActionId::EditorFocusField),
+            "view::OpenCommandPalette" => Ok(ActionId::ViewOpenCommandPalette),
+            "view::ZoomIn" => Ok(ActionId::ViewZoomIn),
+            "view::ZoomOut" => Ok(ActionId::ViewZoomOut),
+            "theme::UseSystem" => Ok(ActionId::ThemeUseSystem),
+            "theme::UseLight" => Ok(ActionId::ThemeUseLight),
+            "theme::UseDark" => Ok(ActionId::ThemeUseDark),
+            "settings::OpenGlobal" => Ok(ActionId::SettingsOpenGlobal),
+            "settings::OpenProject" => Ok(ActionId::SettingsOpenProject),
+            "settings::OpenKeymap" => Ok(ActionId::SettingsOpenKeymap),
+            "settings::Close" => Ok(ActionId::SettingsClose),
+            "help::OpenDocumentation" => Ok(ActionId::HelpOpenDocumentation),
+            "help::OpenAbout" => Ok(ActionId::HelpOpenAbout),
             _ => Err(format!("unknown action id: {value}")),
         }
     }
@@ -295,74 +305,13 @@ pub struct KeyStroke {
     pub modifiers: Vec<KeyModifier>,
 }
 
-#[derive(Debug, Clone, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 #[ts(export, export_to = "../../src/bindings/")]
 pub struct KeyBindingPreference {
     pub action_id: ActionId,
     pub context: String,
     pub sequence: Vec<KeyStroke>,
-}
-
-#[derive(Debug, Deserialize)]
-struct KeyBindingPreferenceFields {
-    #[serde(default)]
-    action_id: Option<String>,
-    #[serde(default)]
-    command_id: Option<String>,
-    #[serde(default)]
-    context: Option<String>,
-    #[serde(default)]
-    sequence: Option<Vec<KeyStroke>>,
-    #[serde(default)]
-    keys: Option<String>,
-    #[serde(default)]
-    scope: Option<String>,
-}
-
-impl<'de> Deserialize<'de> for KeyBindingPreference {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let fields = KeyBindingPreferenceFields::deserialize(deserializer)?;
-        let action_id = fields
-            .action_id
-            .or(fields.command_id)
-            .ok_or_else(|| serde::de::Error::missing_field("action_id"))
-            .and_then(|value| ActionId::from_str(&value).map_err(serde::de::Error::custom))?;
-
-        let context = fields
-            .context
-            .or_else(|| fields.scope.as_deref().map(legacy_scope_to_context))
-            .ok_or_else(|| serde::de::Error::missing_field("context"))?;
-
-        let sequence = if let Some(sequence) = fields.sequence {
-            sequence
-        } else {
-            parse_key_sequence(
-                fields
-                    .keys
-                    .as_deref()
-                    .ok_or_else(|| serde::de::Error::missing_field("sequence"))?,
-            )
-            .map_err(serde::de::Error::custom)?
-        };
-
-        Ok(Self {
-            action_id,
-            context,
-            sequence,
-        })
-    }
-}
-
-fn legacy_scope_to_context(scope: &str) -> String {
-    match scope {
-        "global" => "app".to_string(),
-        "project" => "workspace && !input".to_string(),
-        "editor" => "editor && !input".to_string(),
-        other => other.to_string(),
-    }
 }
 
 pub fn normalize_key_name(key: &str) -> String {
@@ -430,6 +379,7 @@ fn push_modifier(modifiers: &mut Vec<KeyModifier>, modifier: KeyModifier) {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 #[ts(export, export_to = "../../src/bindings/")]
 pub struct KeymapSettings {
     #[serde(default)]
