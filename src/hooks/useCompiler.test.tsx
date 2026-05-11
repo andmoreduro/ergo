@@ -9,6 +9,7 @@ const tauriApiMock = vi.hoisted(() => ({
     listenToCompileEvents: vi.fn(),
     patchSource: vi.fn(),
     readPreviewSvg: vi.fn(),
+    syncDocumentEvent: vi.fn(),
     syncDocumentSnapshot: vi.fn(),
     writeSource: vi.fn(),
 }));
@@ -18,6 +19,7 @@ vi.mock("../api/tauri", () => ({
 }));
 
 import { useCompiler } from "./useCompiler";
+import type { QueuedDocumentEvent } from "../state/DocumentContext";
 
 const createDocumentWithTitle = (title: string): DocumentAST => {
     const ast = createDefaultDocumentAST();
@@ -30,8 +32,44 @@ const createDocumentWithTitle = (title: string): DocumentAST => {
     };
 };
 
-const CompilerHarness = ({ ast }: { ast: DocumentAST }) => {
-    useCompiler(ast);
+const createStatus = (sourceRevision: number) => ({
+    dirtyElementIds: [],
+    dirtySectionIds: [],
+    fragmentCount: 0,
+    layout: {
+        documentStatePath: ".ergproj/document_state.json",
+        mainPath: "main.typ",
+        projectSettingsPath: ".ergproj/project_settings.json",
+        referencesPath: "references.bib",
+        sectionPaths: [],
+        sourceMapPath: ".ergproj/source_map.json",
+        fieldSourceMapPath: ".ergproj/field_source_map.json",
+        templatePath: ".ergproj/template.json",
+    },
+    sourceMap: [],
+    fieldSourceMap: [],
+    sourceRevision,
+});
+
+const queuedEvent = (
+    id: number,
+    event: QueuedDocumentEvent["event"],
+): QueuedDocumentEvent => ({
+    id,
+    event,
+    timestamp: id,
+});
+
+const CompilerHarness = ({
+    ast,
+    events = [],
+    sessionId = 1,
+}: {
+    ast: DocumentAST;
+    events?: QueuedDocumentEvent[];
+    sessionId?: number;
+}) => {
+    useCompiler(ast, events, sessionId);
     return null;
 };
 
@@ -40,11 +78,10 @@ describe("useCompiler source syncing", () => {
         vi.clearAllMocks();
     });
 
-    it("serializes rapid text changes so only the latest document snapshot is compiled", async () => {
-        const longAst = createDocumentWithTitle("Me hago entenderdkjkjfakfd f");
-        const shortAst = createDocumentWithTitle("Me hago entender");
+    it("drains document events in order without sending snapshots for edits", async () => {
+        const ast = createDocumentWithTitle("Me hago entender");
         let revision = 0;
-        let releaseFirstSync: (() => void) | null = null;
+        let releaseFirstEvent: (() => void) | null = null;
         const syncedTitles: string[] = [];
 
         tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
@@ -64,51 +101,63 @@ describe("useCompiler source syncing", () => {
                 source_revision: revision,
             };
         });
-        tauriApiMock.syncDocumentSnapshot.mockImplementation(
-            async (ast: DocumentAST) => {
-                syncedTitles.push(ast.metadata.title);
+        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
+        tauriApiMock.syncDocumentEvent.mockImplementation(
+            async (event: QueuedDocumentEvent["event"]) => {
+                syncedTitles.push(
+                    event.type === "setProjectTitle" ? event.title : "",
+                );
                 if (syncedTitles.length === 1) {
                     await new Promise<void>((resolve) => {
-                        releaseFirstSync = resolve;
+                        releaseFirstEvent = resolve;
                     });
                 }
 
-                return {
-                    dirtyElementIds: [],
-                    dirtySectionIds: [],
-                    fragmentCount: 0,
-                    layout: {
-                        documentStatePath: ".ergproj/document_state.json",
-                        mainPath: "main.typ",
-                        projectSettingsPath: ".ergproj/project_settings.json",
-                        referencesPath: "references.bib",
-                        sectionPaths: [],
-                        sourceMapPath: ".ergproj/source_map.json",
-                        fieldSourceMapPath: ".ergproj/field_source_map.json",
-                        templatePath: ".ergproj/template.json",
-                    },
-                    sourceMap: [],
-                    fieldSourceMap: [],
-                    sourceRevision: syncedTitles.length,
-                };
+                return createStatus(syncedTitles.length + 1);
             },
         );
 
-        const { rerender, unmount } = render(<CompilerHarness ast={longAst} />);
+        const { rerender, unmount } = render(
+            <CompilerHarness
+                ast={ast}
+                events={[
+                    queuedEvent(1, {
+                        type: "setProjectTitle",
+                        title: "Me hago entenderd",
+                    }),
+                ]}
+            />,
+        );
 
         await waitFor(() => {
-            expect(releaseFirstSync).not.toBeNull();
+            expect(releaseFirstEvent).not.toBeNull();
         });
 
-        rerender(<CompilerHarness ast={shortAst} />);
-        releaseFirstSync?.();
+        rerender(
+            <CompilerHarness
+                ast={ast}
+                events={[
+                    queuedEvent(1, {
+                        type: "setProjectTitle",
+                        title: "Me hago entenderd",
+                    }),
+                    queuedEvent(2, {
+                        type: "setProjectTitle",
+                        title: "Me hago entender",
+                    }),
+                ]}
+            />,
+        );
+        releaseFirstEvent?.();
 
         await waitFor(() => {
             expect(syncedTitles[syncedTitles.length - 1]).toBe("Me hago entender");
         });
         expect(tauriApiMock.writeSource).not.toHaveBeenCalled();
         expect(tauriApiMock.patchSource).not.toHaveBeenCalled();
-        expect(tauriApiMock.enqueuePreviewCompile).toHaveBeenCalledTimes(1);
+        expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalledTimes(1);
+        expect(tauriApiMock.syncDocumentEvent).toHaveBeenCalledTimes(2);
+        expect(tauriApiMock.enqueuePreviewCompile).toHaveBeenCalledTimes(3);
 
         unmount();
     });
@@ -117,24 +166,7 @@ describe("useCompiler source syncing", () => {
         const ast = createDocumentWithTitle("Vista previa");
 
         tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
-        tauriApiMock.syncDocumentSnapshot.mockResolvedValue({
-            dirtyElementIds: [],
-            dirtySectionIds: [],
-            fragmentCount: 0,
-            layout: {
-                documentStatePath: ".ergproj/document_state.json",
-                mainPath: "main.typ",
-                projectSettingsPath: ".ergproj/project_settings.json",
-                referencesPath: "references.bib",
-                sectionPaths: [],
-                sourceMapPath: ".ergproj/source_map.json",
-                fieldSourceMapPath: ".ergproj/field_source_map.json",
-                templatePath: ".ergproj/template.json",
-            },
-            sourceMap: [],
-            fieldSourceMap: [],
-            sourceRevision: 1,
-        });
+        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
         tauriApiMock.enqueuePreviewCompile.mockResolvedValue({
             job_id: 1,
             kind: { type: "previewSvg" },
@@ -181,24 +213,8 @@ describe("useCompiler source syncing", () => {
         let queuedRevision = 0;
 
         tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
-        tauriApiMock.syncDocumentSnapshot.mockResolvedValue({
-            dirtyElementIds: [],
-            dirtySectionIds: [],
-            fragmentCount: 0,
-            layout: {
-                documentStatePath: ".ergproj/document_state.json",
-                mainPath: "main.typ",
-                projectSettingsPath: ".ergproj/project_settings.json",
-                referencesPath: "references.bib",
-                sectionPaths: [],
-                sourceMapPath: ".ergproj/source_map.json",
-                fieldSourceMapPath: ".ergproj/field_source_map.json",
-                templatePath: ".ergproj/template.json",
-            },
-            sourceMap: [],
-            fieldSourceMap: [],
-            sourceRevision: 1,
-        });
+        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
+        tauriApiMock.syncDocumentEvent.mockResolvedValue(createStatus(2));
         tauriApiMock.enqueuePreviewCompile.mockImplementation(async () => {
             queuedRevision += 1;
             return {
@@ -259,7 +275,17 @@ describe("useCompiler source syncing", () => {
             expect(tauriApiMock.readPreviewSvg).toHaveBeenCalledTimes(2);
         });
 
-        rerender(<CompilerHarness ast={updatedAst} />);
+        rerender(
+            <CompilerHarness
+                ast={updatedAst}
+                events={[
+                    queuedEvent(1, {
+                        type: "setProjectTitle",
+                        title: "Vista previa actualizada",
+                    }),
+                ]}
+            />,
+        );
 
         await waitFor(() => {
             expect(tauriApiMock.readPreviewSvg).toHaveBeenCalledTimes(3);
@@ -269,6 +295,54 @@ describe("useCompiler source syncing", () => {
                 ([path]) => path === ".ergproj/preview/svg/page-1.svg",
             ),
         ).toHaveLength(1);
+
+        unmount();
+    });
+
+    it("surfaces event sync failures without snapshot resync", async () => {
+        const ast = createDocumentWithTitle("Base");
+        tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
+        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
+        tauriApiMock.syncDocumentEvent.mockRejectedValue(
+            new Error("stale document event"),
+        );
+        tauriApiMock.enqueuePreviewCompile.mockResolvedValue({
+            job_id: 1,
+            kind: { type: "previewSvg" },
+            priority: "preview",
+            source_revision: 1,
+        });
+        tauriApiMock.getCompileStatus.mockResolvedValue({
+            active_job_id: null,
+            last_result: null,
+            latest_source_revision: 1,
+            queued_export_count: 0,
+            queued_preview_job_id: null,
+        });
+
+        const { unmount } = render(
+            <CompilerHarness
+                ast={ast}
+                events={[
+                    queuedEvent(1, {
+                        type: "setProjectTitle",
+                        title: "Will fail",
+                    }),
+                    queuedEvent(2, {
+                        type: "setProjectTitle",
+                        title: "Must not continue",
+                    }),
+                ]}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(tauriApiMock.syncDocumentEvent).toHaveBeenCalledTimes(1);
+        });
+        expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalledTimes(1);
+        expect(tauriApiMock.syncDocumentEvent).not.toHaveBeenCalledWith(
+            expect.objectContaining({ title: "Must not continue" }),
+        );
 
         unmount();
     });

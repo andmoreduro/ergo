@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import { TauriApi } from "../api/tauri";
-import type { CompilationResult, SourceRevision } from "../types/compilation";
-import type { SourceMapEntry } from "../types/sourceMap";
+import type { CompilationResult } from "../bindings/CompilationResult";
+import type { SourceMapEntry } from "../bindings/SourceMapEntry";
+import type { QueuedDocumentEvent } from "../state/DocumentContext";
+import { setActiveDocumentSync } from "./documentSyncBarrier";
+import { useCompileBridge } from "./useCompileBridge";
+import { loadChangedPreviewSvgs } from "./useSvgLoader";
+
+type SourceRevision = number;
 
 interface UseCompilerResult {
     svgs: string[];
@@ -14,6 +20,8 @@ interface UseCompilerResult {
 
 export function useCompiler(
     ast: DocumentAST | null | undefined,
+    events: QueuedDocumentEvent[] = [],
+    sessionId = 1,
     previewDebounceMs = 0,
 ): UseCompilerResult {
     const [svgs, setSvgs] = useState<string[]>([]);
@@ -22,11 +30,14 @@ export function useCompiler(
     const [sourceMap, setSourceMap] = useState<SourceMapEntry[]>([]);
     const [previewRevision, setPreviewRevision] = useState<SourceRevision | null>(null);
     const desiredAstRef = useRef<DocumentAST | null>(null);
-    const desiredTokenRef = useRef(0);
-    const syncedTokenRef = useRef(0);
+    const desiredEventsRef = useRef<QueuedDocumentEvent[]>([]);
+    const desiredSessionIdRef = useRef(sessionId);
+    const bootstrappedSessionIdRef = useRef<number | null>(null);
+    const syncedEventIdRef = useRef(0);
     const latestRevisionRef = useRef<SourceRevision | null>(null);
     const listenersReadyRef = useRef<Promise<void>>(Promise.resolve());
     const syncRunningRef = useRef(false);
+    const syncFailedRef = useRef(false);
     const isMountedRef = useRef(false);
     const previewLoadTokenRef = useRef(0);
     const svgsRef = useRef<string[]>([]);
@@ -44,24 +55,9 @@ export function useCompiler(
         const loadToken = previewLoadTokenRef.current + 1;
         previewLoadTokenRef.current = loadToken;
 
-        const previewPages = result.preview_pages ?? [];
         let nextSvgs: string[];
         try {
-            if (previewPages.length > 0) {
-                const currentSvgs = svgsRef.current;
-                nextSvgs = await Promise.all(
-                    previewPages.map((page) => {
-                        const current = currentSvgs[page.page_number - 1];
-                        if (!page.changed && current) {
-                            return current;
-                        }
-
-                        return TauriApi.readPreviewSvg(page.path);
-                    }),
-                );
-            } else {
-                nextSvgs = [];
-            }
+            nextSvgs = await loadChangedPreviewSvgs(result, svgsRef.current);
         } catch (error: unknown) {
             if (isMountedRef.current && isLatestPreviewResult(result)) {
                 setError(error instanceof Error ? error.message : String(error));
@@ -121,8 +117,27 @@ export function useCompiler(
         await applyImmediateSnapshot(job.source_revision);
     };
 
-    const syncLatestSnapshot = async () => {
-        if (syncRunningRef.current) {
+    const hasPendingSync = () => {
+        if (desiredAstRef.current === null) {
+            return false;
+        }
+
+        if (bootstrappedSessionIdRef.current !== desiredSessionIdRef.current) {
+            return true;
+        }
+
+        return desiredEventsRef.current.some(
+            (event) => event.id > syncedEventIdRef.current,
+        );
+    };
+
+    const nextUnsyncedEvent = () =>
+        desiredEventsRef.current.find(
+            (event) => event.id > syncedEventIdRef.current,
+        ) ?? null;
+
+    const syncLatestDocumentState = async () => {
+        if (syncRunningRef.current || syncFailedRef.current) {
             return;
         }
 
@@ -131,91 +146,88 @@ export function useCompiler(
         try {
             while (isMountedRef.current) {
                 const ast = desiredAstRef.current;
-                const token = desiredTokenRef.current;
-                if (ast === null || token === syncedTokenRef.current) {
+                const currentSessionId = desiredSessionIdRef.current;
+                if (ast === null) {
                     break;
                 }
 
-                const status = await TauriApi.syncDocumentSnapshot(ast);
-                if (desiredTokenRef.current === token && desiredAstRef.current === ast) {
-                    syncedTokenRef.current = token;
+                if (bootstrappedSessionIdRef.current !== currentSessionId) {
+                    const status = await TauriApi.syncDocumentSnapshot(ast);
+                    if (
+                        !isMountedRef.current ||
+                        desiredSessionIdRef.current !== currentSessionId
+                    ) {
+                        continue;
+                    }
+
+                    bootstrappedSessionIdRef.current = currentSessionId;
+                    syncedEventIdRef.current = 0;
                     setSourceMap(status.sourceMap);
                     await listenersReadyRef.current;
                     await enqueuePreview();
+                    continue;
                 }
+
+                const nextEvent = nextUnsyncedEvent();
+                if (!nextEvent) {
+                    break;
+                }
+
+                const status = await TauriApi.syncDocumentEvent(nextEvent.event);
+                if (
+                    !isMountedRef.current ||
+                    desiredSessionIdRef.current !== currentSessionId
+                ) {
+                    continue;
+                }
+
+                syncedEventIdRef.current = nextEvent.id;
+                setSourceMap(status.sourceMap);
+                await listenersReadyRef.current;
+                await enqueuePreview();
             }
         } catch (error: unknown) {
             if (isMountedRef.current) {
+                syncFailedRef.current = true;
                 setError(error instanceof Error ? error.message : String(error));
                 setIsCompiling(false);
             }
         } finally {
             syncRunningRef.current = false;
 
-            if (
-                isMountedRef.current &&
-                desiredTokenRef.current !== syncedTokenRef.current
-            ) {
-                void syncLatestSnapshot();
+            if (isMountedRef.current && !syncFailedRef.current && hasPendingSync()) {
+                return syncLatestDocumentState();
             }
         }
     };
 
+    const startDocumentSync = () => {
+        if (syncRunningRef.current) {
+            return;
+        }
+
+        const sync = listenersReadyRef.current.then(syncLatestDocumentState);
+        setActiveDocumentSync(sync);
+        void sync;
+    };
+
+    useCompileBridge({
+        listenersReadyRef,
+        onPreviewQueued: () => setIsCompiling(true),
+        onPreviewResult: applyPreviewResult,
+    });
+
     useEffect(() => {
-        let isMounted = true;
         isMountedRef.current = true;
-        let unlisten: (() => void) | null = null;
-
-        listenersReadyRef.current = TauriApi.listenToCompileEvents({
-            onQueued: (result) => {
-                if (isMounted && result.kind.type === "previewSvg") {
-                    setIsCompiling(true);
-                }
-            },
-            onStarted: (result) => {
-                if (isMounted && result.kind.type === "previewSvg") {
-                    setIsCompiling(true);
-                }
-            },
-            onSucceeded: (result) => {
-                if (!isMounted) {
-                    return;
-                }
-
-                void applyPreviewResult(result);
-            },
-            onFailed: (result) => {
-                if (!isMounted) {
-                    return;
-                }
-
-                void applyPreviewResult(result);
-            },
-            onDropped: (result) => {
-                if (isMounted) {
-                    void applyPreviewResult(result);
-                }
-            },
-        }).then((nextUnlisten) => {
-            if (isMounted) {
-                unlisten = nextUnlisten;
-            } else {
-                nextUnlisten?.();
-            }
-        }).catch(() => {
-            unlisten = null;
-        });
-
         return () => {
-            isMounted = false;
             isMountedRef.current = false;
-            unlisten?.();
         };
     }, []);
 
     useEffect(() => {
         if (!ast) {
             desiredAstRef.current = null;
+            desiredEventsRef.current = [];
             setSvgs([]);
             svgsRef.current = [];
             setSourceMap([]);
@@ -223,12 +235,20 @@ export function useCompiler(
             return;
         }
 
+        const didSessionChange = desiredSessionIdRef.current !== sessionId;
         desiredAstRef.current = ast;
-        desiredTokenRef.current += 1;
-        setIsCompiling(true);
+        desiredEventsRef.current = events;
+        desiredSessionIdRef.current = sessionId;
+        if (didSessionChange) {
+            syncFailedRef.current = false;
+        }
+
         setError(null);
-        void listenersReadyRef.current.then(syncLatestSnapshot);
-    }, [ast]);
+        if (hasPendingSync()) {
+            setIsCompiling(true);
+            startDocumentSync();
+        }
+    }, [ast, events, sessionId]);
 
     return { svgs, isCompiling, error, sourceMap, previewRevision };
 }

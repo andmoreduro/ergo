@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { TauriApi } from "../../../api/tauri";
 import { useDocument } from "../../../state/DocumentContext";
 import { useCompiler } from "../../../hooks/useCompiler";
-import type { PreviewElementPosition } from "../../../types/previewSync";
+import type { PreviewElementPosition } from "../../../bindings/PreviewElementPosition";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Preview.module.css";
@@ -12,10 +12,12 @@ export interface PreviewProps {
 }
 
 export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
-    const { state, documentFocus } = useDocument();
+    const { state, documentFocus, events, sessionId } = useDocument();
     const dispatchAction = useActionDispatcher();
     const { svgs, error, sourceMap, previewRevision } = useCompiler(
         state,
+        events,
+        sessionId,
         previewDebounceMs,
     );
     const previewRef = useRef<HTMLDivElement>(null);

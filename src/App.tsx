@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
-import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Workspace } from "./components/layout/Workspace/Workspace";
 import { Menubar } from "./components/layout/Menubar/Menubar";
 import { WelcomeScreen } from "./components/screens/WelcomeScreen/WelcomeScreen";
@@ -11,107 +9,24 @@ import {
 } from "./components/organisms/SettingsDialog/SettingsDialog";
 import {
     NewProjectDialog,
-    type NewProjectDialogValues,
 } from "./components/organisms/NewProjectDialog/NewProjectDialog";
 import { TauriApi } from "./api/tauri";
 import { DocumentProvider, useDocument } from "./state/DocumentContext";
-import { createDefaultDocumentAST, createId } from "./state/ast/defaults";
-import { getLocale, locales, setLocale } from "./paraglide/runtime.js";
-import type { Locale } from "./paraglide/runtime.js";
+import { createId } from "./state/ast/defaults";
 import { m } from "./paraglide/messages.js";
 import { createCommandRegistry } from "./commands/registry";
-import type { Command, CommandContext, CommandId } from "./commands/types";
+import type { Command, CommandContext } from "./commands/types";
 import {
     ActionContextProvider,
     ActionRuntimeProvider,
     useActionDispatcher,
-    type ActionHandlerMap,
 } from "./actions/runtime";
-import {
-    DEFAULT_KEYMAP_SETTINGS,
-    DEFAULT_GLOBAL_SETTINGS,
-    mergeGlobalSettings,
-    mergeKeymapSettings,
-    normalizeThemeMode,
-    type ThemeMode,
-} from "./settings/defaults";
-import { createKeymapProfile } from "./settings/keymap";
-import type { GlobalSettings } from "./bindings/GlobalSettings";
-import type { KeymapSettings } from "./bindings/KeymapSettings";
-import type { ActionDescriptor } from "./bindings/ActionDescriptor";
-import {
-    ensureErgprojExtension,
-    projectPathInDirectory,
-} from "./project/paths";
-import {
-    coverTitleFieldId,
-    defaultFieldIdForElement,
-} from "./editor/fieldIds";
+import { useCommandPalette } from "./hooks/useCommandPalette";
+import { useAppActionHandlers } from "./hooks/useAppActionHandlers";
+import { useAutosave } from "./hooks/useAutosave";
+import { useSettingsLifecycle } from "./hooks/useSettingsLifecycle";
+import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
 import styles from "./App.module.css";
-
-const isLocale = (value: string | null): value is Locale =>
-    locales.includes(value as Locale);
-
-interface FocusFieldPayload {
-    elementId: string;
-    fieldId: string | null;
-    caretUtf16Offset: number | null;
-    sourceRevision: number | null;
-}
-
-const parseFocusFieldPayload = (payload: unknown): FocusFieldPayload | null => {
-    if (typeof payload !== "object" || payload === null) {
-        return null;
-    }
-
-    const record = payload as Record<string, unknown>;
-    const elementId = readString(record.elementId);
-    if (!elementId) {
-        return null;
-    }
-
-    return {
-        elementId,
-        fieldId: readString(record.fieldId),
-        caretUtf16Offset: readNumber(record.caretUtf16Offset),
-        sourceRevision: readNumber(record.sourceRevision),
-    };
-};
-
-const readString = (value: unknown): string | null =>
-    typeof value === "string" && value.length > 0 ? value : null;
-
-const readNumber = (value: unknown): number | null => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-        return value;
-    }
-
-    if (typeof value === "bigint") {
-        return Number(value);
-    }
-
-    return null;
-};
-
-const defaultFieldIdForFocus = (
-    state: ReturnType<typeof createDefaultDocumentAST>,
-    elementId: string,
-): string | null => {
-    for (const section of state.sections) {
-        if (section.type === "CoverPage" && section.id === elementId) {
-            return coverTitleFieldId(section.id);
-        }
-
-        if (section.type === "Content") {
-            const element = section.elements.find((entry) => entry.id === elementId);
-            if (element) {
-                return defaultFieldIdForElement(element);
-            }
-        }
-    }
-
-    return null;
-};
 
 const AppShellContent = () => {
     const {
@@ -126,429 +41,56 @@ const AppShellContent = () => {
         documentFocus,
         setDocumentFocus,
     } = useDocument();
-    const [hasActiveProject, setHasActiveProject] = useState(false);
-    const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
-    const [locale, setActiveLocale] = useState<Locale>(getLocale());
-    const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(
-        DEFAULT_GLOBAL_SETTINGS,
-    );
-    const [keymapSettings, setKeymapSettings] = useState<KeymapSettings>(
-        DEFAULT_KEYMAP_SETTINGS,
-    );
-    const [settingsLoaded, setSettingsLoaded] = useState(false);
-    const initialSettingsRef = useRef(true);
+    const {
+        locale,
+        globalSettings,
+        keymapSettings,
+        themeMode,
+        keymap,
+        keymapConflicts,
+        updateGlobalSettings,
+        updateKeymapSettings,
+        setThemeMode,
+        handleLocaleChange,
+        rememberProject,
+    } = useSettingsLifecycle();
+    const {
+        hasActiveProject,
+        currentProjectPath,
+        newProjectInitialName,
+        newProjectInitialLocation,
+        saveActiveProject,
+        showNewProjectDialog,
+        createNewProject,
+        chooseNewProjectLocation,
+        openProject,
+        saveProject,
+        closeProject,
+        ensureActiveProject,
+        cancelNewProjectDialog,
+    } = useProjectLifecycle({
+        dispatch,
+        markSaved,
+        isDirty,
+        globalSettings,
+        rememberProject,
+    });
     const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
-    const [newProjectInitialName, setNewProjectInitialName] = useState<
-        string | null
-    >(null);
-    const [newProjectInitialLocation, setNewProjectInitialLocation] = useState<
-        string | null
-    >(null);
-    const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
-    const [commandQuery, setCommandQuery] = useState("");
-    const [actionCatalog, setActionCatalog] = useState<ActionDescriptor[]>([]);
     const dispatchAction = useActionDispatcher();
-    const themeMode = normalizeThemeMode(globalSettings.theme_mode);
     const recentProjects = globalSettings.recent_projects;
     const recentProjectsRef = useRef(recentProjects);
     recentProjectsRef.current = recentProjects;
-    const stateRef = useRef(state);
-    stateRef.current = state;
-    const hasActiveProjectRef = useRef(hasActiveProject);
-    hasActiveProjectRef.current = hasActiveProject;
-    const currentProjectPathRef = useRef(currentProjectPath);
-    currentProjectPathRef.current = currentProjectPath;
-    const isDirtyRef = useRef(isDirty);
-    isDirtyRef.current = isDirty;
-    const isClosingWindowRef = useRef(false);
     const previewDebounceMs = globalSettings.preview_debounce_enabled
         ? Math.max(0, globalSettings.preview_debounce_ms ?? 0)
         : 0;
-    const { keymap } = useMemo(
-        () => createKeymapProfile(keymapSettings),
-        [keymapSettings],
-    );
-    const [keymapConflicts, setKeymapConflicts] = useState<unknown[]>([]);
 
-    useEffect(() => {
-        let isMounted = true;
-
-        void Promise.all([
-            TauriApi.loadGlobalSettings(),
-            TauriApi.loadKeymapSettings(),
-        ])
-            .then(([loadedSettings, loadedKeymapSettings]) => {
-                if (!isMounted) {
-                    return;
-                }
-
-                const nextSettings = mergeGlobalSettings(loadedSettings);
-                const nextKeymapSettings =
-                    mergeKeymapSettings(loadedKeymapSettings);
-                setGlobalSettings(nextSettings);
-                setKeymapSettings(nextKeymapSettings);
-
-                if (isLocale(nextSettings.locale)) {
-                    setLocale(nextSettings.locale, { reload: false });
-                    setActiveLocale(nextSettings.locale);
-                }
-            })
-            .catch(() => {
-                if (isMounted) {
-                    setGlobalSettings(DEFAULT_GLOBAL_SETTINGS);
-                    setKeymapSettings(DEFAULT_KEYMAP_SETTINGS);
-                }
-            })
-            .finally(() => {
-                if (isMounted) {
-                    setSettingsLoaded(true);
-                }
-            });
-
-        return () => {
-            isMounted = false;
-        };
-    }, []);
-
-    useEffect(() => {
-        if (typeof TauriApi.getActionCatalog !== "function") {
-            return;
-        }
-
-        let isMounted = true;
-        void TauriApi.getActionCatalog()
-            .then((catalog) => {
-                if (isMounted) {
-                    setActionCatalog(catalog);
-                }
-            })
-            .catch(() => undefined);
-
-        return () => {
-            isMounted = false;
-        };
-    }, []);
-
-    useEffect(() => {
-        if (themeMode === "system") {
-            document.documentElement.removeAttribute("data-theme");
-        } else {
-            document.documentElement.dataset.theme = themeMode;
-        }
-    }, [themeMode]);
-
-    useEffect(() => {
-        if (!settingsLoaded || initialSettingsRef.current) {
-            initialSettingsRef.current = false;
-            return;
-        }
-
-        void TauriApi.saveGlobalSettings(globalSettings).catch(() => undefined);
-    }, [globalSettings, settingsLoaded]);
-
-    useEffect(() => {
-        if (!settingsLoaded || initialSettingsRef.current) {
-            return;
-        }
-
-        void TauriApi.saveKeymapSettings(keymapSettings).catch(() => undefined);
-    }, [keymapSettings, settingsLoaded]);
-
-    useEffect(() => {
-        if (typeof TauriApi.validateKeymapSettings !== "function") {
-            setKeymapConflicts([]);
-            return;
-        }
-
-        void TauriApi.validateKeymapSettings(keymapSettings)
-            .then((result) => setKeymapConflicts(result.conflicts))
-            .catch(() => setKeymapConflicts([]));
-    }, [keymapSettings]);
-
-    const updateGlobalSettings = useCallback((settings: GlobalSettings) => {
-        setGlobalSettings(mergeGlobalSettings(settings));
-    }, []);
-
-    const setThemeMode = useCallback((nextThemeMode: ThemeMode) => {
-        setGlobalSettings((current) =>
-            mergeGlobalSettings({
-                ...current,
-                theme_mode: nextThemeMode,
-            }),
-        );
-    }, []);
-
-    const rememberProject = useCallback((path: string) => {
-        setGlobalSettings((current) => {
-            const next = [
-                path,
-                ...current.recent_projects.filter((item) => item !== path),
-            ].slice(0, 8);
-            return mergeGlobalSettings({
-                ...current,
-                recent_projects: next,
-            });
-        });
-    }, []);
-
-    const saveActiveProject = useCallback(async (): Promise<boolean> => {
-        const projectPath = currentProjectPathRef.current;
-        if (
-            !hasActiveProjectRef.current ||
-            !projectPath ||
-            !isDirtyRef.current
-        ) {
-            return false;
-        }
-
-        await TauriApi.saveProject(projectPath, stateRef.current);
-        rememberProject(projectPath);
-        markSaved();
-        return true;
-    }, [markSaved, rememberProject]);
-
-    const saveBeforeProjectBoundary = useCallback(async (): Promise<boolean> => {
-        if (!(globalSettings.autosave_on_project_close ?? true)) {
-            return true;
-        }
-
-        try {
-            await saveActiveProject();
-            return true;
-        } catch (error) {
-            window.alert(
-                m.project_save_failed({
-                    message: error instanceof Error ? error.message : String(error),
-                }),
-            );
-            return false;
-        }
-    }, [globalSettings.autosave_on_project_close, saveActiveProject]);
-
-    const handleLocaleChange = (nextLocale: Locale) => {
-        setLocale(nextLocale, { reload: false });
-        setActiveLocale(nextLocale);
-        setGlobalSettings((current) =>
-            mergeGlobalSettings({
-                ...current,
-                locale: nextLocale,
-            }),
-        );
-    };
-
-    const showNewProjectDialog = useCallback(() => {
-        const defaultTitle = createDefaultDocumentAST().metadata.title;
-        void TauriApi.documentDir()
-            .then((projectLocation) => {
-                setNewProjectInitialName(defaultTitle);
-                setNewProjectInitialLocation(projectLocation);
-            })
-            .catch(() => {
-                setNewProjectInitialName(defaultTitle);
-                setNewProjectInitialLocation("");
-            });
-    }, []);
-
-    const createNewProject = useCallback(async ({
-        projectName,
-        projectFileName,
-        projectLocation,
-    }: NewProjectDialogValues) => {
-        if (!(await saveBeforeProjectBoundary())) {
-            return;
-        }
-
-        const ast = createDefaultDocumentAST();
-        ast.metadata.title = projectName;
-        const projectPath = projectPathInDirectory(projectLocation, projectFileName);
-
-        try {
-            await TauriApi.saveProject(projectPath, ast);
-            dispatch({
-                type: "LOAD_DOCUMENT",
-                payload: { ast },
-            });
-            rememberProject(projectPath);
-            setCurrentProjectPath(projectPath);
-            setHasActiveProject(true);
-            setNewProjectInitialName(null);
-            setNewProjectInitialLocation(null);
-            markSaved();
-        } catch (error) {
-            window.alert(
-                m.project_save_failed({
-                    message: error instanceof Error ? error.message : String(error),
-                }),
-            );
-        }
-    }, [dispatch, markSaved, rememberProject, saveBeforeProjectBoundary]);
-
-    const chooseNewProjectLocation = useCallback(async () => {
-        const selectedDirectory = await openDialog({
-            directory: true,
-            multiple: false,
-            title: m.project_new_choose_folder(),
-        });
-
-        return typeof selectedDirectory === "string" ? selectedDirectory : null;
-    }, []);
-
-    const openProject = useCallback(async (path?: string) => {
-        const selectedPath =
-            path ??
-            (await openDialog({
-                multiple: false,
-                filters: [{ name: "Érgo Project", extensions: ["ergproj"] }],
-            }));
-        const projectPath =
-            typeof selectedPath === "string"
-                ? ensureErgprojExtension(selectedPath)
-                : null;
-        if (!projectPath) {
-            return;
-        }
-
-        if (!(await saveBeforeProjectBoundary())) {
-            return;
-        }
-
-        try {
-            const ast = await TauriApi.openProject(projectPath);
-            dispatch({ type: "LOAD_DOCUMENT", payload: { ast } });
-            rememberProject(projectPath);
-            setCurrentProjectPath(projectPath);
-            setHasActiveProject(true);
-        } catch (error) {
-            window.alert(
-                m.project_open_failed({
-                    message: error instanceof Error ? error.message : String(error),
-                }),
-            );
-        }
-    }, [dispatch, rememberProject, saveBeforeProjectBoundary]);
-
-    const saveProject = useCallback(async () => {
-        if (!hasActiveProject) {
-            return;
-        }
-
-        const selectedPath =
-            currentProjectPath ??
-            (await saveDialog({
-                filters: [{ name: "Érgo Project", extensions: ["ergproj"] }],
-            }));
-        const projectPath =
-            typeof selectedPath === "string"
-                ? ensureErgprojExtension(selectedPath)
-                : null;
-        if (!projectPath) {
-            return;
-        }
-
-        try {
-            await TauriApi.saveProject(projectPath, state);
-            rememberProject(projectPath);
-            setCurrentProjectPath(projectPath);
-            markSaved();
-        } catch (error) {
-            window.alert(
-                m.project_save_failed({
-                    message: error instanceof Error ? error.message : String(error),
-                }),
-            );
-        }
-    }, [currentProjectPath, hasActiveProject, markSaved, rememberProject, state]);
-
-    const closeProject = useCallback(async () => {
-        if (!(await saveBeforeProjectBoundary())) {
-            return;
-        }
-
-        setHasActiveProject(false);
-        setCurrentProjectPath(null);
-        dispatch({
-            type: "LOAD_DOCUMENT",
-            payload: { ast: createDefaultDocumentAST() },
-        });
-    }, [dispatch, saveBeforeProjectBoundary]);
-
-    useEffect(() => {
-        if (!(globalSettings.autosave_enabled ?? true)) {
-            return;
-        }
-
-        const intervalMs = Math.max(
-            1000,
-            globalSettings.autosave_interval_ms ?? 30_000,
-        );
-        const intervalId = window.setInterval(() => {
-            void saveActiveProject().catch(() => undefined);
-        }, intervalMs);
-
-        return () => window.clearInterval(intervalId);
-    }, [
-        globalSettings.autosave_enabled,
-        globalSettings.autosave_interval_ms,
+    useAutosave({
+        globalSettings,
+        hasActiveProject,
+        currentProjectPath,
+        isDirty,
         saveActiveProject,
-    ]);
-
-    useEffect(() => {
-        if (!(globalSettings.autosave_on_window_blur ?? true)) {
-            return;
-        }
-
-        const saveOnBlur = () => {
-            void saveActiveProject().catch(() => undefined);
-        };
-
-        window.addEventListener("blur", saveOnBlur);
-        return () => window.removeEventListener("blur", saveOnBlur);
-    }, [globalSettings.autosave_on_window_blur, saveActiveProject]);
-
-    useEffect(() => {
-        let unlisten: (() => void) | null = null;
-        const appWindow = getCurrentWindow();
-
-        void appWindow
-            .onCloseRequested(async (event) => {
-                if (isClosingWindowRef.current) {
-                    return;
-                }
-
-                if (
-                    !(globalSettings.autosave_on_app_close ?? true) ||
-                    !hasActiveProjectRef.current ||
-                    !currentProjectPathRef.current ||
-                    !isDirtyRef.current
-                ) {
-                    return;
-                }
-
-                event.preventDefault();
-                try {
-                    await saveActiveProject();
-                    isClosingWindowRef.current = true;
-                    await appWindow.close();
-                } catch (error) {
-                    window.alert(
-                        m.project_save_failed({
-                            message:
-                                error instanceof Error
-                                    ? error.message
-                                    : String(error),
-                        }),
-                    );
-                }
-            })
-            .then((nextUnlisten) => {
-                unlisten = nextUnlisten;
-            })
-            .catch(() => undefined);
-
-        return () => {
-            unlisten?.();
-        };
-    }, [globalSettings.autosave_on_app_close, saveActiveProject]);
+    });
 
     const insertElement = useCallback((elementType: "heading" | "paragraph" | "table" | "equation" | "figure") => {
         const contentSection = state.sections.find(
@@ -558,9 +100,7 @@ const AppShellContent = () => {
             return;
         }
 
-        if (!hasActiveProject) {
-            setHasActiveProject(true);
-        }
+        ensureActiveProject();
 
         const sectionId = contentSection.id;
         const id = createId();
@@ -601,7 +141,7 @@ const AppShellContent = () => {
             type: "ADD_FIGURE",
             payload: { sectionId, figureId: id },
         });
-    }, [dispatch, hasActiveProject, state.sections]);
+    }, [dispatch, ensureActiveProject, state.sections]);
 
     const commandContext = useMemo<CommandContext>(
         () => ({
@@ -811,68 +351,20 @@ const AppShellContent = () => {
         () => createCommandRegistry(commands),
         [commands],
     );
-    const paletteCommands = useMemo<Command[]>(() => {
-        if (actionCatalog.length === 0) {
-            return commandRegistry.all();
-        }
-
-        return actionCatalog.map((descriptor) => {
-            const command = commandRegistry.get(descriptor.id);
-            if (command) {
-                return command;
-            }
-
-            return {
-                id: descriptor.id,
-                label: descriptor.id,
-                scope: "global",
-                isEnabled: () => false,
-                run: () => undefined,
-            };
-        });
-    }, [actionCatalog, commandRegistry]);
-    const deferredCommandQuery = useDeferredValue(commandQuery);
-    const filteredCommands = paletteCommands.filter((command) =>
-        command.label.toLowerCase().includes(deferredCommandQuery.toLowerCase()),
-    );
-
-    const runCommand = useCallback((commandId: CommandId) => {
-        setCommandPaletteOpen(false);
-        setCommandQuery("");
-        void dispatchAction({ id: commandId, payload: null });
-    }, [dispatchAction]);
-
-    const appActionHandlers = useMemo<ActionHandlerMap>(() => {
-        const handlers: ActionHandlerMap = {};
-
-        handlers["editor::FocusField"] = (invocation) => {
-            const target = parseFocusFieldPayload(invocation.payload);
-            if (!target) {
-                return false;
-            }
-
-            const fieldId =
-                target.fieldId ??
-                defaultFieldIdForFocus(stateRef.current, target.elementId);
-            setDocumentFocus({
-                elementId: target.elementId,
-                fieldId,
-                caretUtf16Offset: target.caretUtf16Offset,
-                sourceRevision: target.sourceRevision,
-                focusSource: "preview",
-            });
-            return true;
-        };
-
-        for (const command of commandRegistry.all()) {
-            handlers[command.id] = () => {
-                void commandRegistry.run(command.id, commandContext);
-                return true;
-            };
-        }
-
-        return handlers;
-    }, [commandContext, commandRegistry, setDocumentFocus]);
+    const {
+        isOpen: isCommandPaletteOpen,
+        setOpen: setCommandPaletteOpen,
+        query: commandQuery,
+        setQuery: setCommandQuery,
+        filteredCommands,
+        runCommand,
+    } = useCommandPalette({ commandRegistry, dispatchAction });
+    const appActionHandlers = useAppActionHandlers({
+        state,
+        commandRegistry,
+        commandContext,
+        setDocumentFocus,
+    });
 
     return (
         <ActionContextProvider
@@ -969,9 +461,7 @@ const AppShellContent = () => {
                             conflicts={keymapConflicts}
                             keymapSettings={keymapSettings}
                             onGlobalSettingsChange={updateGlobalSettings}
-                            onKeymapSettingsChange={(settings) =>
-                                setKeymapSettings(mergeKeymapSettings(settings))
-                            }
+                            onKeymapSettingsChange={updateKeymapSettings}
                             onProjectSettingsChange={(settings) =>
                                 dispatch({
                                     type: "UPDATE_PROJECT_SETTINGS",
@@ -986,10 +476,7 @@ const AppShellContent = () => {
                     <NewProjectDialog
                         initialProjectName={newProjectInitialName}
                         initialProjectLocation={newProjectInitialLocation}
-                        onCancel={() => {
-                            setNewProjectInitialName(null);
-                            setNewProjectInitialLocation(null);
-                        }}
+                        onCancel={cancelNewProjectDialog}
                         onChooseLocation={chooseNewProjectLocation}
                         onCreate={createNewProject}
                     />
