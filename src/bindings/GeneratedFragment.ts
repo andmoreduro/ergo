@@ -2,4 +2,4 @@
 import type { FieldSourceMapEntry } from "./FieldSourceMapEntry";
 import type { SourceMapEntry } from "./SourceMapEntry";
 
-export type GeneratedFragment = { elementId: string, sectionId: string, kind: string, source: string, sourceHash: bigint, dependencies: Array<string>, sourceMapRanges: Array<SourceMapEntry>, fieldSourceMapRanges: Array<FieldSourceMapEntry>, };
+export type GeneratedFragment = { elementId: string, sectionId: string, kind: string, source: string, sourceHash: number, dependencies: Array<string>, sourceMapRanges: Array<SourceMapEntry>, fieldSourceMapRanges: Array<FieldSourceMapEntry>, };

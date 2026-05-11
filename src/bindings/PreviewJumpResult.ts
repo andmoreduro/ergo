@@ -2,4 +2,4 @@
 import type { PreviewElementPosition } from "./PreviewElementPosition";
 import type { PreviewFocusTarget } from "./PreviewFocusTarget";
 
-export type PreviewJumpResult = { "status": "field", target: PreviewFocusTarget, sourceRevision: bigint, } | { "status": "element", elementId: string, sourceRevision: bigint, } | { "status": "position", position: PreviewElementPosition, sourceRevision: bigint, } | { "status": "noMatch", sourceRevision: bigint | null, reason: string, } | { "status": "unavailable", sourceRevision: bigint | null, reason: string, };
+export type PreviewJumpResult = { "status": "field", target: PreviewFocusTarget, sourceRevision: number, } | { "status": "element", elementId: string, sourceRevision: number, } | { "status": "position", position: PreviewElementPosition, sourceRevision: number, } | { "status": "noMatch", sourceRevision: number | null, reason: string, } | { "status": "unavailable", sourceRevision: number | null, reason: string, };
