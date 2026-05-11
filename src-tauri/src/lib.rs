@@ -1,12 +1,12 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let vfs = std::sync::Arc::new(vfs::VirtualFileSystem::new());
-    let compilation_queue = std::sync::Arc::new(compiler::CompilationQueue::new());
+    let compilation_queue = std::sync::Arc::new(compilation_queue::CompilationQueue::new());
     let document_session = std::sync::Arc::new(document_session::DocumentSession::new(
         std::sync::Arc::clone(&vfs),
     ));
     let preview_sync = std::sync::Arc::new(preview_sync::PreviewSyncState::default());
-    let state = compiler::TauriAppState {
+    let state = app_state::TauriAppState {
         vfs,
         compilation_queue,
         document_session,
@@ -47,12 +47,21 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 pub mod actions;
+pub mod app_state;
 pub mod archive;
 pub mod ast;
 pub mod backend_profile;
+pub mod compilation_queue;
+pub mod compilation_types;
+pub mod compile_artifacts;
+pub mod compile_events;
 pub mod compiler;
 pub mod document_session;
+pub mod document_session_types;
+pub mod path_utils;
 pub mod preview_sync;
 pub mod settings;
+#[cfg(test)]
+pub mod test_fixtures;
 pub mod vfs;
 pub mod world;

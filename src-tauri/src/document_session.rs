@@ -1,15 +1,19 @@
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use tauri::State;
-use ts_rs::TS;
 
+use crate::app_state::TauriAppState;
 use crate::ast::{
-    DocumentAST, DocumentElement, DocumentSection, ProjectSettings, ReferenceEntry, RichText,
+    DocumentAST, DocumentElement, DocumentSection, Figure, Paragraph, ProjectSettings,
+    ReferenceEntry, RichText, Table, TableCell,
 };
-use crate::compiler::TauriAppState;
+pub use crate::document_session_types::{
+    AuthorField, DocumentEvent, DocumentSessionStatus, FieldSourceMapEntry, FieldTextSegment,
+    GeneratedFragment, ProjectSourceLayout, SectionSource, SourceMapEntry,
+};
 use crate::vfs::VirtualFileSystem;
 
 const MAIN_PATH: &str = "main.typ";
@@ -20,106 +24,6 @@ const PROJECT_SETTINGS_PATH: &str = ".ergproj/project_settings.json";
 const TEMPLATE_PATH: &str = ".ergproj/template.json";
 const SOURCE_MAP_PATH: &str = ".ergproj/source_map.json";
 const FIELD_SOURCE_MAP_PATH: &str = ".ergproj/field_source_map.json";
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
-#[serde(rename_all = "camelCase")]
-pub struct SourceMapEntry {
-    pub element_id: String,
-    pub section_id: String,
-    pub file_path: String,
-    pub start: usize,
-    pub end: usize,
-    pub byte_start: usize,
-    pub byte_end: usize,
-    pub label: String,
-    #[serde(default)]
-    pub page: Option<usize>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
-#[serde(rename_all = "camelCase")]
-pub struct FieldTextSegment {
-    pub source_byte_start: usize,
-    pub source_byte_end: usize,
-    pub field_utf16_start: usize,
-    pub field_utf16_end: usize,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
-#[serde(rename_all = "camelCase")]
-pub struct FieldSourceMapEntry {
-    pub element_id: String,
-    pub section_id: String,
-    pub field_id: String,
-    pub file_path: String,
-    pub byte_start: usize,
-    pub byte_end: usize,
-    pub segments: Vec<FieldTextSegment>,
-    #[serde(default)]
-    pub fallback_caret_utf16_offset: Option<usize>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
-#[serde(rename_all = "camelCase")]
-pub struct GeneratedFragment {
-    pub element_id: String,
-    pub section_id: String,
-    pub kind: String,
-    pub source: String,
-    pub source_hash: u64,
-    pub dependencies: Vec<String>,
-    pub source_map_ranges: Vec<SourceMapEntry>,
-    pub field_source_map_ranges: Vec<FieldSourceMapEntry>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
-#[serde(rename_all = "camelCase")]
-pub struct SectionSource {
-    pub section_id: String,
-    pub file_path: String,
-    pub source: String,
-    pub fragment_ids: Vec<String>,
-    pub revision: u64,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectSourceLayout {
-    pub main_path: String,
-    pub section_paths: Vec<String>,
-    pub references_path: String,
-    pub source_map_path: String,
-    pub field_source_map_path: String,
-    pub document_state_path: String,
-    pub project_settings_path: String,
-    pub template_path: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
-#[serde(rename_all = "camelCase")]
-pub struct DocumentSessionStatus {
-    pub source_revision: u64,
-    pub layout: ProjectSourceLayout,
-    pub source_map: Vec<SourceMapEntry>,
-    pub field_source_map: Vec<FieldSourceMapEntry>,
-    pub dirty_section_ids: Vec<String>,
-    pub dirty_element_ids: Vec<String>,
-    pub fragment_count: usize,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum DocumentEvent {
-    SnapshotSynced { ast: Box<DocumentAST> },
-}
 
 #[derive(Default)]
 struct DocumentSessionInner {
@@ -301,6 +205,24 @@ impl DocumentSession {
 
     pub fn sync_snapshot(&self, ast: DocumentAST) -> Result<DocumentSessionStatus, String> {
         let mut inner = self.inner.lock();
+        self.sync_ast_locked(&mut inner, ast)
+    }
+
+    pub fn apply_event(&self, event: DocumentEvent) -> Result<DocumentSessionStatus, String> {
+        let mut inner = self.inner.lock();
+        let mut ast = inner
+            .ast
+            .clone()
+            .ok_or_else(|| "Document session has not been initialized".to_string())?;
+        apply_document_event(&mut ast, event)?;
+        self.sync_ast_locked(&mut inner, ast)
+    }
+
+    fn sync_ast_locked(
+        &self,
+        inner: &mut DocumentSessionInner,
+        ast: DocumentAST,
+    ) -> Result<DocumentSessionStatus, String> {
         let generated = generate_project_sources(&ast);
 
         let mut dirty_element_ids = Vec::new();
@@ -405,6 +327,435 @@ impl DocumentSession {
                 dirty_element_ids: Vec::new(),
                 fragment_count: 0,
             })
+    }
+}
+
+fn apply_document_event(ast: &mut DocumentAST, event: DocumentEvent) -> Result<(), String> {
+    match event {
+        DocumentEvent::SetProjectTitle { title } => {
+            ast.metadata.title = title;
+            Ok(())
+        }
+        DocumentEvent::SetProjectSettings { settings } => {
+            ast.metadata.project_settings = settings;
+            Ok(())
+        }
+        DocumentEvent::UpdateCoverAbstract { section_id, text } => {
+            cover_section_mut(ast, &section_id)?.abstract_text = text;
+            Ok(())
+        }
+        DocumentEvent::UpdateCoverAffiliations {
+            section_id,
+            affiliations,
+        } => {
+            cover_section_mut(ast, &section_id)?.affiliations = affiliations;
+            Ok(())
+        }
+        DocumentEvent::InsertAuthor {
+            section_id,
+            index,
+            author,
+        }
+        | DocumentEvent::RestoreAuthor {
+            section_id,
+            author_index: index,
+            author,
+        } => {
+            let cover_page = cover_section_mut(ast, &section_id)?;
+            if index > cover_page.authors.len() {
+                return Err(format!("Cannot restore author at index {index}"));
+            }
+            cover_page.authors.insert(index, author);
+            Ok(())
+        }
+        DocumentEvent::UpdateAuthor {
+            section_id,
+            author_index,
+            field,
+            value,
+        } => {
+            let author = cover_section_mut(ast, &section_id)?
+                .authors
+                .get_mut(author_index)
+                .ok_or_else(|| format!("Author index {author_index} was not found"))?;
+            match field {
+                AuthorField::Name => author.name = value,
+                AuthorField::Email => {
+                    author.email = if value.trim().is_empty() {
+                        None
+                    } else {
+                        Some(value)
+                    }
+                }
+            }
+            Ok(())
+        }
+        DocumentEvent::RemoveAuthor {
+            section_id,
+            author_index,
+        } => {
+            let cover_page = cover_section_mut(ast, &section_id)?;
+            if author_index >= cover_page.authors.len() {
+                return Err(format!("Author index {author_index} was not found"));
+            }
+            cover_page.authors.remove(author_index);
+            Ok(())
+        }
+        DocumentEvent::InsertElement {
+            section_id,
+            index,
+            element,
+        }
+        | DocumentEvent::RestoreElement {
+            section_id,
+            index,
+            element,
+        } => insert_element_at(ast, &section_id, index, *element, "restore element"),
+        DocumentEvent::RemoveElement { element_id } => remove_element(ast, &element_id),
+        DocumentEvent::UpdateParagraphText { element_id, text } => {
+            let element = element_mut(ast, &element_id)?;
+            match element {
+                DocumentElement::Paragraph(paragraph) => {
+                    paragraph.content = rich_text_from_string(text);
+                    Ok(())
+                }
+                _ => Err(format!("Element {element_id} is not a paragraph")),
+            }
+        }
+        DocumentEvent::UpdateHeading {
+            element_id,
+            text,
+            level,
+        } => {
+            let element = element_mut(ast, &element_id)?;
+            match element {
+                DocumentElement::Heading(heading) => {
+                    if let Some(text) = text {
+                        heading.content = rich_text_from_string(text);
+                    }
+                    if let Some(level) = level {
+                        heading.level = level;
+                    }
+                    Ok(())
+                }
+                _ => Err(format!("Element {element_id} is not a heading")),
+            }
+        }
+        DocumentEvent::UpdateEquation {
+            element_id,
+            latex_source,
+            is_block,
+        } => {
+            let element = element_mut(ast, &element_id)?;
+            match element {
+                DocumentElement::Equation(equation) => {
+                    if let Some(latex_source) = latex_source {
+                        equation.latex_source = latex_source;
+                    }
+                    if let Some(is_block) = is_block {
+                        equation.is_block = is_block;
+                    }
+                    Ok(())
+                }
+                _ => Err(format!("Element {element_id} is not an equation")),
+            }
+        }
+        DocumentEvent::UpdateTableCell {
+            table_id,
+            row_index,
+            col_index,
+            text,
+        } => {
+            let cell = table_mut(ast, &table_id)?
+                .cells
+                .get_mut(row_index)
+                .and_then(|row| row.get_mut(col_index))
+                .ok_or_else(|| {
+                    format!("Table cell {row_index},{col_index} was not found in {table_id}")
+                })?;
+            cell.content = text;
+            Ok(())
+        }
+        DocumentEvent::InsertTableRow {
+            table_id,
+            row_index,
+            cells,
+        }
+        | DocumentEvent::RestoreTableRow {
+            table_id,
+            row_index,
+            cells,
+        } => insert_table_row(ast, &table_id, row_index, cells),
+        DocumentEvent::RemoveTableRow {
+            table_id,
+            row_index,
+        } => remove_table_row(ast, &table_id, row_index),
+        DocumentEvent::InsertTableColumn {
+            table_id,
+            col_index,
+            cells,
+            size,
+        }
+        | DocumentEvent::RestoreTableColumn {
+            table_id,
+            col_index,
+            cells,
+            size,
+        } => insert_table_column(ast, &table_id, col_index, cells, size),
+        DocumentEvent::RemoveTableColumn {
+            table_id,
+            col_index,
+        } => remove_table_column(ast, &table_id, col_index),
+        DocumentEvent::UpdateTableColumnSize {
+            table_id,
+            col_index,
+            size,
+        } => {
+            let table = table_mut(ast, &table_id)?;
+            let column_size = table
+                .column_sizes
+                .get_mut(col_index)
+                .ok_or_else(|| format!("Table column {col_index} was not found in {table_id}"))?;
+            *column_size = size;
+            Ok(())
+        }
+        DocumentEvent::UpdateFigure {
+            element_id,
+            caption,
+            placement,
+            body_text,
+        } => {
+            let element = element_mut(ast, &element_id)?;
+            match element {
+                DocumentElement::Figure(figure) => {
+                    if let Some(caption) = caption {
+                        figure.caption = caption;
+                    }
+                    if let Some(placement) = placement {
+                        figure.placement = placement;
+                    }
+                    if let Some(body_text) = body_text {
+                        update_figure_body(figure, body_text);
+                    }
+                    Ok(())
+                }
+                _ => Err(format!("Element {element_id} is not a figure")),
+            }
+        }
+    }
+}
+
+fn cover_section_mut<'a>(
+    ast: &'a mut DocumentAST,
+    section_id: &str,
+) -> Result<&'a mut crate::ast::CoverPageSection, String> {
+    ast.sections
+        .iter_mut()
+        .find_map(|section| match section {
+            DocumentSection::CoverPage(cover_page) if cover_page.id == section_id => {
+                Some(cover_page)
+            }
+            _ => None,
+        })
+        .ok_or_else(|| format!("Cover page section {section_id} was not found"))
+}
+
+fn content_section_mut<'a>(
+    ast: &'a mut DocumentAST,
+    section_id: &str,
+) -> Result<&'a mut crate::ast::ContentSection, String> {
+    ast.sections
+        .iter_mut()
+        .find_map(|section| match section {
+            DocumentSection::Content(content) if content.id == section_id => Some(content),
+            _ => None,
+        })
+        .ok_or_else(|| format!("Content section {section_id} was not found"))
+}
+
+fn element_mut<'a>(
+    ast: &'a mut DocumentAST,
+    element_id: &str,
+) -> Result<&'a mut DocumentElement, String> {
+    ast.sections
+        .iter_mut()
+        .find_map(|section| match section {
+            DocumentSection::Content(content) => content
+                .elements
+                .iter_mut()
+                .find(|element| element_id_of(element) == element_id),
+            _ => None,
+        })
+        .ok_or_else(|| format!("Element {element_id} was not found"))
+}
+
+fn table_mut<'a>(ast: &'a mut DocumentAST, table_id: &str) -> Result<&'a mut Table, String> {
+    match element_mut(ast, table_id)? {
+        DocumentElement::Table(table) => Ok(table),
+        _ => Err(format!("Element {table_id} is not a table")),
+    }
+}
+
+fn insert_element_at(
+    ast: &mut DocumentAST,
+    section_id: &str,
+    index: usize,
+    element: DocumentElement,
+    operation: &str,
+) -> Result<(), String> {
+    let section = content_section_mut(ast, section_id)?;
+    if index > section.elements.len() {
+        return Err(format!(
+            "Cannot {operation} at index {index} in section {section_id}"
+        ));
+    }
+    section.elements.insert(index, element);
+    Ok(())
+}
+
+fn remove_element(ast: &mut DocumentAST, element_id: &str) -> Result<(), String> {
+    for section in &mut ast.sections {
+        if let DocumentSection::Content(content) = section {
+            if let Some(index) = content
+                .elements
+                .iter()
+                .position(|element| element_id_of(element) == element_id)
+            {
+                content.elements.remove(index);
+                return Ok(());
+            }
+        }
+    }
+    Err(format!("Element {element_id} was not found"))
+}
+
+fn insert_table_row(
+    ast: &mut DocumentAST,
+    table_id: &str,
+    row_index: usize,
+    cells: Vec<TableCell>,
+) -> Result<(), String> {
+    let table = table_mut(ast, table_id)?;
+    let expected_cols = usize::try_from(table.cols).unwrap_or(0);
+    if cells.len() != expected_cols {
+        return Err(format!(
+            "Cannot restore table row with {} cells into {table_id}; expected {expected_cols}",
+            cells.len()
+        ));
+    }
+    if row_index > table.cells.len() {
+        return Err(format!("Cannot restore table row at index {row_index}"));
+    }
+    table.cells.insert(row_index, cells);
+    table.rows = i32::try_from(table.cells.len()).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn remove_table_row(ast: &mut DocumentAST, table_id: &str, row_index: usize) -> Result<(), String> {
+    let table = table_mut(ast, table_id)?;
+    if table.cells.len() <= 1 {
+        return Err(format!("Cannot remove the last row from {table_id}"));
+    }
+    if row_index >= table.cells.len() {
+        return Err(format!("Table row {row_index} was not found in {table_id}"));
+    }
+    table.cells.remove(row_index);
+    table.rows = i32::try_from(table.cells.len()).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn insert_table_column(
+    ast: &mut DocumentAST,
+    table_id: &str,
+    col_index: usize,
+    cells: Vec<TableCell>,
+    size: String,
+) -> Result<(), String> {
+    let table = table_mut(ast, table_id)?;
+    let expected_rows = usize::try_from(table.rows).unwrap_or(0);
+    if cells.len() != expected_rows {
+        return Err(format!(
+            "Cannot restore table column with {} cells into {table_id}; expected {expected_rows}",
+            cells.len()
+        ));
+    }
+    if col_index > table.column_sizes.len() {
+        return Err(format!("Cannot restore table column at index {col_index}"));
+    }
+    for (row, cell) in table.cells.iter_mut().zip(cells) {
+        if col_index > row.len() {
+            return Err(format!("Cannot restore table column at index {col_index}"));
+        }
+        row.insert(col_index, cell);
+    }
+    table.column_sizes.insert(col_index, size);
+    table.cols = i32::try_from(table.column_sizes.len()).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn remove_table_column(
+    ast: &mut DocumentAST,
+    table_id: &str,
+    col_index: usize,
+) -> Result<(), String> {
+    let table = table_mut(ast, table_id)?;
+    if table.column_sizes.len() <= 1 {
+        return Err(format!("Cannot remove the last column from {table_id}"));
+    }
+    if col_index >= table.column_sizes.len() {
+        return Err(format!(
+            "Table column {col_index} was not found in {table_id}"
+        ));
+    }
+    for row in &mut table.cells {
+        if col_index >= row.len() {
+            return Err(format!(
+                "Table column {col_index} was not found in {table_id}"
+            ));
+        }
+        row.remove(col_index);
+    }
+    table.column_sizes.remove(col_index);
+    table.cols = i32::try_from(table.column_sizes.len()).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn update_figure_body(figure: &mut Figure, text: String) {
+    match &mut figure.content {
+        DocumentElement::Paragraph(paragraph) => {
+            paragraph.content = rich_text_from_string(text);
+        }
+        _ => {
+            figure.content = DocumentElement::Paragraph(Paragraph {
+                id: format!("{}-body", figure.id),
+                content: rich_text_from_string(text),
+            });
+        }
+    }
+}
+
+fn rich_text_from_string(text: String) -> Vec<RichText> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+
+    vec![RichText {
+        text,
+        bold: None,
+        italic: None,
+        kind: None,
+        reference_id: None,
+        equation_source: None,
+    }]
+}
+
+fn element_id_of(element: &DocumentElement) -> &str {
+    match element {
+        DocumentElement::Heading(heading) => &heading.id,
+        DocumentElement::Paragraph(paragraph) => &paragraph.id,
+        DocumentElement::Table(table) => &table.id,
+        DocumentElement::Equation(equation) => &equation.id,
+        DocumentElement::Figure(figure) => &figure.id,
     }
 }
 
@@ -1089,9 +1440,7 @@ pub fn sync_document_event(
     state: State<'_, TauriAppState>,
     event: DocumentEvent,
 ) -> Result<DocumentSessionStatus, String> {
-    let status = match event {
-        DocumentEvent::SnapshotSynced { ast } => state.document_session.sync_snapshot(*ast),
-    }?;
+    let status = state.document_session.apply_event(event)?;
     state
         .compilation_queue
         .mark_source_revision(status.source_revision);
@@ -1123,8 +1472,8 @@ fn read_preview_svg_from_vfs(vfs: &VirtualFileSystem, path: &str) -> Result<Stri
 mod tests {
     use super::*;
     use crate::ast::{
-        ContentSection, CoverPageSection, DependencyManifest, GlobalSettings, Heading,
-        ProjectMetadata, RichText,
+        Author, ContentSection, CoverPageSection, DependencyManifest, Equation, Figure,
+        GlobalSettings, Heading, Paragraph, ProjectMetadata, RichText, Table, TableCell,
     };
 
     fn test_ast() -> DocumentAST {
@@ -1165,6 +1514,21 @@ mod tests {
                 }),
             ],
         }
+    }
+
+    fn rich_text(text: &str) -> Vec<RichText> {
+        vec![RichText {
+            text: text.to_string(),
+            bold: None,
+            italic: None,
+            kind: None,
+            reference_id: None,
+            equation_source: None,
+        }]
+    }
+
+    fn persisted_ast(vfs: &VirtualFileSystem) -> DocumentAST {
+        serde_json::from_str(&vfs.read_source(DOCUMENT_STATE_PATH).unwrap()).unwrap()
     }
 
     #[test]
@@ -1273,6 +1637,393 @@ mod tests {
             .read_source("sections/content-section.typ")
             .unwrap()
             .contains("Método"));
+    }
+
+    #[test]
+    fn applies_paragraph_text_events_in_sequence() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let mut ast = test_ast();
+        if let DocumentSection::Content(content) = &mut ast.sections[1] {
+            content.elements.push(DocumentElement::Paragraph(Paragraph {
+                id: "paragraph-1".to_string(),
+                content: vec![],
+            }));
+        }
+        session.sync_snapshot(ast).unwrap();
+
+        for index in 1..=10 {
+            let status = session
+                .apply_event(DocumentEvent::UpdateParagraphText {
+                    element_id: "paragraph-1".to_string(),
+                    text: format!("Paso {index} con ñ"),
+                })
+                .unwrap();
+            assert_eq!(status.dirty_element_ids, vec!["paragraph-1"]);
+        }
+
+        let source = vfs.read_source("sections/content-section.typ").unwrap();
+        let state_json = vfs.read_source(".ergproj/document_state.json").unwrap();
+
+        assert!(source.contains("Paso 10 con ñ"));
+        assert!(!source.contains("Paso 9 con ñ"));
+        assert!(state_json.contains("Paso 10 con ñ"));
+    }
+
+    #[test]
+    fn applies_document_event_variants_to_backend_ast() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session.sync_snapshot(test_ast()).unwrap();
+
+        session
+            .apply_event(DocumentEvent::SetProjectSettings {
+                settings: ProjectSettings {
+                    language: Some("es".to_string()),
+                    ..ProjectSettings::default()
+                },
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::UpdateCoverAbstract {
+                section_id: "cover-section".to_string(),
+                text: "Resumen con ñ".to_string(),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::UpdateCoverAffiliations {
+                section_id: "cover-section".to_string(),
+                affiliations: vec!["Universidad".to_string()],
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::InsertAuthor {
+                section_id: "cover-section".to_string(),
+                index: 0,
+                author: Author {
+                    name: "Ana".to_string(),
+                    email: None,
+                },
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::UpdateAuthor {
+                section_id: "cover-section".to_string(),
+                author_index: 0,
+                field: AuthorField::Email,
+                value: "ana@example.com".to_string(),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::RestoreAuthor {
+                section_id: "cover-section".to_string(),
+                author_index: 1,
+                author: Author {
+                    name: "Luis".to_string(),
+                    email: None,
+                },
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::RemoveAuthor {
+                section_id: "cover-section".to_string(),
+                author_index: 1,
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::InsertElement {
+                section_id: "content-section".to_string(),
+                index: 1,
+                element: Box::new(DocumentElement::Paragraph(Paragraph {
+                    id: "paragraph-1".to_string(),
+                    content: rich_text("Borrador"),
+                })),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::UpdateParagraphText {
+                element_id: "paragraph-1".to_string(),
+                text: "Texto con #, ñ y 🌍".to_string(),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::UpdateHeading {
+                element_id: "heading-1".to_string(),
+                text: Some("Método".to_string()),
+                level: Some(3),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::InsertElement {
+                section_id: "content-section".to_string(),
+                index: 2,
+                element: Box::new(DocumentElement::Equation(Equation {
+                    id: "equation-1".to_string(),
+                    latex_source: "x".to_string(),
+                    is_block: true,
+                })),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::UpdateEquation {
+                element_id: "equation-1".to_string(),
+                latex_source: Some("x^2".to_string()),
+                is_block: Some(false),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::InsertElement {
+                section_id: "content-section".to_string(),
+                index: 3,
+                element: Box::new(DocumentElement::Table(Table {
+                    id: "table-1".to_string(),
+                    rows: 1,
+                    cols: 1,
+                    cells: vec![vec![TableCell {
+                        content: "A".to_string(),
+                        row_span: None,
+                        col_span: None,
+                    }]],
+                    column_sizes: vec!["1fr".to_string()],
+                })),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::InsertTableRow {
+                table_id: "table-1".to_string(),
+                row_index: 1,
+                cells: vec![TableCell {
+                    content: "B".to_string(),
+                    row_span: None,
+                    col_span: None,
+                }],
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::UpdateTableCell {
+                table_id: "table-1".to_string(),
+                row_index: 1,
+                col_index: 0,
+                text: "Celda".to_string(),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::InsertTableColumn {
+                table_id: "table-1".to_string(),
+                col_index: 1,
+                cells: vec![
+                    TableCell {
+                        content: "C".to_string(),
+                        row_span: None,
+                        col_span: None,
+                    },
+                    TableCell {
+                        content: "D".to_string(),
+                        row_span: None,
+                        col_span: None,
+                    },
+                ],
+                size: "2fr".to_string(),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::UpdateTableColumnSize {
+                table_id: "table-1".to_string(),
+                col_index: 1,
+                size: "3fr".to_string(),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::RestoreTableRow {
+                table_id: "table-1".to_string(),
+                row_index: 2,
+                cells: vec![
+                    TableCell {
+                        content: "E".to_string(),
+                        row_span: None,
+                        col_span: None,
+                    },
+                    TableCell {
+                        content: "F".to_string(),
+                        row_span: None,
+                        col_span: None,
+                    },
+                ],
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::RemoveTableRow {
+                table_id: "table-1".to_string(),
+                row_index: 2,
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::RestoreTableColumn {
+                table_id: "table-1".to_string(),
+                col_index: 2,
+                cells: vec![
+                    TableCell {
+                        content: "G".to_string(),
+                        row_span: None,
+                        col_span: None,
+                    },
+                    TableCell {
+                        content: "H".to_string(),
+                        row_span: None,
+                        col_span: None,
+                    },
+                ],
+                size: "auto".to_string(),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::RemoveTableColumn {
+                table_id: "table-1".to_string(),
+                col_index: 2,
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::InsertElement {
+                section_id: "content-section".to_string(),
+                index: 4,
+                element: Box::new(DocumentElement::Figure(Box::new(Figure {
+                    id: "figure-1".to_string(),
+                    asset_id: None,
+                    content: DocumentElement::Paragraph(Paragraph {
+                        id: "figure-body".to_string(),
+                        content: rich_text("Cuerpo"),
+                    }),
+                    caption: "Figura".to_string(),
+                    placement: "auto".to_string(),
+                }))),
+            })
+            .unwrap();
+        session
+            .apply_event(DocumentEvent::UpdateFigure {
+                element_id: "figure-1".to_string(),
+                caption: Some("Figura con ñ".to_string()),
+                placement: Some("top".to_string()),
+                body_text: Some("Contenido de figura".to_string()),
+            })
+            .unwrap();
+
+        let ast = persisted_ast(&vfs);
+
+        assert_eq!(
+            ast.metadata.project_settings.language.as_deref(),
+            Some("es")
+        );
+        match &ast.sections[0] {
+            DocumentSection::CoverPage(cover) => {
+                assert_eq!(cover.abstract_text, "Resumen con ñ");
+                assert_eq!(cover.affiliations, vec!["Universidad"]);
+                assert_eq!(cover.authors[0].email.as_deref(), Some("ana@example.com"));
+                assert_eq!(cover.authors.len(), 1);
+            }
+            _ => panic!("cover section missing"),
+        }
+        match &ast.sections[1] {
+            DocumentSection::Content(content) => {
+                assert_eq!(content.elements.len(), 5);
+                match &content.elements[0] {
+                    DocumentElement::Heading(heading) => {
+                        assert_eq!(heading.level, 3);
+                        assert_eq!(heading.content[0].text, "Método");
+                    }
+                    _ => panic!("heading missing"),
+                }
+                match &content.elements[1] {
+                    DocumentElement::Paragraph(paragraph) => {
+                        assert_eq!(paragraph.content[0].text, "Texto con #, ñ y 🌍");
+                    }
+                    _ => panic!("paragraph missing"),
+                }
+                match &content.elements[2] {
+                    DocumentElement::Equation(equation) => {
+                        assert_eq!(equation.latex_source, "x^2");
+                        assert!(!equation.is_block);
+                    }
+                    _ => panic!("equation missing"),
+                }
+                match &content.elements[3] {
+                    DocumentElement::Table(table) => {
+                        assert_eq!(table.rows, 2);
+                        assert_eq!(table.cols, 2);
+                        assert_eq!(table.cells[1][0].content, "Celda");
+                        assert_eq!(table.column_sizes[1], "3fr");
+                    }
+                    _ => panic!("table missing"),
+                }
+                match &content.elements[4] {
+                    DocumentElement::Figure(figure) => {
+                        assert_eq!(figure.caption, "Figura con ñ");
+                        assert_eq!(figure.placement, "top");
+                    }
+                    _ => panic!("figure missing"),
+                }
+            }
+            _ => panic!("content section missing"),
+        }
+    }
+
+    #[test]
+    fn restore_element_round_trips_removed_content() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let ast = test_ast();
+        let removed = match &ast.sections[1] {
+            DocumentSection::Content(content) => content.elements[0].clone(),
+            _ => panic!("content section missing"),
+        };
+        session.sync_snapshot(ast).unwrap();
+
+        session
+            .apply_event(DocumentEvent::RemoveElement {
+                element_id: "heading-1".to_string(),
+            })
+            .unwrap();
+        assert!(!vfs
+            .read_source("sections/content-section.typ")
+            .unwrap()
+            .contains("Introducción"));
+
+        session
+            .apply_event(DocumentEvent::RestoreElement {
+                section_id: "content-section".to_string(),
+                index: 0,
+                element: Box::new(removed),
+            })
+            .unwrap();
+        assert!(vfs
+            .read_source("sections/content-section.typ")
+            .unwrap()
+            .contains("Introducción"));
+    }
+
+    #[test]
+    fn impossible_restore_element_does_not_mutate_document() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let ast = test_ast();
+        let removed = match &ast.sections[1] {
+            DocumentSection::Content(content) => content.elements[0].clone(),
+            _ => panic!("content section missing"),
+        };
+        session.sync_snapshot(ast).unwrap();
+
+        let error = session
+            .apply_event(DocumentEvent::RestoreElement {
+                section_id: "content-section".to_string(),
+                index: 99,
+                element: Box::new(removed),
+            })
+            .unwrap_err();
+
+        assert!(error.contains("restore element"));
+        assert!(vfs
+            .read_source("sections/content-section.typ")
+            .unwrap()
+            .contains("Introducción"));
     }
 
     #[test]

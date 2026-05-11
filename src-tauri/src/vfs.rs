@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use ts_rs::TS;
-use typst::syntax::{FileId, Source, VirtualPath};
+use typst::syntax::Source;
+
+use crate::path_utils::{file_id_for_virtual_path, normalize_virtual_path};
 
 pub struct VirtualFileSystem {
     memory_sources: RwLock<HashMap<String, RetainedTextFile>>,
@@ -25,7 +27,9 @@ struct RetainedTextFile {
 pub struct VirtualTextFile {
     pub path: String,
     pub text: String,
+    #[ts(type = "number")]
     pub revision: u64,
+    #[ts(type = "number")]
     pub last_modified: u64,
 }
 
@@ -39,7 +43,7 @@ impl VirtualFileSystem {
     }
 
     pub fn read_source(&self, path: &str) -> Result<String, String> {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         self.memory_sources
             .read()
             .get(&path)
@@ -48,7 +52,7 @@ impl VirtualFileSystem {
     }
 
     pub fn read_typst_source(&self, path: &str) -> Result<Source, String> {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         self.memory_sources
             .read()
             .get(&path)
@@ -69,7 +73,7 @@ impl VirtualFileSystem {
     }
 
     pub fn read_text_file(&self, path: &str) -> Result<VirtualTextFile, String> {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         self.memory_sources
             .read()
             .get(&path)
@@ -83,7 +87,7 @@ impl VirtualFileSystem {
     }
 
     pub fn source_revision(&self, path: &str) -> Result<u64, String> {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         self.memory_sources
             .read()
             .get(&path)
@@ -96,13 +100,13 @@ impl VirtualFileSystem {
     }
 
     pub fn has_file(&self, path: &str) -> bool {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         self.memory_sources.read().contains_key(&path)
             || self.memory_files.read().contains_key(&path)
     }
 
     pub fn write_source(&self, path: &str, content: String) -> u64 {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         let revision = self.next_revision.fetch_add(1, Ordering::SeqCst);
         self.memory_files.write().remove(&path);
         let mut sources = self.memory_sources.write();
@@ -117,7 +121,7 @@ impl VirtualFileSystem {
         sources.insert(
             path.clone(),
             RetainedTextFile {
-                source: Source::new(file_id_for_path(&path), content),
+                source: Source::new(file_id_for_virtual_path(&path), content),
                 revision,
                 last_modified: now_millis(),
             },
@@ -126,7 +130,7 @@ impl VirtualFileSystem {
     }
 
     pub fn read_file(&self, path: &str) -> Result<Vec<u8>, String> {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         if let Some(file) = self.memory_sources.read().get(&path) {
             return Ok(file.source.text().as_bytes().to_vec());
         }
@@ -139,12 +143,12 @@ impl VirtualFileSystem {
     }
 
     pub fn has_retained_source(&self, path: &str) -> bool {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         self.memory_sources.read().contains_key(&path)
     }
 
     pub fn write_file(&self, path: &str, content: Vec<u8>) {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         self.memory_sources.write().remove(&path);
         self.memory_files.write().insert(path, content);
     }
@@ -156,7 +160,7 @@ impl VirtualFileSystem {
         end: usize,
         text: &str,
     ) -> Result<(), String> {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         let mut sources = self.memory_sources.write();
         if let Some(file) = sources.get_mut(&path) {
             let content = file.source.text();
@@ -189,7 +193,7 @@ impl VirtualFileSystem {
     }
 
     pub fn remove_path(&self, path: &str) {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         self.memory_sources.write().remove(&path);
         self.memory_files.write().remove(&path);
     }
@@ -201,14 +205,6 @@ impl VirtualFileSystem {
         }
         files
     }
-}
-
-fn file_id_for_path(path: &str) -> FileId {
-    FileId::new(None, VirtualPath::new(normalize_path(path)))
-}
-
-fn normalize_path(path: &str) -> String {
-    path.replace('\\', "/")
 }
 
 fn now_millis() -> u64 {

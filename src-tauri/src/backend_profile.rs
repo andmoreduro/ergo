@@ -2,7 +2,7 @@ use crate::ast::{
     ContentSection, CoverPageSection, DependencyManifest, DocumentAST, DocumentElement,
     DocumentSection, GlobalSettings, Heading, Paragraph, ProjectMetadata, RichText,
 };
-use crate::compiler::{compile_document_snapshot, render_svgs, write_svg_pages};
+use crate::compile_artifacts::{compile_document_snapshot, render_svgs, write_svg_pages};
 use crate::document_session::DocumentSession;
 use crate::vfs::VirtualFileSystem;
 use serde::Serialize;
