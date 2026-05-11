@@ -1,5 +1,5 @@
 import type {
-    CommandId,
+    ActionId,
     CommandScope,
     KeyBinding,
     KeymapProfile,
@@ -24,7 +24,7 @@ const sequence = (keys: string) =>
     });
 
 const defaultBinding = (
-    commandId: CommandId,
+    commandId: ActionId,
     keys: string,
     scope: CommandScope,
     context: string,
@@ -108,7 +108,7 @@ export const DEFAULT_KEYMAP: KeymapProfile = {
 export interface KeymapConflict {
     keys: string;
     scope: CommandScope;
-    commandIds: CommandId[];
+    commandIds: ActionId[];
 }
 
 export const detectKeymapConflicts = (
