@@ -9,12 +9,18 @@ import {
 import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
 import type { DocumentAST } from "../bindings/DocumentAST";
+import type { DocumentEvent as BackendDocumentEvent } from "../bindings/DocumentEvent";
 import { createDefaultDocumentAST } from "./ast/defaults";
+import {
+    createDocumentEventHistoryEntry,
+    type DocumentEventHistoryEntry,
+} from "./documentEvents";
 
 const initialAST: DocumentAST = createDefaultDocumentAST();
 
-export type DocumentEvent = {
-    action: ASTAction;
+export type QueuedDocumentEvent = {
+    id: number;
+    event: BackendDocumentEvent;
     timestamp: number;
 };
 
@@ -33,9 +39,11 @@ export type DocumentFocusInput = Omit<DocumentFocusState, "requestId">;
 
 interface DocumentSessionState {
     ast: DocumentAST;
-    past: DocumentAST[];
-    future: DocumentAST[];
-    events: DocumentEvent[];
+    past: DocumentEventHistoryEntry[];
+    future: DocumentEventHistoryEntry[];
+    events: QueuedDocumentEvent[];
+    nextEventId: number;
+    sessionId: number;
     isDirty: boolean;
     documentFocus: DocumentFocusState;
 }
@@ -54,7 +62,8 @@ interface DocumentContextType {
     canUndo: boolean;
     canRedo: boolean;
     documentFocus: DocumentFocusState;
-    events: DocumentEvent[];
+    events: QueuedDocumentEvent[];
+    sessionId: number;
     undo: () => void;
     redo: () => void;
     markSaved: () => void;
@@ -70,11 +79,16 @@ interface DocumentProviderProps {
     historyLimit?: number;
 }
 
-const createInitialSessionState = (): DocumentSessionState => ({
-    ast: initialAST,
+const createInitialSessionState = (
+    ast: DocumentAST = initialAST,
+    sessionId = 1,
+): DocumentSessionState => ({
+    ast,
     past: [],
     future: [],
     events: [],
+    nextEventId: 1,
+    sessionId,
     isDirty: false,
     documentFocus: {
         elementId: null,
@@ -100,9 +114,18 @@ const createSessionReducer =
 
             return {
                 ...state,
-                ast: previous,
+                ast: previous.previousAst,
                 past: state.past.slice(0, -1),
-                future: [state.ast, ...state.future],
+                future: [previous, ...state.future],
+                events: [
+                    ...state.events,
+                    {
+                        id: state.nextEventId,
+                        event: previous.inverseEvent,
+                        timestamp: Date.now(),
+                    },
+                ],
+                nextEventId: state.nextEventId + 1,
                 isDirty: true,
             };
         }
@@ -115,9 +138,18 @@ const createSessionReducer =
 
             return {
                 ...state,
-                ast: next,
-                past: [...state.past, state.ast].slice(-historyLimit),
+                ast: next.nextAst,
+                past: [...state.past, next].slice(-historyLimit),
                 future: state.future.slice(1),
+                events: [
+                    ...state.events,
+                    {
+                        id: state.nextEventId,
+                        event: next.forwardEvent,
+                        timestamp: Date.now(),
+                    },
+                ],
+                nextEventId: state.nextEventId + 1,
                 isDirty: true,
             };
         }
@@ -143,7 +175,7 @@ const createSessionReducer =
 
         if (action.action.type === "LOAD_DOCUMENT") {
             return {
-                ...createInitialSessionState(),
+                ...createInitialSessionState(nextAST, state.sessionId + 1),
                 ast: nextAST,
             };
         }
@@ -152,18 +184,26 @@ const createSessionReducer =
             return state;
         }
 
+        const historyEntry = createDocumentEventHistoryEntry(
+            state.ast,
+            action.action,
+            nextAST,
+        );
+
         return {
             ...state,
             ast: nextAST,
-            past: [...state.past, state.ast].slice(-historyLimit),
+            past: [...state.past, historyEntry].slice(-historyLimit),
             future: [],
             events: [
                 ...state.events,
                 {
-                    action: action.action,
-                    timestamp: Date.now(),
+                    id: state.nextEventId,
+                    event: historyEntry.forwardEvent,
+                    timestamp: historyEntry.timestamp,
                 },
-            ].slice(-historyLimit),
+            ],
+            nextEventId: state.nextEventId + 1,
             isDirty: true,
         };
     };
@@ -204,6 +244,7 @@ export const DocumentProvider = ({
                 canRedo: sessionState.future.length > 0,
                 documentFocus: sessionState.documentFocus,
                 events: sessionState.events,
+                sessionId: sessionState.sessionId,
                 undo,
                 redo,
                 markSaved,
