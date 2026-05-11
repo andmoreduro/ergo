@@ -8,6 +8,7 @@ use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World};
 use typst_ide::IdeWorld;
 
+use crate::path_utils::{normalize_virtual_path, path_from_file_id};
 use crate::vfs::VirtualFileSystem;
 
 #[derive(Clone)]
@@ -29,7 +30,7 @@ impl WorldSourceSnapshot {
     }
 
     pub fn source_for_path(&self, path: &str) -> Result<Source, String> {
-        let path = normalize_path(path);
+        let path = normalize_virtual_path(path);
         self.sources
             .get(&path)
             .cloned()
@@ -195,16 +196,4 @@ impl IdeWorld for SnapshotWorld {
     fn upcast(&self) -> &dyn World {
         self
     }
-}
-
-fn path_from_file_id(file_id: FileId) -> String {
-    file_id
-        .vpath()
-        .as_rootless_path()
-        .to_string_lossy()
-        .replace('\\', "/")
-}
-
-fn normalize_path(path: &str) -> String {
-    path.replace('\\', "/")
 }

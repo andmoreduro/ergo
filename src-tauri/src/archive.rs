@@ -3,27 +3,19 @@ use std::io::{Read, Write};
 use std::path::Path;
 use tauri::State;
 
+use crate::app_state::TauriAppState;
 use crate::ast::DocumentAST;
-use crate::compiler::TauriAppState;
 
 #[tauri::command]
-pub fn save_project(
-    state: State<'_, TauriAppState>,
-    path: String,
-    ast: DocumentAST,
-) -> Result<(), String> {
-    save_project_to_path(&state, &path, ast)
+pub fn save_project(state: State<'_, TauriAppState>, path: String) -> Result<(), String> {
+    save_project_to_path(&state, &path)
 }
 
-pub fn save_project_to_path(
-    state: &TauriAppState,
-    path: impl AsRef<Path>,
-    ast: DocumentAST,
-) -> Result<(), String> {
-    let status = state.document_session.sync_snapshot(ast)?;
+pub fn save_project_to_path(state: &TauriAppState, path: impl AsRef<Path>) -> Result<(), String> {
     state
-        .compilation_queue
-        .mark_source_revision(status.source_revision);
+        .vfs
+        .read_source(".ergproj/document_state.json")
+        .map_err(|_| "No active document session to save".to_string())?;
 
     let mut files = state
         .vfs
@@ -99,13 +91,11 @@ fn should_pack_file(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{
-        ContentSection, CoverPageSection, DependencyManifest, DocumentAST, DocumentElement,
-        DocumentSection, GlobalSettings, Heading, ProjectMetadata, ProjectSettings, RichText,
-    };
-    use crate::compiler::CompilationQueue;
+    use crate::ast::DocumentAST;
+    use crate::compilation_queue::CompilationQueue;
     use crate::document_session::DocumentSession;
     use crate::preview_sync::PreviewSyncState;
+    use crate::test_fixtures::basic_document_ast;
     use crate::vfs::VirtualFileSystem;
     use std::collections::HashSet;
     use std::fs;
@@ -126,43 +116,7 @@ mod tests {
     }
 
     fn test_ast() -> DocumentAST {
-        DocumentAST {
-            version: "1.0".to_string(),
-            metadata: ProjectMetadata {
-                template_id: "apa7".to_string(),
-                title: "Proyecto con ñ".to_string(),
-                project_settings: ProjectSettings::default(),
-                local_overrides: GlobalSettings::default(),
-            },
-            dependencies: DependencyManifest { packages: vec![] },
-            references: vec![],
-            assets: vec![],
-            sections: vec![
-                DocumentSection::CoverPage(CoverPageSection {
-                    id: "cover-section".to_string(),
-                    is_optional: true,
-                    authors: vec![],
-                    affiliations: vec![],
-                    abstract_text: "Resumen.".to_string(),
-                }),
-                DocumentSection::Content(ContentSection {
-                    id: "content-section".to_string(),
-                    is_optional: false,
-                    elements: vec![DocumentElement::Heading(Heading {
-                        id: "heading-1".to_string(),
-                        level: 2,
-                        content: vec![RichText {
-                            text: "Introducción".to_string(),
-                            bold: None,
-                            italic: None,
-                            kind: None,
-                            reference_id: None,
-                            equation_source: None,
-                        }],
-                    })],
-                }),
-            ],
-        }
+        basic_document_ast("Proyecto con ñ", "Resumen.")
     }
 
     fn temp_project_path() -> std::path::PathBuf {
@@ -186,9 +140,10 @@ mod tests {
         state
             .vfs
             .write_file(".ergproj/exports/document.pdf", vec![1, 2, 3]);
+        state.document_session.sync_snapshot(test_ast()).unwrap();
         let path = temp_project_path();
 
-        save_project_to_path(&state, &path, test_ast()).unwrap();
+        save_project_to_path(&state, &path).unwrap();
 
         let names = zip_names(&path);
         fs::remove_file(&path).ok();
@@ -205,6 +160,33 @@ mod tests {
         assert!(names.contains(".ergproj/field_source_map.json"));
         assert!(!names.contains(".ergproj/preview/svg/page-1.svg"));
         assert!(!names.contains(".ergproj/exports/document.pdf"));
+    }
+
+    #[test]
+    fn save_project_uses_backend_session_state_after_events() {
+        let state = test_state();
+        state.document_session.sync_snapshot(test_ast()).unwrap();
+        state
+            .document_session
+            .apply_event(crate::document_session::DocumentEvent::SetProjectTitle {
+                title: "Guardado incremental".to_string(),
+            })
+            .unwrap();
+        let path = temp_project_path();
+
+        save_project_to_path(&state, &path).unwrap();
+
+        let file = File::open(&path).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        let mut document_state = String::new();
+        archive
+            .by_name(".ergproj/document_state.json")
+            .unwrap()
+            .read_to_string(&mut document_state)
+            .unwrap();
+        fs::remove_file(&path).ok();
+
+        assert!(document_state.contains("Guardado incremental"));
     }
 
     #[test]

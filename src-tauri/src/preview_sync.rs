@@ -6,8 +6,10 @@ use typst::layout::{Abs, PagedDocument, Point, Position};
 use typst::syntax::{FileId, VirtualPath};
 use typst_ide::{jump_from_click, jump_from_cursor, Jump};
 
-use crate::compiler::{SourceRevision, TauriAppState};
+use crate::app_state::TauriAppState;
+use crate::compilation_types::SourceRevision;
 use crate::document_session::{FieldSourceMapEntry, SourceMapEntry};
+use crate::path_utils::path_from_file_id;
 use crate::world::{SnapshotWorld, WorldSourceSnapshot};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
@@ -31,6 +33,7 @@ pub struct PreviewElementPosition {
     pub page_number: usize,
     pub x_pt: f64,
     pub y_pt: f64,
+    #[ts(type = "number")]
     pub source_revision: SourceRevision,
 }
 
@@ -43,6 +46,7 @@ pub struct PreviewFocusTarget {
     pub field_id: Option<String>,
     #[serde(default)]
     pub caret_utf16_offset: Option<usize>,
+    #[ts(type = "number")]
     pub source_revision: SourceRevision,
 }
 
@@ -50,6 +54,7 @@ pub struct PreviewFocusTarget {
 #[ts(export, export_to = "../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewSyncStatus {
+    #[ts(type = "number | null")]
     pub source_revision: Option<SourceRevision>,
     pub pages: Vec<PreviewPageMetrics>,
 }
@@ -64,21 +69,26 @@ pub struct PreviewSyncStatus {
 pub enum PreviewJumpResult {
     Field {
         target: PreviewFocusTarget,
+        #[ts(type = "number")]
         source_revision: SourceRevision,
     },
     Element {
         element_id: String,
+        #[ts(type = "number")]
         source_revision: SourceRevision,
     },
     Position {
         position: PreviewElementPosition,
+        #[ts(type = "number")]
         source_revision: SourceRevision,
     },
     NoMatch {
+        #[ts(type = "number | null")]
         source_revision: Option<SourceRevision>,
         reason: String,
     },
     Unavailable {
+        #[ts(type = "number | null")]
         source_revision: Option<SourceRevision>,
         reason: String,
     },
@@ -94,13 +104,16 @@ pub enum PreviewJumpResult {
 pub enum PreviewElementPositionsResult {
     Matched {
         positions: Vec<PreviewElementPosition>,
+        #[ts(type = "number")]
         source_revision: SourceRevision,
     },
     NoMatch {
+        #[ts(type = "number | null")]
         source_revision: Option<SourceRevision>,
         reason: String,
     },
     Unavailable {
+        #[ts(type = "number | null")]
         source_revision: Option<SourceRevision>,
         reason: String,
     },
@@ -616,14 +629,6 @@ fn candidate_offsets(text: &str, start: usize, end: usize) -> Vec<usize> {
     offsets
 }
 
-fn path_from_file_id(file_id: FileId) -> String {
-    file_id
-        .vpath()
-        .as_rootless_path()
-        .to_string_lossy()
-        .replace('\\', "/")
-}
-
 #[tauri::command]
 pub fn jump_from_preview_click(
     state: State<'_, TauriAppState>,
@@ -669,68 +674,16 @@ pub fn get_preview_sync_status(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{
-        ContentSection, CoverPageSection, DependencyManifest, DocumentAST, DocumentElement,
-        DocumentSection, GlobalSettings, Heading, Paragraph, ProjectMetadata, ProjectSettings,
-        RichText,
-    };
+    use crate::ast::{DocumentAST, DocumentElement, DocumentSection};
     use crate::document_session::{DocumentSession, FieldSourceMapEntry};
+    use crate::test_fixtures::preview_sync_document_ast;
     use crate::vfs::VirtualFileSystem;
     use crate::world::ErgoWorld;
     use std::sync::Arc;
     use typst_ide::IdeWorld;
 
     fn test_ast() -> DocumentAST {
-        DocumentAST {
-            version: "1.0".to_string(),
-            metadata: ProjectMetadata {
-                template_id: "apa7".to_string(),
-                title: "Título con ñ".to_string(),
-                project_settings: ProjectSettings::default(),
-                local_overrides: GlobalSettings::default(),
-            },
-            dependencies: DependencyManifest { packages: vec![] },
-            references: vec![],
-            assets: vec![],
-            sections: vec![
-                DocumentSection::CoverPage(CoverPageSection {
-                    id: "cover-section".to_string(),
-                    is_optional: true,
-                    authors: vec![],
-                    affiliations: vec![],
-                    abstract_text: String::new(),
-                }),
-                DocumentSection::Content(ContentSection {
-                    id: "content-section".to_string(),
-                    is_optional: false,
-                    elements: vec![
-                        DocumentElement::Heading(Heading {
-                            id: "heading-ñ".to_string(),
-                            level: 2,
-                            content: vec![RichText {
-                                text: "Introducción".to_string(),
-                                bold: None,
-                                italic: None,
-                                kind: None,
-                                reference_id: None,
-                                equation_source: None,
-                            }],
-                        }),
-                        DocumentElement::Paragraph(Paragraph {
-                            id: "paragraph-emoji".to_string(),
-                            content: vec![RichText {
-                                text: "Niñez, acción y símbolos 🌍.".to_string(),
-                                bold: None,
-                                italic: None,
-                                kind: None,
-                                reference_id: None,
-                                equation_source: None,
-                            }],
-                        }),
-                    ],
-                }),
-            ],
-        }
+        preview_sync_document_ast()
     }
 
     fn compile_preview(
