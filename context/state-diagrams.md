@@ -18,10 +18,10 @@ stateDiagram-v2
 
     ActiveProject --> Editing : document action
     Editing --> Editing : continuous input
-    Editing --> SyncPending : schedule backend sync
-    SyncPending --> Syncing : sync_document_snapshot
+    Editing --> SyncPending : enqueue DocumentEvent
+    SyncPending --> Syncing : sync_document_event
     Syncing --> ActiveProject : session status received
-    Syncing --> SyncPending : newer AST exists
+    Syncing --> SyncPending : queued event remains
     Syncing --> Error : sync failed
 
     ActiveProject --> Saving : manual save / autosave interval / configured save event
@@ -35,7 +35,7 @@ stateDiagram-v2
 ### Notes
 
 - React state updates immediately during `Editing`.
-- Backend sync is asynchronous and coalesces to the latest AST snapshot.
+- Backend sync is asynchronous and serialized. Bootstrap sends an AST snapshot; edits, undo, and redo send queued typed events in order.
 - The frontend does not wait for compilation before letting users continue editing.
 - Autosave is governed by global settings. Periodic autosave uses the configured interval and save-event toggles cover window blur, app close, and project close.
 
@@ -54,13 +54,19 @@ stateDiagram-v2
     AssemblingSections --> WritingSources
     WritingMetadata --> WritingSources
     WritingSources --> Ready : VFS revisions updated
-    Ready --> DetectingChanges : newer snapshot
+    Ready --> ApplyingEvent : sync_document_event(event)
+    ApplyingEvent --> DetectingChanges : canonical AST mutated
+    ApplyingEvent --> Error : invalid ID / invalid restore payload
+    Ready --> DetectingChanges : bootstrap snapshot
+    Error --> Ready : state unchanged
     Ready --> [*] : clear project
 ```
 
 ### Notes
 
 - `DocumentSession` owns the fragment cache, section assembly, source map, and project source layout.
+- `DocumentSession` owns the canonical backend AST after bootstrap and applies typed document events before generation.
+- Invalid events fail without mutating the previous canonical AST.
 - `main.typ` changes only when document-wide structure changes, such as section order, references, template metadata, or global source setup.
 - `sections/{section-id}.typ` changes when a section's fragments change.
 - `.ergproj/source_map.json` is regenerated from backend source ranges.

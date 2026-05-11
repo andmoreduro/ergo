@@ -306,6 +306,7 @@ classDiagram
 
         class DocumentSession {
             +sync_snapshot(ast: DocumentAST) Result~DocumentSessionStatus~
+            +apply_event(event: DocumentEvent) Result~DocumentSessionStatus~
             +status() DocumentSessionStatus
         }
 
@@ -321,7 +322,29 @@ classDiagram
 
         class DocumentEvent {
             <<enum>>
-            SnapshotSynced
+            SetProjectTitle
+            SetProjectSettings
+            UpdateCoverAbstract
+            UpdateCoverAffiliations
+            InsertAuthor
+            UpdateAuthor
+            RemoveAuthor
+            RestoreAuthor
+            InsertElement
+            RemoveElement
+            RestoreElement
+            UpdateParagraphText
+            UpdateHeading
+            UpdateEquation
+            UpdateTableCell
+            InsertTableRow
+            RemoveTableRow
+            RestoreTableRow
+            InsertTableColumn
+            RemoveTableColumn
+            RestoreTableColumn
+            UpdateTableColumnSize
+            UpdateFigure
         }
 
         class GeneratedFragment {
@@ -440,6 +463,21 @@ classDiagram
             +snapshot() CompilationQueueSnapshot
         }
 
+        class CompileArtifacts {
+            +compile_document_snapshot(vfs) Result~PagedDocument~
+            +render_svgs(document) String[]
+            +write_svg_pages(vfs, directory, svgs) PreviewPageFile[]
+            +run_export_job(vfs, job, format) CompilationResult
+        }
+
+        class CompileEvents {
+            +COMPILE_QUEUED_EVENT String
+            +COMPILE_STARTED_EVENT String
+            +COMPILE_SUCCEEDED_EVENT String
+            +COMPILE_FAILED_EVENT String
+            +COMPILE_DROPPED_EVENT String
+        }
+
         class CompilationQueueSnapshot {
             +UInt64 latest_source_revision
             +UInt64? active_job_id
@@ -512,7 +550,9 @@ classDiagram
     TauriAppState "1" *-- "1" CompilationQueue
     CompilationQueue "1" *-- "0..*" CompilationJob
     CompilationQueue "1" --> "1" CompilationQueueSnapshot
-    CompilationQueue ..> ErgoWorld : compiles with
+    CompilationQueue ..> CompileArtifacts : runs work through
+    CompilationQueue ..> CompileEvents : emits names from
+    CompileArtifacts ..> ErgoWorld : compiles with
     CompilationJob "1" --> "1" CompilationJobKind
     CompilationJob "1" --> "1" CompilationPriority
     CompilationResult "1" --> "1" CompilationStatus
@@ -616,8 +656,23 @@ classDiagram
     class ReactRuntime {
         +ActionContextNode[] context_tree
         +DocumentAST local_ast
+        +DocumentEventHistoryEntry[] undo_history
+        +QueuedDocumentEvent[] pending_events
         +DocumentFocusState focus_state
         +dispatch(action: ActionInvocation)
+    }
+
+    class DocumentEventHistoryEntry {
+        +DocumentEvent forward_event
+        +DocumentEvent inverse_event
+        +DocumentAST previous_ast
+        +DocumentAST next_ast
+    }
+
+    class QueuedDocumentEvent {
+        +UInt64 id
+        +DocumentEvent event
+        +UInt64 timestamp
     }
 
     class TauriAppState {
@@ -628,6 +683,7 @@ classDiagram
     }
 
     class DocumentAST
+    class DocumentEvent
     class ActionInvocation
     class ActionContextNode
     class DocumentSession
@@ -636,6 +692,10 @@ classDiagram
     class VirtualFileSystem
 
     ReactRuntime "1" *-- "1" DocumentAST
+    ReactRuntime "1" *-- "0..*" DocumentEventHistoryEntry
+    ReactRuntime "1" *-- "0..*" QueuedDocumentEvent
+    DocumentEventHistoryEntry "1" *-- "1" DocumentEvent
+    QueuedDocumentEvent "1" *-- "1" DocumentEvent
     ReactRuntime "1" *-- "0..*" ActionContextNode
     ReactRuntime ..> ActionInvocation : dispatches
     ReactRuntime ..> TauriAppState : invokes commands
@@ -661,3 +721,5 @@ classDiagram
 - Backward sync maps `typst_ide::Jump::File` offsets to field ranges first and element ranges second. Forward sync maps `PreviewFocusTarget` values to Typst preview positions with `jump_from_cursor`.
 - Keymap preference files use typed `action_id` values such as `workspace::OpenProject`, a context expression such as `editor && !input`, and a logical-key `sequence` array. The persisted keymap schema is strict.
 - React owns `ActionContextNode` registration and action handlers. Rust owns `ActionDescriptor`, keymap validation, context-expression matching, sequence state, and `ActionResolution`.
+- Public IPC DTOs that cross the Tauri boundary are exported with `ts-rs` into `src/bindings/`; frontend code must import those generated types directly. Local Rust `u64` counters and revisions are exported as TypeScript `number` values under the assumption that session-local monotonic counters remain far below `Number.MAX_SAFE_INTEGER`.
+- Backend coupling boundaries are module-level: `app_state` owns shared runtime handles, `compilation_queue` owns scheduling, `compile_artifacts` owns rendering/export artifact creation, `compile_events` owns lifecycle event names, `compilation_types` and `document_session_types` own exported DTOs, and `path_utils` owns virtual path normalization and `FileId` conversion.
