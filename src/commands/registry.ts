@@ -1,10 +1,10 @@
-import type { Command, CommandContext, CommandId } from "./types";
+import type { ActionId, Command, CommandContext } from "./types";
 
 export interface CommandRegistry {
     all: () => Command[];
-    get: (id: CommandId) => Command | undefined;
-    enabled: (id: CommandId, context: CommandContext) => boolean;
-    run: (id: CommandId, context: CommandContext) => Promise<boolean>;
+    get: (id: ActionId) => Command | undefined;
+    enabled: (id: ActionId, context: CommandContext) => boolean;
+    run: (id: ActionId, context: CommandContext) => Promise<boolean>;
 }
 
 export const createCommandRegistry = (commands: Command[]): CommandRegistry => {

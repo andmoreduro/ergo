@@ -3,47 +3,6 @@ import type { KeyStroke } from "../bindings/KeyStroke";
 
 export type { ActionId };
 
-export type CommandId = ActionId;
-
-export const COMMAND_IDS: CommandId[] = [
-    "workspace::NewProject",
-    "workspace::OpenProject",
-    "workspace::OpenRecentProject",
-    "workspace::SaveProject",
-    "workspace::CloseProject",
-    "workspace::ExportSvg",
-    "edit::Undo",
-    "edit::Redo",
-    "editor::DeleteElement",
-    "editor::InsertParagraph",
-    "editor::InsertHeading",
-    "editor::InsertTable",
-    "editor::InsertFigure",
-    "editor::InsertEquation",
-    "editor::InsertReference",
-    "editor::AddAuthor",
-    "editor::RemoveAuthor",
-    "editor::AddTableRow",
-    "editor::AddTableColumn",
-    "editor::RemoveTableRow",
-    "editor::RemoveTableColumn",
-    "view::OpenCommandPalette",
-    "view::ZoomIn",
-    "view::ZoomOut",
-    "theme::UseSystem",
-    "theme::UseLight",
-    "theme::UseDark",
-    "settings::OpenGlobal",
-    "settings::OpenProject",
-    "settings::OpenKeymap",
-    "settings::Close",
-    "help::OpenDocumentation",
-    "help::OpenAbout",
-];
-
-export const isCommandId = (value: string): value is CommandId =>
-    COMMAND_IDS.includes(value as CommandId);
-
 export type CommandScope = "global" | "project" | "editor";
 
 export interface CommandContext {
@@ -52,7 +11,7 @@ export interface CommandContext {
 }
 
 export interface Command {
-    id: CommandId;
+    id: ActionId;
     label: string;
     scope: CommandScope;
     run: () => void | Promise<void>;
@@ -60,7 +19,7 @@ export interface Command {
 }
 
 export interface KeyBinding {
-    commandId: CommandId;
+    commandId: ActionId;
     keys: string;
     scope: CommandScope;
     context: string;

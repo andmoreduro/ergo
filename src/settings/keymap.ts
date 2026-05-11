@@ -5,18 +5,14 @@ import {
     detectKeymapConflicts,
     type KeymapConflict,
 } from "../commands/keymap";
-import type { CommandScope, KeyBinding, KeymapProfile } from "../commands/types";
-import { isCommandId, type CommandId } from "../commands/types";
+import type { ActionId, CommandScope, KeyBinding, KeymapProfile } from "../commands/types";
 
 export const isCommandScope = (value: string): value is CommandScope =>
     value === "global" || value === "project" || value === "editor";
 
-const normalizeCommandId = (value: string): CommandId | null => {
-    if (isCommandId(value)) {
-        return value;
-    }
-
-    return null;
+const normalizeActionId = (value: string): ActionId | null => {
+    const actionId = value.trim();
+    return actionId.length > 0 ? (actionId as ActionId) : null;
 };
 
 const contextToScope = (context: string): CommandScope => {
@@ -57,7 +53,7 @@ export const createKeymapProfile = (
         context?: string;
         sequence?: KeyStroke[];
     }): KeyBinding[] => {
-        const commandId = normalizeCommandId(binding.action_id ?? "");
+        const commandId = normalizeActionId(binding.action_id ?? "");
         const context = binding.context?.trim();
         const sequence = binding.sequence ?? [];
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { m } from "../../../paraglide/messages.js";
 import { locales } from "../../../paraglide/runtime.js";
 import type { Locale } from "../../../paraglide/runtime.js";
-import type { CommandId } from "../../../commands/types";
+import type { ActionId } from "../../../commands/types";
 import styles from "./Menubar.module.css";
 
 export type InsertElementType =
@@ -16,7 +16,7 @@ export type ThemeMode = "system" | "light" | "dark";
 
 interface MenuAction {
     label: string;
-    commandId?: CommandId;
+    commandId?: ActionId;
 }
 
 interface MenuGroup {
@@ -28,8 +28,8 @@ export interface MenubarProps {
     activeLocale: Locale;
     themeMode: ThemeMode;
     onLocaleChange: (locale: Locale) => void;
-    onCommand: (commandId: CommandId) => void;
-    isCommandEnabled: (commandId: CommandId) => boolean;
+    onCommand: (commandId: ActionId) => void;
+    isCommandEnabled: (commandId: ActionId) => boolean;
 }
 
 export const Menubar = ({
