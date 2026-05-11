@@ -137,7 +137,7 @@ src/
   settings/             — Global settings, keymap defaults + merge
   templates/            — Document template registry
   project/paths.ts      — .ergproj path helpers
-  hooks/useCompiler.ts  — Compile queue event listener
+  hooks/                — compile bridge, SVG loader, autosave, project/settings lifecycle hooks
   styles/               — global.css, variables.css (design tokens)
 ```
 

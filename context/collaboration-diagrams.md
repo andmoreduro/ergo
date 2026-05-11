@@ -23,20 +23,21 @@ flowchart LR
 
     User -- "1: edits document" --> UI
     UI -- "2: dispatches command/action" --> Command
-    Command -- "3: updates AST" --> State
-    State -- "4: sync_document_snapshot" --> API
-    API -- "5: sends AST snapshot" --> Session
-    Session -- "6: regenerates dirty fragments" --> Cache
-    Session -- "7: writes main + section files" --> VFS
-    API -- "8: enqueue_preview_compile" --> Queue
-    Queue -- "9: compiles with world" --> Typst
-    Typst -- "10: requests sources/files" --> World
-    World -- "11: reads retained Source/Bytes" --> VFS
-    Queue -- "12: writes preview SVG files" --> VFS
-    Queue -- "13: emits preview page paths" --> API
-    API -- "14: read_preview_svg" --> VFS
-    API -- "15: supplies SVG text" --> Preview
-    Preview -- "16: updates document view" --> User
+    Command -- "3: updates AST + records event" --> State
+    State -- "4: sync_document_event" --> API
+    API -- "5: sends typed DocumentEvent" --> Session
+    Session -- "6: applies event to canonical AST" --> Session
+    Session -- "7: regenerates dirty fragments" --> Cache
+    Session -- "8: writes main + section files" --> VFS
+    API -- "9: enqueue_preview_compile" --> Queue
+    Queue -- "10: compiles with world" --> Typst
+    Typst -- "11: requests sources/files" --> World
+    World -- "12: reads retained Source/Bytes" --> VFS
+    Queue -- "13: writes preview SVG files" --> VFS
+    Queue -- "14: emits preview page paths" --> API
+    API -- "15: read_preview_svg" --> VFS
+    API -- "16: supplies SVG text" --> Preview
+    Preview -- "17: updates document view" --> User
 
     class UI,Command,State,API,Session,Cache,VFS,Queue,World,Typst,Preview comp;
 ```
@@ -54,16 +55,14 @@ flowchart TB
     Archive["Archive Manager"]
     Disk[("Host Disk")]
 
-    State -- "1: save_project(path, ast)" --> API
-    API -- "2: sync latest AST" --> Session
-    Session -- "3: materialize canonical project files" --> VFS
-    API -- "4: request archive pack" --> Archive
-    Archive -- "5: read VFS file map" --> VFS
-    VFS -- "6: return source, metadata, assets" --> Archive
-    Archive -- "7: write .ergproj zip" --> Disk
-    Disk -- "8: I/O complete" --> Archive
-    Archive -- "9: save confirmed" --> API
-    API -- "10: mark saved" --> State
+    State -- "1: save_project(path)" --> API
+    API -- "2: request archive pack" --> Archive
+    Archive -- "3: read VFS file map" --> VFS
+    VFS -- "4: return source, metadata, assets" --> Archive
+    Archive -- "5: write .ergproj zip" --> Disk
+    Disk -- "6: I/O complete" --> Archive
+    Archive -- "7: save confirmed" --> API
+    API -- "8: mark saved" --> State
 
     class State,API,Session,VFS,Archive comp;
 ```
@@ -95,7 +94,8 @@ flowchart LR
 
 ## Collaboration Notes
 
-- The frontend sends document snapshots/events, not canonical full Typst source, during normal editing.
+- Bootstrap sends a document snapshot; normal edits, undo, and redo send typed document events, not canonical full Typst source or full AST snapshots.
+- Saves pack the backend session's mounted VFS state. They do not receive a frontend AST payload.
 - Dirty element fragments are cached in `DocumentSession`; dirty sections are assembled into section files.
 - `VirtualFileSystem` is the compile surface. It normalizes paths and retains Typst `Source` objects for incremental parsing.
 - `CompilationQueue` is responsible for dedupe, preview priority, stale-result dropping, and export ordering.

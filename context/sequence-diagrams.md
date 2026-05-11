@@ -1,6 +1,6 @@
 # Sequence Diagrams
 
-This document describes chronological flows through Érgo's architecture. The primary path uses backend-owned Typst source materialization: React updates the AST, Rust `DocumentSession` generates section files, the retained-source VFS feeds Typst, and the frontend loads generated SVG page files.
+This document describes chronological flows through Érgo's architecture. The primary path uses backend-owned Typst source materialization: React updates its local AST mirror, sends typed document events to Rust, Rust `DocumentSession` applies those events to its canonical AST, the retained-source VFS feeds Typst, and the frontend loads generated SVG page files.
 
 ## 1. Real-Time Editing And Preview Compilation
 
@@ -26,8 +26,10 @@ sequenceDiagram
     Commands->>State: Apply typed document action
     State-->>UI: Immediate local UI update
 
-    State->>API: sync_document_snapshot(ast)
-    API->>Session: Send latest AST snapshot
+    State->>State: Record forward/inverse DocumentEvent
+    State->>API: sync_document_event(event)
+    API->>Session: Apply typed DocumentEvent
+    Session->>Session: Mutate canonical backend AST
     Session->>Session: Update dirty element fragments
     Session->>Session: Assemble dirty section files
     Session->>VFS: write_source(main.typ, sections/*.typ, metadata)
@@ -62,13 +64,45 @@ sequenceDiagram
 ### Flow Notes
 
 - The frontend does not own canonical full Typst source generation.
-- `patch_source` remains a lower-level VFS command for focused source edits, but normal document editing syncs AST snapshots/events to `DocumentSession`.
+- `sync_document_snapshot(ast)` is a cold-path bootstrap for new/opened documents. Normal edits, undo, and redo use `sync_document_event(event)`.
+- `patch_source` remains a lower-level VFS command for focused source edits, but normal document editing syncs typed events to `DocumentSession`.
 - The preview result must be rejected if its source revision is stale.
 - Preview SVG files under `.ergproj/preview/svg/` are generated artifacts, not authoritative document state.
 - Frontend Typst generation utilities must not be used in the compile path. Backend `DocumentSession` is the only canonical source generator.
+- The Tauri API client uses generated `ts-rs` bindings for all IPC DTOs. Hand-written frontend DTO shadows are not part of the flow.
 - The retained preview document is runtime state only. It contains the compiled `PagedDocument`, source-map snapshot, Typst source snapshot, and page metrics. It is kept for sync and discarded/replaced when a newer non-stale preview compile succeeds.
-- Preview page SVG writes are page-granular. The backend compares rendered SVG text with the VFS file bytes, writes only changed pages as generated file artifacts, and marks each `PreviewPageFile.changed` value. The frontend keeps unchanged page SVG strings in memory and reloads only changed pages.
+- Preview page SVG writes are page-granular. `compile_artifacts` renders each Typst page through `typst-svg`, compares rendered SVG text with the VFS file bytes, writes only changed pages as generated file artifacts, and marks each `PreviewPageFile.changed` value. The frontend SVG loader keeps unchanged page SVG strings in memory and reloads only changed pages.
 - Preview debounce is disabled by default. When enabled in global settings, `preview_debounce_ms` controls the backend delay used to coalesce pending preview jobs.
+
+Undo and redo use the same event pipe:
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    participant UI as React UI
+    participant State as Document State
+    participant API as Tauri API Client
+    participant Session as DocumentSession
+
+    UI->>State: Dispatch edit ASTAction
+    State->>State: Compute next AST
+    State->>State: Store {forwardEvent, inverseEvent, previousAst, nextAst}
+    State->>API: sync_document_event(forwardEvent)
+    API->>Session: Apply forward event
+
+    UI->>State: Undo
+    State->>State: Restore previousAst locally
+    State->>API: sync_document_event(inverseEvent)
+    API->>Session: Apply inverse event
+
+    UI->>State: Redo
+    State->>State: Restore nextAst locally
+    State->>API: sync_document_event(forwardEvent)
+    API->>Session: Apply forward event
+```
+
+Destructive inverse events carry the removed payload and exact position. Examples include `RestoreElement { section_id, index, element }`, `RestoreTableRow { table_id, row_index, cells }`, `RestoreTableColumn { table_id, col_index, cells, size }`, and `RestoreAuthor { section_id, author_index, author }`.
 
 ## 2. Archive Save
 
@@ -96,8 +130,11 @@ sequenceDiagram
     Dialog->>OS: Select destination folder
     OS-->>Dialog: Updated folder path or cancellation
     User->>Dialog: Create Project
-    Dialog->>API: save_project(folder/file_name.ergproj, ast)
-    API->>Archive: Write first canonical archive
+    Dialog->>API: sync_document_snapshot(initial ast)
+    API->>Session: Bootstrap canonical backend AST
+    Session->>VFS: write canonical project files
+    Dialog->>API: save_project(folder/file_name.ergproj)
+    API->>Archive: Write first canonical archive from backend session
     API-->>UI: Load active project and remember path
 ```
 
@@ -108,19 +145,17 @@ sequenceDiagram
     autonumber
 
     participant UI as React UI
+    participant SyncLoop as Document Event Sync Loop
     participant API as Tauri API Client
     participant Session as DocumentSession
     participant VFS as VirtualFileSystem
     participant Archive as Archive Manager
     participant Disk as Host Disk
 
-    UI->>API: save_project(path, ast)
-    API->>Session: sync_snapshot(ast)
-    Session->>VFS: write canonical project files
-    Note right of VFS: main.typ, sections/*.typ, references.bib, .ergproj/*.json
-    Session-->>API: DocumentSessionStatus
-
-    API->>Archive: pack mounted VFS files
+    UI->>SyncLoop: wait for queued document events to drain
+    SyncLoop-->>UI: backend session caught up
+    UI->>API: save_project(path)
+    API->>Archive: pack mounted VFS files from current backend session
     Archive->>VFS: get_all_files()
     VFS-->>Archive: file map
     Archive->>Disk: write .ergproj zip
@@ -191,30 +226,30 @@ sequenceDiagram
     participant Window as Tauri Window
 
     Settings-->>Autosave: interval and event toggles
-    State-->>Autosave: dirty state, current project path, latest AST
+    State-->>Autosave: dirty state and current project path
 
     alt periodic autosave enabled
         Autosave->>Autosave: wait autosave_interval_ms
-        Autosave->>API: save_project(current path, latest AST) when dirty
+        Autosave->>API: save_project(current path) when dirty
         API->>Archive: write .ergproj archive
         Archive-->>State: save complete / mark saved
     end
 
     alt save on window blur enabled
         Window-->>Autosave: app window loses focus
-        Autosave->>API: save_project(current path, latest AST) when dirty
+        Autosave->>API: save_project(current path) when dirty
     end
 
     alt save on project close enabled
         UI->>Autosave: close current project / open another project / create another project
-        Autosave->>API: save_project(current path, latest AST) when dirty
+        Autosave->>API: save_project(current path) when dirty
         API-->>UI: continue project boundary after save succeeds
     end
 
     alt save on app close enabled
         Window-->>Autosave: close requested
         Autosave->>Window: prevent close while dirty save runs
-        Autosave->>API: save_project(current path, latest AST)
+        Autosave->>API: save_project(current path)
         API-->>Autosave: save complete
         Autosave->>Window: close window
     end
