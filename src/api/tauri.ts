@@ -9,27 +9,23 @@ import type { ActionDescriptor } from "../bindings/ActionDescriptor";
 import type { ActionResolution } from "../bindings/ActionResolution";
 import type { KeymapValidationResult } from "../bindings/KeymapValidationResult";
 import type { LogicalKeyEvent } from "../bindings/LogicalKeyEvent";
-import type {
-    DocumentEvent,
-    DocumentSessionStatus,
-} from "../types/documentSession";
-import type {
-    PreviewElementPositionsResult,
-    PreviewFocusTarget,
-    PreviewJumpResult,
-    PreviewSyncStatus,
-} from "../types/previewSync";
+import type { DocumentEvent } from "../bindings/DocumentEvent";
+import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
+import type { PreviewElementPositionsResult } from "../bindings/PreviewElementPositionsResult";
+import type { PreviewFocusTarget } from "../bindings/PreviewFocusTarget";
+import type { PreviewJumpResult } from "../bindings/PreviewJumpResult";
+import type { PreviewSyncStatus } from "../bindings/PreviewSyncStatus";
 import {
     COMPILE_DROPPED_EVENT,
     COMPILE_FAILED_EVENT,
     COMPILE_QUEUED_EVENT,
     COMPILE_STARTED_EVENT,
     COMPILE_SUCCEEDED_EVENT,
-    type CompilationJob,
-    type CompilationQueueSnapshot,
-    type CompilationResult,
-    type ExportFormat,
-} from "../types/compilation";
+} from "./compileEvents";
+import type { CompilationJob } from "../bindings/CompilationJob";
+import type { CompilationQueueSnapshot } from "../bindings/CompilationQueueSnapshot";
+import type { CompilationResult } from "../bindings/CompilationResult";
+import type { ExportFormat } from "../bindings/ExportFormat";
 
 export type CompileEventHandler = (result: CompilationResult) => void;
 
@@ -173,13 +169,12 @@ export const TauriApi = {
     },
 
     /**
-     * Saves the current DocumentAST and the entire VFS state into a zipped `.ergproj` archive.
+     * Saves the backend session and VFS state into a zipped `.ergproj` archive.
      *
      * @param path - The physical host OS path to save the archive to
-     * @param ast - The complete serialized Document AST state
      */
-    async saveProject(path: string, ast: DocumentAST): Promise<void> {
-        return invoke("save_project", { path, ast });
+    async saveProject(path: string): Promise<void> {
+        return invoke("save_project", { path });
     },
 
     /**

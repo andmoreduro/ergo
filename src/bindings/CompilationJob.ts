@@ -2,4 +2,4 @@
 import type { CompilationJobKind } from "./CompilationJobKind";
 import type { CompilationPriority } from "./CompilationPriority";
 
-export type CompilationJob = { job_id: bigint, kind: CompilationJobKind, priority: CompilationPriority, source_revision: bigint, };
+export type CompilationJob = { job_id: number, kind: CompilationJobKind, priority: CompilationPriority, source_revision: number, };
