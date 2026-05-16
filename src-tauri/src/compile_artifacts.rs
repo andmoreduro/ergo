@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
+use typst::diag::{Severity, SourceDiagnostic};
 use typst::layout::PagedDocument;
 
 use crate::compilation_types::{
     CompilationJob, CompilationResult, CompilationStatus, ExportFormat, PreviewPageFile,
 };
+use crate::core_errors::CompileError;
 use crate::path_utils::file_id_for_virtual_path;
 use crate::vfs::VirtualFileSystem;
 use crate::world::{ErgoWorld, SnapshotWorld, WorldSourceSnapshot};
@@ -27,18 +29,18 @@ pub(crate) fn failed_result(job: &CompilationJob, message: String) -> Compilatio
     result
 }
 
-fn compile_document(vfs: Arc<VirtualFileSystem>) -> Result<PagedDocument, String> {
+fn compile_document(vfs: Arc<VirtualFileSystem>) -> Result<PagedDocument, CompileError> {
     let world = ErgoWorld::new(vfs, file_id_for_virtual_path("main.typ"));
 
     match typst::compile::<PagedDocument>(&world).output {
         Ok(document) => Ok(document),
-        Err(errors) => Err(format!("{:?}", errors)),
+        Err(errors) => Err(CompileError::Operation(format_source_diagnostics(&errors))),
     }
 }
 
 pub(crate) fn compile_document_snapshot(
     vfs: &Arc<VirtualFileSystem>,
-) -> Result<(PagedDocument, WorldSourceSnapshot), String> {
+) -> Result<(PagedDocument, WorldSourceSnapshot), CompileError> {
     let source_snapshot = WorldSourceSnapshot::from_vfs(vfs);
     let world = SnapshotWorld::new(
         source_snapshot.clone(),
@@ -47,13 +49,31 @@ pub(crate) fn compile_document_snapshot(
 
     match typst::compile::<PagedDocument>(&world).output {
         Ok(document) => Ok((document, source_snapshot)),
-        Err(errors) => Err(format!("{:?}", errors)),
+        Err(errors) => Err(CompileError::Operation(format_source_diagnostics(&errors))),
     }
 }
 
-fn compile_svgs(vfs: Arc<VirtualFileSystem>) -> Result<Vec<String>, String> {
+fn compile_svgs(vfs: Arc<VirtualFileSystem>) -> Result<Vec<String>, CompileError> {
     let document = compile_document(vfs)?;
     Ok(render_svgs(&document))
+}
+
+fn format_source_diagnostics(errors: &[SourceDiagnostic]) -> String {
+    errors
+        .iter()
+        .map(format_source_diagnostic)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn format_source_diagnostic(error: &SourceDiagnostic) -> String {
+    let severity = match error.severity {
+        Severity::Error => "error",
+        Severity::Warning => "warning",
+    };
+    let mut lines = vec![format!("{severity}: {}", error.message)];
+    lines.extend(error.hints.iter().map(|hint| format!("hint: {hint}")));
+    lines.join("\n")
 }
 
 pub(crate) fn render_svgs(document: &PagedDocument) -> Vec<String> {
@@ -111,7 +131,7 @@ pub(crate) fn run_export_job(
                 result.export_path = Some(export_dir.to_string());
                 result
             }
-            Err(message) => failed_result(job, message),
+            Err(error) => failed_result(job, error.to_string()),
         },
         ExportFormat::Pdf => match compile_document(Arc::clone(vfs)) {
             Ok(document) => match typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default()) {
@@ -122,9 +142,9 @@ pub(crate) fn run_export_job(
                     result.export_path = Some(export_path.to_string());
                     result
                 }
-                Err(errors) => failed_result(job, format!("{:?}", errors)),
+                Err(errors) => failed_result(job, format_source_diagnostics(&errors)),
             },
-            Err(message) => failed_result(job, message),
+            Err(error) => failed_result(job, error.to_string()),
         },
         ExportFormat::Png => match compile_document(Arc::clone(vfs)) {
             Ok(document) => {
@@ -143,7 +163,7 @@ pub(crate) fn run_export_job(
                 result.export_path = Some(export_dir.to_string());
                 result
             }
-            Err(message) => failed_result(job, message),
+            Err(error) => failed_result(job, error.to_string()),
         },
     }
 }
@@ -172,6 +192,19 @@ mod tests {
 
         assert!(!svgs.is_empty());
         assert!(svgs[0].contains("<svg"));
+    }
+
+    #[test]
+    fn compile_errors_use_plain_diagnostics() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        vfs.write_source("main.typ", "#let =".to_string());
+
+        let error = compile_svgs(vfs).unwrap_err().to_string();
+
+        assert!(!error.contains("SourceDiagnostic"));
+        assert!(!error.contains("Tracepoint"));
+        assert!(!error.contains("hints:"));
+        assert!(!error.trim().is_empty());
     }
 
     #[test]
