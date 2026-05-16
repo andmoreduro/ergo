@@ -34,37 +34,32 @@ flowchart TB
         Keymap["Shortcut Recorder UI"]:::comp
         DocState["Document State + History"]:::comp
         SettingsUI["Settings UI"]:::comp
+        AppOrchestration["App Orchestration"]:::comp
         Autosave["Autosave Scheduler"]:::comp
-        LifecycleHooks["Project / Settings / Command Hooks"]:::comp
         Preview["SVG Preview Renderer"]:::comp
         TauriClient["Typed Tauri API Client"]:::comp
-        Bindings["Generated IPC Bindings"]:::comp
 
         UI --> Commands
         Keymap --> Commands
         Commands --> DocState
-        LifecycleHooks --> Commands
-        LifecycleHooks --> TauriClient
+        AppOrchestration --> Commands
+        AppOrchestration --> TauriClient
         SettingsUI --> TauriClient
         Autosave --> TauriClient
         DocState --> Autosave
         DocState --> TauriClient
         Preview --> TauriClient
-        TauriClient --> Bindings
     end
 
     subgraph Backend ["Backend Container"]
         direction TB
         Handlers["Tauri IPC Handlers"]:::comp
-        AppState["TauriAppState"]:::comp
         Session["DocumentSession"]:::comp
         FragmentCache["Element Fragment Cache"]:::comp
         SourceGen["Section Source Generator"]:::comp
         VFS["VirtualFileSystem"]:::comp
         Queue["CompilationQueue"]:::comp
-        CompileArtifacts["Compile Artifacts + Export Rendering"]:::comp
-        CompileEvents["Compile Event Names"]:::comp
-        PathUtils["Virtual Path Utilities"]:::comp
+        ArtifactPipeline["Compile / Export Artifact Pipeline"]:::comp
         PreviewSync["PreviewSyncState"]:::comp
         World["ErgoWorld"]:::comp
         Compiler["Embedded Typst Engine"]:::comp
@@ -73,11 +68,6 @@ flowchart TB
         ActionCatalog["Action Catalog"]:::comp
         KeyResolver["Logical Keymap Resolver"]:::comp
 
-        Handlers --> AppState
-        AppState --> Session
-        AppState --> Queue
-        AppState --> VFS
-        AppState --> PreviewSync
         Handlers --> ActionCatalog
         Handlers --> KeyResolver
         Handlers --> Session
@@ -87,16 +77,12 @@ flowchart TB
         Session --> FragmentCache
         Session --> SourceGen
         SourceGen --> VFS
-        Queue --> CompileArtifacts
-        Queue --> CompileEvents
-        CompileArtifacts --> Compiler
+        Queue --> ArtifactPipeline
+        ArtifactPipeline --> Compiler
         Queue --> PreviewSync
         PreviewSync --> World
         Compiler --> World
         World --> VFS
-        VFS --> PathUtils
-        World --> PathUtils
-        PreviewSync --> PathUtils
         Archive --> VFS
     end
 
@@ -124,7 +110,7 @@ flowchart TB
 
 - **DocumentSession** is the backend coordination point for the canonical backend AST, bootstrap snapshots, typed document events, dirty tracking, fragment cache updates, section-file assembly, source-map generation, and VFS writes.
 - **Typed Tauri API Client** imports IPC DTOs only from generated `src/bindings/` files. The frontend must not keep hand-written mirrors for backend DTOs.
-- **Project / Settings / Command Hooks** keep root UI orchestration separated by concern: project lifecycle, settings lifecycle, autosave, command palette state, app action handlers, compile-event bridging, and SVG page loading.
+- **App Orchestration** groups project lifecycle, settings lifecycle, command palette state, action handlers, compile-event bridging, and SVG page loading behind focused frontend hooks.
 - **Document State + History** keeps the immediate React AST mirror and stores each edit as `{ forwardEvent, inverseEvent, previousAst, nextAst }`. Undo sends the inverse event; redo sends the forward event. Destructive inverse events carry restore payloads and exact positions.
 - **Editor Field Registry** registers editable form fields by stable field IDs. `DocumentFocusState` drives focus and caret placement from React state, and field components apply selection inside layout effects.
 - **Action Runtime + Keymap Resolver** follow a Zed-inspired action model. Rust owns typed action IDs, the action catalog, keymap JSON schema, validation, logical-key normalization, multi-stroke sequence state, and context-expression matching. React owns the live context tree and executes handlers from the focused context upward through parent contexts.
@@ -135,8 +121,7 @@ flowchart TB
 - **Autosave Scheduler** is controlled by global settings. It waits for the serialized document event sync loop before calling `save_project(path)`, saves dirty projects on a configurable interval, and can also save when the app window loses focus, when the app window is closing, or when the active project is closing because the user closes it or opens/creates another project.
 - **VirtualFileSystem** stores canonical Typst/text sources as retained Typst `Source` objects plus revisions. It stores generated preview SVGs, exports, assets, and other non-source artifacts as file bytes. Paths are normalized to `/` so Typst includes work consistently across Windows and Linux.
 - **CompilationQueue** is the only scheduler for preview and export compilation. Preview SVG jobs have priority over export jobs.
-- **Compile Artifacts + Export Rendering** owns Typst compilation snapshots, `typst-svg` page rendering, changed-page VFS writes, and PDF/PNG/SVG export artifact generation. `CompilationQueue` owns scheduling and lifecycle status; Tauri compiler commands are IPC glue.
-- Local monotonic counters and revisions stay as `u64` internally in Rust and are exported through `ts-rs` as TypeScript `number` values. They are session-local counters and must not approach JavaScript's `Number.MAX_SAFE_INTEGER`.
+- **Compile / Export Artifact Pipeline** owns Typst compilation snapshots, `typst-svg` page rendering, changed-page VFS writes, and PDF/PNG/SVG export artifact generation. Code-level package boundaries are described in the package diagram.
 - Preview debounce is disabled by default. Global settings can enable it and provide the debounce time sent to the queue when preview work is enqueued.
 - **ErgoWorld** implements Typst's `World` trait for compilation and Typst IDE's `IdeWorld` trait for source-to-preview mapping.
 - **PreviewSyncState** retains the latest successful, non-stale `PagedDocument` plus element source-map, field source-map, Typst source snapshot, and page metrics. Preview clicks call Typst IDE jump APIs on that retained document and retained sources, then map returned file offsets to Érgo field targets.

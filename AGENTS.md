@@ -6,13 +6,34 @@ The `context/` folder holds the canonical design documents. Before proposing or 
 
 1. `context/component-diagram.md` — container/component architecture
 2. `context/class-diagrams.md` — domain models, Rust structs, IPC types
-3. `context/sequence-diagrams.md` — editing, compile, save, export, sync flows
-4. `context/collaboration-diagrams.md` — message passing between runtime objects
-5. `context/state-diagrams.md` — frontend, backend, compile queue, key sequence state machines
-6. `context/distribution-diagram.md` — deployment, archive layout, storage boundaries
-7. `context/user-stories.md` / `context/user-story-map.md` — feature scope and priority
+3. `context/package-diagrams.md` — source-module ownership and dependency boundaries
+4. `context/sequence-diagrams.md` — editing, compile, save, export, sync flows
+5. `context/collaboration-diagrams.md` — message passing between runtime objects
+6. `context/state-diagrams.md` — frontend, backend, compile queue, key sequence state machines
+7. `context/distribution-diagram.md` — deployment, archive layout, storage boundaries
+8. `context/user-stories.md` / `context/user-story-map.md` — feature scope and priority
 
 When implementation and design docs conflict, preserve working code and update the design docs deliberately.
+
+## Context documentation rules
+
+The context files describe the intended current design. They are not a changelog, implementation diary, status report, or place to record what recently changed.
+
+- Write stable design facts. Avoid temporal phrasing such as "now", "previously", "new", "changed", "removed", "legacy", "before", or "after" unless the document explicitly describes a migration path.
+- Replace obsolete design text with the current design. Do not append change notes that preserve outdated architecture as narrative history.
+- Keep diagrams at their assigned abstraction level:
+  - `component-diagram.md`: containers and major runtime components.
+  - `class-diagrams.md`: domain models, Rust structs, IPC DTO shapes, and relationships between data types.
+  - `package-diagrams.md`: source modules/packages, ownership, and allowed dependency direction.
+  - `sequence-diagrams.md`: ordered runtime interactions for user-visible flows.
+  - `collaboration-diagrams.md`: message passing and object cooperation.
+  - `state-diagrams.md`: states, transitions, guards, and events.
+  - `distribution-diagram.md`: deployment nodes, archive layout, config files, and storage boundaries.
+- If a detail belongs in another diagram type, move it there instead of duplicating it or forcing it into the current file.
+- Keep code-level module names out of component diagrams unless the module is also a runtime architectural component.
+- Keep package dependency rules out of class diagrams. Class diagrams should describe data and type relationships, not source-file ownership.
+- Keep implementation task lists, progress notes, caveats, and completed-work summaries out of `context/`. Put only durable product and architecture decisions there.
+- When a design change touches multiple views, update only the views whose abstraction actually changes.
 
 ## Product intent
 
