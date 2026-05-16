@@ -71,7 +71,7 @@ sequenceDiagram
 - Frontend Typst generation utilities must not be used in the compile path. Backend `DocumentSession` is the only canonical source generator.
 - The Tauri API client uses generated `ts-rs` bindings for all IPC DTOs. Hand-written frontend DTO shadows are not part of the flow.
 - The retained preview document is runtime state only. It contains the compiled `PagedDocument`, source-map snapshot, Typst source snapshot, and page metrics. It is kept for sync and discarded/replaced when a newer non-stale preview compile succeeds.
-- Preview page SVG writes are page-granular. `compile_artifacts` renders each Typst page through `typst-svg`, compares rendered SVG text with the VFS file bytes, writes only changed pages as generated file artifacts, and marks each `PreviewPageFile.changed` value. The frontend SVG loader keeps unchanged page SVG strings in memory and reloads only changed pages.
+- Preview page SVG writes are page-granular. The backend artifact pipeline renders each Typst page through `typst-svg`, compares rendered SVG text with the VFS file bytes, writes only changed pages as generated file artifacts, and marks each `PreviewPageFile.changed` value. The frontend SVG loader keeps unchanged page SVG strings in memory and reloads only changed pages.
 - Preview debounce is disabled by default. When enabled in global settings, `preview_debounce_ms` controls the backend delay used to coalesce pending preview jobs.
 
 Undo and redo use the same event pipe:
@@ -396,7 +396,6 @@ sequenceDiagram
 - Sync requests resolve against the preview revision that is actually displayed. Form edits made after that preview do not invalidate click sync for visible content because the retained preview includes its own Typst source snapshot.
 - Newly added or newly rendered content cannot sync until a successful preview compile includes it.
 - `Jump::Url` does not focus a form field in v1.
-- Source-map byte ranges are half-open. This prevents adjacent fragments such as a heading followed by a paragraph from both owning the same byte offset when Typst reports a boundary click.
 - Backward sync resolves clicks with Typst IDE frame hit testing and maps file offsets to field ranges first, then to element ranges.
 - `editor::FocusField` is an action. Preview clicks, sidebar navigation, and other command-like focus surfaces dispatch the same `ActionInvocation`.
 - `DocumentFocusState` stores `elementId`, `fieldId`, optional UTF-16 caret offset, preview revision, focus source, and a request id.
