@@ -91,7 +91,6 @@ fn should_pack_file(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::DocumentAST;
     use crate::compilation_queue::CompilationQueue;
     use crate::document_session::DocumentSession;
     use crate::preview_sync::PreviewSyncState;
@@ -115,10 +114,6 @@ mod tests {
         }
     }
 
-    fn test_ast() -> DocumentAST {
-        basic_document_ast("Proyecto con ñ", "Resumen.")
-    }
-
     fn temp_project_path() -> std::path::PathBuf {
         std::env::temp_dir().join(format!("ergo-test-{}.ergproj", Uuid::new_v4()))
     }
@@ -140,7 +135,10 @@ mod tests {
         state
             .vfs
             .write_file(".ergproj/exports/document.pdf", vec![1, 2, 3]);
-        state.document_session.sync_snapshot(test_ast()).unwrap();
+        state
+            .document_session
+            .sync_snapshot(basic_document_ast("Proyecto con ñ", "Resumen."))
+            .unwrap();
         let path = temp_project_path();
 
         save_project_to_path(&state, &path).unwrap();
@@ -165,7 +163,10 @@ mod tests {
     #[test]
     fn save_project_uses_backend_session_state_after_events() {
         let state = test_state();
-        state.document_session.sync_snapshot(test_ast()).unwrap();
+        state
+            .document_session
+            .sync_snapshot(basic_document_ast("Proyecto con ñ", "Resumen."))
+            .unwrap();
         state
             .document_session
             .apply_event(crate::document_session::DocumentEvent::SetProjectTitle {
@@ -198,7 +199,11 @@ mod tests {
         let options = zip::write::SimpleFileOptions::default();
         zip.start_file(".ergproj/document_state.json", options)
             .unwrap();
-        zip.write_all(serde_json::to_string(&test_ast()).unwrap().as_bytes())
+        zip.write_all(
+            serde_json::to_string(&basic_document_ast("Proyecto con ñ", "Resumen."))
+                .unwrap()
+                .as_bytes(),
+        )
             .unwrap();
         zip.start_file("main.typ", options).unwrap();
         zip.write_all(b"= Unused source").unwrap();
@@ -229,7 +234,11 @@ mod tests {
         let options = zip::write::SimpleFileOptions::default();
         zip.start_file(".ergproj/document_state.json", options)
             .unwrap();
-        zip.write_all(serde_json::to_string(&test_ast()).unwrap().as_bytes())
+        zip.write_all(
+            serde_json::to_string(&basic_document_ast("Proyecto con ñ", "Resumen."))
+                .unwrap()
+                .as_bytes(),
+        )
             .unwrap();
         zip.start_file("assets/image.png", options).unwrap();
         zip.write_all(&[137, 80, 78, 71]).unwrap();

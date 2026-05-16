@@ -233,7 +233,7 @@ impl CompilationQueue {
                     if self.is_stale_preview(&job) {
                         result_for_job(&job, CompilationStatus::Dropped)
                     } else {
-                        failed_result(&job, message)
+                        failed_result(&job, message.to_string())
                     }
                 }
             },
