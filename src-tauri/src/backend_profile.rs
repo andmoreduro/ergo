@@ -127,9 +127,9 @@ pub fn run_backend_profile(options: BackendProfileOptions) -> Result<BackendProf
 
         let (preview_page_count, changed_page_count, render_svg_ms, write_svg_ms) =
             if options.render_svgs {
-                let (svgs, render_ms) = measure(|| Ok(render_svgs(&document)))?;
+                let (svgs, render_ms) = measure(|| Ok::<_, String>(render_svgs(&document)))?;
                 let (preview_pages, write_ms) =
-                    measure(|| Ok(write_svg_pages(&vfs, ".ergproj/preview/svg", &svgs)))?;
+                    measure(|| Ok::<_, String>(write_svg_pages(&vfs, ".ergproj/preview/svg", &svgs)))?;
                 (
                     preview_pages.len(),
                     preview_pages.iter().filter(|page| page.changed).count(),
@@ -179,9 +179,11 @@ pub fn run_backend_profile(options: BackendProfileOptions) -> Result<BackendProf
     })
 }
 
-fn measure<T>(operation: impl FnOnce() -> Result<T, String>) -> Result<(T, f64), String> {
+fn measure<T, E: std::fmt::Display>(
+    operation: impl FnOnce() -> Result<T, E>,
+) -> Result<(T, f64), String> {
     let started = Instant::now();
-    let value = operation()?;
+    let value = operation().map_err(|error| error.to_string())?;
     Ok((value, duration_ms(started.elapsed())))
 }
 
