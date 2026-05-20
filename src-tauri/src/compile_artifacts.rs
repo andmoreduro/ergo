@@ -1,7 +1,10 @@
+use std::collections::hash_map::DefaultHasher;
+use std::fmt::Write as FmtWrite;
+use std::hash::Hasher;
 use std::sync::Arc;
 
 use typst::diag::{Severity, SourceDiagnostic};
-use typst::layout::PagedDocument;
+use typst::layout::{Page, PagedDocument};
 
 use crate::compilation_types::{
     CompilationJob, CompilationResult, CompilationStatus, ExportFormat, PreviewPageFile,
@@ -79,6 +82,99 @@ fn format_source_diagnostic(error: &SourceDiagnostic) -> String {
 pub(crate) fn render_svgs(document: &PagedDocument) -> Vec<String> {
     use rayon::prelude::*;
     document.pages.par_iter().map(typst_svg::svg).collect()
+}
+
+/// Feeds `fmt::Debug` output directly into a `Hasher` without allocating a String.
+struct DebugHasher(DefaultHasher);
+
+impl FmtWrite for DebugHasher {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        self.0.write(s.as_bytes());
+        Ok(())
+    }
+}
+
+fn fingerprint_page(page: &Page) -> u64 {
+    let mut hasher = DebugHasher(DefaultHasher::new());
+    let _ = write!(hasher, "{:?}", page);
+    hasher.0.finish()
+}
+
+struct CachedSvgPage {
+    fingerprint: u64,
+    svg: String,
+}
+
+/// Per-page SVG rendering cache that stores fingerprints and rendered SVG
+/// strings to skip re-rendering unchanged pages across compilations.
+pub(crate) struct SvgPageCache {
+    entries: Vec<CachedSvgPage>,
+}
+
+impl SvgPageCache {
+    pub fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+}
+
+/// Renders SVGs only for pages whose content fingerprint changed since the
+/// last compilation. Unchanged pages reuse their cached SVG strings.
+pub(crate) fn render_svgs_incremental(
+    document: &PagedDocument,
+    cache: &mut SvgPageCache,
+) -> Vec<String> {
+    use rayon::prelude::*;
+
+    // 1. Compute fingerprints for all pages (parallel, cheap)
+    let fingerprints: Vec<u64> = document.pages.par_iter().map(fingerprint_page).collect();
+
+    // 2. Identify which pages need re-rendering
+    let needs_render: Vec<bool> = fingerprints
+        .iter()
+        .enumerate()
+        .map(|(i, fp)| cache.entries.get(i).map_or(true, |e| e.fingerprint != *fp))
+        .collect();
+
+    // 3. Render only changed pages in parallel
+    let rendered: Vec<Option<String>> = (0..document.pages.len())
+        .into_par_iter()
+        .map(|i| {
+            if needs_render[i] {
+                Some(typst_svg::svg(&document.pages[i]))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // 4. Assemble: new SVGs for changed pages, cached for unchanged
+    let mut old_entries: Vec<Option<CachedSvgPage>> =
+        cache.entries.drain(..).map(Some).collect();
+
+    let svgs: Vec<String> = rendered
+        .into_iter()
+        .enumerate()
+        .map(|(i, opt)| {
+            opt.unwrap_or_else(|| {
+                old_entries
+                    .get_mut(i)
+                    .and_then(|slot| slot.take())
+                    .map(|entry| entry.svg)
+                    .unwrap_or_default()
+            })
+        })
+        .collect();
+
+    // 5. Rebuild cache
+    cache.entries = fingerprints
+        .into_iter()
+        .zip(svgs.iter().cloned())
+        .map(|(fingerprint, svg)| CachedSvgPage { fingerprint, svg })
+        .collect();
+
+    svgs
 }
 
 pub(crate) fn write_svg_pages(
