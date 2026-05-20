@@ -25,6 +25,11 @@ export const useAutosave = ({
     currentProjectPathRef.current = currentProjectPath;
     const isDirtyRef = useRef(isDirty);
     isDirtyRef.current = isDirty;
+    const saveActiveProjectRef = useRef(saveActiveProject);
+    saveActiveProjectRef.current = saveActiveProject;
+    const autosaveOnAppCloseRef = useRef(globalSettings.autosave_on_app_close ?? true);
+    autosaveOnAppCloseRef.current = globalSettings.autosave_on_app_close ?? true;
+
     const isClosingWindowRef = useRef(false);
 
     useEffect(() => {
@@ -37,14 +42,13 @@ export const useAutosave = ({
             globalSettings.autosave_interval_ms ?? 30_000,
         );
         const intervalId = window.setInterval(() => {
-            void saveActiveProject().catch(() => undefined);
+            void saveActiveProjectRef.current().catch(() => undefined);
         }, intervalMs);
 
         return () => window.clearInterval(intervalId);
     }, [
         globalSettings.autosave_enabled,
         globalSettings.autosave_interval_ms,
-        saveActiveProject,
     ]);
 
     useEffect(() => {
@@ -53,36 +57,51 @@ export const useAutosave = ({
         }
 
         const saveOnBlur = () => {
-            void saveActiveProject().catch(() => undefined);
+            void saveActiveProjectRef.current().catch(() => undefined);
         };
 
         window.addEventListener("blur", saveOnBlur);
         return () => window.removeEventListener("blur", saveOnBlur);
-    }, [globalSettings.autosave_on_window_blur, saveActiveProject]);
+    }, [globalSettings.autosave_on_window_blur]);
 
     useEffect(() => {
         let unlisten: (() => void) | null = null;
+        let isCleanedUp = false;
         const appWindow = getCurrentWindow();
 
-        void appWindow
+        appWindow
             .onCloseRequested(async (event) => {
-                if (isClosingWindowRef.current) {
-                    return;
-                }
-
-                if (
-                    !(globalSettings.autosave_on_app_close ?? true) ||
-                    !hasActiveProjectRef.current ||
-                    !currentProjectPathRef.current ||
-                    !isDirtyRef.current
-                ) {
-                    return;
-                }
-
+                // Tauri v2: preventDefault() must be called synchronously (before any
+                // await) to actually intercept the close. We always prevent the default
+                // and then close the window ourselves once done.
                 event.preventDefault();
-                try {
-                    await saveActiveProject();
+
+                if (isClosingWindowRef.current) {
+                    // Second close call triggered by us after saving — actually close.
+                    await appWindow.close();
+                    return;
+                }
+
+                const needsSave =
+                    autosaveOnAppCloseRef.current &&
+                    hasActiveProjectRef.current &&
+                    !!currentProjectPathRef.current &&
+                    isDirtyRef.current;
+
+                if (!needsSave) {
+                    // Nothing to save — close immediately.
                     isClosingWindowRef.current = true;
+                    await appWindow.close();
+                    return;
+                }
+
+                try {
+                    await saveActiveProjectRef.current();
+                    isClosingWindowRef.current = true;
+                    if (unlisten) {
+                        unlisten();
+                        unlisten = null;
+                    }
                     await appWindow.close();
                 } catch (error) {
                     window.alert(
@@ -96,12 +115,19 @@ export const useAutosave = ({
                 }
             })
             .then((nextUnlisten) => {
-                unlisten = nextUnlisten;
+                if (isCleanedUp || isClosingWindowRef.current) {
+                    nextUnlisten();
+                } else {
+                    unlisten = nextUnlisten;
+                }
             })
             .catch(() => undefined);
 
         return () => {
-            unlisten?.();
+            isCleanedUp = true;
+            if (unlisten) {
+                unlisten();
+            }
         };
-    }, [globalSettings.autosave_on_app_close, saveActiveProject]);
+    }, []);
 };

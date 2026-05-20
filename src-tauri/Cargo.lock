@@ -1265,6 +1265,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "parking_lot",
+ "rayon",
  "serde",
  "serde_json",
  "tauri",

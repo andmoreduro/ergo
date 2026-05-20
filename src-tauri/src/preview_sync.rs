@@ -1,4 +1,5 @@
 use parking_lot::Mutex;
+use std::sync::Arc;
 use typst::layout::{Abs, PagedDocument, Point};
 use typst::syntax::{FileId, VirtualPath};
 use typst_ide::{jump_from_click, jump_from_cursor, Jump};
@@ -29,7 +30,7 @@ struct RetainedPreviewDocument {
 
 #[derive(Default)]
 pub struct PreviewSyncState {
-    inner: Mutex<Option<RetainedPreviewDocument>>,
+    inner: Mutex<Option<Arc<RetainedPreviewDocument>>>,
 }
 
 impl PreviewSyncState {
@@ -55,14 +56,14 @@ impl PreviewSyncState {
             })
             .collect();
 
-        *self.inner.lock() = Some(RetainedPreviewDocument {
+        *self.inner.lock() = Some(Arc::new(RetainedPreviewDocument {
             source_revision,
             document,
             source_map,
             field_source_map,
             source_snapshot,
             pages,
-        });
+        }));
     }
 
     pub fn status(&self) -> PreviewSyncStatus {
@@ -344,7 +345,7 @@ impl PreviewSyncState {
     fn preview_for_revision(
         &self,
         source_revision: SourceRevision,
-    ) -> Result<RetainedPreviewDocument, PreviewJumpResult> {
+    ) -> Result<Arc<RetainedPreviewDocument>, PreviewJumpResult> {
         let actual_revision = {
             let guard = self.inner.lock();
             guard.as_ref().map(|p| p.source_revision)

@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import { DocumentProvider, useDocument } from "./DocumentContext";
 
 describe("DocumentProvider session state", () => {
-    it("tracks dirty state and restores document changes with undo and redo", () => {
-        const { result } = renderHook(() => useDocument(), {
+    const renderDocument = (historyLimit?: number) =>
+        renderHook(() => useDocument(), {
             wrapper: ({ children }) => (
-                <DocumentProvider>{children}</DocumentProvider>
+                <DocumentProvider historyLimit={historyLimit}>{children}</DocumentProvider>
             ),
         });
+
+    it("queues the forward document event when an AST action is applied", () => {
+        const { result } = renderDocument();
 
         act(() => {
             result.current.dispatch({
@@ -18,11 +21,33 @@ describe("DocumentProvider session state", () => {
         });
 
         expect(result.current.state.metadata.title).toBe("Draft");
-        expect(result.current.isDirty).toBe(true);
-        expect(result.current.canUndo).toBe(true);
         expect(result.current.events.at(-1)?.event).toEqual({
             type: "setProjectTitle",
             title: "Draft",
+        });
+    });
+
+    it("marks the document dirty when an AST action is applied", () => {
+        const { result } = renderDocument();
+
+        act(() => {
+            result.current.dispatch({
+                type: "UPDATE_PROJECT_TITLE",
+                payload: { title: "Draft" },
+            });
+        });
+
+        expect(result.current.isDirty).toBe(true);
+    });
+
+    it("undo applies the inverse document event", () => {
+        const { result } = renderDocument();
+
+        act(() => {
+            result.current.dispatch({
+                type: "UPDATE_PROJECT_TITLE",
+                payload: { title: "Draft" },
+            });
         });
 
         act(() => result.current.undo());
@@ -33,6 +58,18 @@ describe("DocumentProvider session state", () => {
             type: "setProjectTitle",
             title: "Untitled Document",
         });
+    });
+
+    it("redo reapplies the forward document event", () => {
+        const { result } = renderDocument();
+
+        act(() => {
+            result.current.dispatch({
+                type: "UPDATE_PROJECT_TITLE",
+                payload: { title: "Draft" },
+            });
+        });
+        act(() => result.current.undo());
 
         act(() => result.current.redo());
 
@@ -44,11 +81,7 @@ describe("DocumentProvider session state", () => {
     });
 
     it("respects the configured history limit", () => {
-        const { result } = renderHook(() => useDocument(), {
-            wrapper: ({ children }) => (
-                <DocumentProvider historyLimit={1}>{children}</DocumentProvider>
-            ),
-        });
+        const { result } = renderDocument(1);
 
         act(() => {
             result.current.dispatch({
@@ -68,11 +101,7 @@ describe("DocumentProvider session state", () => {
     });
 
     it("stores restore payloads for destructive undo events", () => {
-        const { result } = renderHook(() => useDocument(), {
-            wrapper: ({ children }) => (
-                <DocumentProvider>{children}</DocumentProvider>
-            ),
-        });
+        const { result } = renderDocument();
         const section = result.current.state.sections.find(
             (entry) => entry.type === "Content",
         );
@@ -126,5 +155,30 @@ describe("DocumentProvider session state", () => {
                 ],
             },
         });
+    });
+
+    it("prunes synced document events by acknowledged id", () => {
+        const { result } = renderDocument();
+
+        act(() => {
+            result.current.dispatch({
+                type: "UPDATE_PROJECT_TITLE",
+                payload: { title: "Uno" },
+            });
+            result.current.dispatch({
+                type: "UPDATE_PROJECT_TITLE",
+                payload: { title: "Dos" },
+            });
+            result.current.dispatch({
+                type: "UPDATE_PROJECT_TITLE",
+                payload: { title: "Tres" },
+            });
+        });
+
+        expect(result.current.events.map((event) => event.id)).toEqual([1, 2, 3]);
+
+        act(() => result.current.ackDocumentEvents(2));
+
+        expect(result.current.events.map((event) => event.id)).toEqual([3]);
     });
 });

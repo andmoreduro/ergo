@@ -1,7 +1,7 @@
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 use std::collections::VecDeque;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
 use std::thread;
@@ -31,7 +31,6 @@ struct CompilationQueueInner {
     pending_preview: Option<CompilationJob>,
     pending_exports: VecDeque<CompilationJob>,
     active_job_id: Option<u64>,
-    worker_running: bool,
     preview_has_started: bool,
     latest_source_revision: SourceRevision,
     last_result: Option<CompilationResult>,
@@ -40,7 +39,9 @@ struct CompilationQueueInner {
 
 pub struct CompilationQueue {
     inner: Mutex<CompilationQueueInner>,
+    condvar: Condvar,
     next_job_id: AtomicU64,
+    worker_spawned: AtomicBool,
 }
 
 impl CompilationQueue {
@@ -55,7 +56,9 @@ impl CompilationQueue {
         };
         Self {
             inner: Mutex::new(inner),
+            condvar: Condvar::new(),
             next_job_id: AtomicU64::new(1),
+            worker_spawned: AtomicBool::new(false),
         }
     }
 
@@ -76,6 +79,7 @@ impl CompilationQueue {
         inner.latest_source_revision = job.source_revision;
         inner.pending_preview = Some(job.clone());
         inner.last_result = Some(result_for_job(&job, CompilationStatus::Queued));
+        self.condvar.notify_one();
         job
     }
 
@@ -95,6 +99,7 @@ impl CompilationQueue {
         let mut inner = self.inner.lock();
         inner.pending_exports.push_back(job.clone());
         inner.last_result = Some(result_for_job(&job, CompilationStatus::Queued));
+        self.condvar.notify_one();
         job
     }
 
@@ -116,19 +121,11 @@ impl CompilationQueue {
         document_session: Arc<DocumentSession>,
         preview_sync: Arc<PreviewSyncState>,
     ) {
-        let should_spawn = {
-            let mut inner = self.inner.lock();
-            if inner.worker_running {
-                false
-            } else {
-                inner.worker_running = true;
-                true
-            }
-        };
-
-        if should_spawn {
+        if !self.worker_spawned.swap(true, Ordering::SeqCst) {
             let queue = Arc::clone(self);
             thread::spawn(move || queue.run_worker(app, vfs, document_session, preview_sync));
+        } else {
+            self.condvar.notify_one();
         }
     }
 
@@ -140,6 +137,14 @@ impl CompilationQueue {
         preview_sync: Arc<PreviewSyncState>,
     ) {
         loop {
+            // Wait for work if none is available
+            {
+                let mut inner = self.inner.lock();
+                while inner.pending_preview.is_none() && inner.pending_exports.is_empty() {
+                    self.condvar.wait(&mut inner);
+                }
+            }
+
             if let Some(job) = self.take_debounced_preview_job() {
                 self.run_job(&app, &vfs, &document_session, &preview_sync, job);
                 continue;
@@ -148,20 +153,6 @@ impl CompilationQueue {
             if let Some(job) = self.take_export_job() {
                 self.run_job(&app, &vfs, &document_session, &preview_sync, job);
                 continue;
-            }
-
-            let should_stop = {
-                let mut inner = self.inner.lock();
-                if inner.pending_preview.is_none() && inner.pending_exports.is_empty() {
-                    inner.worker_running = false;
-                    true
-                } else {
-                    false
-                }
-            };
-
-            if should_stop {
-                return;
             }
         }
     }

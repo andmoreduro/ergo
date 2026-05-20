@@ -21,11 +21,7 @@ impl WorldSourceSnapshot {
     pub fn from_vfs(vfs: &VirtualFileSystem) -> Self {
         Self {
             sources: vfs.snapshot_sources(),
-            files: vfs
-                .snapshot_binary_files()
-                .into_iter()
-                .map(|(path, bytes)| (path, Bytes::new(bytes)))
-                .collect(),
+            files: vfs.snapshot_binary_files(),
         }
     }
 
@@ -49,15 +45,10 @@ pub struct ErgoWorld {
 impl ErgoWorld {
     pub fn new(vfs: Arc<VirtualFileSystem>, main: FileId) -> Self {
         let fonts = bundled_fonts();
-        let mut book = FontBook::new();
-        for font in fonts.iter() {
-            book.push(font.info().clone());
-        }
-
         Self {
             vfs,
-            library: LazyHash::new(Library::default()),
-            book: LazyHash::new(book),
+            library: shared_library().clone(),
+            book: shared_font_book().clone(),
             fonts,
             main,
         }
@@ -75,20 +66,33 @@ pub struct SnapshotWorld {
 impl SnapshotWorld {
     pub fn new(snapshot: WorldSourceSnapshot, main: FileId) -> Self {
         let fonts = bundled_fonts();
-        let mut book = FontBook::new();
-        for font in fonts.iter() {
-            book.push(font.info().clone());
-        }
-
         Self {
             snapshot,
-            library: LazyHash::new(Library::default()),
-            book: LazyHash::new(book),
+            library: shared_library().clone(),
+            book: shared_font_book().clone(),
             fonts,
             main,
         }
     }
 }
+
+fn shared_library() -> &'static LazyHash<Library> {
+    static LIBRARY: OnceLock<LazyHash<Library>> = OnceLock::new();
+    LIBRARY.get_or_init(|| LazyHash::new(Library::default()))
+}
+
+fn shared_font_book() -> &'static LazyHash<FontBook> {
+    static BOOK: OnceLock<LazyHash<FontBook>> = OnceLock::new();
+    BOOK.get_or_init(|| {
+        let fonts = bundled_fonts();
+        let mut book = FontBook::new();
+        for font in fonts.iter() {
+            book.push(font.info().clone());
+        }
+        LazyHash::new(book)
+    })
+}
+
 
 fn bundled_fonts() -> Arc<Vec<Font>> {
     static FONTS: OnceLock<Arc<Vec<Font>>> = OnceLock::new();
@@ -126,11 +130,9 @@ impl World for ErgoWorld {
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
         let path = id.vpath().as_rootless_path().to_string_lossy().to_string();
-        let bytes = self
-            .vfs
-            .read_file(&path)
-            .map_err(|_| FileError::NotFound(path.into()))?;
-        Ok(Bytes::new(bytes))
+        self.vfs
+            .read_binary_file(&path)
+            .map_err(|_| FileError::NotFound(path.into()))
     }
 
     fn today(&self, _offset: Option<i64>) -> Option<Datetime> {

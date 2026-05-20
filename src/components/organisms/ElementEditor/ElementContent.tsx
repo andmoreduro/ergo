@@ -1,4 +1,4 @@
-import { useDocumentActions } from "../../../state/DocumentContext";
+import { useDocument } from "../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import { useActionDispatcher } from "../../../actions/runtime";
@@ -61,7 +61,7 @@ export const ElementContent = ({ element }: { element: DocumentElement }) => {
 };
 
 const HeadingEditor = ({ element }: { element: HeadingElement }) => {
-    const { dispatch } = useDocumentActions();
+    const { dispatch } = useDocument();
     const textField = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: element.id,
         fieldId: richTextFieldId(element.id),
@@ -103,7 +103,7 @@ const HeadingEditor = ({ element }: { element: HeadingElement }) => {
 };
 
 const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
-    const { dispatch } = useDocumentActions();
+    const { dispatch } = useDocument();
     const textField = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: element.id,
         fieldId: richTextFieldId(element.id),
@@ -128,7 +128,7 @@ const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
 };
 
 const EquationEditor = ({ element }: { element: EquationElement }) => {
-    const { dispatch } = useDocumentActions();
+    const { dispatch } = useDocument();
     const sourceField = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: element.id,
         fieldId: equationSourceFieldId(element.id),
@@ -267,7 +267,7 @@ const TableColumnSizeEditor = ({
     element: TableElement;
     size: string;
 }) => {
-    const { dispatch } = useDocumentActions();
+    const { dispatch } = useDocument();
     const columnField = useEditorFieldBinding<HTMLInputElement>({
         elementId: element.id,
         fieldId: tableColumnSizeFieldId(element.id, colIndex),
@@ -305,7 +305,7 @@ const TableCellEditor = ({
     element: TableElement;
     rowIndex: number;
 }) => {
-    const { dispatch } = useDocumentActions();
+    const { dispatch } = useDocument();
     const cellField = useEditorFieldBinding<HTMLInputElement>({
         elementId: element.id,
         fieldId: tableCellFieldId(element.id, rowIndex, colIndex),
@@ -335,7 +335,7 @@ const TableCellEditor = ({
 };
 
 const FigureEditor = ({ element }: { element: FigureElement }) => {
-    const { dispatch } = useDocumentActions();
+    const { dispatch } = useDocument();
     const bodyText =
         element.content.type === "Paragraph" ? richTextToString(element.content) : "";
     const bodyField = useEditorFieldBinding<HTMLTextAreaElement>({

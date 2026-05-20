@@ -5,12 +5,13 @@ import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { Table } from "../bindings/Table";
 import type { TableCell } from "../bindings/TableCell";
 import type { ASTAction } from "./ast/actions";
+import { createRichText } from "./ast/defaults";
+
+type TableElement = Extract<DocumentElement, { type: "Table" }>;
 
 export interface DocumentEventHistoryEntry {
     forwardEvent: DocumentEvent;
     inverseEvent: DocumentEvent;
-    previousAst: DocumentAST;
-    nextAst: DocumentAST;
     timestamp: number;
 }
 
@@ -21,10 +22,236 @@ export const createDocumentEventHistoryEntry = (
 ): DocumentEventHistoryEntry => ({
     forwardEvent: documentEventFromAction(previousAst, action, nextAst),
     inverseEvent: inverseDocumentEventFromAction(previousAst, action, nextAst),
-    previousAst,
-    nextAst,
     timestamp: Date.now(),
 });
+
+export const applyDocumentEventToAst = (
+    ast: DocumentAST,
+    event: DocumentEvent,
+): DocumentAST => {
+    switch (event.type) {
+        case "setProjectTitle":
+            return {
+                ...ast,
+                metadata: {
+                    ...ast.metadata,
+                    title: event.title,
+                },
+            };
+
+        case "setProjectSettings":
+            return {
+                ...ast,
+                metadata: {
+                    ...ast.metadata,
+                    project_settings: event.settings,
+                },
+            };
+
+        case "updateCoverAbstract":
+            return mapSections(ast, (section) =>
+                section.type === "CoverPage" && section.id === event.section_id
+                    ? { ...section, abstract_text: event.text }
+                    : section,
+            );
+
+        case "updateCoverAffiliations":
+            return mapSections(ast, (section) =>
+                section.type === "CoverPage" && section.id === event.section_id
+                    ? { ...section, affiliations: [...event.affiliations] }
+                    : section,
+            );
+
+        case "insertAuthor":
+        case "restoreAuthor":
+            return mapSections(ast, (section) => {
+                if (section.type !== "CoverPage" || section.id !== event.section_id) {
+                    return section;
+                }
+                const authors = [...section.authors];
+                authors.splice(event.type === "insertAuthor" ? event.index : event.author_index, 0, cloneValue(event.author));
+                return { ...section, authors };
+            });
+
+        case "updateAuthor":
+            return mapSections(ast, (section) => {
+                if (section.type !== "CoverPage" || section.id !== event.section_id) {
+                    return section;
+                }
+                return {
+                    ...section,
+                    authors: section.authors.map((author, index) =>
+                        index === event.author_index
+                            ? {
+                                  ...author,
+                                  [event.field]:
+                                      event.field === "email" && event.value.trim() === ""
+                                          ? null
+                                          : event.value,
+                              }
+                            : author,
+                    ),
+                };
+            });
+
+        case "removeAuthor":
+            return mapSections(ast, (section) =>
+                section.type === "CoverPage" && section.id === event.section_id
+                    ? {
+                          ...section,
+                          authors: section.authors.filter(
+                              (_, index) => index !== event.author_index,
+                          ),
+                      }
+                    : section,
+            );
+
+        case "insertElement":
+        case "restoreElement":
+            return mapSections(ast, (section) => {
+                if (section.type !== "Content" || section.id !== event.section_id) {
+                    return section;
+                }
+                const elements = [...section.elements];
+                elements.splice(event.index, 0, cloneValue(event.element));
+                return { ...section, elements };
+            });
+
+        case "removeElement":
+            return mapSections(ast, (section) =>
+                section.type === "Content"
+                    ? {
+                          ...section,
+                          elements: section.elements.filter(
+                              (element) => elementIdOf(element) !== event.element_id,
+                          ),
+                      }
+                    : section,
+            );
+
+        case "updateParagraphText":
+            return mapContentElements(ast, event.element_id, (element) =>
+                element.type === "Paragraph"
+                    ? { ...element, content: richTextFromString(event.text) }
+                    : element,
+            );
+
+        case "updateHeading":
+            return mapContentElements(ast, event.element_id, (element) =>
+                element.type === "Heading"
+                    ? {
+                          ...element,
+                          level: event.level ?? element.level,
+                          content:
+                              event.text === null
+                                  ? element.content
+                                  : richTextFromString(event.text),
+                      }
+                    : element,
+            );
+
+        case "updateEquation":
+            return mapContentElements(ast, event.element_id, (element) =>
+                element.type === "Equation"
+                    ? {
+                          ...element,
+                          latex_source: event.latex_source ?? element.latex_source,
+                          is_block: event.is_block ?? element.is_block,
+                      }
+                    : element,
+            );
+
+        case "updateTableCell":
+            return mapContentElements(ast, event.table_id, (element) =>
+                element.type === "Table"
+                    ? {
+                          ...element,
+                          cells: element.cells.map((row, rowIndex) =>
+                              rowIndex === event.row_index
+                                  ? row.map((cell, colIndex) =>
+                                        colIndex === event.col_index
+                                            ? { ...cell, content: event.text }
+                                            : cell,
+                                    )
+                                  : row,
+                          ),
+                      }
+                    : element,
+            );
+
+        case "insertTableRow":
+        case "restoreTableRow":
+            return mapTable(ast, event.table_id, (table) => {
+                const cells = [...table.cells];
+                cells.splice(event.row_index, 0, cloneValue(event.cells));
+                return { ...table, rows: cells.length, cells };
+            });
+
+        case "removeTableRow":
+            return mapTable(ast, event.table_id, (table) => ({
+                ...table,
+                rows: Math.max(0, table.rows - 1),
+                cells: table.cells.filter((_, index) => index !== event.row_index),
+            }));
+
+        case "insertTableColumn":
+        case "restoreTableColumn":
+            return mapTable(ast, event.table_id, (table) => ({
+                ...table,
+                cols: table.cols + 1,
+                cells: table.cells.map((row, rowIndex) => {
+                    const next = [...row];
+                    next.splice(event.col_index, 0, cloneValue(event.cells[rowIndex]));
+                    return next;
+                }),
+                column_sizes: insertAt(table.column_sizes, event.col_index, event.size),
+            }));
+
+        case "removeTableColumn":
+            return mapTable(ast, event.table_id, (table) => ({
+                ...table,
+                cols: Math.max(0, table.cols - 1),
+                cells: table.cells.map((row) =>
+                    row.filter((_, index) => index !== event.col_index),
+                ),
+                column_sizes: table.column_sizes.filter(
+                    (_, index) => index !== event.col_index,
+                ),
+            }));
+
+        case "updateTableColumnSize":
+            return mapTable(ast, event.table_id, (table) => ({
+                ...table,
+                column_sizes: table.column_sizes.map((size, index) =>
+                    index === event.col_index ? event.size : size,
+                ),
+            }));
+
+        case "updateFigure":
+            return mapContentElements(ast, event.element_id, (element) => {
+                if (element.type !== "Figure") {
+                    return element;
+                }
+                return {
+                    ...element,
+                    caption: event.caption ?? element.caption,
+                    placement: event.placement ?? element.placement,
+                    content:
+                        event.body_text === null
+                            ? element.content
+                            : element.content.type === "Paragraph"
+                              ? {
+                                    ...element.content,
+                                    content: richTextFromString(event.body_text),
+                                }
+                              : element.content,
+                };
+            });
+
+        default:
+            return assertNever(event);
+    }
+};
 
 const documentEventFromAction = (
     previousAst: DocumentAST,
@@ -429,6 +656,51 @@ const insertElementEvent = (
         element: section.elements[index],
     };
 };
+
+const mapSections = (
+    ast: DocumentAST,
+    mapper: (section: DocumentAST["sections"][number]) => DocumentAST["sections"][number],
+): DocumentAST => ({
+    ...ast,
+    sections: ast.sections.map(mapper),
+});
+
+const mapContentElements = (
+    ast: DocumentAST,
+    elementId: string,
+    mapper: (element: DocumentElement) => DocumentElement,
+): DocumentAST =>
+    mapSections(ast, (section) => {
+        if (section.type !== "Content") {
+            return section;
+        }
+
+        return {
+            ...section,
+            elements: section.elements.map((element) =>
+                elementIdOf(element) === elementId ? mapper(element) : element,
+            ),
+        };
+    });
+
+const mapTable = (
+    ast: DocumentAST,
+    tableId: string,
+    mapper: (table: TableElement) => TableElement,
+): DocumentAST =>
+    mapContentElements(ast, tableId, (element) =>
+        element.type === "Table" ? mapper(element) : element,
+    );
+
+const richTextFromString = (text: string) => (text ? [createRichText(text)] : []);
+
+const insertAt = <T,>(values: T[], index: number, value: T): T[] => [
+    ...values.slice(0, index),
+    value,
+    ...values.slice(index),
+];
+
+const cloneValue = <T,>(value: T): T => structuredClone(value);
 
 const coverSection = (ast: DocumentAST, sectionId: string) => {
     const section = ast.sections.find(
