@@ -13,8 +13,8 @@ use crate::compilation_types::{
     CompilationResult, CompilationStatus, ExportFormat, SourceRevision,
 };
 use crate::compile_artifacts::{
-    compile_document_snapshot, failed_result, render_svgs, result_for_job, run_export_job,
-    write_svg_pages,
+    compile_document_snapshot, failed_result, render_svgs_incremental, result_for_job,
+    run_export_job, write_svg_pages, SvgPageCache,
 };
 use crate::compile_events::{
     emit_compile_event, COMPILE_DROPPED_EVENT, COMPILE_FAILED_EVENT, COMPILE_QUEUED_EVENT,
@@ -136,6 +136,7 @@ impl CompilationQueue {
         document_session: Arc<DocumentSession>,
         preview_sync: Arc<PreviewSyncState>,
     ) {
+        let mut svg_cache = SvgPageCache::new();
         loop {
             // Wait for work if none is available
             {
@@ -146,12 +147,12 @@ impl CompilationQueue {
             }
 
             if let Some(job) = self.take_debounced_preview_job() {
-                self.run_job(&app, &vfs, &document_session, &preview_sync, job);
+                self.run_job(&app, &vfs, &document_session, &preview_sync, job, &mut svg_cache);
                 continue;
             }
 
             if let Some(job) = self.take_export_job() {
-                self.run_job(&app, &vfs, &document_session, &preview_sync, job);
+                self.run_job(&app, &vfs, &document_session, &preview_sync, job, &mut svg_cache);
                 continue;
             }
         }
@@ -187,6 +188,7 @@ impl CompilationQueue {
         document_session: &DocumentSession,
         preview_sync: &PreviewSyncState,
         job: CompilationJob,
+        svg_cache: &mut SvgPageCache,
     ) {
         self.update_result(result_for_job(&job, CompilationStatus::Started));
         emit_compile_event(
@@ -198,7 +200,7 @@ impl CompilationQueue {
         let result = match &job.kind {
             CompilationJobKind::PreviewSvg => match compile_document_snapshot(vfs) {
                 Ok((document, source_snapshot)) => {
-                    let svgs = render_svgs(&document);
+                    let svgs = render_svgs_incremental(&document, svg_cache);
                     let document_status = document_session.status();
                     if self.is_stale_preview(&job)
                         || document_status.source_revision != job.source_revision
