@@ -122,14 +122,14 @@ impl World for ErgoWorld {
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
-        let path = id.vpath().as_rootless_path().to_string_lossy().to_string();
+        let path = path_from_file_id(id);
         self.vfs
             .read_typst_source(&path)
             .map_err(|_| FileError::NotFound(path.into()))
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        let path = id.vpath().as_rootless_path().to_string_lossy().to_string();
+        let path = path_from_file_id(id);
         self.vfs
             .read_binary_file(&path)
             .map_err(|_| FileError::NotFound(path.into()))

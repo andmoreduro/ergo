@@ -97,8 +97,7 @@ impl DocumentSession {
         let mut dirty_section_ids = Vec::new();
         let mut next_sections = HashMap::new();
         for mut section in generated.sections {
-            let existing_source = self.vfs.read_source(&section.file_path).ok();
-            if existing_source.as_deref() != Some(section.source.as_str()) {
+            if !self.vfs.is_source_equal(&section.file_path, &section.source) {
                 section.revision = self
                     .vfs
                     .write_source(&section.file_path, section.source.clone());
@@ -182,9 +181,10 @@ fn write_json_source<T: Serialize>(
 }
 
 fn write_source_if_changed(vfs: &VirtualFileSystem, path: &str, source: &str) -> u64 {
-    match vfs.read_source(path) {
-        Ok(existing) if existing == source => vfs.source_revision(path).unwrap_or(0),
-        _ => vfs.write_source(path, source.to_string()),
+    if vfs.is_source_equal(path, source) {
+        vfs.source_revision(path).unwrap_or(0)
+    } else {
+        vfs.write_source(path, source.to_string())
     }
 }
 
