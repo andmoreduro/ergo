@@ -39,7 +39,7 @@
 
 .textarea:focus-visible {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+  box-shadow: 0 0 0 3px var(--color-focus-ring-primary);
 }
 
 .textareaError {
@@ -48,7 +48,7 @@
 
 .textareaError:focus-visible {
   border-color: var(--color-danger);
-  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.2);
+  box-shadow: 0 0 0 3px var(--color-focus-ring-danger);
 }
 
 .disabled {

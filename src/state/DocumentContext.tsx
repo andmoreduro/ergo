@@ -5,6 +5,7 @@ import {
     ReactNode,
     Dispatch,
     useCallback,
+    useMemo,
 } from "react";
 import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
@@ -12,6 +13,7 @@ import type { DocumentAST } from "../bindings/DocumentAST";
 import type { DocumentEvent as BackendDocumentEvent } from "../bindings/DocumentEvent";
 import { createDefaultDocumentAST } from "./ast/defaults";
 import {
+    applyDocumentEventToAst,
     createDocumentEventHistoryEntry,
     type DocumentEventHistoryEntry,
 } from "./documentEvents";
@@ -53,6 +55,7 @@ type DocumentSessionAction =
     | { type: "UNDO" }
     | { type: "REDO" }
     | { type: "MARK_SAVED" }
+    | { type: "ACK_DOCUMENT_EVENTS"; upToEventId: number }
     | { type: "SET_DOCUMENT_FOCUS"; focus: DocumentFocusInput };
 
 interface DocumentContextType {
@@ -67,6 +70,7 @@ interface DocumentContextType {
     undo: () => void;
     redo: () => void;
     markSaved: () => void;
+    ackDocumentEvents: (upToEventId: number) => void;
     setDocumentFocus: (focus: DocumentFocusInput) => void;
 }
 
@@ -114,7 +118,7 @@ const createSessionReducer =
 
             return {
                 ...state,
-                ast: previous.previousAst,
+                ast: applyDocumentEventToAst(state.ast, previous.inverseEvent),
                 past: state.past.slice(0, -1),
                 future: [previous, ...state.future],
                 events: [
@@ -138,7 +142,7 @@ const createSessionReducer =
 
             return {
                 ...state,
-                ast: next.nextAst,
+                ast: applyDocumentEventToAst(state.ast, next.forwardEvent),
                 past: [...state.past, next].slice(-historyLimit),
                 future: state.future.slice(1),
                 events: [
@@ -158,6 +162,15 @@ const createSessionReducer =
             return {
                 ...state,
                 isDirty: false,
+            };
+        }
+
+        if (action.type === "ACK_DOCUMENT_EVENTS") {
+            return {
+                ...state,
+                events: state.events.filter(
+                    (event) => event.id > action.upToEventId,
+                ),
             };
         }
 
@@ -233,24 +246,50 @@ export const DocumentProvider = ({
             sessionDispatch({ type: "SET_DOCUMENT_FOCUS", focus }),
         [],
     );
+    const ackDocumentEvents = useCallback(
+        (upToEventId: number) =>
+            sessionDispatch({
+                type: "ACK_DOCUMENT_EVENTS",
+                upToEventId,
+            }),
+        [],
+    );
+
+    const contextValue = useMemo(
+        () => ({
+            state: sessionState.ast,
+            dispatch,
+            isDirty: sessionState.isDirty,
+            canUndo: sessionState.past.length > 0,
+            canRedo: sessionState.future.length > 0,
+            documentFocus: sessionState.documentFocus,
+            events: sessionState.events,
+            sessionId: sessionState.sessionId,
+            undo,
+            redo,
+            markSaved,
+            ackDocumentEvents,
+            setDocumentFocus,
+        }),
+        [
+            sessionState.ast,
+            dispatch,
+            sessionState.isDirty,
+            sessionState.past.length,
+            sessionState.future.length,
+            sessionState.documentFocus,
+            sessionState.events,
+            sessionState.sessionId,
+            undo,
+            redo,
+            markSaved,
+            ackDocumentEvents,
+            setDocumentFocus,
+        ],
+    );
 
     return (
-        <DocumentContext.Provider
-            value={{
-                state: sessionState.ast,
-                dispatch,
-                isDirty: sessionState.isDirty,
-                canUndo: sessionState.past.length > 0,
-                canRedo: sessionState.future.length > 0,
-                documentFocus: sessionState.documentFocus,
-                events: sessionState.events,
-                sessionId: sessionState.sessionId,
-                undo,
-                redo,
-                markSaved,
-                setDocumentFocus,
-            }}
-        >
+        <DocumentContext.Provider value={contextValue}>
             {children}
         </DocumentContext.Provider>
     );

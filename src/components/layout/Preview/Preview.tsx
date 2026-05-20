@@ -12,13 +12,15 @@ export interface PreviewProps {
 }
 
 export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
-    const { state, documentFocus, events, sessionId } = useDocument();
+    const { state, documentFocus, events, sessionId, ackDocumentEvents } =
+        useDocument();
     const dispatchAction = useActionDispatcher();
     const { svgs, error, sourceMap, previewRevision } = useCompiler(
         state,
         events,
         sessionId,
         previewDebounceMs,
+        ackDocumentEvents,
     );
     const previewRef = useRef<HTMLDivElement>(null);
     const [highlightedPosition, setHighlightedPosition] =

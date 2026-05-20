@@ -10,7 +10,7 @@ use crate::path_utils::{file_id_for_virtual_path, normalize_virtual_path};
 
 pub struct VirtualFileSystem {
     memory_sources: RwLock<HashMap<String, RetainedTextFile>>,
-    memory_files: RwLock<HashMap<String, Vec<u8>>>,
+    memory_files: RwLock<HashMap<String, typst::foundations::Bytes>>,
     next_revision: AtomicU64,
 }
 
@@ -68,8 +68,17 @@ impl VirtualFileSystem {
             .collect()
     }
 
-    pub fn snapshot_binary_files(&self) -> HashMap<String, Vec<u8>> {
+    pub fn snapshot_binary_files(&self) -> HashMap<String, typst::foundations::Bytes> {
         self.memory_files.read().clone()
+    }
+
+    pub fn is_source_equal(&self, path: &str, content: &str) -> bool {
+        let path = normalize_virtual_path(path);
+        self.memory_sources
+            .read()
+            .get(&path)
+            .map(|file| file.source.text() == content)
+            .unwrap_or(false)
     }
 
     pub fn read_text_file(&self, path: &str) -> Result<VirtualTextFile, String> {
@@ -129,10 +138,10 @@ impl VirtualFileSystem {
         revision
     }
 
-    pub fn read_file(&self, path: &str) -> Result<Vec<u8>, String> {
+    pub fn read_binary_file(&self, path: &str) -> Result<typst::foundations::Bytes, String> {
         let path = normalize_virtual_path(path);
         if let Some(file) = self.memory_sources.read().get(&path) {
-            return Ok(file.source.text().as_bytes().to_vec());
+            return Ok(typst::foundations::Bytes::new(file.source.text().as_bytes().to_vec()));
         }
 
         self.memory_files
@@ -142,15 +151,32 @@ impl VirtualFileSystem {
             .ok_or_else(|| format!("File not found: {}", path))
     }
 
+    pub fn read_file(&self, path: &str) -> Result<Vec<u8>, String> {
+        let path = normalize_virtual_path(path);
+        if let Some(file) = self.memory_sources.read().get(&path) {
+            return Ok(file.source.text().as_bytes().to_vec());
+        }
+
+        self.memory_files
+            .read()
+            .get(&path)
+            .map(|bytes| bytes.to_vec())
+            .ok_or_else(|| format!("File not found: {}", path))
+    }
+
     pub fn has_retained_source(&self, path: &str) -> bool {
         let path = normalize_virtual_path(path);
         self.memory_sources.read().contains_key(&path)
     }
 
-    pub fn write_file(&self, path: &str, content: Vec<u8>) {
+    pub fn write_binary_file(&self, path: &str, content: typst::foundations::Bytes) {
         let path = normalize_virtual_path(path);
         self.memory_sources.write().remove(&path);
         self.memory_files.write().insert(path, content);
+    }
+
+    pub fn write_file(&self, path: &str, content: Vec<u8>) {
+        self.write_binary_file(path, typst::foundations::Bytes::new(content));
     }
 
     pub fn apply_patch(
@@ -199,7 +225,10 @@ impl VirtualFileSystem {
     }
 
     pub fn get_all_files(&self) -> HashMap<String, Vec<u8>> {
-        let mut files = self.memory_files.read().clone();
+        let mut files = HashMap::new();
+        for (path, bytes) in self.memory_files.read().iter() {
+            files.insert(path.clone(), bytes.to_vec());
+        }
         for (path, file) in self.memory_sources.read().iter() {
             files.insert(path.clone(), file.source.text().as_bytes().to_vec());
         }

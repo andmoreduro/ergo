@@ -62,11 +62,16 @@ pub fn open_project_from_path(
         if file.is_file() {
             let mut content = Vec::new();
             file.read_to_end(&mut content).map_err(|e| e.to_string())?;
-            match std::str::from_utf8(&content) {
-                Ok(text) => {
-                    state.vfs.write_source(&name, text.to_owned());
+            let is_text = name.ends_with(".typ") || name.ends_with(".json") || name.ends_with(".bib");
+            if is_text {
+                match std::str::from_utf8(&content) {
+                    Ok(text) => {
+                        state.vfs.write_source(&name, text.to_owned());
+                    }
+                    Err(_) => state.vfs.write_file(&name, content),
                 }
-                Err(_) => state.vfs.write_file(&name, content),
+            } else {
+                state.vfs.write_file(&name, content);
             }
         }
     }

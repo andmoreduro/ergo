@@ -19,6 +19,13 @@
     --color-success: #2ecc71;
     --color-warning: #f1c40f;
     --color-danger: #e74c3c;
+    --color-danger-hover: #c0392b;
+    --color-danger-active: #a93226;
+    --color-focus-ring-primary: rgba(52, 152, 219, 0.2);
+    --color-focus-ring-primary-strong: rgba(52, 152, 219, 0.3);
+    --color-focus-ring-danger: rgba(231, 76, 60, 0.2);
+    --color-overlay-backdrop: rgba(0, 0, 0, 0.38);
+    --color-welcome-halo: rgba(52, 152, 219, 0.08);
 
     /* Typography */
     --font-family-sans:
@@ -79,6 +86,8 @@
         --color-primary: #3498db;
         --color-primary-hover: #5dade2;
         --color-primary-active: #2e86c1;
+        --color-focus-ring-primary: rgba(93, 173, 226, 0.24);
+        --color-focus-ring-primary-strong: rgba(93, 173, 226, 0.32);
     }
 }
 
@@ -99,6 +108,13 @@
     --color-primary: #3498db;
     --color-primary-hover: #2980b9;
     --color-primary-active: #21618c;
+    --color-danger-hover: #c0392b;
+    --color-danger-active: #a93226;
+    --color-focus-ring-primary: rgba(52, 152, 219, 0.2);
+    --color-focus-ring-primary-strong: rgba(52, 152, 219, 0.3);
+    --color-focus-ring-danger: rgba(231, 76, 60, 0.2);
+    --color-overlay-backdrop: rgba(0, 0, 0, 0.38);
+    --color-welcome-halo: rgba(52, 152, 219, 0.08);
 }
 
 :root[data-theme="dark"],
@@ -118,4 +134,11 @@
     --color-primary: #3498db;
     --color-primary-hover: #5dade2;
     --color-primary-active: #2e86c1;
+    --color-danger-hover: #c0392b;
+    --color-danger-active: #a93226;
+    --color-focus-ring-primary: rgba(93, 173, 226, 0.24);
+    --color-focus-ring-primary-strong: rgba(93, 173, 226, 0.32);
+    --color-focus-ring-danger: rgba(231, 76, 60, 0.24);
+    --color-overlay-backdrop: rgba(0, 0, 0, 0.5);
+    --color-welcome-halo: rgba(93, 173, 226, 0.1);
 }

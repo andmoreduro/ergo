@@ -77,7 +77,8 @@ fn format_source_diagnostic(error: &SourceDiagnostic) -> String {
 }
 
 pub(crate) fn render_svgs(document: &PagedDocument) -> Vec<String> {
-    document.pages.iter().map(typst_svg::svg).collect()
+    use rayon::prelude::*;
+    document.pages.par_iter().map(typst_svg::svg).collect()
 }
 
 pub(crate) fn write_svg_pages(

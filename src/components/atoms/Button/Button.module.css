@@ -54,11 +54,11 @@
 }
 
 .danger:hover:not(.disabled) {
-  background-color: #c0392b; /* Slightly darker than danger */
+  background-color: var(--color-danger-hover);
 }
 
 .danger:active:not(.disabled) {
-  background-color: #a93226;
+  background-color: var(--color-danger-active);
 }
 
 .ghost {

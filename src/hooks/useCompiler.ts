@@ -23,6 +23,7 @@ export function useCompiler(
     events: QueuedDocumentEvent[] = [],
     sessionId = 1,
     previewDebounceMs = 0,
+    ackDocumentEvents?: (upToEventId: number) => void,
 ): UseCompilerResult {
     const [svgs, setSvgs] = useState<string[]>([]);
     const [isCompiling, setIsCompiling] = useState<boolean>(false);
@@ -38,6 +39,7 @@ export function useCompiler(
     const listenersReadyRef = useRef<Promise<void>>(Promise.resolve());
     const syncRunningRef = useRef(false);
     const syncFailedRef = useRef(false);
+    const failedEventCountRef = useRef(0);
     const isMountedRef = useRef(false);
     const previewLoadTokenRef = useRef(0);
     const svgsRef = useRef<string[]>([]);
@@ -54,6 +56,7 @@ export function useCompiler(
     const loadPreviewSvgs = async (result: CompilationResult) => {
         const loadToken = previewLoadTokenRef.current + 1;
         previewLoadTokenRef.current = loadToken;
+        const started = now();
 
         let nextSvgs: string[];
         try {
@@ -76,6 +79,7 @@ export function useCompiler(
             setPreviewRevision(result.source_revision);
             setError(null);
             setIsCompiling(false);
+            recordTiming("preview-svg-load", started);
         }
     };
 
@@ -112,7 +116,9 @@ export function useCompiler(
     };
 
     const enqueuePreview = async () => {
+        const started = now();
         const job = await TauriApi.enqueuePreviewCompile(previewDebounceMsRef.current);
+        recordTiming("preview-enqueue", started);
         latestRevisionRef.current = job.source_revision;
         await applyImmediateSnapshot(job.source_revision);
     };
@@ -142,6 +148,8 @@ export function useCompiler(
         }
 
         syncRunningRef.current = true;
+        let lastEventId: number | null = null;
+        let lastSourceMap: SourceMapEntry[] | null = null;
 
         try {
             while (isMountedRef.current) {
@@ -152,7 +160,12 @@ export function useCompiler(
                 }
 
                 if (bootstrappedSessionIdRef.current !== currentSessionId) {
+                    lastEventId = null;
+                    lastSourceMap = null;
+
+                    const syncStarted = now();
                     const status = await TauriApi.syncDocumentSnapshot(ast);
+                    recordTiming("sync-snapshot", syncStarted);
                     if (
                         !isMountedRef.current ||
                         desiredSessionIdRef.current !== currentSessionId
@@ -173,7 +186,10 @@ export function useCompiler(
                     break;
                 }
 
+                recordDurationFromTimestamp("event-dispatch", nextEvent.timestamp);
+                const syncStarted = now();
                 const status = await TauriApi.syncDocumentEvent(nextEvent.event);
+                recordTiming("sync-event", syncStarted);
                 if (
                     !isMountedRef.current ||
                     desiredSessionIdRef.current !== currentSessionId
@@ -182,13 +198,20 @@ export function useCompiler(
                 }
 
                 syncedEventIdRef.current = nextEvent.id;
-                setSourceMap(status.sourceMap);
+                lastEventId = nextEvent.id;
+                lastSourceMap = status.sourceMap;
+            }
+
+            if (isMountedRef.current && lastEventId !== null && lastSourceMap !== null) {
+                ackDocumentEvents?.(lastEventId);
+                setSourceMap(lastSourceMap);
                 await listenersReadyRef.current;
                 await enqueuePreview();
             }
         } catch (error: unknown) {
             if (isMountedRef.current) {
                 syncFailedRef.current = true;
+                failedEventCountRef.current = desiredEventsRef.current.length;
                 setError(error instanceof Error ? error.message : String(error));
                 setIsCompiling(false);
             }
@@ -239,7 +262,10 @@ export function useCompiler(
         desiredAstRef.current = ast;
         desiredEventsRef.current = events;
         desiredSessionIdRef.current = sessionId;
-        if (didSessionChange) {
+        if (
+            didSessionChange ||
+            (syncFailedRef.current && events.length > failedEventCountRef.current)
+        ) {
             syncFailedRef.current = false;
         }
 
@@ -248,7 +274,54 @@ export function useCompiler(
             setIsCompiling(true);
             startDocumentSync();
         }
-    }, [ast, events, sessionId]);
+    }, [ackDocumentEvents, ast, events, sessionId]);
 
     return { svgs, isCompiling, error, sourceMap, previewRevision };
 }
+
+type TimingSample = {
+    name: string;
+    durationMs: number;
+    startedAt: number;
+    endedAt: number;
+};
+
+const now = (): number =>
+    typeof performance === "undefined" ? Date.now() : performance.now();
+
+const recordTiming = (name: string, startedAt: number) => {
+    const endedAt = now();
+    recordTimingSample({
+        name,
+        durationMs: endedAt - startedAt,
+        startedAt,
+        endedAt,
+    });
+};
+
+const recordDurationFromTimestamp = (name: string, timestamp: number) => {
+    if (!timestamp) {
+        return;
+    }
+
+    const endedAt = Date.now();
+    recordTimingSample({
+        name,
+        durationMs: Math.max(0, endedAt - timestamp),
+        startedAt: timestamp,
+        endedAt,
+    });
+};
+
+const recordTimingSample = (sample: TimingSample) => {
+    if (!import.meta.env.DEV || typeof window === "undefined") {
+        return;
+    }
+
+    const timingWindow = window as typeof window & {
+        __ergo_timings?: TimingSample[];
+    };
+    const samples = timingWindow.__ergo_timings ?? [];
+    samples.push(sample);
+    timingWindow.__ergo_timings = samples.slice(-50);
+};

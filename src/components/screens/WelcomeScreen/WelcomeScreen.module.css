@@ -4,7 +4,7 @@
     place-items: center;
     min-height: 0;
     background:
-        radial-gradient(circle at 50% 18%, rgba(52, 152, 219, 0.08), transparent 28rem),
+        radial-gradient(circle at 50% 18%, var(--color-welcome-halo), transparent 28rem),
         var(--color-bg-primary);
     color: var(--color-text-primary);
 }
