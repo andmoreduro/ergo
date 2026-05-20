@@ -157,7 +157,7 @@ describe("useCompiler source syncing", () => {
         expect(tauriApiMock.patchSource).not.toHaveBeenCalled();
         expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalledTimes(1);
         expect(tauriApiMock.syncDocumentEvent).toHaveBeenCalledTimes(2);
-        expect(tauriApiMock.enqueuePreviewCompile).toHaveBeenCalledTimes(2);
+        expect(tauriApiMock.enqueuePreviewCompile).toHaveBeenCalledTimes(3);
 
         unmount();
     });
