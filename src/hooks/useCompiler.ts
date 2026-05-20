@@ -148,8 +148,6 @@ export function useCompiler(
         }
 
         syncRunningRef.current = true;
-        let lastEventId: number | null = null;
-        let lastSourceMap: SourceMapEntry[] | null = null;
 
         try {
             while (isMountedRef.current) {
@@ -160,9 +158,6 @@ export function useCompiler(
                 }
 
                 if (bootstrappedSessionIdRef.current !== currentSessionId) {
-                    lastEventId = null;
-                    lastSourceMap = null;
-
                     const syncStarted = now();
                     const status = await TauriApi.syncDocumentSnapshot(ast);
                     recordTiming("sync-snapshot", syncStarted);
@@ -198,13 +193,8 @@ export function useCompiler(
                 }
 
                 syncedEventIdRef.current = nextEvent.id;
-                lastEventId = nextEvent.id;
-                lastSourceMap = status.sourceMap;
-            }
-
-            if (isMountedRef.current && lastEventId !== null && lastSourceMap !== null) {
-                ackDocumentEvents?.(lastEventId);
-                setSourceMap(lastSourceMap);
+                ackDocumentEvents?.(nextEvent.id);
+                setSourceMap(status.sourceMap);
                 await listenersReadyRef.current;
                 await enqueuePreview();
             }
