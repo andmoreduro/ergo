@@ -31,6 +31,7 @@ export const useAutosave = ({
     autosaveOnAppCloseRef.current = globalSettings.autosave_on_app_close ?? true;
 
     const isClosingWindowRef = useRef(false);
+    const isSavingRef = useRef(false);
 
     useEffect(() => {
         if (!(globalSettings.autosave_enabled ?? true)) {
@@ -71,14 +72,17 @@ export const useAutosave = ({
 
         appWindow
             .onCloseRequested(async (event) => {
+                if (isClosingWindowRef.current) {
+                    // We already saved and initiated the close. Let the default close proceed!
+                    return;
+                }
+
                 // Tauri v2: preventDefault() must be called synchronously (before any
-                // await) to actually intercept the close. We always prevent the default
-                // and then close the window ourselves once done.
+                // await) to actually intercept the close.
                 event.preventDefault();
 
-                if (isClosingWindowRef.current) {
-                    // Second close call triggered by us after saving — actually close.
-                    await appWindow.close();
+                if (isSavingRef.current) {
+                    // Already saving. Ignore duplicate close requests.
                     return;
                 }
 
@@ -96,6 +100,7 @@ export const useAutosave = ({
                 }
 
                 try {
+                    isSavingRef.current = true;
                     await saveActiveProjectRef.current();
                     isClosingWindowRef.current = true;
                     if (unlisten) {
@@ -104,6 +109,7 @@ export const useAutosave = ({
                     }
                     await appWindow.close();
                 } catch (error) {
+                    isSavingRef.current = false;
                     window.alert(
                         m.project_save_failed({
                             message:
