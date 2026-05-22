@@ -1,8 +1,8 @@
+use crate::action_context::{parse_context_expression, ActiveContext};
+use crate::action_keymap::effective_bindings;
 use crate::ast::{
     normalize_key_name, ActionId, KeyBindingPreference, KeyModifier, KeyStroke, KeymapSettings,
 };
-use crate::action_context::{parse_context_expression, ActiveContext};
-use crate::action_keymap::effective_bindings;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -12,8 +12,8 @@ const KEY_SEQUENCE_TIMEOUT_MS: u32 = 900;
 pub use crate::action_catalog::action_catalog;
 pub use crate::action_keymap::validate_keymap;
 pub use crate::action_types::{
-    ActionContextNode, ActionContextSnapshot, ActionDescriptor, ActionInvocation,
-    ActionResolution, KeymapConflict, KeymapValidationResult, LogicalKeyEvent,
+    ActionContextNode, ActionContextSnapshot, ActionDescriptor, ActionInvocation, ActionResolution,
+    KeymapConflict, KeymapValidationResult, LogicalKeyEvent,
 };
 
 #[derive(Default)]

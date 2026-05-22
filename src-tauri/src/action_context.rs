@@ -67,7 +67,9 @@ impl ContextExpression {
                 .map(|actual| actual == value)
                 .unwrap_or(false),
             ContextExpression::Not(inner) => !inner.evaluate(context),
-            ContextExpression::And(left, right) => left.evaluate(context) && right.evaluate(context),
+            ContextExpression::And(left, right) => {
+                left.evaluate(context) && right.evaluate(context)
+            }
             ContextExpression::Or(left, right) => left.evaluate(context) || right.evaluate(context),
         }
     }

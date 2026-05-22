@@ -36,6 +36,7 @@ flowchart TB
         SettingsUI["Settings UI"]:::comp
         AppOrchestration["App Orchestration"]:::comp
         Autosave["Autosave Scheduler"]:::comp
+        Sidebar["Workspace Sidebar"]:::comp
         Preview["SVG Preview Renderer"]:::comp
         TauriClient["Typed Tauri API Client"]:::comp
 
@@ -49,6 +50,7 @@ flowchart TB
         DocState --> Autosave
         DocState --> TauriClient
         Preview --> TauriClient
+        Preview --> Sidebar
     end
 
     subgraph Backend ["Backend Container"]
@@ -111,13 +113,14 @@ flowchart TB
 - **DocumentSession** is the backend coordination point for the canonical backend AST, bootstrap snapshots, typed document events, dirty tracking, fragment cache updates, section-file assembly, source-map generation, and VFS writes.
 - **Typed Tauri API Client** imports IPC DTOs only from generated `src/bindings/` files. The frontend must not keep hand-written mirrors for backend DTOs.
 - **App Orchestration** groups project lifecycle, settings lifecycle, command palette state, action handlers, compile-event bridging, and SVG page loading behind focused frontend hooks.
+- **Custom UI Components** include a frameless app menubar that serves as the Tauri drag titlebar. The menubar exposes window controls through Tauri window APIs, routes command items through the action runtime, shows project-scoped menus only for active projects, and keeps app-level language selection in the Settings UI.
 - **Document State + History** keeps the immediate React AST mirror and stores each edit as `{ forwardEvent, inverseEvent, previousAst, nextAst }`. Undo sends the inverse event; redo sends the forward event. Destructive inverse events carry restore payloads and exact positions.
 - **Editor Field Registry** registers editable form fields by stable field IDs. `DocumentFocusState` drives focus and caret placement from React state, and field components apply selection inside layout effects.
 - **Action Runtime + Keymap Resolver** follow a Zed-inspired action model. Rust owns typed action IDs, the action catalog, keymap JSON schema, validation, logical-key normalization, multi-stroke sequence state, and context-expression matching. React owns the live context tree and executes handlers from the focused context upward through parent contexts.
 - Every mouse-performable command must dispatch a stable action ID such as `workspace::OpenProject`; clicking the UI surface and pressing the matching shortcut both produce an `ActionInvocation`. Raw text editing remains native input plus typed document events.
 - Key bindings use logical keys from `KeyboardEvent.key`, not physical key positions. Multi-stroke sequences such as `Ctrl+O Ctrl+O` and `Ctrl+O Ctrl+R` are supported. Default keymaps must avoid assigning an action to a prefix stroke that is also used by longer sequences; users may intentionally create that ambiguity in settings, in which case the resolver waits for the sequence timeout before running the prefix fallback. If more than one binding matches, the most specific active context expression wins.
 - The frontend must not keep a separate shortcut resolver or canonical Typst generator. It may keep a small action-handler adapter for UI labels, enablement, and React-owned side effects until those pieces are fully derived from the Rust action catalog.
-- **Settings Store** reads installed default JSON resources first and persists user overrides under the platform config root's `Ergo` folder. Bundled defaults live at `defaults/default_settings.json` and `defaults/default_keymap.json`; user settings live at `settings.json` and `keymap.json`. Default keymap bindings come from bundled resources; user keymap files and the keymap settings UI store overrides.
+- **Settings Store** reads installed default JSON resources first and persists user overrides under the platform config root's `Ergo` folder. Bundled defaults live at `defaults/default_settings.json` and `defaults/default_keymap.json`; user settings live at `settings.json` and `keymap.json`. App-level preferences, including interface language and recent projects, are edited through global app surfaces. The Welcome screen opens or removes recent project entries from global settings. Per-project settings are available from the Project menu when a project is active. Default keymap bindings come from bundled resources; user keymap files and the keymap settings UI store overrides.
 - **Autosave Scheduler** is controlled by global settings. It waits for the serialized document event sync loop before calling `save_project(path)`, saves dirty projects on a configurable interval, and can also save when the app window loses focus, when the app window is closing, or when the active project is closing because the user closes it or opens/creates another project.
 - **VirtualFileSystem** stores canonical Typst/text sources as retained Typst `Source` objects plus revisions. It stores generated preview SVGs, exports, assets, and other non-source artifacts as file bytes. Paths are normalized to `/` so Typst includes work consistently across Windows and Linux.
 - **CompilationQueue** is the only scheduler for preview and export compilation. Preview SVG jobs have priority over export jobs.
@@ -125,5 +128,6 @@ flowchart TB
 - Preview debounce is disabled by default. Global settings can enable it and provide the debounce time sent to the queue when preview work is enqueued.
 - **ErgoWorld** implements Typst's `World` trait for compilation and Typst IDE's `IdeWorld` trait for source-to-preview mapping.
 - **PreviewSyncState** retains the latest successful, non-stale `PagedDocument` plus element source-map, field source-map, Typst source snapshot, and page metrics. Preview clicks call Typst IDE jump APIs on that retained document and retained sources, then map returned file offsets to Érgo field targets.
-- **Preview Renderer** treats SVG page files as canonical preview output. It reloads only page files marked as changed by the backend, converts click positions from SVG viewBox space into Typst page coordinates, and dispatches `editor::FocusField` when backend sync returns an Érgo focus target.
+- **Preview Renderer** treats SVG page files as canonical preview output. It reloads only page files marked as changed by the backend, converts click positions from SVG viewBox space into Typst page coordinates, dispatches `editor::FocusField` when backend sync returns an Érgo focus target, and publishes the latest compiled outline, compiled resources, and displayed preview revision to the workspace sidebar.
+- **Workspace Sidebar** shows the compiled document outline from the latest successful preview result plus project bibliography and resources. Outline rows reflect rendered headings and page numbers, bind to their matching editor fields, and dispatch `editor::FocusField` so the form field and preview position stay synchronized. The Bibliography panel renders formatted citations and edits bibliography entries through a dialog while storing generated BibLaTeX in `ReferenceEntry`. The Resources panel groups every referenceable resource by kind, including imported files from `AssetEntry` and document-backed figures, tables, equations, and template custom media. Resource rows dispatch generic resource action IDs, use Typst-generated mini SVG previews when available, and open their owning editor field or metadata dialog through `resources::Open`.
 - **Archive Manager** writes and opens `.ergproj` archives. Save commands pack the current backend session's VFS state and do not receive a frontend AST payload. `.ergproj/document_state.json` is required, and source files are materialized from that structured document state on open.

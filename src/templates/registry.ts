@@ -1,12 +1,12 @@
-import { APA7_TEMPLATE } from "./apa7";
-import type { TemplateManifest } from "./types";
+import { VERSATILE_APA_TEMPLATE } from "./versatile-apa";
+import type { TemplateSpec } from "./types";
 
-const templates = new Map<string, TemplateManifest>([
-    [APA7_TEMPLATE.id, APA7_TEMPLATE],
+const templates = new Map<string, TemplateSpec>([
+    [VERSATILE_APA_TEMPLATE.template.id, VERSATILE_APA_TEMPLATE],
 ]);
 
-export const getTemplateManifest = (templateId: string): TemplateManifest =>
-    templates.get(templateId) ?? APA7_TEMPLATE;
+export const getTemplateSpec = (templateId: string): TemplateSpec =>
+    templates.get(templateId) ?? VERSATILE_APA_TEMPLATE;
 
-export const listTemplateManifests = (): TemplateManifest[] =>
+export const listTemplateSpecs = (): TemplateSpec[] =>
     Array.from(templates.values());

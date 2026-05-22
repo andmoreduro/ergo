@@ -20,6 +20,7 @@ sequenceDiagram
     participant World as ErgoWorld
     participant Typst as Typst Engine
     participant Preview as Preview Renderer
+    participant Sidebar as Workspace Sidebar
 
     User->>UI: Types, edits, clicks, or triggers shortcut
     UI->>Commands: Dispatch action ID or typed form event
@@ -54,10 +55,14 @@ sequenceDiagram
     Typst-->>Queue: PagedDocument
     Queue->>VFS: compare and write changed .ergproj/preview/svg/page-N.svg file bytes
     Queue->>Sync: store_preview(revision, PagedDocument, sourceMap, sourceSnapshot)
-    Queue-->>API: emit succeeded with preview_pages(changed)
+    Queue->>Queue: derive outline and resources
+    Queue->>Typst: compile missing or changed resource mini-previews
+    Queue->>VFS: write .ergproj/resource-previews/svg/{resource-id}-{hash}.svg
+    Queue-->>API: emit succeeded with preview_pages(changed), outline, and resources
     API->>VFS: read_preview_svg(page path)
     VFS-->>API: SVG text
     API-->>Preview: SVG page strings
+    Preview-->>Sidebar: Publish compiled outline, resources, and displayed revision
     Preview-->>User: Updated live preview
 ```
 
@@ -73,6 +78,8 @@ sequenceDiagram
 - The retained preview document is runtime state only. It contains the compiled `PagedDocument`, source-map snapshot, Typst source snapshot, and page metrics. It is kept for sync and discarded/replaced when a newer non-stale preview compile succeeds.
 - Preview page SVG writes are page-granular. The backend artifact pipeline renders each Typst page through `typst-svg`, compares rendered SVG text with the VFS file bytes, writes only changed pages as generated file artifacts, and marks each `PreviewPageFile.changed` value. The frontend SVG loader keeps unchanged page SVG strings in memory and reloads only changed pages.
 - Preview debounce is disabled by default. When enabled in global settings, `preview_debounce_ms` controls the backend delay used to coalesce pending preview jobs.
+- After a successful, non-stale preview compile, a `DocumentOutline` is extracted from `document.introspector` and attached to the `CompilationResult` emitted by the `COMPILE_SUCCEEDED` event. The preview hook stores the latest outline and the workspace sidebar renders it with heading text and compiled page numbers. Sidebar outline rows map to editor fields and ignore repeated compiled entries that would target the same field. Failed, dropped, and export results carry `outline: null`.
+- The same successful preview result carries `DocumentResources`. The backend derives imported-file, figure, table, equation, and custom resource rows from the canonical AST, compiles missing or changed Typst mini-previews immediately, reuses unchanged preview SVG files by cache key, and records per-resource preview failures without failing the main preview compile.
 
 Undo and redo use the same event pipe:
 
@@ -170,15 +177,15 @@ The canonical archive state is:
 
 - `main.typ`
 - `sections/{section-id}.typ`
-- `assets/`
-- `references.bib`
+- `assets/`: imported resource file bytes referenced by `AssetEntry` metadata.
+- `references.bib`: materialized from form-managed `ReferenceEntry` values.
 - `.ergproj/document_state.json`
 - `.ergproj/dependency_manifest.json`
 - `.ergproj/project_settings.json`
 - `.ergproj/template.json`
 - `.ergproj/source_map.json`
 
-Generated preview/export files may exist in the VFS, but they should be treated as cache artifacts and can be regenerated.
+Generated preview, export, and resource-preview files may exist in the VFS, but they should be treated as cache artifacts and can be regenerated. `.ergproj/resource-previews/` is excluded from archive saves.
 
 ## 3. Archive Open
 
@@ -383,11 +390,15 @@ sequenceDiagram
     Preview->>API: get_preview_positions_for_focus(target, displayed_revision)
     API->>Sync: Resolve field or element if displayed revision matches retained preview
     Sync->>Sync: Read retained section Source from preview snapshot
-    Sync->>TypstIDE: jump_from_cursor(PagedDocument, Source, source-map offset)
-    TypstIDE-->>Sync: Preview page positions
+    Sync->>Sync: Build candidate text hit points from field source-map caret ranges
+    Sync->>TypstIDE: jump_from_click(IdeWorld, PagedDocument, page.frame, candidate)
+    TypstIDE-->>Sync: File offset for candidate point
+    Sync->>Sync: Keep candidates whose backward sync target matches the focused caret
+    Sync->>TypstIDE: jump_from_cursor(PagedDocument, Source, source-map offset) when no caret candidate matches
+    TypstIDE-->>Sync: Preview page positions or fallback field positions
     Sync-->>API: PreviewElementPosition[]
     API-->>Preview: positions
-    Preview->>Preview: Scroll page and draw non-layout-shifting marker
+    Preview->>Preview: Scroll page and draw non-layout-shifting caret cue
 ```
 
 ### Sync Notes
@@ -397,8 +408,11 @@ sequenceDiagram
 - Newly added or newly rendered content cannot sync until a successful preview compile includes it.
 - `Jump::Url` does not focus a form field in v1.
 - Backward sync resolves clicks with Typst IDE frame hit testing and maps file offsets to field ranges first, then to element ranges.
+- Forward sync caret cues use preview points that backward sync maps to the same field and UTF-16 caret offset. Field-level fallback positions use Typst IDE cursor-to-preview mapping.
 - `editor::FocusField` is an action. Preview clicks, sidebar navigation, and other command-like focus surfaces dispatch the same `ActionInvocation`.
 - `DocumentFocusState` stores `elementId`, `fieldId`, optional UTF-16 caret offset, preview revision, focus source, and a request id.
 - Registered editor fields apply focus and caret placement from React state inside `useLayoutEffect`; preview sync does not mutate DOM selection directly.
+- Project-level template inputs use editor field IDs prefixed with `project-input-` followed by the template input JSON pointer. Backend source-map ranges for those fields are owned by the `inputs` pseudo-element and use the JSON pointer as `field_id`, such as `/title`, `/running_head`, `/authors/0/name`, or `/affiliations/0`. Forward sync converts registered editor IDs to backend source-map IDs before calling preview sync, and backward sync converts backend input focus targets back to registered project input fields before updating `DocumentFocusState`.
+- Template input collection and reference fields may map through related rendered fields when the raw stored value is not itself visible in the compiled document. For example, an author affiliation reference can resolve through the author's rendered name or the referenced affiliation label while keeping the focused field ID tied to the original template input path.
 - Plain text fields can receive UTF-16 caret placement. Generated wrappers, references, inline equations, and rich segments that do not map to raw field text fall back to field-level focus with a safe caret offset.
 - Typst labels remain stable source identifiers, but SVG output is not expected to contain Érgo-specific HTML data attributes.

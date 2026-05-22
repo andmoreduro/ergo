@@ -12,6 +12,8 @@ interface UseAutosaveOptions {
     saveActiveProject: () => Promise<boolean>;
 }
 
+let globalUnlistenPromise: Promise<() => void> | null = null;
+
 export const useAutosave = ({
     globalSettings,
     hasActiveProject,
@@ -66,74 +68,67 @@ export const useAutosave = ({
     }, [globalSettings.autosave_on_window_blur]);
 
     useEffect(() => {
-        let unlisten: (() => void) | null = null;
-        let isCleanedUp = false;
         const appWindow = getCurrentWindow();
 
-        appWindow
-            .onCloseRequested(async (event) => {
-                if (isClosingWindowRef.current) {
-                    // We already saved and initiated the close. Let the default close proceed!
-                    return;
-                }
+        // Clean up any previously registered listener from HMR
+        if (globalUnlistenPromise) {
+            globalUnlistenPromise.then((unlisten) => unlisten()).catch(() => {});
+        }
 
-                // Tauri v2: preventDefault() must be called synchronously (before any
-                // await) to actually intercept the close.
-                event.preventDefault();
+        const currentPromise = appWindow.onCloseRequested(async (event) => {
+            if (isClosingWindowRef.current) {
+                // We already saved and initiated the close. Let the default close proceed!
+                return;
+            }
 
-                if (isSavingRef.current) {
-                    // Already saving. Ignore duplicate close requests.
-                    return;
-                }
+            const needsSave =
+                autosaveOnAppCloseRef.current &&
+                hasActiveProjectRef.current &&
+                !!currentProjectPathRef.current &&
+                isDirtyRef.current;
 
-                const needsSave =
-                    autosaveOnAppCloseRef.current &&
-                    hasActiveProjectRef.current &&
-                    !!currentProjectPathRef.current &&
-                    isDirtyRef.current;
+            if (!needsSave) {
+                return;
+            }
 
-                if (!needsSave) {
-                    // Nothing to save — close immediately.
-                    isClosingWindowRef.current = true;
-                    await appWindow.close();
-                    return;
-                }
+            // Tauri v2: preventDefault() must be called before saving so the
+            // window stays alive until the backend archive write completes.
+            event.preventDefault();
 
-                try {
-                    isSavingRef.current = true;
-                    await saveActiveProjectRef.current();
-                    isClosingWindowRef.current = true;
-                    if (unlisten) {
-                        unlisten();
-                        unlisten = null;
-                    }
-                    await appWindow.close();
-                } catch (error) {
-                    isSavingRef.current = false;
-                    window.alert(
-                        m.project_save_failed({
-                            message:
-                                error instanceof Error
-                                    ? error.message
-                                    : String(error),
-                        }),
-                    );
-                }
-            })
-            .then((nextUnlisten) => {
-                if (isCleanedUp || isClosingWindowRef.current) {
-                    nextUnlisten();
-                } else {
-                    unlisten = nextUnlisten;
-                }
-            })
-            .catch(() => undefined);
+            if (isSavingRef.current) {
+                // Already saving. Ignore duplicate close requests.
+                return;
+            }
+
+            try {
+                isSavingRef.current = true;
+                await saveActiveProjectRef.current();
+                isClosingWindowRef.current = true;
+                await appWindow.destroy();
+            } catch (error) {
+                isSavingRef.current = false;
+                window.alert(
+                    m.project_save_failed({
+                        message:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }),
+                );
+            }
+        });
+
+        globalUnlistenPromise = currentPromise;
 
         return () => {
-            isCleanedUp = true;
-            if (unlisten) {
-                unlisten();
-            }
+            currentPromise
+                .then((unlisten) => {
+                    unlisten();
+                    if (globalUnlistenPromise === currentPromise) {
+                        globalUnlistenPromise = null;
+                    }
+                })
+                .catch(() => {});
         };
     }, []);
 };

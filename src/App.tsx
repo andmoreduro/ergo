@@ -51,8 +51,8 @@ const AppShellContent = () => {
         updateGlobalSettings,
         updateKeymapSettings,
         setThemeMode,
-        handleLocaleChange,
         rememberProject,
+        forgetProject,
     } = useSettingsLifecycle();
     const {
         hasActiveProject,
@@ -378,9 +378,8 @@ const AppShellContent = () => {
                 data-theme={themeMode === "system" ? undefined : themeMode}
             >
                 <Menubar
-                    activeLocale={locale}
+                    hasActiveProject={hasActiveProject}
                     themeMode={themeMode}
-                    onLocaleChange={handleLocaleChange}
                     onCommand={runCommand}
                     isCommandEnabled={(commandId) =>
                         commandRegistry.enabled(commandId, commandContext)
@@ -397,6 +396,7 @@ const AppShellContent = () => {
                             onNewProject={() => runCommand("workspace::NewProject")}
                             onOpenProject={() => runCommand("workspace::OpenProject")}
                             onOpenRecentProject={(path) => void openProject(path)}
+                            onRemoveRecentProject={forgetProject}
                             onCommandPalette={() => runCommand("view::OpenCommandPalette")}
                         />
                     </ActionContextProvider>

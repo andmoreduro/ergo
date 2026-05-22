@@ -51,6 +51,7 @@ An Érgo project file is a zip archive. The canonical project layout is:
 
 ```text
 main.typ
+lib.typ
 sections/
   {section-id}.typ
 assets/
@@ -65,7 +66,8 @@ references.bib
 
 ### File Responsibilities
 
-- `main.typ`: small Typst entry point containing template/preamble setup and includes for section files.
+- `main.typ`: small Typst entry point containing imports, document metadata, show rules, and includes for section files.
+- `lib.typ`: styling preamble containing template/style rules, imports, show rules, and a wrapper function `apply(body)` imported by both `main.typ` and resource previews.
 - `sections/{section-id}.typ`: generated Typst source for one document section. Cover page, content, appendices, and template-defined sections all use section files.
 - `assets/`: project-local binary assets such as images.
 - `references.bib`: generated bibliography file from structured reference entries.

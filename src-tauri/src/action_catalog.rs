@@ -172,6 +172,94 @@ pub fn action_catalog() -> Vec<ActionDescriptor> {
             true,
         ),
         descriptor(
+            ActionId::BibliographyCreateEntry,
+            "action_bibliography_create_entry",
+            "bibliography",
+            "bibliography",
+            true,
+            true,
+        ),
+        descriptor(
+            ActionId::BibliographyOpenEntry,
+            "action_bibliography_open_entry",
+            "bibliography",
+            "bibliography",
+            false,
+            true,
+        ),
+        descriptor(
+            ActionId::BibliographySaveEntry,
+            "action_bibliography_save_entry",
+            "bibliography",
+            "bibliography",
+            false,
+            true,
+        ),
+        descriptor(
+            ActionId::BibliographyRemoveEntry,
+            "action_bibliography_remove_entry",
+            "bibliography",
+            "bibliography",
+            false,
+            true,
+        ),
+        descriptor(
+            ActionId::BibliographyCancelEdit,
+            "action_bibliography_cancel_edit",
+            "bibliography",
+            "bibliography",
+            false,
+            true,
+        ),
+        descriptor(
+            ActionId::ResourcesCreate,
+            "action_resources_create",
+            "resources",
+            "resources",
+            true,
+            true,
+        ),
+        descriptor(
+            ActionId::ResourcesOpen,
+            "action_resources_open",
+            "resources",
+            "resources",
+            false,
+            true,
+        ),
+        descriptor(
+            ActionId::ResourcesEdit,
+            "action_resources_edit",
+            "resources",
+            "resources",
+            false,
+            true,
+        ),
+        descriptor(
+            ActionId::ResourcesSave,
+            "action_resources_save",
+            "resources",
+            "resources",
+            false,
+            true,
+        ),
+        descriptor(
+            ActionId::ResourcesRemove,
+            "action_resources_remove",
+            "resources",
+            "resources",
+            false,
+            true,
+        ),
+        descriptor(
+            ActionId::ResourcesInsertReference,
+            "action_resources_insert_reference",
+            "resources",
+            "resources",
+            true,
+            true,
+        ),
+        descriptor(
             ActionId::ViewOpenCommandPalette,
             "action_view_open_command_palette",
             "view",
@@ -285,5 +373,30 @@ fn descriptor(
         default_context: default_context.to_string(),
         allows_keybinding,
         requires_project,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn catalog_contains_bibliography_and_resource_actions() {
+        let ids = action_catalog()
+            .into_iter()
+            .map(|descriptor| descriptor.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(ids.contains(&"bibliography::CreateEntry"));
+        assert!(ids.contains(&"bibliography::OpenEntry"));
+        assert!(ids.contains(&"bibliography::SaveEntry"));
+        assert!(ids.contains(&"bibliography::RemoveEntry"));
+        assert!(ids.contains(&"bibliography::CancelEdit"));
+        assert!(ids.contains(&"resources::Create"));
+        assert!(ids.contains(&"resources::Open"));
+        assert!(ids.contains(&"resources::Edit"));
+        assert!(ids.contains(&"resources::Save"));
+        assert!(ids.contains(&"resources::Remove"));
+        assert!(ids.contains(&"resources::InsertReference"));
     }
 }

@@ -15,6 +15,14 @@ pub struct PreviewPageMetrics {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
 #[ts(export, export_to = "../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
+pub struct PreviewCaretCue {
+    pub top_y_pt: f64,
+    pub height_pt: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
+#[serde(rename_all = "camelCase")]
 pub struct PreviewElementPosition {
     pub element_id: Option<String>,
     #[serde(default)]
@@ -24,6 +32,8 @@ pub struct PreviewElementPosition {
     pub page_number: usize,
     pub x_pt: f64,
     pub y_pt: f64,
+    #[serde(default)]
+    pub caret_cue: Option<PreviewCaretCue>,
     #[ts(type = "number")]
     pub source_revision: SourceRevision,
 }

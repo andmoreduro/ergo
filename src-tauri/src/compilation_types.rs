@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::document_outline::DocumentOutline;
+use crate::document_resources::DocumentResources;
+
 pub type SourceRevision = u64;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
@@ -62,6 +65,8 @@ pub struct CompilationResult {
     pub preview_pages: Option<Vec<PreviewPageFile>>,
     pub export_path: Option<String>,
     pub diagnostics: Vec<String>,
+    pub outline: Option<DocumentOutline>,
+    pub resources: Option<DocumentResources>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]

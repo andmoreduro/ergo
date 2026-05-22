@@ -62,7 +62,8 @@ pub fn open_project_from_path(
         if file.is_file() {
             let mut content = Vec::new();
             file.read_to_end(&mut content).map_err(|e| e.to_string())?;
-            let is_text = name.ends_with(".typ") || name.ends_with(".json") || name.ends_with(".bib");
+            let is_text =
+                name.ends_with(".typ") || name.ends_with(".json") || name.ends_with(".bib");
             if is_text {
                 match std::str::from_utf8(&content) {
                     Ok(text) => {
@@ -90,7 +91,9 @@ pub fn open_project_from_path(
 }
 
 fn should_pack_file(path: &str) -> bool {
-    !path.starts_with(".ergproj/preview/") && !path.starts_with(".ergproj/exports/")
+    !path.starts_with(".ergproj/preview/")
+        && !path.starts_with(".ergproj/exports/")
+        && !path.starts_with(".ergproj/resource-previews/")
 }
 
 #[cfg(test)]
@@ -152,8 +155,8 @@ mod tests {
         fs::remove_file(&path).ok();
 
         assert!(names.contains("main.typ"));
-        assert!(names.contains("sections/cover-section.typ"));
         assert!(names.contains("sections/content-section.typ"));
+
         assert!(names.contains("references.bib"));
         assert!(names.contains(".ergproj/document_state.json"));
         assert!(names.contains(".ergproj/dependency_manifest.json"));
@@ -209,7 +212,7 @@ mod tests {
                 .unwrap()
                 .as_bytes(),
         )
-            .unwrap();
+        .unwrap();
         zip.start_file("main.typ", options).unwrap();
         zip.write_all(b"= Unused source").unwrap();
         zip.finish().unwrap();
@@ -244,7 +247,7 @@ mod tests {
                 .unwrap()
                 .as_bytes(),
         )
-            .unwrap();
+        .unwrap();
         zip.start_file("assets/image.png", options).unwrap();
         zip.write_all(&[137, 80, 78, 71]).unwrap();
         zip.finish().unwrap();
@@ -256,6 +259,35 @@ mod tests {
             state.vfs.read_file("assets/image.png").unwrap(),
             vec![137, 80, 78, 71]
         );
+    }
+
+    #[test]
+    fn save_project_excludes_resource_preview_cache() {
+        let state = test_state();
+        let path = temp_project_path();
+        state
+            .document_session
+            .sync_snapshot(basic_document_ast("Title", "Abstract"))
+            .unwrap();
+        state.vfs.write_file(
+            ".ergproj/resource-previews/svg/equation-1-deadbeef.svg",
+            b"<svg />".to_vec(),
+        );
+        state
+            .vfs
+            .write_file("assets/image.png", vec![137, 80, 78, 71]);
+
+        save_project_to_path(&state, &path).unwrap();
+
+        let file = File::open(&path).unwrap();
+        let mut zip = zip::ZipArchive::new(file).unwrap();
+        let names: HashSet<String> = (0..zip.len())
+            .map(|index| zip.by_index(index).unwrap().name().to_string())
+            .collect();
+        fs::remove_file(&path).ok();
+
+        assert!(!names.contains(".ergproj/resource-previews/svg/equation-1-deadbeef.svg"));
+        assert!(names.contains("assets/image.png"));
     }
 
     #[test]

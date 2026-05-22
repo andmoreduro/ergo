@@ -1,21 +1,39 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type MouseEvent,
+} from "react";
 import { TauriApi } from "../../../api/tauri";
 import { useDocument } from "../../../state/DocumentContext";
 import { useCompiler } from "../../../hooks/useCompiler";
+import type { DocumentOutline } from "../../../bindings/DocumentOutline";
+import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { PreviewElementPosition } from "../../../bindings/PreviewElementPosition";
+import type { PreviewFocusTarget } from "../../../bindings/PreviewFocusTarget";
+import { backendFocusIdsForEditorField } from "../../../editor/fieldIds";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Preview.module.css";
 
 export interface PreviewProps {
     previewDebounceMs?: number;
+    onOutlineChange?: (outline: DocumentOutline | null) => void;
+    onResourcesChange?: (resources: DocumentResources | null) => void;
+    onPreviewRevisionChange?: (revision: number | null) => void;
 }
 
-export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
+export const Preview = ({
+    previewDebounceMs = 0,
+    onOutlineChange,
+    onResourcesChange,
+    onPreviewRevisionChange,
+}: PreviewProps) => {
     const { state, documentFocus, events, sessionId, ackDocumentEvents } =
         useDocument();
     const dispatchAction = useActionDispatcher();
-    const { svgs, error, sourceMap, previewRevision } = useCompiler(
+    const { svgs, error, sourceMap, previewRevision, outline, resources } = useCompiler(
         state,
         events,
         sessionId,
@@ -23,6 +41,7 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
         ackDocumentEvents,
     );
     const previewRef = useRef<HTMLDivElement>(null);
+    const syncCueRequestIdRef = useRef(0);
     const [highlightedPosition, setHighlightedPosition] =
         useState<PreviewElementPosition | null>(null);
     const activeSource = sourceMap.find(
@@ -30,51 +49,84 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
     );
 
     useEffect(() => {
-        if (!documentFocus.elementId || previewRevision === null) {
-            setHighlightedPosition(null);
-            return;
-        }
+        onOutlineChange?.(outline);
+    }, [onOutlineChange, outline]);
 
-        let isCancelled = false;
-        const target = {
-            elementId: documentFocus.elementId,
-            fieldId: documentFocus.fieldId,
-            caretUtf16Offset: documentFocus.caretUtf16Offset,
-            sourceRevision: previewRevision,
-        };
+    useEffect(() => {
+        onResourcesChange?.(resources);
+    }, [onResourcesChange, resources]);
 
-        void TauriApi.getPreviewPositionsForFocus(target, previewRevision)
-            .then((result) => {
-                if (isCancelled) {
+    useEffect(() => {
+        onPreviewRevisionChange?.(previewRevision);
+    }, [onPreviewRevisionChange, previewRevision]);
+
+    const clearHighlightedPosition = useCallback(() => {
+        syncCueRequestIdRef.current += 1;
+        setHighlightedPosition(null);
+    }, []);
+
+    const requestHighlightedPosition = useCallback(
+        async (target: PreviewFocusTarget, displayedRevision: number) => {
+            const requestId = syncCueRequestIdRef.current + 1;
+            syncCueRequestIdRef.current = requestId;
+
+            try {
+                const result = await TauriApi.getPreviewPositionsForFocus(
+                    target,
+                    displayedRevision,
+                );
+                if (requestId !== syncCueRequestIdRef.current) {
                     return;
                 }
 
-                if (result.status !== "matched" || result.positions.length === 0) {
+                const position =
+                    result.status === "matched"
+                        ? result.positions.find((entry) => entry.caretCue)
+                        : null;
+                if (!position) {
                     setHighlightedPosition(null);
                     return;
                 }
 
-                const [position] = result.positions;
                 setHighlightedPosition(position);
                 const page = previewRef.current?.querySelector<HTMLElement>(
                     `[data-preview-page-number="${position.pageNumber}"]`,
                 );
                 page?.scrollIntoView?.({ block: "nearest" });
-            })
-            .catch(() => {
-                if (!isCancelled) {
+            } catch {
+                if (requestId === syncCueRequestIdRef.current) {
                     setHighlightedPosition(null);
                 }
-            });
+            }
+        },
+        [],
+    );
 
-        return () => {
-            isCancelled = true;
+    useEffect(() => {
+        if (!documentFocus.elementId || previewRevision === null) {
+            clearHighlightedPosition();
+            return;
+        }
+
+        const previewTarget = backendFocusIdsForEditorField(
+            documentFocus.elementId,
+            documentFocus.fieldId,
+        );
+        const target = {
+            elementId: previewTarget.elementId,
+            fieldId: previewTarget.fieldId,
+            caretUtf16Offset: documentFocus.caretUtf16Offset,
+            sourceRevision: previewRevision,
         };
+
+        void requestHighlightedPosition(target, previewRevision);
     }, [
+        clearHighlightedPosition,
         documentFocus.caretUtf16Offset,
         documentFocus.elementId,
         documentFocus.fieldId,
         previewRevision,
+        requestHighlightedPosition,
     ]);
 
     const handlePreviewClick = (event: MouseEvent<HTMLElement>) => {
@@ -101,6 +153,12 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
         )
             .then((result) => {
                 if (result.status === "field") {
+                    if (result.sourceRevision === previewRevision) {
+                        void requestHighlightedPosition(
+                            result.target,
+                            previewRevision,
+                        );
+                    }
                     void dispatchAction({
                         id: "editor::FocusField",
                         payload: result.target,
@@ -109,6 +167,7 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
                 }
 
                 if (result.status === "element") {
+                    clearHighlightedPosition();
                     void dispatchAction({
                         id: "editor::FocusField",
                         payload: {
@@ -129,15 +188,14 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
             data-active-source-label={activeSource?.label}
             onClick={handlePreviewClick}
         >
-            <h2>{m.workspace_live_preview()}</h2>
             {error && <div className={styles.error}>{error}</div>}
             <div className={styles.svgContainer} ref={previewRef}>
                 {svgs.length > 0 ? (
                     svgs.map((svg, index) => {
                         const pageNumber = index + 1;
-                        const markerStyle =
+                        const caretStyle =
                             highlightedPosition?.pageNumber === pageNumber
-                                ? markerStyleForSvg(highlightedPosition, svg)
+                                ? caretStyleForSvg(highlightedPosition, svg)
                                 : null;
 
                         return (
@@ -146,14 +204,16 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
                                 className={styles.page}
                                 data-preview-page-number={pageNumber}
                                 data-active-preview-page={
-                                    markerStyle ? "true" : undefined
+                                    caretStyle ? "true" : undefined
                                 }
                             >
                                 <div dangerouslySetInnerHTML={{ __html: svg }} />
-                                {markerStyle && (
+                                {caretStyle && (
                                     <span
-                                        className={styles.syncMarker}
-                                        style={markerStyle}
+                                        key={`${highlightedPosition?.sourceRevision}-${highlightedPosition?.elementId}-${highlightedPosition?.fieldId}-${highlightedPosition?.caretUtf16Offset}-${caretStyle.left}-${caretStyle.top}`}
+                                        className={styles.syncCaret}
+                                        data-preview-sync-caret="true"
+                                        style={caretStyle}
                                     />
                                 )}
                             </div>
@@ -169,20 +229,28 @@ export const Preview = ({ previewDebounceMs = 0 }: PreviewProps) => {
     );
 };
 
-const markerStyleForSvg = (
+const caretStyleForSvg = (
     position: PreviewElementPosition,
     svg: string,
-): { left: string; top: string } | null => {
+): { left: string; top: string; height: string } | null => {
+    const caretCue = position.caretCue;
+    if (!caretCue) {
+        return null;
+    }
+
     const viewBox = parseSvgViewBoxString(svg);
     if (!viewBox) {
         return null;
     }
 
     return {
-        left: `${((position.xPt - viewBox.x) / viewBox.width) * 100}%`,
-        top: `${((position.yPt - viewBox.y) / viewBox.height) * 100}%`,
+        left: toPercent((position.xPt - viewBox.x) / viewBox.width),
+        top: toPercent((caretCue.topYPt - viewBox.y) / viewBox.height),
+        height: toPercent(caretCue.heightPt / viewBox.height),
     };
 };
+
+const toPercent = (ratio: number) => `${Number((ratio * 100).toFixed(4))}%`;
 
 const previewPointFromMouseEvent = (
     event: MouseEvent<HTMLElement>,

@@ -1277,6 +1277,7 @@ dependencies = [
  "typst",
  "typst-assets",
  "typst-ide",
+ "typst-library",
  "typst-pdf",
  "typst-render",
  "typst-svg",

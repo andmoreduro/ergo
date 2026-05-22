@@ -19,11 +19,14 @@ import { TextInput } from "../../atoms/TextInput/TextInput";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./ElementEditor.module.css";
 
+import { getTemplateSpec } from "../../../templates/registry";
+
 type HeadingElement = Extract<DocumentElement, { type: "Heading" }>;
 type ParagraphElement = Extract<DocumentElement, { type: "Paragraph" }>;
 type EquationElement = Extract<DocumentElement, { type: "Equation" }>;
 type TableElement = Extract<DocumentElement, { type: "Table" }>;
 type FigureElement = Extract<DocumentElement, { type: "Figure" }>;
+type CustomElementUnion = Extract<DocumentElement, { type: "Custom" }>;
 type RichTextElement = HeadingElement | ParagraphElement;
 
 const richTextToString = (element: RichTextElement) =>
@@ -57,7 +60,52 @@ export const ElementContent = ({ element }: { element: DocumentElement }) => {
         return <TableEditor element={element} />;
     }
 
-    return <FigureEditor element={element} />;
+    if (element.type === "Custom") {
+        return <CustomElementEditor element={element} />;
+    }
+
+    if (element.type === "Figure") {
+        return <FigureEditor element={element} />;
+    }
+
+    return null;
+};
+
+const CustomElementEditor = ({ element }: { element: CustomElementUnion }) => {
+    const { state, dispatch } = useDocument();
+    const templateSpec = getTemplateSpec(state.metadata.template_id);
+    const customElements = templateSpec.custom_elements || [];
+    const spec = customElements.find((c) => c.kind === element.element_type);
+
+    if (!spec) {
+        return <div className={styles.placeholder}>Unknown custom element type: {element.element_type}</div>;
+    }
+
+    return (
+        <>
+            {(spec.fields || []).map((field) => {
+                const value = element.fields[field.key] ?? "";
+                return (
+                    <Textarea
+                        key={field.key}
+                        fullWidth
+                        label={field.label || field.key}
+                        value={value}
+                        onChange={(event) =>
+                            dispatch({
+                                type: "UPDATE_CUSTOM_ELEMENT_FIELD",
+                                payload: {
+                                    elementId: element.id,
+                                    field: field.key,
+                                    value: event.target.value,
+                                },
+                            })
+                        }
+                    />
+                );
+            })}
+        </>
+    );
 };
 
 const HeadingEditor = ({ element }: { element: HeadingElement }) => {

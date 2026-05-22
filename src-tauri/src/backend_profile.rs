@@ -1,6 +1,6 @@
 use crate::ast::{
-    ContentSection, CoverPageSection, DependencyManifest, DocumentAST, DocumentElement,
-    DocumentSection, GlobalSettings, Heading, Paragraph, ProjectMetadata, RichText,
+    ContentSection, DependencyManifest, DocumentAST, DocumentElement, DocumentSection,
+    GlobalSettings, Heading, Paragraph, ProjectMetadata, RichText,
 };
 use crate::compile_artifacts::{compile_document_snapshot, render_svgs, write_svg_pages};
 use crate::document_session::DocumentSession;
@@ -125,20 +125,21 @@ pub fn run_backend_profile(options: BackendProfileOptions) -> Result<BackendProf
         let ((document, _source_snapshot), compile_ms) =
             measure(|| compile_document_snapshot(&vfs))?;
 
-        let (preview_page_count, changed_page_count, render_svg_ms, write_svg_ms) =
-            if options.render_svgs {
-                let (svgs, render_ms) = measure(|| Ok::<_, String>(render_svgs(&document)))?;
-                let (preview_pages, write_ms) =
-                    measure(|| Ok::<_, String>(write_svg_pages(&vfs, ".ergproj/preview/svg", &svgs)))?;
-                (
-                    preview_pages.len(),
-                    preview_pages.iter().filter(|page| page.changed).count(),
-                    render_ms,
-                    write_ms,
-                )
-            } else {
-                (document.pages.len(), 0, 0.0, 0.0)
-            };
+        let (preview_page_count, changed_page_count, render_svg_ms, write_svg_ms) = if options
+            .render_svgs
+        {
+            let (svgs, render_ms) = measure(|| Ok::<_, String>(render_svgs(&document)))?;
+            let (preview_pages, write_ms) =
+                measure(|| Ok::<_, String>(write_svg_pages(&vfs, ".ergproj/preview/svg", &svgs)))?;
+            (
+                preview_pages.len(),
+                preview_pages.iter().filter(|page| page.changed).count(),
+                render_ms,
+                write_ms,
+            )
+        } else {
+            (document.pages.len(), 0, 0.0, 0.0)
+        };
 
         let timings = BackendProfileTiming {
             sync_snapshot_ms,
@@ -208,6 +209,21 @@ fn ast_for_iteration(scenario: BackendProfileScenario, iteration: usize) -> Docu
 }
 
 fn base_ast(title: &str, paragraph_count: usize) -> DocumentAST {
+    let mut inputs = std::collections::HashMap::new();
+    inputs.insert("title".to_string(), serde_json::json!(title));
+    inputs.insert("running_head".to_string(), serde_json::json!(""));
+    inputs.insert(
+        "abstract_text".to_string(),
+        serde_json::json!("Resumen breve para perfilar el flujo de vista previa."),
+    );
+    inputs.insert("authors".to_string(), serde_json::json!([]));
+    inputs.insert("affiliations".to_string(), serde_json::json!([]));
+    inputs.insert("course".to_string(), serde_json::json!(""));
+    inputs.insert("due_date".to_string(), serde_json::json!(""));
+    inputs.insert("instructor".to_string(), serde_json::json!(""));
+    inputs.insert("author_note".to_string(), serde_json::json!(""));
+    inputs.insert("keywords".to_string(), serde_json::json!([]));
+
     DocumentAST {
         version: "1.0".to_string(),
         metadata: ProjectMetadata {
@@ -215,24 +231,18 @@ fn base_ast(title: &str, paragraph_count: usize) -> DocumentAST {
             title: title.to_string(),
             project_settings: Default::default(),
             local_overrides: GlobalSettings::default(),
+            running_head: None,
+            keywords: vec![],
         },
         dependencies: DependencyManifest { packages: vec![] },
         references: vec![],
         assets: vec![],
-        sections: vec![
-            DocumentSection::CoverPage(CoverPageSection {
-                id: "cover-section".to_string(),
-                is_optional: true,
-                authors: vec![],
-                affiliations: vec![],
-                abstract_text: "Resumen breve para perfilar el flujo de vista previa.".to_string(),
-            }),
-            DocumentSection::Content(ContentSection {
-                id: "content-section".to_string(),
-                is_optional: false,
-                elements: content_elements(paragraph_count),
-            }),
-        ],
+        sections: vec![DocumentSection::Content(ContentSection {
+            id: "content-section".to_string(),
+            is_optional: false,
+            elements: content_elements(paragraph_count),
+        })],
+        inputs,
     }
 }
 

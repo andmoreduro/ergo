@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::ast::{Author, DocumentElement, ProjectSettings, TableCell};
+use crate::ast::{DocumentElement, ProjectSettings, TableCell, ReferenceEntry, AssetEntry};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[ts(export, export_to = "../../src/bindings/")]
@@ -76,6 +76,7 @@ pub struct SectionSource {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSourceLayout {
     pub main_path: String,
+    pub lib_path: String,
     pub section_paths: Vec<String>,
     pub references_path: String,
     pub source_map_path: String,
@@ -97,6 +98,7 @@ pub struct DocumentSessionStatus {
     pub dirty_section_ids: Vec<String>,
     pub dirty_element_ids: Vec<String>,
     pub fragment_count: usize,
+    pub dirty_resource_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
@@ -108,34 +110,6 @@ pub enum DocumentEvent {
     },
     SetProjectSettings {
         settings: ProjectSettings,
-    },
-    UpdateCoverAbstract {
-        section_id: String,
-        text: String,
-    },
-    UpdateCoverAffiliations {
-        section_id: String,
-        affiliations: Vec<String>,
-    },
-    InsertAuthor {
-        section_id: String,
-        index: usize,
-        author: Author,
-    },
-    UpdateAuthor {
-        section_id: String,
-        author_index: usize,
-        field: AuthorField,
-        value: String,
-    },
-    RemoveAuthor {
-        section_id: String,
-        author_index: usize,
-    },
-    RestoreAuthor {
-        section_id: String,
-        author_index: usize,
-        author: Author,
     },
     InsertElement {
         section_id: String,
@@ -211,12 +185,59 @@ pub enum DocumentEvent {
         placement: Option<String>,
         body_text: Option<String>,
     },
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, TS, PartialEq, Eq)]
-#[ts(export, export_to = "../../src/bindings/")]
-#[serde(rename_all = "camelCase")]
-pub enum AuthorField {
-    Name,
-    Email,
+    UpdateInput {
+        path: String,
+        #[ts(type = "any")]
+        value: serde_json::Value,
+    },
+    InsertInputArrayItem {
+        path: String,
+        index: usize,
+        #[ts(type = "any")]
+        value: serde_json::Value,
+    },
+    RemoveInputArrayItem {
+        path: String,
+        index: usize,
+    },
+    UpdateCustomElementField {
+        element_id: String,
+        field: String,
+        #[ts(type = "any")]
+        value: serde_json::Value,
+    },
+    UpdateElementExtraField {
+        element_id: String,
+        field_key: String,
+        #[ts(type = "any")]
+        field_value: serde_json::Value,
+    },
+    InsertReference {
+        index: usize,
+        reference: ReferenceEntry,
+    },
+    UpdateReference {
+        reference: ReferenceEntry,
+    },
+    RemoveReference {
+        reference_id: String,
+    },
+    RestoreReference {
+        index: usize,
+        reference: ReferenceEntry,
+    },
+    InsertAsset {
+        index: usize,
+        asset: AssetEntry,
+    },
+    UpdateAsset {
+        asset: AssetEntry,
+    },
+    RemoveAsset {
+        asset_id: String,
+    },
+    RestoreAsset {
+        index: usize,
+        asset: AssetEntry,
+    },
 }

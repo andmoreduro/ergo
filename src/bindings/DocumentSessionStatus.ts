@@ -3,4 +3,4 @@ import type { FieldSourceMapEntry } from "./FieldSourceMapEntry";
 import type { ProjectSourceLayout } from "./ProjectSourceLayout";
 import type { SourceMapEntry } from "./SourceMapEntry";
 
-export type DocumentSessionStatus = { sourceRevision: number, layout: ProjectSourceLayout, sourceMap: Array<SourceMapEntry>, fieldSourceMap: Array<FieldSourceMapEntry>, dirtySectionIds: Array<string>, dirtyElementIds: Array<string>, fragmentCount: number, };
+export type DocumentSessionStatus = { sourceRevision: number, layout: ProjectSourceLayout, sourceMap: Array<SourceMapEntry>, fieldSourceMap: Array<FieldSourceMapEntry>, dirtySectionIds: Array<string>, dirtyElementIds: Array<string>, fragmentCount: number, dirtyResourceIds: Array<string>, };

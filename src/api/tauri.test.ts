@@ -9,6 +9,7 @@ describe("TauriApi type boundaries", () => {
         const source = readFileSync(resolve("src/api/tauri.ts"), "utf8");
 
         expect(source).toContain("../bindings/CompilationResult");
+        expect(source).toContain("../bindings/DocumentOutline");
         expect(source).toContain("../bindings/DocumentSessionStatus");
         expect(source).not.toContain("../types/");
     });

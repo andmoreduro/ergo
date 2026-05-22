@@ -1,5 +1,7 @@
 import type { DocumentAST } from "../../bindings/DocumentAST";
 import type { ProjectSettings } from "../../bindings/ProjectSettings";
+import type { ReferenceEntry } from "../../bindings/ReferenceEntry";
+import type { AssetEntry } from "../../bindings/AssetEntry";
 
 export type LoadDocumentAction = {
   type: 'LOAD_DOCUMENT';
@@ -22,44 +24,37 @@ export type UpdateProjectSettingsAction = {
   };
 };
 
-export type UpdateCoverPageAbstractAction = {
-  type: 'UPDATE_COVER_PAGE_ABSTRACT';
+export type UpdateInputAction = {
+  type: 'UPDATE_INPUT';
   payload: {
-    sectionId: string;
-    abstractText: string;
+    path: string;
+    value: any;
   };
 };
 
-export type UpdateCoverPageAffiliationsAction = {
-  type: 'UPDATE_COVER_PAGE_AFFILIATIONS';
+export type InsertInputArrayItemAction = {
+  type: 'INSERT_INPUT_ARRAY_ITEM';
   payload: {
-    sectionId: string;
-    affiliations: string[];
+    path: string;
+    index: number;
+    value: any;
   };
 };
 
-export type AddAuthorAction = {
-  type: 'ADD_AUTHOR';
+export type RemoveInputArrayItemAction = {
+  type: 'REMOVE_INPUT_ARRAY_ITEM';
   payload: {
-    sectionId: string;
+    path: string;
+    index: number;
   };
 };
 
-export type UpdateAuthorAction = {
-  type: 'UPDATE_AUTHOR';
+export type UpdateCustomElementFieldAction = {
+  type: 'UPDATE_CUSTOM_ELEMENT_FIELD';
   payload: {
-    sectionId: string;
-    authorIndex: number;
-    field: 'name' | 'email';
-    value: string;
-  };
-};
-
-export type RemoveAuthorAction = {
-  type: 'REMOVE_AUTHOR';
-  payload: {
-    sectionId: string;
-    authorIndex: number;
+    elementId: string;
+    field: string;
+    value: any;
   };
 };
 
@@ -194,6 +189,57 @@ export type UpdateFigureAction = {
   };
 };
 
+export type UpdateElementExtraFieldAction = {
+  type: 'UPDATE_ELEMENT_EXTRA_FIELD';
+  payload: {
+    elementId: string;
+    fieldKey: string;
+    fieldValue: string;
+  };
+};
+
+export type AddReferenceAction = {
+  type: 'ADD_REFERENCE';
+  payload: {
+    reference: ReferenceEntry;
+  };
+};
+
+export type UpdateReferenceAction = {
+  type: 'UPDATE_REFERENCE';
+  payload: {
+    reference: ReferenceEntry;
+  };
+};
+
+export type RemoveReferenceAction = {
+  type: 'REMOVE_REFERENCE';
+  payload: {
+    referenceId: string;
+  };
+};
+
+export type AddAssetAction = {
+  type: 'ADD_ASSET';
+  payload: {
+    asset: AssetEntry;
+  };
+};
+
+export type UpdateAssetAction = {
+  type: 'UPDATE_ASSET';
+  payload: {
+    asset: AssetEntry;
+  };
+};
+
+export type RemoveAssetAction = {
+  type: 'REMOVE_ASSET';
+  payload: {
+    assetId: string;
+  };
+};
+
 export type RemoveElementAction = {
   type: 'REMOVE_ELEMENT';
   payload: {
@@ -205,11 +251,10 @@ export type ASTAction =
   | LoadDocumentAction
   | UpdateProjectTitleAction
   | UpdateProjectSettingsAction
-  | UpdateCoverPageAbstractAction
-  | UpdateCoverPageAffiliationsAction
-  | AddAuthorAction
-  | UpdateAuthorAction
-  | RemoveAuthorAction
+  | UpdateInputAction
+  | InsertInputArrayItemAction
+  | RemoveInputArrayItemAction
+  | UpdateCustomElementFieldAction
   | AddParagraphAction
   | AddHeadingAction
   | AddTableAction
@@ -225,4 +270,11 @@ export type ASTAction =
   | RemoveTableColumnAction
   | UpdateTableColumnSizeAction
   | UpdateFigureAction
+  | UpdateElementExtraFieldAction
+  | AddReferenceAction
+  | UpdateReferenceAction
+  | RemoveReferenceAction
+  | AddAssetAction
+  | UpdateAssetAction
+  | RemoveAssetAction
   | RemoveElementAction;

@@ -5,7 +5,7 @@
     width: 100%;
     height: 32px;
     flex: 0 0 32px;
-    padding: 0 var(--space-2);
+    padding: 0 0 0 var(--space-2);
     border-bottom: 1px solid var(--color-border);
     background-color: var(--color-bg-secondary);
     color: var(--color-text-primary);
@@ -16,6 +16,11 @@
 .menuGroups {
     display: flex;
     align-items: stretch;
+    height: 100%;
+}
+
+.dragRegion {
+    flex: 1 1 auto;
     height: 100%;
 }
 
@@ -73,19 +78,41 @@
     background-color: var(--color-bg-tertiary);
 }
 
-.language {
+.windowControls {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-xs);
+    height: 100%;
 }
 
-.language select {
-    height: 24px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius-sm);
+.windowControl {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 32px;
+    border: 0;
     color: var(--color-text-primary);
-    background: var(--color-bg-primary);
-    font: inherit;
+    background: transparent;
+    cursor: pointer;
+}
+
+.windowControl:hover,
+.windowControl:focus-visible {
+    outline: none;
+    background-color: var(--color-bg-tertiary);
+}
+
+.windowControl svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+}
+
+.closeControl:hover,
+.closeControl:focus-visible {
+    color: var(--color-text-on-danger);
+    background-color: var(--color-danger-hover);
 }

@@ -86,6 +86,8 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
     const { documentFocus, setDocumentFocus } = useDocument();
     const nodeRef = useRef<T | null>(null);
     const lastAppliedRequestRef = useRef<number | null>(null);
+    const isApplyingProgrammaticFocusRef = useRef(false);
+    const programmaticFocusTimeoutRef = useRef<number | null>(null);
 
     const ref = useCallback<RefCallback<T>>(
         (node) => {
@@ -104,6 +106,10 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
 
     const updateNativeFocus = useCallback(
         (node: T) => {
+            if (isApplyingProgrammaticFocusRef.current) {
+                return;
+            }
+
             setDocumentFocus({
                 elementId,
                 fieldId,
@@ -147,18 +153,30 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
         }
 
         lastAppliedRequestRef.current = documentFocus.requestId;
-        node.scrollIntoView?.({ block: "center", behavior: "smooth" });
-        node.focus();
+        isApplyingProgrammaticFocusRef.current = true;
+        if (programmaticFocusTimeoutRef.current !== null) {
+            window.clearTimeout(programmaticFocusTimeoutRef.current);
+            programmaticFocusTimeoutRef.current = null;
+        }
+        try {
+            node.scrollIntoView?.({ block: "center", behavior: "smooth" });
+            node.focus();
 
-        if (
-            typeof documentFocus.caretUtf16Offset === "number" &&
-            isTextSelectionField(node)
-        ) {
-            const caret = Math.max(
-                0,
-                Math.min(documentFocus.caretUtf16Offset, node.value.length),
-            );
-            node.setSelectionRange(caret, caret);
+            if (
+                typeof documentFocus.caretUtf16Offset === "number" &&
+                isTextSelectionField(node)
+            ) {
+                const caret = Math.max(
+                    0,
+                    Math.min(documentFocus.caretUtf16Offset, node.value.length),
+                );
+                node.setSelectionRange(caret, caret);
+            }
+        } finally {
+            programmaticFocusTimeoutRef.current = window.setTimeout(() => {
+                isApplyingProgrammaticFocusRef.current = false;
+                programmaticFocusTimeoutRef.current = null;
+            }, 0);
         }
     }, [documentFocus, fieldId]);
 
@@ -184,5 +202,22 @@ const caretOffsetFromNode = (node: EditorFieldElement): number | null => {
 const isTextSelectionField = (
     node: EditorFieldElement,
 ): node is HTMLInputElement | HTMLTextAreaElement => {
-    return node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement;
+    if (node instanceof HTMLTextAreaElement) {
+        return true;
+    }
+
+    if (!(node instanceof HTMLInputElement)) {
+        return false;
+    }
+
+    return [
+        "",
+        "email",
+        "number",
+        "password",
+        "search",
+        "tel",
+        "text",
+        "url",
+    ].includes(node.type);
 };

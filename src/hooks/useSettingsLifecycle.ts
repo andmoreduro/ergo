@@ -118,7 +118,12 @@ export const useSettingsLifecycle = () => {
     }, [keymapSettings]);
 
     const updateGlobalSettings = useCallback((settings: GlobalSettings) => {
-        setGlobalSettings(mergeGlobalSettings(settings));
+        const nextSettings = mergeGlobalSettings(settings);
+        if (isLocale(nextSettings.locale)) {
+            setLocale(nextSettings.locale, { reload: false });
+            setActiveLocale(nextSettings.locale);
+        }
+        setGlobalSettings(nextSettings);
     }, []);
 
     const updateKeymapSettings = useCallback((settings: KeymapSettings) => {
@@ -158,6 +163,17 @@ export const useSettingsLifecycle = () => {
         });
     }, []);
 
+    const forgetProject = useCallback((path: string) => {
+        setGlobalSettings((current) =>
+            mergeGlobalSettings({
+                ...current,
+                recent_projects: current.recent_projects.filter(
+                    (item) => item !== path,
+                ),
+            }),
+        );
+    }, []);
+
     const { keymap } = useMemo(
         () => createKeymapProfile(keymapSettings),
         [keymapSettings],
@@ -175,5 +191,6 @@ export const useSettingsLifecycle = () => {
         setThemeMode,
         handleLocaleChange,
         rememberProject,
+        forgetProject,
     };
 };

@@ -5,6 +5,7 @@ import type { DocumentAST } from "../bindings/DocumentAST";
 import type { GlobalSettings } from "../bindings/GlobalSettings";
 import type { KeymapSettings } from "../bindings/KeymapSettings";
 import type { ActionContextSnapshot } from "../bindings/ActionContextSnapshot";
+import type { AssetEntry } from "../bindings/AssetEntry";
 import type { ActionDescriptor } from "../bindings/ActionDescriptor";
 import type { ActionResolution } from "../bindings/ActionResolution";
 import type { KeymapValidationResult } from "../bindings/KeymapValidationResult";
@@ -26,6 +27,8 @@ import type { CompilationJob } from "../bindings/CompilationJob";
 import type { CompilationQueueSnapshot } from "../bindings/CompilationQueueSnapshot";
 import type { CompilationResult } from "../bindings/CompilationResult";
 import type { ExportFormat } from "../bindings/ExportFormat";
+
+export type { DocumentOutline } from "../bindings/DocumentOutline";
 
 export type CompileEventHandler = (result: CompilationResult) => void;
 
@@ -98,6 +101,14 @@ export const TauriApi = {
 
     async readPreviewSvg(path: string): Promise<string> {
         return invoke("read_preview_svg", { path });
+    },
+
+    async readResourcePreviewSvg(path: string): Promise<string> {
+        return invoke("read_resource_preview_svg", { path });
+    },
+
+    async importResourceFile(sourcePath: string): Promise<AssetEntry> {
+        return invoke("import_resource_file", { sourcePath });
     },
 
     async jumpFromPreviewClick(

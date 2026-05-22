@@ -229,12 +229,123 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         });
     });
 
-    it("handles ADD_AUTHOR round-trip", () => {
+    it("handles UPDATE_INPUT round-trip", () => {
         const ast = createDefaultDocumentAST();
-        const coverSection = ast.sections.find((s) => s.type === "CoverPage")!;
         verifyRoundTrip(ast, {
-            type: "ADD_AUTHOR",
-            payload: { sectionId: coverSection.id },
+            type: "UPDATE_INPUT",
+            payload: { path: "/abstract_text", value: "New abstract text" },
+        });
+    });
+
+    it("handles INSERT_INPUT_ARRAY_ITEM round-trip", () => {
+        const ast = createDefaultDocumentAST();
+        verifyRoundTrip(ast, {
+            type: "INSERT_INPUT_ARRAY_ITEM",
+            payload: {
+                path: "/authors",
+                index: 0,
+                value: { name: "New Author", email: "new@example.com", affiliations: [] },
+            },
+        });
+    });
+
+    it("handles UPDATE_ELEMENT_EXTRA_FIELD round-trip", () => {
+        const base = createDefaultDocumentAST();
+        const contentSection = base.sections.find((s) => s.type === "Content")!;
+        const ast = astReducer(base, {
+            type: "ADD_FIGURE",
+            payload: { sectionId: contentSection.id, figureId: "fig-1" },
+        });
+        verifyRoundTrip(ast, {
+            type: "UPDATE_ELEMENT_EXTRA_FIELD",
+            payload: {
+                elementId: "fig-1",
+                fieldKey: "note",
+                fieldValue: "General Note Content",
+            },
+        });
+    });
+
+    it("handles reference add, update, and remove round-trips", () => {
+        const ast = createDefaultDocumentAST();
+        verifyRoundTrip(ast, {
+            type: "ADD_REFERENCE",
+            payload: {
+                reference: {
+                    id: "ref-1",
+                    citation_key: "garcia2024",
+                    biblatex: "@article{garcia2024,\n  title = {Niñez}\n}",
+                },
+            },
+        });
+
+        const withReference = astReducer(ast, {
+            type: "ADD_REFERENCE",
+            payload: {
+                reference: {
+                    id: "ref-1",
+                    citation_key: "garcia2024",
+                    biblatex: "@article{garcia2024,\n  title = {Niñez}\n}",
+                },
+            },
+        });
+
+        verifyRoundTrip(withReference, {
+            type: "UPDATE_REFERENCE",
+            payload: {
+                reference: {
+                    id: "ref-1",
+                    citation_key: "garcia2025",
+                    biblatex: "@book{garcia2025,\n  title = {Libro}\n}",
+                },
+            },
+        });
+        verifyRoundTrip(withReference, {
+            type: "REMOVE_REFERENCE",
+            payload: { referenceId: "ref-1" },
+        });
+    });
+
+    it("handles asset add, update, and remove round-trips", () => {
+        const ast = createDefaultDocumentAST();
+        verifyRoundTrip(ast, {
+            type: "ADD_ASSET",
+            payload: {
+                asset: {
+                    id: "asset-1",
+                    path: "assets/chart.png",
+                    kind: "image",
+                    caption: "Chart",
+                },
+            },
+        });
+
+        const withAsset = astReducer(ast, {
+            type: "ADD_ASSET",
+            payload: {
+                asset: {
+                    id: "asset-1",
+                    path: "assets/chart.png",
+                    kind: "image",
+                    caption: "Chart",
+                },
+            },
+        });
+
+        verifyRoundTrip(withAsset, {
+            type: "UPDATE_ASSET",
+            payload: {
+                asset: {
+                    id: "asset-1",
+                    path: "assets/chart.png",
+                    kind: "image",
+                    caption: "Updated chart",
+                },
+            },
+        });
+        verifyRoundTrip(withAsset, {
+            type: "REMOVE_ASSET",
+            payload: { assetId: "asset-1" },
         });
     });
 });

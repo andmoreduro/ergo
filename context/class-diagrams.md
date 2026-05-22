@@ -398,6 +398,7 @@ classDiagram
 
         class ProjectSourceLayout {
             +String main_path
+            +String lib_path
             +String[] section_paths
             +String references_path
             +String source_map_path

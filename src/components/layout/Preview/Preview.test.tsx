@@ -43,6 +43,20 @@ const FocusElement = ({ elementId }: { elementId: string }) => {
     return null;
 };
 
+const FocusProjectInput = ({ fieldId }: { fieldId: string }) => {
+    const { setDocumentFocus } = useDocument();
+    useEffect(() => {
+        setDocumentFocus({
+            elementId: "project",
+            fieldId,
+            caretUtf16Offset: 0,
+            sourceRevision: 4,
+            focusSource: "preview",
+        });
+    }, [fieldId, setDocumentFocus]);
+    return null;
+};
+
 const renderPreview = (children: ReactNode = null) =>
     render(
         <DocumentProvider>
@@ -125,6 +139,7 @@ describe("Preview sync", () => {
         tauriApiMock.getPreviewPositionsForFocus.mockResolvedValue({
             positions: [
                 {
+                    caretCue: null,
                     caretUtf16Offset: 0,
                     elementId: "heading-1",
                     fieldId: "heading-1:text",
@@ -154,6 +169,206 @@ describe("Preview sync", () => {
 
         expect(
             container.querySelector('[data-active-preview-page="true"]'),
-        ).toBeInTheDocument();
+        ).not.toBeInTheDocument();
+        expect(
+            container.querySelector('[data-preview-sync-marker="true"]'),
+        ).not.toBeInTheDocument();
+    });
+
+    it("renders a persistent caret cue when the backend returns click-equivalent caret geometry", async () => {
+        tauriApiMock.getPreviewPositionsForFocus.mockResolvedValue({
+            positions: [
+                {
+                    caretCue: {
+                        heightPt: 10,
+                        topYPt: 14,
+                    },
+                    caretUtf16Offset: 5,
+                    elementId: "heading-1",
+                    fieldId: "heading-1:text",
+                    pageNumber: 1,
+                    sourceRevision: 4,
+                    xPt: 42,
+                    yPt: 19,
+                },
+            ],
+            sourceRevision: 4,
+            status: "matched",
+        });
+
+        const { container } = renderPreview(<FocusElement elementId="heading-1" />);
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-preview-sync-caret="true"]'))
+                .toBeInTheDocument();
+        });
+
+        const caret = container.querySelector<HTMLElement>(
+            '[data-preview-sync-caret="true"]',
+        );
+        expect(caret).toHaveStyle({
+            height: "20%",
+            left: "42%",
+            top: "28%",
+        });
+        expect(
+            container.querySelector('[data-preview-sync-marker="true"]'),
+        ).not.toBeInTheDocument();
+    });
+
+    it("shows the caret for the latest preview click and ignores stale click cue responses", async () => {
+        let resolveFirstPosition:
+            | ((value: Awaited<ReturnType<typeof tauriApiMock.getPreviewPositionsForFocus>>) => void)
+            | null = null;
+        let resolveSecondPosition:
+            | ((value: Awaited<ReturnType<typeof tauriApiMock.getPreviewPositionsForFocus>>) => void)
+            | null = null;
+        tauriApiMock.jumpFromPreviewClick
+            .mockResolvedValueOnce({
+                target: {
+                    caretUtf16Offset: 1,
+                    elementId: "heading-1",
+                    fieldId: "heading-1:text",
+                    sourceRevision: 4,
+                },
+                sourceRevision: 4,
+                status: "field",
+            })
+            .mockResolvedValueOnce({
+                target: {
+                    caretUtf16Offset: 2,
+                    elementId: "heading-1",
+                    fieldId: "heading-1:text",
+                    sourceRevision: 4,
+                },
+                sourceRevision: 4,
+                status: "field",
+            });
+        tauriApiMock.getPreviewPositionsForFocus
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        resolveFirstPosition = resolve;
+                    }),
+            )
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        resolveSecondPosition = resolve;
+                    }),
+            );
+
+        const { container } = renderPreview();
+        const svg = container.querySelector("svg") as SVGSVGElement;
+        vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+            bottom: 70,
+            height: 50,
+            left: 20,
+            right: 120,
+            toJSON: () => ({}),
+            top: 20,
+            width: 100,
+            x: 20,
+            y: 20,
+        } as DOMRect);
+
+        fireEvent.click(svg, { clientX: 30, clientY: 30 });
+        fireEvent.click(svg, { clientX: 80, clientY: 30 });
+
+        await waitFor(() => {
+            expect(tauriApiMock.getPreviewPositionsForFocus).toHaveBeenCalledTimes(2);
+        });
+
+        resolveSecondPosition?.({
+            positions: [
+                {
+                    caretCue: {
+                        heightPt: 10,
+                        topYPt: 14,
+                    },
+                    caretUtf16Offset: 2,
+                    elementId: "heading-1",
+                    fieldId: "heading-1:text",
+                    pageNumber: 1,
+                    sourceRevision: 4,
+                    xPt: 60,
+                    yPt: 19,
+                },
+            ],
+            sourceRevision: 4,
+            status: "matched",
+        });
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-preview-sync-caret="true"]'))
+                .toHaveStyle({ left: "60%" });
+        });
+
+        resolveFirstPosition?.({
+            positions: [
+                {
+                    caretCue: {
+                        heightPt: 10,
+                        topYPt: 14,
+                    },
+                    caretUtf16Offset: 1,
+                    elementId: "heading-1",
+                    fieldId: "heading-1:text",
+                    pageNumber: 1,
+                    sourceRevision: 4,
+                    xPt: 20,
+                    yPt: 19,
+                },
+            ],
+            sourceRevision: 4,
+            status: "matched",
+        });
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-preview-sync-caret="true"]'))
+                .toHaveStyle({ left: "60%" });
+        });
+    });
+
+    it("publishes compiled outline updates to the workspace", async () => {
+        const handleOutlineChange = vi.fn();
+        useCompilerMock.mockReturnValue({
+            error: null,
+            isCompiling: false,
+            outline: {
+                entries: [{ level: 1, text: "Introduction", page: 1 }],
+            },
+            previewRevision: 4,
+            sourceMap: [],
+            svgs: [svgPage],
+        });
+
+        render(
+            <DocumentProvider>
+                <Preview onOutlineChange={handleOutlineChange} />
+            </DocumentProvider>,
+        );
+
+        await waitFor(() => {
+            expect(handleOutlineChange).toHaveBeenCalledWith({
+                entries: [{ level: 1, text: "Introduction", page: 1 }],
+            });
+        });
+    });
+
+    it("maps project input field ids to backend input source map targets", async () => {
+        renderPreview(<FocusProjectInput fieldId="project-input-/abstract_text" />);
+
+        await waitFor(() => {
+            expect(tauriApiMock.getPreviewPositionsForFocus).toHaveBeenCalledWith(
+                {
+                    caretUtf16Offset: 0,
+                    elementId: "inputs",
+                    fieldId: "/abstract_text",
+                    sourceRevision: 4,
+                },
+                4,
+            );
+        });
     });
 });

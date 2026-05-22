@@ -10,6 +10,7 @@ use crate::compilation_types::{
     CompilationJob, CompilationResult, CompilationStatus, ExportFormat, PreviewPageFile,
 };
 use crate::core_errors::CompileError;
+use crate::document_outline::DocumentOutline;
 use crate::path_utils::file_id_for_virtual_path;
 use crate::vfs::VirtualFileSystem;
 use crate::world::{ErgoWorld, SnapshotWorld, WorldSourceSnapshot};
@@ -23,12 +24,29 @@ pub(crate) fn result_for_job(job: &CompilationJob, status: CompilationStatus) ->
         preview_pages: None,
         export_path: None,
         diagnostics: Vec::new(),
+        outline: None,
+        resources: None,
     }
 }
 
 pub(crate) fn failed_result(job: &CompilationJob, message: String) -> CompilationResult {
     let mut result = result_for_job(job, CompilationStatus::Failed);
     result.diagnostics = vec![message];
+    result
+}
+
+pub(crate) fn successful_preview_result(
+    job: &CompilationJob,
+    preview_dir: &str,
+    preview_pages: Vec<PreviewPageFile>,
+    outline: DocumentOutline,
+    resources: crate::document_resources::DocumentResources,
+) -> CompilationResult {
+    let mut result = result_for_job(job, CompilationStatus::Succeeded);
+    result.preview_pages = Some(preview_pages);
+    result.export_path = Some(preview_dir.to_string());
+    result.outline = Some(outline);
+    result.resources = Some(resources);
     result
 }
 
@@ -150,8 +168,7 @@ pub(crate) fn render_svgs_incremental(
         .collect();
 
     // 4. Assemble: new SVGs for changed pages, cached for unchanged
-    let mut old_entries: Vec<Option<CachedSvgPage>> =
-        cache.entries.drain(..).map(Some).collect();
+    let mut old_entries: Vec<Option<CachedSvgPage>> = cache.entries.drain(..).map(Some).collect();
 
     let svgs: Vec<String> = rendered
         .into_iter()
@@ -270,8 +287,101 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::compilation_types::{CompilationJobKind, CompilationPriority};
+    use crate::document_outline::{DocumentOutline, OutlineEntry};
+    use crate::document_resources::{
+        DocumentResources, ResourceEntry, ResourceGroup, ResourceKind, ResourcePreview,
+        ResourcePreviewStatus,
+    };
     use crate::document_session::DocumentSession;
     use crate::test_fixtures::basic_document_ast;
+
+    fn preview_job() -> CompilationJob {
+        CompilationJob {
+            job_id: 42,
+            kind: CompilationJobKind::PreviewSvg,
+            priority: CompilationPriority::Preview,
+            source_revision: 7,
+        }
+    }
+
+    #[test]
+    fn successful_preview_result_includes_outline() {
+        let pages = vec![PreviewPageFile {
+            changed: true,
+            page_number: 1,
+            path: ".ergproj/preview/svg/page-1.svg".to_string(),
+        }];
+        let outline = DocumentOutline {
+            entries: vec![OutlineEntry {
+                level: 2,
+                text: "Method".to_string(),
+                page: 1,
+            }],
+        };
+
+        let result = successful_preview_result(
+            &preview_job(),
+            ".ergproj/preview/svg",
+            pages.clone(),
+            outline.clone(),
+            DocumentResources::default(),
+        );
+
+        assert_eq!(result.status, CompilationStatus::Succeeded);
+        assert_eq!(result.preview_pages, Some(pages));
+        assert_eq!(result.export_path, Some(".ergproj/preview/svg".to_string()));
+        assert_eq!(result.outline, Some(outline));
+    }
+
+    #[test]
+    fn successful_preview_result_includes_resources() {
+        let pages = vec![PreviewPageFile {
+            changed: true,
+            page_number: 1,
+            path: ".ergproj/preview/svg/page-1.svg".to_string(),
+        }];
+        let outline = DocumentOutline { entries: vec![] };
+        let resources = DocumentResources {
+            groups: vec![ResourceGroup {
+                kind: ResourceKind::Equation,
+                label: "Equations".to_string(),
+                entries: vec![ResourceEntry {
+                    id: "equation-1".to_string(),
+                    kind: ResourceKind::Equation,
+                    label: "Equation".to_string(),
+                    subtitle: None,
+                    reference_token: "@ergo-equation-1".to_string(),
+                    source_element_id: Some("equation-1".to_string()),
+                    asset_id: None,
+                    preview: ResourcePreview {
+                        status: ResourcePreviewStatus::Ready,
+                        path: Some(".ergproj/resource-previews/svg/equation-1.svg".to_string()),
+                        diagnostic: None,
+                    },
+                }],
+            }],
+        };
+
+        let result = successful_preview_result(
+            &preview_job(),
+            ".ergproj/preview/svg",
+            pages,
+            outline,
+            resources.clone(),
+        );
+
+        assert_eq!(result.resources, Some(resources));
+    }
+
+    #[test]
+    fn failed_preview_result_has_no_outline() {
+        let result = failed_result(&preview_job(), "compile failed".to_string());
+
+        assert_eq!(result.status, CompilationStatus::Failed);
+        assert_eq!(result.diagnostics, vec!["compile failed"]);
+        assert!(result.outline.is_none());
+    }
 
     #[test]
     fn compiles_svg_from_multifile_vfs_sources() {
@@ -312,10 +422,128 @@ mod tests {
             .sync_snapshot(basic_document_ast("Título con ñ", "Resumen breve."))
             .unwrap();
 
+        if let Ok(main_content) = vfs.read_file("main.typ") {
+            println!(
+                "=== main.typ ===\n{}",
+                String::from_utf8(main_content).unwrap()
+            );
+        }
+        if let Ok(abstract_content) = vfs.read_file("sections/abstract-page.typ") {
+            println!(
+                "=== abstract-page.typ ===\n{}",
+                String::from_utf8(abstract_content).unwrap()
+            );
+        }
+
         let svgs = compile_svgs(vfs).unwrap();
 
         assert!(!svgs.is_empty());
         assert!(svgs[0].contains("<svg"));
+    }
+
+    #[test]
+    fn incremental_svg_render_updates_when_page_text_changes() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let mut cache = SvgPageCache::new();
+        vfs.write_source("main.typ", "Alpha".to_string());
+
+        let (first_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let first_cached = render_svgs_incremental(&first_document, &mut cache);
+
+        vfs.write_source("main.typ", "Beta".to_string());
+        let (second_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let second_fresh = render_svgs(&second_document);
+        let second_cached = render_svgs_incremental(&second_document, &mut cache);
+
+        assert_ne!(first_cached, second_fresh);
+        assert_eq!(second_cached, second_fresh);
+    }
+
+    #[test]
+    fn document_session_text_events_update_preview_svg_artifacts() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let mut cache = SvgPageCache::new();
+
+        session
+            .sync_snapshot(basic_document_ast("Título con ñ", "Resumen breve."))
+            .unwrap();
+        let (first_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let first_svgs = render_svgs_incremental(&first_document, &mut cache);
+        write_svg_pages(&vfs, ".ergproj/preview/svg", &first_svgs);
+        let first_files = (1..=first_svgs.len())
+            .map(|page_number| {
+                vfs.read_file(&format!(".ergproj/preview/svg/page-{page_number}.svg"))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        session
+            .apply_event(
+                crate::document_session_types::DocumentEvent::UpdateHeading {
+                    element_id: "heading-1".to_string(),
+                    text: Some("Método con ñ".to_string()),
+                    level: None,
+                },
+            )
+            .unwrap();
+        let (second_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let second_svgs = render_svgs_incremental(&second_document, &mut cache);
+        let pages = write_svg_pages(&vfs, ".ergproj/preview/svg", &second_svgs);
+        let second_files = (1..=second_svgs.len())
+            .map(|page_number| {
+                vfs.read_file(&format!(".ergproj/preview/svg/page-{page_number}.svg"))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        assert!(pages.iter().any(|page| page.changed));
+        assert!(pages.iter().any(|page| {
+            let index = page.page_number - 1;
+            page.changed && first_files.get(index) != second_files.get(index)
+        }));
+    }
+
+    #[test]
+    fn document_session_title_input_events_update_preview_svg_artifacts() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let mut cache = SvgPageCache::new();
+
+        session
+            .sync_snapshot(basic_document_ast("Título inicial", "Resumen breve."))
+            .unwrap();
+        let (first_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let first_svgs = render_svgs_incremental(&first_document, &mut cache);
+        write_svg_pages(&vfs, ".ergproj/preview/svg", &first_svgs);
+        let first_files = (1..=first_svgs.len())
+            .map(|page_number| {
+                vfs.read_file(&format!(".ergproj/preview/svg/page-{page_number}.svg"))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        session
+            .apply_event(crate::document_session_types::DocumentEvent::UpdateInput {
+                path: "/title".to_string(),
+                value: serde_json::json!("Título escrito"),
+            })
+            .unwrap();
+        let (second_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let second_svgs = render_svgs_incremental(&second_document, &mut cache);
+        let pages = write_svg_pages(&vfs, ".ergproj/preview/svg", &second_svgs);
+        let second_files = (1..=second_svgs.len())
+            .map(|page_number| {
+                vfs.read_file(&format!(".ergproj/preview/svg/page-{page_number}.svg"))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        assert!(pages.iter().any(|page| page.changed));
+        assert!(pages.iter().any(|page| {
+            let index = page.page_number - 1;
+            page.changed && first_files.get(index) != second_files.get(index)
+        }));
     }
 
     #[test]

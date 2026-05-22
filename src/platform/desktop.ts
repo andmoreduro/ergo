@@ -19,6 +19,8 @@ export interface DesktopPlatform {
         handler: CloseRequestHandler,
     ) => Promise<() => void>;
     closeCurrentWindow: () => Promise<void>;
+    minimizeCurrentWindow: () => Promise<void>;
+    toggleMaximizeCurrentWindow: () => Promise<void>;
 }
 
 const asSinglePath = (value: string | string[] | null): string | null =>
@@ -62,5 +64,13 @@ export const desktopPlatform: DesktopPlatform = {
 
     async closeCurrentWindow() {
         await getCurrentWindow().close();
+    },
+
+    async minimizeCurrentWindow() {
+        await getCurrentWindow().minimize();
+    },
+
+    async toggleMaximizeCurrentWindow() {
+        await getCurrentWindow().toggleMaximize();
     },
 };
