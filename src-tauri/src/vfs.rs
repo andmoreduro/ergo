@@ -141,7 +141,9 @@ impl VirtualFileSystem {
     pub fn read_binary_file(&self, path: &str) -> Result<typst::foundations::Bytes, String> {
         let path = normalize_virtual_path(path);
         if let Some(file) = self.memory_sources.read().get(&path) {
-            return Ok(typst::foundations::Bytes::new(file.source.text().as_bytes().to_vec()));
+            return Ok(typst::foundations::Bytes::new(
+                file.source.text().as_bytes().to_vec(),
+            ));
         }
 
         self.memory_files

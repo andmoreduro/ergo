@@ -136,6 +136,50 @@
     font-weight: var(--font-weight-normal);
 }
 
+.recentProject {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px;
+    align-items: center;
+}
+
+.recentAction {
+    grid-template-columns: 24px minmax(0, 1fr);
+}
+
+.recentRemove {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid transparent;
+    border-radius: var(--border-radius-sm);
+    color: var(--color-text-secondary);
+    background: transparent;
+    font-size: var(--font-size-md);
+    line-height: 1;
+    opacity: 0;
+    pointer-events: none;
+    cursor: pointer;
+}
+
+.recentProject:hover .recentRemove,
+.recentProject:focus-within .recentRemove {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.recentRemove:hover {
+    border-color: color-mix(in srgb, var(--color-danger), transparent 40%);
+    color: var(--color-danger);
+    background: color-mix(in srgb, var(--color-danger), transparent 90%);
+}
+
+.recentRemove:focus-visible {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary), transparent 70%);
+}
+
 .empty {
     padding: var(--space-2);
     color: var(--color-text-secondary);

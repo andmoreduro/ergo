@@ -5,4 +5,4 @@ import type { DocumentSection } from "./DocumentSection";
 import type { ProjectMetadata } from "./ProjectMetadata";
 import type { ReferenceEntry } from "./ReferenceEntry";
 
-export type DocumentAST = { version: string, metadata: ProjectMetadata, dependencies: DependencyManifest, references: Array<ReferenceEntry>, assets: Array<AssetEntry>, sections: Array<DocumentSection>, };
+export type DocumentAST = { version: string, metadata: ProjectMetadata, dependencies: DependencyManifest, references: Array<ReferenceEntry>, assets: Array<AssetEntry>, sections: Array<DocumentSection>, inputs: Record<string, any>, };

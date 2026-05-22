@@ -26,8 +26,8 @@ This document categorizes the core functionalities of Érgo into specific Epics 
 
 ## Epic 3: Workspace & Navigation UI
 
-- **US3.1 - Resizable Tri-Column Layout:** As a user, I want a resizable three-column interface so that I can simultaneously navigate the document structure, edit my content, and view the final rendered result.
-- **US3.2 - Sidebar Navigation Menus:** As a user, I want dedicated sidebar menus for document structure, references, and assets so that I can quickly organize and locate my project's resources.
+- **US3.1 - Resizable Tri-Column Layout:** As a user, I want a resizable three-column interface so that I can simultaneously navigate the rendered outline, edit my content, and view the final rendered result.
+- **US3.2 - Sidebar Navigation Menus:** As a user, I want dedicated sidebar menus for the rendered outline, bibliography, and resources so that I can quickly organize citations and reusable document content.
 - **US3.3 - Visual Element Insertion:** As a user, I want straightforward visual buttons to insert complex elements like tables, images, and equations so that I don't have to memorize code commands or markup.
 - **US3.4 - Comprehensive Keyboard Navigation:** As a user, I want to use comprehensive keyboard shortcuts for navigation, inserting elements, and standard operations so that I can work efficiently without constantly relying on my mouse.
 - **US3.5 - Custom Keymap Configuration:** As a user, I want to be able to customize and remap my keyboard shortcuts so that the IDE matches my personal workflow preferences.
@@ -57,7 +57,7 @@ This document categorizes the core functionalities of Érgo into specific Epics 
 - **US6.1 - Forward Sync (Form to Preview):** As a user, I want the live preview to automatically scroll to vertically center the new content I am adding so that I never lose sight of my active editing location.
 - **US6.2 - Backward Sync (Preview to Form):** As a user, I want to click on any specific word or visual element in the rendered preview, and have the editor instantly focus the exact input field where that content was written, so that I can quickly fix typos without hunting through long forms.
 
-## Epic 7: References & Labeling
+## Epic 7: Bibliography, Resources & Labeling
 
 - **US7.1 - Universal Background IDs:** As a user, I want every single element I create (paragraphs, tables, images, equations) to be automatically assigned a unique, invisible identifier in the background so that everything is instantly ready to be cross-referenced without manual setup.
 - **US7.2 - Manual Custom Labeling:** As a user, I want to right-click on specific text selections to manually attach a hidden label so that I can create hyperlinks to highly specific parts of my writing.

@@ -1,7 +1,6 @@
 import { useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { m } from "../../../paraglide/messages.js";
-import { locales } from "../../../paraglide/runtime.js";
-import type { Locale } from "../../../paraglide/runtime.js";
 import type { ActionId } from "../../../commands/types";
 import styles from "./Menubar.module.css";
 
@@ -25,17 +24,15 @@ interface MenuGroup {
 }
 
 export interface MenubarProps {
-    activeLocale: Locale;
+    hasActiveProject: boolean;
     themeMode: ThemeMode;
-    onLocaleChange: (locale: Locale) => void;
     onCommand: (commandId: ActionId) => void;
     isCommandEnabled: (commandId: ActionId) => boolean;
 }
 
 export const Menubar = ({
-    activeLocale,
+    hasActiveProject,
     themeMode,
-    onLocaleChange,
     onCommand,
     isCommandEnabled,
 }: MenubarProps) => {
@@ -47,49 +44,84 @@ export const Menubar = ({
             actions: [
                 { label: m.menubar_new_project(), commandId: "workspace::NewProject" },
                 { label: m.menubar_open_project(), commandId: "workspace::OpenProject" },
-                { label: m.menubar_open_recent() },
-                { label: m.menubar_save_project(), commandId: "workspace::SaveProject" },
-                { label: m.menubar_export(), commandId: "workspace::ExportSvg" },
-                { label: m.menubar_close_project(), commandId: "workspace::CloseProject" },
+                {
+                    label: m.menubar_open_recent(),
+                    commandId: "workspace::OpenRecentProject",
+                },
+                ...(hasActiveProject
+                    ? [
+                          {
+                              label: m.menubar_save_project(),
+                              commandId: "workspace::SaveProject" as const,
+                          },
+                          {
+                              label: m.menubar_export(),
+                              commandId: "workspace::ExportSvg" as const,
+                          },
+                          {
+                              label: m.menubar_close_project(),
+                              commandId: "workspace::CloseProject" as const,
+                          },
+                      ]
+                    : []),
             ],
         },
-        {
-            title: m.menubar_edit(),
-            actions: [
-                { label: m.menubar_undo(), commandId: "edit::Undo" },
-                { label: m.menubar_redo(), commandId: "edit::Redo" },
-                { label: m.menubar_cut() },
-                { label: m.menubar_copy() },
-                { label: m.menubar_paste() },
-                { label: m.menubar_delete_element(), commandId: "editor::DeleteElement" },
-            ],
-        },
-        {
-            title: m.menubar_insert(),
-            actions: [
-                {
-                    label: m.menubar_insert_paragraph(),
-                    commandId: "editor::InsertParagraph",
-                },
-                {
-                    label: m.menubar_insert_heading(),
-                    commandId: "editor::InsertHeading",
-                },
-                {
-                    label: m.menubar_insert_table(),
-                    commandId: "editor::InsertTable",
-                },
-                {
-                    label: m.menubar_insert_figure(),
-                    commandId: "editor::InsertFigure",
-                },
-                {
-                    label: m.menubar_insert_equation(),
-                    commandId: "editor::InsertEquation",
-                },
-                { label: m.menubar_insert_reference(), commandId: "editor::InsertReference" },
-            ],
-        },
+        ...(hasActiveProject
+            ? [
+                  {
+                      title: m.menubar_project(),
+                      actions: [
+                          {
+                              label: m.menubar_project_settings(),
+                              commandId: "settings::OpenProject" as const,
+                          },
+                      ],
+                  },
+                  {
+                      title: m.menubar_edit(),
+                      actions: [
+                          { label: m.menubar_undo(), commandId: "edit::Undo" as const },
+                          { label: m.menubar_redo(), commandId: "edit::Redo" as const },
+                          { label: m.menubar_cut() },
+                          { label: m.menubar_copy() },
+                          { label: m.menubar_paste() },
+                          {
+                              label: m.menubar_delete_element(),
+                              commandId: "editor::DeleteElement" as const,
+                          },
+                      ],
+                  },
+                  {
+                      title: m.menubar_insert(),
+                      actions: [
+                          {
+                              label: m.menubar_insert_paragraph(),
+                              commandId: "editor::InsertParagraph" as const,
+                          },
+                          {
+                              label: m.menubar_insert_heading(),
+                              commandId: "editor::InsertHeading" as const,
+                          },
+                          {
+                              label: m.menubar_insert_table(),
+                              commandId: "editor::InsertTable" as const,
+                          },
+                          {
+                              label: m.menubar_insert_figure(),
+                              commandId: "editor::InsertFigure" as const,
+                          },
+                          {
+                              label: m.menubar_insert_equation(),
+                              commandId: "editor::InsertEquation" as const,
+                          },
+                          {
+                              label: m.menubar_insert_reference(),
+                              commandId: "editor::InsertReference" as const,
+                          },
+                      ],
+                  },
+              ]
+            : []),
         {
             title: m.menubar_view(),
             actions: [
@@ -97,8 +129,18 @@ export const Menubar = ({
                     label: m.menubar_command_palette(),
                     commandId: "view::OpenCommandPalette",
                 },
-                { label: m.menubar_zoom_in(), commandId: "view::ZoomIn" },
-                { label: m.menubar_zoom_out(), commandId: "view::ZoomOut" },
+                ...(hasActiveProject
+                    ? [
+                          {
+                              label: m.menubar_zoom_in(),
+                              commandId: "view::ZoomIn" as const,
+                          },
+                          {
+                              label: m.menubar_zoom_out(),
+                              commandId: "view::ZoomOut" as const,
+                          },
+                      ]
+                    : []),
                 {
                     label: `${themeMode === "system" ? "* " : ""}${m.menubar_theme_system()}`,
                     commandId: "theme::UseSystem",
@@ -114,10 +156,9 @@ export const Menubar = ({
             ],
         },
         {
-            title: m.menubar_options(),
+            title: m.menubar_settings(),
             actions: [
                 { label: m.menubar_global_settings(), commandId: "settings::OpenGlobal" },
-                { label: m.menubar_project_settings(), commandId: "settings::OpenProject" },
                 { label: m.menubar_keymap_settings(), commandId: "settings::OpenKeymap" },
             ],
         },
@@ -130,8 +171,24 @@ export const Menubar = ({
         },
     ];
 
+    const minimizeWindow = () => {
+        void getCurrentWindow().minimize();
+    };
+
+    const toggleMaximizeWindow = () => {
+        void getCurrentWindow().toggleMaximize();
+    };
+
+    const closeWindow = () => {
+        void getCurrentWindow().close();
+    };
+
     return (
-        <nav className={styles.menubar} aria-label="Application menu">
+        <nav
+            className={styles.menubar}
+            aria-label="Application menu"
+            data-tauri-drag-region=""
+        >
             <div className={styles.menuGroups}>
                 {menuGroups.map((group, index) => {
                     const isOpen = openMenuIndex === index;
@@ -195,23 +252,42 @@ export const Menubar = ({
                 })}
             </div>
 
-            <label className={styles.language}>
-                <span>{m.menubar_language()}</span>
-                <select
-                    value={activeLocale}
-                    onChange={(event) =>
-                        onLocaleChange(event.target.value as Locale)
-                    }
+            <div className={styles.dragRegion} data-tauri-drag-region="" />
+            <div className={styles.windowControls}>
+                <button
+                    type="button"
+                    className={styles.windowControl}
+                    aria-label={m.titlebar_minimize()}
+                    title={m.titlebar_minimize()}
+                    onClick={minimizeWindow}
                 >
-                    {locales.map((locale) => (
-                        <option value={locale} key={locale}>
-                            {locale === "es"
-                                ? m.menubar_language_spanish()
-                                : m.menubar_language_english()}
-                        </option>
-                    ))}
-                </select>
-            </label>
+                    <svg aria-hidden="true" viewBox="0 0 12 12">
+                        <path d="M2 6h8" />
+                    </svg>
+                </button>
+                <button
+                    type="button"
+                    className={styles.windowControl}
+                    aria-label={m.titlebar_maximize()}
+                    title={`${m.titlebar_maximize()} / ${m.titlebar_restore()}`}
+                    onClick={toggleMaximizeWindow}
+                >
+                    <svg aria-hidden="true" viewBox="0 0 12 12">
+                        <rect x="3" y="3" width="6" height="6" />
+                    </svg>
+                </button>
+                <button
+                    type="button"
+                    className={`${styles.windowControl} ${styles.closeControl}`}
+                    aria-label={m.titlebar_close()}
+                    title={m.titlebar_close()}
+                    onClick={closeWindow}
+                >
+                    <svg aria-hidden="true" viewBox="0 0 12 12">
+                        <path d="M3 3l6 6M9 3L3 9" />
+                    </svg>
+                </button>
+            </div>
         </nav>
     );
 };

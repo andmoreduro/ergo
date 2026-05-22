@@ -1,8 +1,13 @@
 use crate::ast::{
-    DocumentAST, DocumentElement, DocumentSection, Figure, Paragraph, RichText, Table, TableCell,
+    AssetEntry, DocumentAST, DocumentElement, DocumentSection, Figure, Paragraph, ReferenceEntry,
+    RichText, Table, TableCell,
 };
-use crate::document_session_types::{AuthorField, DocumentEvent};
-pub(crate) fn apply_document_event(ast: &mut DocumentAST, event: DocumentEvent) -> Result<(), String> {
+use crate::document_session_types::DocumentEvent;
+
+pub(crate) fn apply_document_event(
+    ast: &mut DocumentAST,
+    event: DocumentEvent,
+) -> Result<(), String> {
     match event {
         DocumentEvent::SetProjectTitle { title } => {
             ast.metadata.title = title;
@@ -12,66 +17,19 @@ pub(crate) fn apply_document_event(ast: &mut DocumentAST, event: DocumentEvent) 
             ast.metadata.project_settings = settings;
             Ok(())
         }
-        DocumentEvent::UpdateCoverAbstract { section_id, text } => {
-            cover_section_mut(ast, &section_id)?.abstract_text = text;
-            Ok(())
-        }
-        DocumentEvent::UpdateCoverAffiliations {
-            section_id,
-            affiliations,
-        } => {
-            cover_section_mut(ast, &section_id)?.affiliations = affiliations;
-            Ok(())
-        }
-        DocumentEvent::InsertAuthor {
-            section_id,
-            index,
-            author,
-        }
-        | DocumentEvent::RestoreAuthor {
-            section_id,
-            author_index: index,
-            author,
-        } => {
-            let cover_page = cover_section_mut(ast, &section_id)?;
-            if index > cover_page.authors.len() {
-                return Err(format!("Cannot restore author at index {index}"));
-            }
-            cover_page.authors.insert(index, author);
-            Ok(())
-        }
-        DocumentEvent::UpdateAuthor {
-            section_id,
-            author_index,
-            field,
-            value,
-        } => {
-            let author = cover_section_mut(ast, &section_id)?
-                .authors
-                .get_mut(author_index)
-                .ok_or_else(|| format!("Author index {author_index} was not found"))?;
-            match field {
-                AuthorField::Name => author.name = value,
-                AuthorField::Email => {
-                    author.email = if value.trim().is_empty() {
-                        None
-                    } else {
-                        Some(value)
-                    }
+        DocumentEvent::UpdateInput { path, value } => {
+            if path == "/title" {
+                if let Some(title) = value.as_str() {
+                    ast.metadata.title = title.to_string();
                 }
             }
-            Ok(())
+            set_value_at_path(&mut ast.inputs, &path, value)
         }
-        DocumentEvent::RemoveAuthor {
-            section_id,
-            author_index,
-        } => {
-            let cover_page = cover_section_mut(ast, &section_id)?;
-            if author_index >= cover_page.authors.len() {
-                return Err(format!("Author index {author_index} was not found"));
-            }
-            cover_page.authors.remove(author_index);
-            Ok(())
+        DocumentEvent::InsertInputArrayItem { path, index, value } => {
+            insert_input_array_item(&mut ast.inputs, &path, index, value)
+        }
+        DocumentEvent::RemoveInputArrayItem { path, index } => {
+            remove_input_array_item(&mut ast.inputs, &path, index)
         }
         DocumentEvent::InsertElement {
             section_id,
@@ -214,23 +172,245 @@ pub(crate) fn apply_document_event(ast: &mut DocumentAST, event: DocumentEvent) 
                 _ => Err(format!("Element {element_id} is not a figure")),
             }
         }
+        DocumentEvent::UpdateCustomElementField {
+            element_id,
+            field,
+            value,
+        } => {
+            let el = element_mut(ast, &element_id)?;
+            match el {
+                DocumentElement::Custom(custom) => {
+                    if value.is_null() {
+                        custom.fields.remove(&field);
+                    } else {
+                        custom.fields.insert(field, value);
+                    }
+                    Ok(())
+                }
+                _ => Err(format!("Element {} is not a custom element", element_id)),
+            }
+        }
+        DocumentEvent::UpdateElementExtraField {
+            element_id,
+            field_key,
+            field_value,
+        } => {
+            let el = element_mut(ast, &element_id)?;
+            match el {
+                DocumentElement::Table(table) => {
+                    if field_value.is_null() {
+                        table.extra_fields.remove(&field_key);
+                    } else {
+                        table.extra_fields.insert(field_key, field_value);
+                    }
+                    Ok(())
+                }
+                DocumentElement::Figure(figure) => {
+                    if field_value.is_null() {
+                        figure.extra_fields.remove(&field_key);
+                    } else {
+                        figure.extra_fields.insert(field_key, field_value);
+                    }
+                    Ok(())
+                }
+                _ => Err(format!("Element {element_id} is not a table or figure")),
+            }
+        }
+        DocumentEvent::InsertReference { index, reference }
+        | DocumentEvent::RestoreReference { index, reference } => {
+            insert_reference(ast, index, reference)
+        }
+        DocumentEvent::UpdateReference { reference } => update_reference(ast, reference),
+        DocumentEvent::RemoveReference { reference_id } => remove_reference(ast, &reference_id),
+        DocumentEvent::InsertAsset { index, asset }
+        | DocumentEvent::RestoreAsset { index, asset } => insert_asset(ast, index, asset),
+        DocumentEvent::UpdateAsset { asset } => update_asset(ast, asset),
+        DocumentEvent::RemoveAsset { asset_id } => remove_asset(ast, &asset_id),
     }
 }
 
-fn cover_section_mut<'a>(
-    ast: &'a mut DocumentAST,
-    section_id: &str,
-) -> Result<&'a mut crate::ast::CoverPageSection, String> {
-    ast.sections
-        .iter_mut()
-        .find_map(|section| match section {
-            DocumentSection::CoverPage(cover_page) if cover_page.id == section_id => {
-                Some(cover_page)
+// ─── Input Path Modification Helpers ─────────────────────────────────
+
+fn set_value_at_path(
+    inputs: &mut std::collections::HashMap<String, serde_json::Value>,
+    path: &str,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    if !path.starts_with('/') {
+        return Err(format!("Invalid path format: {}", path));
+    }
+
+    let mut map = serde_json::Map::new();
+    for (k, v) in inputs.drain() {
+        map.insert(k, v);
+    }
+    let mut root = serde_json::Value::Object(map);
+
+    if let Some(target) = root.pointer_mut(path) {
+        *target = value;
+    } else {
+        let parts: Vec<&str> = path.split('/').skip(1).collect();
+        if parts.is_empty() {
+            return Err("Path cannot be empty".to_string());
+        }
+
+        let mut curr = &mut root;
+        for (i, part) in parts.iter().enumerate() {
+            let part_str = part.replace("~1", "/").replace("~0", "~");
+            let is_last = i == parts.len() - 1;
+            if is_last {
+                match curr {
+                    serde_json::Value::Array(arr) => {
+                        if let Ok(idx) = part_str.parse::<usize>() {
+                            if idx < arr.len() {
+                                arr[idx] = value.clone();
+                            } else if idx == arr.len() {
+                                arr.push(value.clone());
+                            } else {
+                                return Err(format!(
+                                    "Index {} out of bounds for array at path",
+                                    idx
+                                ));
+                            }
+                        } else {
+                            return Err(format!("Invalid array index '{}'", part_str));
+                        }
+                    }
+                    serde_json::Value::Object(obj) => {
+                        obj.insert(part_str, value.clone());
+                    }
+                    _ => {
+                        return Err(format!(
+                            "Cannot set value on non-container at path {}",
+                            path
+                        ));
+                    }
+                }
+            } else {
+                let next_part = parts[i + 1].replace("~1", "/").replace("~0", "~");
+                let is_next_array = next_part.parse::<usize>().is_ok();
+
+                if curr.is_null() {
+                    *curr = if is_next_array {
+                        serde_json::Value::Array(Vec::new())
+                    } else {
+                        serde_json::Value::Object(serde_json::Map::new())
+                    };
+                }
+
+                match curr {
+                    serde_json::Value::Array(arr) => {
+                        if let Ok(idx) = part_str.parse::<usize>() {
+                            while arr.len() <= idx {
+                                arr.push(serde_json::Value::Null);
+                            }
+                            curr = &mut arr[idx];
+                        } else {
+                            return Err(format!("Invalid array index '{}'", part_str));
+                        }
+                    }
+                    serde_json::Value::Object(obj) => {
+                        curr = obj.entry(part_str).or_insert_with(|| {
+                            if is_next_array {
+                                serde_json::Value::Array(Vec::new())
+                            } else {
+                                serde_json::Value::Object(serde_json::Map::new())
+                            }
+                        });
+                    }
+                    _ => {
+                        return Err(format!("Cannot traverse non-container at path {}", path));
+                    }
+                }
             }
-            _ => None,
-        })
-        .ok_or_else(|| format!("Cover page section {section_id} was not found"))
+        }
+    }
+
+    if let serde_json::Value::Object(map) = root {
+        for (k, v) in map {
+            inputs.insert(k, v);
+        }
+    }
+    Ok(())
 }
+
+fn insert_input_array_item(
+    inputs: &mut std::collections::HashMap<String, serde_json::Value>,
+    path: &str,
+    index: usize,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    if !path.starts_with('/') {
+        return Err(format!("Invalid path format: {}", path));
+    }
+    let mut map = serde_json::Map::new();
+    for (k, v) in inputs.drain() {
+        map.insert(k, v);
+    }
+    let mut root = serde_json::Value::Object(map);
+
+    if let Some(target) = root.pointer_mut(path) {
+        if let Some(arr) = target.as_array_mut() {
+            if index <= arr.len() {
+                arr.insert(index, value);
+            } else {
+                arr.push(value);
+            }
+        } else {
+            return Err(format!("Target at path {} is not an array", path));
+        }
+    } else {
+        return Err(format!("Path {} was not found", path));
+    }
+
+    if let serde_json::Value::Object(map) = root {
+        for (k, v) in map {
+            inputs.insert(k, v);
+        }
+    }
+    Ok(())
+}
+
+fn remove_input_array_item(
+    inputs: &mut std::collections::HashMap<String, serde_json::Value>,
+    path: &str,
+    index: usize,
+) -> Result<(), String> {
+    if !path.starts_with('/') {
+        return Err(format!("Invalid path format: {}", path));
+    }
+    let mut map = serde_json::Map::new();
+    for (k, v) in inputs.drain() {
+        map.insert(k, v);
+    }
+    let mut root = serde_json::Value::Object(map);
+
+    if let Some(target) = root.pointer_mut(path) {
+        if let Some(arr) = target.as_array_mut() {
+            if index < arr.len() {
+                arr.remove(index);
+            } else {
+                return Err(format!(
+                    "Index {} out of bounds for array at {}",
+                    index, path
+                ));
+            }
+        } else {
+            return Err(format!("Target at path {} is not an array", path));
+        }
+    } else {
+        return Err(format!("Path {} was not found", path));
+    }
+
+    if let serde_json::Value::Object(map) = root {
+        for (k, v) in map {
+            inputs.insert(k, v);
+        }
+    }
+    Ok(())
+}
+
+// ─── AST Navigation Helpers ──────────────────────────────────────────
 
 fn content_section_mut<'a>(
     ast: &'a mut DocumentAST,
@@ -256,7 +436,6 @@ fn element_mut<'a>(
                 .elements
                 .iter_mut()
                 .find(|element| element_id_of(element) == element_id),
-            _ => None,
         })
         .ok_or_else(|| format!("Element {element_id} was not found"))
 }
@@ -287,14 +466,16 @@ fn insert_element_at(
 
 fn remove_element(ast: &mut DocumentAST, element_id: &str) -> Result<(), String> {
     for section in &mut ast.sections {
-        if let DocumentSection::Content(content) = section {
-            if let Some(index) = content
-                .elements
-                .iter()
-                .position(|element| element_id_of(element) == element_id)
-            {
-                content.elements.remove(index);
-                return Ok(());
+        match section {
+            DocumentSection::Content(content) => {
+                if let Some(index) = content
+                    .elements
+                    .iter()
+                    .position(|element| element_id_of(element) == element_id)
+                {
+                    content.elements.remove(index);
+                    return Ok(());
+                }
             }
         }
     }
@@ -406,6 +587,72 @@ fn update_figure_body(figure: &mut Figure, text: String) {
     }
 }
 
+fn insert_reference(
+    ast: &mut DocumentAST,
+    index: usize,
+    reference: ReferenceEntry,
+) -> Result<(), String> {
+    if index > ast.references.len() {
+        return Err(format!("Cannot insert reference at index {index}"));
+    }
+
+    ast.references.insert(index, reference);
+    Ok(())
+}
+
+fn update_reference(ast: &mut DocumentAST, reference: ReferenceEntry) -> Result<(), String> {
+    let existing = ast
+        .references
+        .iter_mut()
+        .find(|entry| entry.id == reference.id)
+        .ok_or_else(|| format!("Reference {} was not found", reference.id))?;
+
+    *existing = reference;
+    Ok(())
+}
+
+fn remove_reference(ast: &mut DocumentAST, reference_id: &str) -> Result<(), String> {
+    let index = ast
+        .references
+        .iter()
+        .position(|entry| entry.id == reference_id)
+        .ok_or_else(|| format!("Reference {reference_id} was not found"))?;
+
+    ast.references.remove(index);
+    Ok(())
+}
+
+fn insert_asset(ast: &mut DocumentAST, index: usize, asset: AssetEntry) -> Result<(), String> {
+    if index > ast.assets.len() {
+        return Err(format!("Cannot insert asset at index {index}"));
+    }
+
+    ast.assets.insert(index, asset);
+    Ok(())
+}
+
+fn update_asset(ast: &mut DocumentAST, asset: AssetEntry) -> Result<(), String> {
+    let existing = ast
+        .assets
+        .iter_mut()
+        .find(|entry| entry.id == asset.id)
+        .ok_or_else(|| format!("Asset {} was not found", asset.id))?;
+
+    *existing = asset;
+    Ok(())
+}
+
+fn remove_asset(ast: &mut DocumentAST, asset_id: &str) -> Result<(), String> {
+    let index = ast
+        .assets
+        .iter()
+        .position(|entry| entry.id == asset_id)
+        .ok_or_else(|| format!("Asset {asset_id} was not found"))?;
+
+    ast.assets.remove(index);
+    Ok(())
+}
+
 fn rich_text_from_string(text: String) -> Vec<RichText> {
     if text.is_empty() {
         return Vec::new();
@@ -428,5 +675,6 @@ fn element_id_of(element: &DocumentElement) -> &str {
         DocumentElement::Table(table) => &table.id,
         DocumentElement::Equation(equation) => &equation.id,
         DocumentElement::Figure(figure) => &figure.id,
+        DocumentElement::Custom(custom) => &custom.id,
     }
 }

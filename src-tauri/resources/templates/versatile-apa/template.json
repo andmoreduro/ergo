@@ -1,0 +1,237 @@
+{
+  "$schema": "../../schemas/ergo-template.schema.json",
+  "template": {
+    "id": "versatile-apa",
+    "name": "APA 7th Edition",
+    "version": "1.0.0",
+    "description": "American Psychological Association 7th Edition formatting via the versatile-apa Typst package."
+  },
+  "package": {
+    "name": "@preview/versatile-apa",
+    "version": "7.2.0",
+    "imports": [
+      "abstract-page",
+      "appendix",
+      "appendix-outline",
+      "title-page",
+      { "symbol": "versatile-apa", "alias": "apa-style" }
+    ]
+  },
+  "show_rule": {
+    "function": "apa-style",
+    "params": [
+      {
+        "key": "font-size",
+        "type": "length",
+        "source": "settings.font_size",
+        "default": "12pt"
+      },
+      {
+        "key": "running-head",
+        "type": "content",
+        "source": "inputs.running_head"
+      }
+    ]
+  },
+  "inputs": [
+    {
+      "id": "title",
+      "type": "string",
+      "label": "Document Title",
+      "importance": "required",
+      "default": "Untitled Document"
+    },
+    {
+      "id": "running_head",
+      "type": "string",
+      "label": "Running Head",
+      "importance": "recommended"
+    },
+    {
+      "id": "abstract_text",
+      "type": "content",
+      "label": "Abstract",
+      "importance": "recommended"
+    },
+    {
+      "id": "keywords",
+      "type": "array",
+      "label": "Keywords",
+      "importance": "optional",
+      "items": {
+        "type": "string",
+        "label": "Keyword"
+      }
+    },
+    {
+      "id": "affiliations",
+      "type": "array",
+      "label": "Affiliations",
+      "importance": "recommended",
+      "items": {
+        "type": "string",
+        "label": "Affiliation Name"
+      }
+    },
+    {
+      "id": "authors",
+      "type": "array",
+      "label": "Authors",
+      "importance": "required",
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "id": "name",
+            "type": "string",
+            "label": "Name",
+            "importance": "required"
+          },
+          {
+            "id": "affiliations",
+            "type": "array",
+            "label": "Affiliations",
+            "importance": "optional",
+            "items": {
+              "type": "reference",
+              "target": "affiliations",
+              "label": "Affiliation Reference"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "course",
+      "type": "string",
+      "label": "Course",
+      "importance": "optional"
+    },
+    {
+      "id": "instructor",
+      "type": "string",
+      "label": "Instructor",
+      "importance": "optional"
+    },
+    {
+      "id": "due_date",
+      "type": "string",
+      "label": "Due Date",
+      "importance": "optional"
+    },
+    {
+      "id": "author_note",
+      "type": "content",
+      "label": "Author Note",
+      "importance": "optional"
+    }
+  ],
+  "groups": [
+    {
+      "id": "cover_page",
+      "label": "Cover Page",
+      "inputs": ["title", "running_head", "authors", "affiliations", "course", "instructor", "due_date", "author_note"]
+    },
+    {
+      "id": "abstract",
+      "label": "Abstract & Keywords",
+      "inputs": ["abstract_text", "keywords"]
+    }
+  ],
+  "resource_policy": {
+    "preview": {
+      "width_pt": 360,
+      "margin_pt": 8
+    },
+    "pasted_image": {
+      "behavior": "figure",
+      "wrapper": "apa-figure"
+    }
+  },
+  "sections": [
+    {
+      "id": "title-page",
+      "kind": "function_call",
+      "function": "title-page",
+      "label": "Title Page",
+      "params": [
+        {
+          "key": "authors",
+          "type": "author_list",
+          "source": "inputs.authors"
+        },
+        {
+          "key": "affiliations",
+          "type": "affiliation_map",
+          "source": "inputs.affiliations"
+        },
+        {
+          "key": "course",
+          "type": "content",
+          "source": "inputs.course"
+        },
+        {
+          "key": "instructor",
+          "type": "content",
+          "source": "inputs.instructor"
+        },
+        {
+          "key": "due-date",
+          "type": "content",
+          "source": "inputs.due_date"
+        },
+        {
+          "key": "author-note",
+          "type": "content",
+          "source": "inputs.author_note"
+        }
+      ]
+    },
+    {
+      "id": "abstract-page",
+      "kind": "function_call",
+      "function": "abstract-page",
+      "label": "Abstract",
+      "params": [
+        {
+          "key": "_positional",
+          "type": "content",
+          "source": "inputs.abstract_text"
+        },
+        {
+          "key": "keywords",
+          "type": "string_array",
+          "source": "inputs.keywords"
+        }
+      ]
+    },
+    {
+      "id": "body",
+      "kind": "content",
+      "label": "Body"
+    },
+    {
+      "id": "references",
+      "kind": "bibliography",
+      "label": "References",
+      "file": "references.bib",
+      "title": "References",
+      "pagebreak_before": true
+    },
+    {
+      "id": "appendices",
+      "kind": "appendix",
+      "label": "Appendices",
+      "show_rule": "appendix"
+    }
+  ],
+  "defaults": {
+    "paper_size": "us-letter",
+    "language": "en",
+    "text_font": "Libertinus Serif",
+    "math_font": "Libertinus Math",
+    "raw_font": "DejaVu Sans Mono",
+    "font_size": 12.0,
+    "table_stroke_width": 0.5
+  }
+}

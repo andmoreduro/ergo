@@ -5,41 +5,148 @@ import type { DocumentSection } from "../../../bindings/DocumentSection";
 import {
     ActionContextProvider,
     useActionDispatcher,
-    type ActionHandlerMap,
 } from "../../../actions/runtime";
-import {
-    coverAbstractFieldId,
-    coverAffiliationsFieldId,
-    coverAuthorEmailFieldId,
-    coverAuthorNameFieldId,
-    coverTitleFieldId,
-} from "../../../editor/fieldIds";
 import { ElementEditor } from "../../organisms/ElementEditor/ElementEditor";
 import { Button } from "../../atoms/Button/Button";
-import { TextInput } from "../../atoms/TextInput/TextInput";
 import { Textarea } from "../../atoms/Textarea/Textarea";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Editor.module.css";
+import { getTemplateSpec } from "../../../templates/registry";
+import type { InputSchema } from "../../../templates/types";
+import { projectInputFieldId } from "../../../editor/fieldIds";
+import {
+    TextHeader124Regular,
+    TextParagraph24Regular,
+    Table24Regular,
+    MathFormula24Regular,
+    Image24Regular,
+} from "@fluentui/react-icons";
+import { Accordion } from "../../molecules/Accordion/Accordion";
 
-type CoverPageSection = Extract<DocumentSection, { type: "CoverPage" }>;
 type ContentSection = Extract<DocumentSection, { type: "Content" }>;
+
+const getValueAtPath = (obj: any, path: string): any => {
+    const parts = path.split("/").filter(Boolean);
+    let current = obj;
+    for (const part of parts) {
+        if (current === null || current === undefined) {
+            return undefined;
+        }
+        if (Array.isArray(current)) {
+            const index = parseInt(part, 10);
+            current = current[index];
+        } else {
+            current = current[part];
+        }
+    }
+    return current;
+};
 
 export const Editor = () => {
     const { state } = useDocument();
+    const dispatchAction = useActionDispatcher();
+
+    const templateSpec = getTemplateSpec(state.metadata.template_id);
+    const groups = templateSpec.groups || [];
+    const inputsMap = useMemo(() => {
+        return new Map<string, InputSchema>(
+            (templateSpec.inputs || []).map((input) => [input.id!, input])
+        );
+    }, [templateSpec.inputs]);
 
     return (
         <ActionContextProvider id="editor" contexts={["editor"]}>
             <main className={styles.editor}>
-                <h2>{m.workspace_form_editor()}</h2>
-                {state.sections.map((section) =>
-                    section.type === "CoverPage" ? (
-                        <CoverPageEditor
-                            key={section.id}
-                            section={section}
-                            title={state.metadata.title}
-                        />
-                    ) : null,
-                )}
+                {/* Insert Toolbar at the top with Fluent Icons */}
+                <div className={styles.toolbar}>
+                    <button
+                        className={styles.toolbarButton}
+                        type="button"
+                        title={m.menubar_insert_heading()}
+                        onClick={() =>
+                            void dispatchAction({
+                                id: "editor::InsertHeading",
+                                payload: null,
+                            })
+                        }
+                    >
+                        <TextHeader124Regular />
+                    </button>
+                    <button
+                        className={styles.toolbarButton}
+                        type="button"
+                        title={m.menubar_insert_paragraph()}
+                        onClick={() =>
+                            void dispatchAction({
+                                id: "editor::InsertParagraph",
+                                payload: null,
+                            })
+                        }
+                    >
+                        <TextParagraph24Regular />
+                    </button>
+                    <button
+                        className={styles.toolbarButton}
+                        type="button"
+                        title={m.menubar_insert_table()}
+                        onClick={() =>
+                            void dispatchAction({
+                                id: "editor::InsertTable",
+                                payload: null,
+                            })
+                        }
+                    >
+                        <Table24Regular />
+                    </button>
+                    <button
+                        className={styles.toolbarButton}
+                        type="button"
+                        title={m.menubar_insert_equation()}
+                        onClick={() =>
+                            void dispatchAction({
+                                id: "editor::InsertEquation",
+                                payload: null,
+                            })
+                        }
+                    >
+                        <MathFormula24Regular />
+                    </button>
+                    <button
+                        className={styles.toolbarButton}
+                        type="button"
+                        title={m.menubar_insert_figure()}
+                        onClick={() =>
+                            void dispatchAction({
+                                id: "editor::InsertFigure",
+                                payload: null,
+                            })
+                        }
+                    >
+                        <Image24Regular />
+                    </button>
+                </div>
+
+                {/* Render input groups dynamically */}
+                {groups.map((group) => (
+                    <Accordion key={group.id} title={group.label} defaultOpen>
+                        <div className={styles.groupContent}>
+                            {group.inputs.map((inputId) => {
+                                const schema = inputsMap.get(inputId);
+                                if (!schema) return null;
+                                return (
+                                    <DynamicField
+                                        key={inputId}
+                                        schema={schema}
+                                        path={`/${inputId}`}
+                                        label={schema.label}
+                                    />
+                                );
+                            })}
+                        </div>
+                    </Accordion>
+                ))}
+
+                {/* Render Content Sections */}
                 {state.sections.map((section) =>
                     section.type === "Content" ? (
                         <ContentSectionEditor key={section.id} section={section} />
@@ -50,293 +157,258 @@ export const Editor = () => {
     );
 };
 
-const CoverPageEditor = ({
-    section,
-    title,
-}: {
-    section: CoverPageSection;
-    title: string;
-}) => {
-    const { dispatch } = useDocument();
-    const dispatchAction = useActionDispatcher();
-    const titleField = useEditorFieldBinding<HTMLInputElement>({
-        elementId: section.id,
-        fieldId: coverTitleFieldId(section.id),
-    });
-    const abstractField = useEditorFieldBinding<HTMLTextAreaElement>({
-        elementId: section.id,
-        fieldId: coverAbstractFieldId(section.id),
-    });
-    const affiliationsField = useEditorFieldBinding<HTMLTextAreaElement>({
-        elementId: section.id,
-        fieldId: coverAffiliationsFieldId(section.id),
-    });
+interface DynamicFieldProps {
+    schema: InputSchema;
+    path: string;
+    label?: string;
+}
 
-    const coverPageHandlers: ActionHandlerMap = useMemo(
-        () => ({
-            "editor::AddAuthor": () => {
-                dispatch({
-                    type: "ADD_AUTHOR",
-                    payload: { sectionId: section.id },
-                });
-                return true;
-            },
-            "editor::RemoveAuthor": (invocation) => {
-                const authorIndex =
-                    typeof invocation.payload === "object" &&
-                    invocation.payload !== null &&
-                    "authorIndex" in invocation.payload &&
-                    typeof invocation.payload.authorIndex === "number"
-                        ? invocation.payload.authorIndex
-                        : -1;
+const getFieldLabel = (schema: InputSchema, label?: string) => {
+    const baseLabel = label || schema.label || schema.id || "";
+    if (!schema.importance) return baseLabel;
+    return `${baseLabel} (${schema.importance})`;
+};
 
-                if (authorIndex < 0) {
-                    return false;
-                }
+const DynamicField = ({ schema, path, label }: DynamicFieldProps) => {
+    if (schema.type === "array") {
+        return <DynamicFieldArray schema={schema} path={path} label={label} />;
+    }
 
-                dispatch({
-                    type: "REMOVE_AUTHOR",
-                    payload: {
-                        sectionId: section.id,
-                        authorIndex,
-                    },
-                });
-                return true;
-            },
-        }),
-        [dispatch, section.id],
-    );
+    return <DynamicFieldString schema={schema} path={path} label={label} />;
+};
+
+const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
+    const { state, dispatch } = useDocument();
+    const fieldBinding = useEditorFieldBinding<HTMLTextAreaElement>({
+        elementId: "project",
+        fieldId: projectInputFieldId(path),
+    });
+    const value = getValueAtPath(state.inputs, path) ?? "";
 
     return (
-        <ActionContextProvider
-            id={`section-${section.id}`}
-            contexts={["section", "coverPage"]}
-            attributes={{ "section.id": section.id }}
-            handlers={coverPageHandlers}
-        >
-            <section
-                className={styles.section}
-                data-element-id={section.id}
-                data-section-id={section.id}
-            >
-                <h3>{m.editor_cover_page()}</h3>
-                <TextInput
-                    {...titleField}
-                    fullWidth
-                    label={m.editor_document_title()}
-                    value={title}
-                    onChange={(event) =>
-                        dispatch({
-                            type: "UPDATE_PROJECT_TITLE",
-                            payload: { title: event.target.value },
-                        })
-                    }
-                />
-                <Textarea
-                    {...abstractField}
-                    fullWidth
-                    label={m.editor_abstract()}
-                    value={section.abstract_text}
-                    onChange={(event) =>
-                        dispatch({
-                            type: "UPDATE_COVER_PAGE_ABSTRACT",
-                            payload: {
-                                sectionId: section.id,
-                                abstractText: event.target.value,
-                            },
-                        })
-                    }
-                />
-                <Textarea
-                    {...affiliationsField}
-                    fullWidth
-                    label={m.editor_affiliations()}
-                    value={section.affiliations.join("\n")}
-                    onChange={(event) =>
-                        dispatch({
-                            type: "UPDATE_COVER_PAGE_AFFILIATIONS",
-                            payload: {
-                                sectionId: section.id,
-                                affiliations: event.target.value
-                                    .split("\n")
-                                    .map((value) => value.trim())
-                                    .filter(Boolean),
-                            },
-                        })
-                    }
-                />
-                <div className={styles.authorList}>
-                    {section.authors.map((author, index) => (
-                        <AuthorRow
-                            author={author}
-                            index={index}
-                            key={author.name || `author-${index}`}
-                            sectionId={section.id}
-                        />
-                    ))}
-                </div>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() =>
-                        dispatchAction({
-                            id: "editor::AddAuthor",
-                            payload: null,
-                        })
-                    }
-                >
-                    {m.editor_add_author()}
-                </Button>
-            </section>
-        </ActionContextProvider>
+        <Textarea
+            {...fieldBinding}
+            fullWidth
+            label={getFieldLabel(schema, label)}
+            placeholder={schema.description}
+            value={value}
+            onChange={(event) =>
+                dispatch({
+                    type: "UPDATE_INPUT",
+                    payload: { path, value: event.target.value },
+                })
+            }
+        />
     );
 };
 
-const AuthorRow = ({
-    author,
-    index,
-    sectionId,
+
+const AuthorAffiliationsSelector = ({
+    authorPath,
+    authorAffiliations = [],
 }: {
-    author: CoverPageSection["authors"][number];
-    index: number;
-    sectionId: string;
+    authorPath: string;
+    authorAffiliations: string[];
 }) => {
-    const { dispatch } = useDocument();
-    const dispatchAction = useActionDispatcher();
-    const nameField = useEditorFieldBinding<HTMLInputElement>({
-        elementId: sectionId,
-        fieldId: coverAuthorNameFieldId(sectionId, index),
-    });
-    const emailField = useEditorFieldBinding<HTMLInputElement>({
-        elementId: sectionId,
-        fieldId: coverAuthorEmailFieldId(sectionId, index),
+    const { state, dispatch } = useDocument();
+    const allAffiliations = state.inputs.affiliations || [];
+
+    const handleToggleAffiliation = (affRef: string, checked: boolean) => {
+        const nextAffiliations = checked
+            ? [...authorAffiliations, affRef]
+            : authorAffiliations.filter((ref) => ref !== affRef);
+
+        dispatch({
+            type: "UPDATE_INPUT",
+            payload: {
+                path: `${authorPath}/affiliations`,
+                value: nextAffiliations,
+            },
+        });
+    };
+
+    if (!Array.isArray(allAffiliations) || allAffiliations.length === 0) {
+        return (
+            <div className={styles.affiliationsSelector}>
+                <span className={styles.label}>Affiliations</span>
+                <p className={styles.empty}>No affiliations defined yet. Add some in the Affiliations section below.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className={styles.affiliationsSelector}>
+            <span className={styles.label}>Affiliations</span>
+            <div className={styles.checkboxGroup}>
+                {allAffiliations.map((aff: any, index: number) => {
+                    const affRef = String(index + 1);
+                    const displayName = typeof aff === "string" ? aff : (aff.name || aff.institution || `Affiliation #${affRef}`);
+                    const isChecked = authorAffiliations.includes(affRef);
+                    const selectedIndex = authorAffiliations.indexOf(affRef);
+                    const selectedPath = selectedIndex >= 0
+                        ? `${authorPath}/affiliations/${selectedIndex}`
+                        : `${authorPath}/affiliations`;
+
+                    return (
+                        <AuthorAffiliationCheckbox
+                            key={affRef}
+                            checked={isChecked}
+                            fieldPath={selectedPath}
+                            label={displayName}
+                            onChange={(checked) =>
+                                handleToggleAffiliation(affRef, checked)
+                            }
+                        />
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+const AuthorAffiliationCheckbox = ({
+    checked,
+    fieldPath,
+    label,
+    onChange,
+}: {
+    checked: boolean;
+    fieldPath: string;
+    label: string;
+    onChange: (checked: boolean) => void;
+}) => {
+    const fieldBinding = useEditorFieldBinding<HTMLInputElement>({
+        elementId: "project",
+        fieldId: projectInputFieldId(fieldPath),
     });
 
     return (
-        <div className={styles.authorRow}>
-            <TextInput
-                {...nameField}
-                fullWidth
-                label={m.editor_author_name()}
-                value={author.name}
-                onChange={(event) =>
-                    dispatch({
-                        type: "UPDATE_AUTHOR",
-                        payload: {
-                            sectionId,
-                            authorIndex: index,
-                            field: "name",
-                            value: event.target.value,
-                        },
-                    })
-                }
+        <label className={styles.checkboxLabel}>
+            <input
+                {...fieldBinding}
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => onChange(event.target.checked)}
             />
-            <TextInput
-                {...emailField}
-                fullWidth
-                label={m.editor_author_email()}
-                value={author.email ?? ""}
-                onChange={(event) =>
-                    dispatch({
-                        type: "UPDATE_AUTHOR",
-                        payload: {
-                            sectionId,
-                            authorIndex: index,
-                            field: "email",
-                            value: event.target.value,
-                        },
-                    })
+            <span>{label}</span>
+        </label>
+    );
+};
+
+const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
+    const { state, dispatch } = useDocument();
+    const items = getValueAtPath(state.inputs, path) ?? [];
+
+    const handleAddItem = () => {
+        let insertedValue: any;
+        if (schema.items?.type === "object" && schema.items.properties) {
+            const newItem: Record<string, any> = {};
+            for (const prop of schema.items.properties) {
+                if (prop.type === "integer" && prop.id === "id") {
+                    newItem[prop.id] = items.length + 1;
+                } else if (prop.type === "array") {
+                    newItem[prop.id!] = [];
+                } else {
+                    newItem[prop.id!] = prop.default ?? "";
                 }
-            />
+            }
+            insertedValue = newItem;
+        } else {
+            insertedValue = schema.items?.default ?? "";
+        }
+
+        dispatch({
+            type: "INSERT_INPUT_ARRAY_ITEM",
+            payload: {
+                path,
+                index: items.length,
+                value: insertedValue,
+            },
+        });
+    };
+
+    const handleRemoveItem = (index: number) => {
+        dispatch({
+            type: "REMOVE_INPUT_ARRAY_ITEM",
+            payload: { path, index },
+        });
+    };
+
+    return (
+        <div className={styles.arrayContainer}>
+            <div className={styles.arrayHeader}>
+                <h4>{getFieldLabel(schema, label)}</h4>
+            </div>
+            <div className={styles.arrayList}>
+                {items.map((item: any, index: number) => {
+                    const itemPath = `${path}/${index}`;
+                    return (
+                        <div key={index} className={styles.arrayItemRow}>
+                            <div className={styles.arrayItemContent}>
+                                {schema.items?.type === "object" && schema.items.properties ? (
+                                    schema.items.properties.map((prop) => {
+                                        const propPath = `${itemPath}/${prop.id}`;
+                                        if (path.endsWith("authors") && prop.id === "affiliations") {
+                                            return (
+                                                <AuthorAffiliationsSelector
+                                                    key={prop.id}
+                                                    authorPath={itemPath}
+                                                    authorAffiliations={item.affiliations || []}
+                                                />
+                                            );
+                                        }
+
+                                        if (prop.id === "id" && prop.type === "integer") {
+                                            return (
+                                                <div key={prop.id} className={styles.badge}>
+                                                    ID: {item.id}
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <DynamicField
+                                                key={prop.id}
+                                                schema={prop}
+                                                path={propPath}
+                                                label={prop.label}
+                                            />
+                                        );
+                                    })
+                                ) : (
+                                    <DynamicField
+                                        schema={schema.items!}
+                                        path={itemPath}
+                                    />
+                                )}
+                            </div>
+                            <Button
+                                type="button"
+                                variant="danger"
+                                size="small"
+                                onClick={() => handleRemoveItem(index)}
+                            >
+                                Remove
+                            </Button>
+                        </div>
+                    );
+                })}
+            </div>
             <Button
                 type="button"
-                variant="danger"
+                variant="secondary"
                 size="small"
-                onClick={() =>
-                    dispatchAction({
-                        id: "editor::RemoveAuthor",
-                        payload: { authorIndex: index },
-                    })
-                }
+                onClick={handleAddItem}
             >
-                {m.editor_remove_author()}
+                Add {label || schema.label || "Item"}
             </Button>
         </div>
     );
 };
 
 const ContentSectionEditor = ({ section }: { section: ContentSection }) => {
-    const dispatchAction = useActionDispatcher();
-
     return (
         <div className={styles.section}>
-            <div className={styles.insertToolbar}>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    onClick={() =>
-                        dispatchAction({
-                            id: "editor::InsertHeading",
-                            payload: null,
-                        })
-                    }
-                >
-                    {m.editor_add_heading()}
-                </Button>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    onClick={() =>
-                        dispatchAction({
-                            id: "editor::InsertParagraph",
-                            payload: null,
-                        })
-                    }
-                >
-                    {m.editor_add_paragraph()}
-                </Button>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    onClick={() =>
-                        dispatchAction({
-                            id: "editor::InsertTable",
-                            payload: null,
-                        })
-                    }
-                >
-                    {m.editor_add_table()}
-                </Button>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    onClick={() =>
-                        dispatchAction({
-                            id: "editor::InsertEquation",
-                            payload: null,
-                        })
-                    }
-                >
-                    {m.editor_add_equation()}
-                </Button>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    onClick={() =>
-                        dispatchAction({
-                            id: "editor::InsertFigure",
-                            payload: null,
-                        })
-                    }
-                >
-                    {m.editor_add_figure()}
-                </Button>
-            </div>
             {section.elements.map((element) => (
                 <ElementEditor key={element.id} element={element} />
             ))}

@@ -3,17 +3,21 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::ast::DocumentAST;
+use crate::ast::{DocumentAST, DocumentElement, DocumentSection};
 use crate::core_errors::DocumentSessionError;
 use crate::document_session_events::apply_document_event;
 use crate::document_session_generation::{default_layout, generate_project_sources};
+use crate::document_resources::{
+    ensure_resource_preview_lib, resource_preview_lib_hash, ResourcePreviewState,
+};
 pub use crate::document_session_types::{
-    AuthorField, DocumentEvent, DocumentSessionStatus, FieldSourceMapEntry, FieldTextSegment,
-    GeneratedFragment, ProjectSourceLayout, SectionSource, SourceMapEntry,
+    DocumentEvent, DocumentSessionStatus, FieldSourceMapEntry, FieldTextSegment, GeneratedFragment,
+    ProjectSourceLayout, SectionSource, SourceMapEntry,
 };
 use crate::vfs::VirtualFileSystem;
 
 pub(crate) const MAIN_PATH: &str = "main.typ";
+pub(crate) const LIB_PATH: &str = "lib.typ";
 pub(crate) const REFERENCES_PATH: &str = "references.bib";
 pub(crate) const DOCUMENT_STATE_PATH: &str = ".ergproj/document_state.json";
 pub(crate) const DEPENDENCY_MANIFEST_PATH: &str = ".ergproj/dependency_manifest.json";
@@ -30,6 +34,8 @@ struct DocumentSessionInner {
     source_map: Vec<SourceMapEntry>,
     field_source_map: Vec<FieldSourceMapEntry>,
     last_status: Option<DocumentSessionStatus>,
+    dirty_resource_ids: HashSet<String>,
+    resource_preview_lib_hash: u64,
 }
 
 pub struct DocumentSession {
@@ -47,7 +53,31 @@ impl DocumentSession {
 
     pub fn sync_snapshot(&self, ast: DocumentAST) -> Result<DocumentSessionStatus, String> {
         let mut inner = self.inner.lock();
-        self.sync_ast_locked(&mut inner, ast)
+        let mut dirty_resource_ids = HashSet::new();
+        if let Some(old_ast) = &inner.ast {
+            // Find changed/new assets
+            for asset in &ast.assets {
+                let is_dirty = match old_ast.assets.iter().find(|a| a.id == asset.id) {
+                    Some(old_asset) => old_asset != asset,
+                    None => true,
+                };
+                if is_dirty {
+                    dirty_resource_ids.insert(asset.id.clone());
+                    dirty_resource_ids.extend(figure_ids_for_asset(&ast, &asset.id));
+                }
+            }
+            // Find removed assets
+            for old_asset in &old_ast.assets {
+                if !ast.assets.iter().any(|a| a.id == old_asset.id) {
+                    dirty_resource_ids.insert(old_asset.id.clone());
+                    dirty_resource_ids.extend(figure_ids_for_asset(&ast, &old_asset.id));
+                }
+            }
+        } else {
+            // Initial sync: mark all resource IDs as dirty
+            dirty_resource_ids = resource_ids_for_ast(&ast);
+        }
+        self.sync_ast_locked(&mut inner, ast, dirty_resource_ids)
     }
 
     pub fn apply_event(&self, event: DocumentEvent) -> Result<DocumentSessionStatus, String> {
@@ -56,16 +86,23 @@ impl DocumentSession {
             .ast
             .clone()
             .ok_or_else(|| "Document session has not been initialized".to_string())?;
+        let dirty_resource_ids = dirty_resource_ids_for_event(&ast, &event);
         apply_document_event(&mut ast, event)?;
-        self.sync_ast_locked(&mut inner, ast)
+        self.sync_ast_locked(&mut inner, ast, dirty_resource_ids)
     }
 
     fn sync_ast_locked(
         &self,
         inner: &mut DocumentSessionInner,
         ast: DocumentAST,
+        mut dirty_resource_ids: HashSet<String>,
     ) -> Result<DocumentSessionStatus, String> {
-        let generated = generate_project_sources(&ast);
+        let template_spec = crate::template_spec::load_bundled_template(&ast.metadata.template_id)?;
+        let next_resource_preview_lib_hash = resource_preview_lib_hash(&ast, &template_spec);
+        let resource_preview_lib_changed =
+            inner.resource_preview_lib_hash != next_resource_preview_lib_hash;
+        ensure_resource_preview_lib(&self.vfs, &ast, &template_spec);
+        let generated = generate_project_sources(&ast, &template_spec);
 
         let mut dirty_element_ids = Vec::new();
         for (element_id, fragment) in &generated.fragments {
@@ -76,7 +113,14 @@ impl DocumentSession {
                 .unwrap_or(true);
             if is_dirty {
                 dirty_element_ids.push(element_id.clone());
+                if is_resource_element_id(&ast, element_id) {
+                    dirty_resource_ids.insert(element_id.clone());
+                }
             }
+        }
+
+        if resource_preview_lib_changed {
+            dirty_resource_ids.extend(resource_ids_for_ast(&ast));
         }
 
         let previous_section_paths: HashSet<String> = inner
@@ -97,7 +141,10 @@ impl DocumentSession {
         let mut dirty_section_ids = Vec::new();
         let mut next_sections = HashMap::new();
         for mut section in generated.sections {
-            if !self.vfs.is_source_equal(&section.file_path, &section.source) {
+            if !self
+                .vfs
+                .is_source_equal(&section.file_path, &section.source)
+            {
                 section.revision = self
                     .vfs
                     .write_source(&section.file_path, section.source.clone());
@@ -109,6 +156,7 @@ impl DocumentSession {
         }
 
         write_source_if_changed(&self.vfs, MAIN_PATH, &generated.main_source);
+        write_source_if_changed(&self.vfs, LIB_PATH, &generated.lib_source);
         write_source_if_changed(&self.vfs, REFERENCES_PATH, &generated.references_source);
 
         write_json_source(&self.vfs, DOCUMENT_STATE_PATH, &ast)?;
@@ -134,21 +182,25 @@ impl DocumentSession {
             &generated.field_source_map,
         )?;
 
-        let status = DocumentSessionStatus {
-            source_revision: self.vfs.latest_revision(),
-            layout: generated.layout,
-            source_map: generated.source_map.clone(),
-            field_source_map: generated.field_source_map.clone(),
-            dirty_section_ids,
-            dirty_element_ids,
-            fragment_count: generated.fragments.len(),
-        };
-
         inner.ast = Some(ast);
         inner.fragments = generated.fragments;
         inner.sections = next_sections;
         inner.source_map = generated.source_map;
         inner.field_source_map = generated.field_source_map;
+        inner.dirty_resource_ids.extend(dirty_resource_ids);
+        inner.resource_preview_lib_hash = next_resource_preview_lib_hash;
+
+        let status = DocumentSessionStatus {
+            source_revision: self.vfs.latest_revision(),
+            layout: generated.layout,
+            source_map: inner.source_map.clone(),
+            field_source_map: inner.field_source_map.clone(),
+            dirty_section_ids,
+            dirty_element_ids,
+            fragment_count: inner.fragments.len(),
+            dirty_resource_ids: inner.dirty_resource_ids.iter().cloned().collect(),
+        };
+
         inner.last_status = Some(status.clone());
 
         Ok(status)
@@ -167,7 +219,34 @@ impl DocumentSession {
                 dirty_section_ids: Vec::new(),
                 dirty_element_ids: Vec::new(),
                 fragment_count: 0,
+                dirty_resource_ids: Vec::new(),
             })
+    }
+
+    pub fn ast(&self) -> Option<DocumentAST> {
+        self.inner.lock().ast.clone()
+    }
+
+    pub(crate) fn resource_preview_state(&self) -> Option<ResourcePreviewState> {
+        let inner = self.inner.lock();
+        Some(ResourcePreviewState {
+            ast: inner.ast.clone()?,
+            dirty_resource_ids: inner.dirty_resource_ids.clone(),
+            resource_preview_lib_hash: inner.resource_preview_lib_hash,
+        })
+    }
+
+    pub(crate) fn acknowledge_resource_previews(
+        &self,
+        resource_ids: &HashSet<String>,
+        resource_preview_lib_hash: u64,
+    ) {
+        let mut inner = self.inner.lock();
+        if inner.resource_preview_lib_hash == resource_preview_lib_hash {
+            for resource_id in resource_ids {
+                inner.dirty_resource_ids.remove(resource_id);
+            }
+        }
     }
 }
 
@@ -178,6 +257,116 @@ fn write_json_source<T: Serialize>(
 ) -> Result<u64, String> {
     let text = serde_json::to_string_pretty(value).map_err(|error| error.to_string())?;
     Ok(write_source_if_changed(vfs, path, &text))
+}
+
+fn dirty_resource_ids_for_event(ast: &DocumentAST, event: &DocumentEvent) -> HashSet<String> {
+    let mut ids = HashSet::new();
+    match event {
+        DocumentEvent::SetProjectSettings { .. } => {
+            ids.extend(resource_ids_for_ast(ast));
+        }
+        DocumentEvent::InsertElement { element, .. }
+        | DocumentEvent::RestoreElement { element, .. } => {
+            if let Some(resource_id) = resource_id_for_element(element) {
+                ids.insert(resource_id);
+            }
+        }
+        DocumentEvent::RemoveElement { element_id } => {
+            ids.insert(element_id.clone());
+        }
+        DocumentEvent::UpdateEquation { element_id, .. }
+        | DocumentEvent::UpdateFigure { element_id, .. }
+        | DocumentEvent::UpdateCustomElementField { element_id, .. } => {
+            ids.insert(element_id.clone());
+        }
+        DocumentEvent::UpdateTableCell { table_id, .. }
+        | DocumentEvent::InsertTableRow { table_id, .. }
+        | DocumentEvent::RemoveTableRow { table_id, .. }
+        | DocumentEvent::RestoreTableRow { table_id, .. }
+        | DocumentEvent::InsertTableColumn { table_id, .. }
+        | DocumentEvent::RemoveTableColumn { table_id, .. }
+        | DocumentEvent::RestoreTableColumn { table_id, .. }
+        | DocumentEvent::UpdateTableColumnSize { table_id, .. } => {
+            ids.insert(table_id.clone());
+        }
+        DocumentEvent::UpdateElementExtraField { element_id, .. } => {
+            if is_resource_element_id(ast, element_id) {
+                ids.insert(element_id.clone());
+            }
+        }
+        DocumentEvent::InsertAsset { asset, .. }
+        | DocumentEvent::UpdateAsset { asset }
+        | DocumentEvent::RestoreAsset { asset, .. } => {
+            ids.insert(asset.id.clone());
+            ids.extend(figure_ids_for_asset(ast, &asset.id));
+        }
+        DocumentEvent::RemoveAsset { asset_id } => {
+            ids.insert(asset_id.clone());
+            ids.extend(figure_ids_for_asset(ast, asset_id));
+        }
+        DocumentEvent::SetProjectTitle { .. }
+        | DocumentEvent::UpdateInput { .. }
+        | DocumentEvent::InsertInputArrayItem { .. }
+        | DocumentEvent::RemoveInputArrayItem { .. }
+        | DocumentEvent::UpdateParagraphText { .. }
+        | DocumentEvent::UpdateHeading { .. }
+        | DocumentEvent::InsertReference { .. }
+        | DocumentEvent::UpdateReference { .. }
+        | DocumentEvent::RemoveReference { .. }
+        | DocumentEvent::RestoreReference { .. } => {}
+    }
+    ids
+}
+
+fn resource_ids_for_ast(ast: &DocumentAST) -> HashSet<String> {
+    let mut ids = ast
+        .assets
+        .iter()
+        .map(|asset| asset.id.clone())
+        .collect::<HashSet<_>>();
+
+    for element in ast.sections.iter().flat_map(section_elements) {
+        if let Some(resource_id) = resource_id_for_element(element) {
+            ids.insert(resource_id);
+        }
+    }
+
+    ids
+}
+
+fn is_resource_element_id(ast: &DocumentAST, element_id: &str) -> bool {
+    ast.sections
+        .iter()
+        .flat_map(section_elements)
+        .any(|element| resource_id_for_element(element).as_deref() == Some(element_id))
+}
+
+fn resource_id_for_element(element: &DocumentElement) -> Option<String> {
+    match element {
+        DocumentElement::Table(table) => Some(table.id.clone()),
+        DocumentElement::Equation(equation) => Some(equation.id.clone()),
+        DocumentElement::Figure(figure) => Some(figure.id.clone()),
+        DocumentElement::Custom(custom) => Some(custom.id.clone()),
+        DocumentElement::Heading(_) | DocumentElement::Paragraph(_) => None,
+    }
+}
+
+fn figure_ids_for_asset(ast: &DocumentAST, asset_id: &str) -> HashSet<String> {
+    ast.sections
+        .iter()
+        .flat_map(section_elements)
+        .filter_map(|element| match element {
+            DocumentElement::Figure(figure) if figure.asset_id.as_deref() == Some(asset_id) => {
+                Some(figure.id.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn section_elements(section: &DocumentSection) -> &[DocumentElement] {
+    let DocumentSection::Content(content) = section;
+    &content.elements
 }
 
 fn write_source_if_changed(vfs: &VirtualFileSystem, path: &str, source: &str) -> u64 {
@@ -201,10 +390,11 @@ pub fn read_preview_svg_from_vfs(
 }
 
 #[cfg(test)]
+#[allow(irrefutable_let_patterns, unreachable_patterns)]
 mod tests {
     use super::*;
     use crate::ast::{
-        Author, DocumentElement, DocumentSection, Equation, Figure, Paragraph, ProjectSettings,
+        AssetEntry, DocumentElement, DocumentSection, Equation, Figure, Paragraph, ProjectSettings,
         ReferenceEntry, RichText, Table, TableCell,
     };
     use crate::test_fixtures::basic_document_ast;
@@ -229,15 +419,17 @@ mod tests {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
 
-        let status = session.sync_snapshot(basic_document_ast("Título con ñ", "")).unwrap();
+        let status = session
+            .sync_snapshot(basic_document_ast("Título con ñ", ""))
+            .unwrap();
 
         assert_eq!(status.layout.main_path, "main.typ");
-        assert_eq!(status.layout.section_paths.len(), 2);
-        assert!(vfs.read_source("main.typ").unwrap().contains("#include"));
+        assert_eq!(status.layout.section_paths.len(), 1);
+        assert!(vfs.read_source("main.typ").unwrap().contains("#import"));
         assert!(vfs
             .read_source("sections/content-section.typ")
             .unwrap()
-            .contains("== Introducción <ergo-heading-1>"));
+            .contains("#heading(level: 2, [Introducción]) <ergo-heading-1>"));
         assert!(status
             .source_map
             .iter()
@@ -246,11 +438,120 @@ mod tests {
     }
 
     #[test]
+    fn generates_compile_safe_defaults_for_empty_template_inputs() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let mut ast = basic_document_ast("Título con ñ", "");
+        ast.inputs
+            .insert("keywords".to_string(), serde_json::json!([]));
+
+        session.sync_snapshot(ast).unwrap();
+
+        let main_source = vfs.read_source("main.typ").unwrap();
+        let lib_source = vfs.read_source("lib.typ").unwrap();
+        assert!(!lib_source.contains("running-head:"));
+        assert!(!main_source.contains("authors:"));
+        assert!(main_source.contains("affiliations: (:)"));
+        assert!(main_source.contains("keywords: ()"));
+        assert!(lib_source.contains("#set text(font: \"Libertinus Serif\", size: 11pt)"));
+        assert!(!lib_source.contains("#set text(font: \"DejaVu Sans Mono\")"));
+    }
+
+    #[test]
+    fn field_source_map_tracks_template_input_collection_paths() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let mut ast = basic_document_ast("Título con ñ", "");
+        ast.inputs.insert(
+            "affiliations".to_string(),
+            serde_json::json!(["Universidad Norte"]),
+        );
+        ast.inputs.insert(
+            "authors".to_string(),
+            serde_json::json!([
+                {
+                    "name": "Ada Lovelace",
+                    "affiliations": ["1"]
+                }
+            ]),
+        );
+
+        let status = session.sync_snapshot(ast).unwrap();
+
+        for field_id in [
+            "/authors/0/name",
+            "/authors/0/affiliations/0",
+            "/affiliations/0",
+        ] {
+            assert!(
+                status.field_source_map.iter().any(|entry| {
+                    entry.element_id == "inputs"
+                        && entry.field_id == field_id
+                        && entry.file_path == "main.typ"
+                }),
+                "missing field source map entry for {field_id}",
+            );
+        }
+    }
+
+    #[test]
+    fn field_source_map_tracks_template_preamble_input_paths() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        let mut ast = basic_document_ast("Título con ñ", "");
+        ast.inputs
+            .insert("running_head".to_string(), serde_json::json!("CABEZA"));
+
+        let status = session.sync_snapshot(ast).unwrap();
+
+        for field_id in ["/title", "/running_head"] {
+            let expected_file = if field_id == "/title" { "main.typ" } else { "lib.typ" };
+            assert!(
+                status.field_source_map.iter().any(|entry| {
+                    entry.element_id == "inputs"
+                        && entry.field_id == field_id
+                        && entry.file_path == expected_file
+                        && !entry.segments.is_empty()
+                }),
+                "missing preamble field source map entry for {field_id}",
+            );
+        }
+    }
+
+    #[test]
+    fn title_input_events_update_project_metadata_source() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session
+            .sync_snapshot(basic_document_ast("Borrador inicial", ""))
+            .unwrap();
+
+        session
+            .apply_event(DocumentEvent::UpdateInput {
+                path: "/title".to_string(),
+                value: serde_json::json!("Título escrito"),
+            })
+            .unwrap();
+
+        let persisted = persisted_ast(&vfs);
+        let main_source = vfs.read_source("main.typ").unwrap();
+
+        assert_eq!(persisted.metadata.title, "Título escrito");
+        assert_eq!(
+            persisted.inputs.get("title"),
+            Some(&serde_json::json!("Título escrito"))
+        );
+        assert!(main_source.contains("#set document(title: [Título escrito]"));
+    }
+
+    #[test]
     fn status_includes_field_source_map_for_heading_text() {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
 
-        let status = session.sync_snapshot(basic_document_ast("Título con ñ", "")).unwrap();
+        let status = session
+            .sync_snapshot(basic_document_ast("Título con ñ", ""))
+            .unwrap();
         let status_json = serde_json::to_value(status).unwrap();
         let field_map = status_json
             .get("fieldSourceMap")
@@ -270,7 +571,7 @@ mod tests {
         let session = DocumentSession::new(Arc::clone(&vfs));
         let mut ast = basic_document_ast("Título con ñ", "");
 
-        if let DocumentSection::Content(content) = &mut ast.sections[1] {
+        if let DocumentSection::Content(content) = &mut ast.sections[0] {
             if let DocumentElement::Heading(heading) = &mut content.elements[0] {
                 heading.content[0].text = "#Niñez 🌍".to_string();
             }
@@ -285,7 +586,7 @@ mod tests {
 
         assert_eq!(
             vfs.read_source("sections/content-section.typ").unwrap(),
-            "== \\#Niñez 🌍 <ergo-heading-1>\n\n"
+            "#heading(level: 2, [\\#Niñez 🌍]) <ergo-heading-1>\n\n"
         );
         assert_eq!(
             field_entry
@@ -316,7 +617,7 @@ mod tests {
         let mut ast = basic_document_ast("Título con ñ", "");
         session.sync_snapshot(ast.clone()).unwrap();
 
-        if let DocumentSection::Content(content) = &mut ast.sections[1] {
+        if let DocumentSection::Content(content) = &mut ast.sections[0] {
             if let DocumentElement::Heading(heading) = &mut content.elements[0] {
                 heading.content[0].text = "Método".to_string();
             }
@@ -337,7 +638,7 @@ mod tests {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
         let mut ast = basic_document_ast("Título con ñ", "");
-        if let DocumentSection::Content(content) = &mut ast.sections[1] {
+        if let DocumentSection::Content(content) = &mut ast.sections[0] {
             content.elements.push(DocumentElement::Paragraph(Paragraph {
                 id: "paragraph-1".to_string(),
                 content: vec![],
@@ -367,7 +668,9 @@ mod tests {
     fn applies_document_event_variants_to_backend_ast() {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
-        session.sync_snapshot(basic_document_ast("Título con ñ", "")).unwrap();
+        session
+            .sync_snapshot(basic_document_ast("Título con ñ", ""))
+            .unwrap();
 
         session
             .apply_event(DocumentEvent::SetProjectSettings {
@@ -378,49 +681,23 @@ mod tests {
             })
             .unwrap();
         session
-            .apply_event(DocumentEvent::UpdateCoverAbstract {
-                section_id: "cover-section".to_string(),
-                text: "Resumen con ñ".to_string(),
+            .apply_event(DocumentEvent::UpdateInput {
+                path: "/abstract_text".to_string(),
+                value: serde_json::json!("Resumen con ñ"),
             })
             .unwrap();
         session
-            .apply_event(DocumentEvent::UpdateCoverAffiliations {
-                section_id: "cover-section".to_string(),
-                affiliations: vec!["Universidad".to_string()],
+            .apply_event(DocumentEvent::UpdateInput {
+                path: "/affiliations".to_string(),
+                value: serde_json::json!(["Universidad"]),
             })
             .unwrap();
         session
-            .apply_event(DocumentEvent::InsertAuthor {
-                section_id: "cover-section".to_string(),
-                index: 0,
-                author: Author {
-                    name: "Ana".to_string(),
-                    email: None,
-                },
-            })
-            .unwrap();
-        session
-            .apply_event(DocumentEvent::UpdateAuthor {
-                section_id: "cover-section".to_string(),
-                author_index: 0,
-                field: AuthorField::Email,
-                value: "ana@example.com".to_string(),
-            })
-            .unwrap();
-        session
-            .apply_event(DocumentEvent::RestoreAuthor {
-                section_id: "cover-section".to_string(),
-                author_index: 1,
-                author: Author {
-                    name: "Luis".to_string(),
-                    email: None,
-                },
-            })
-            .unwrap();
-        session
-            .apply_event(DocumentEvent::RemoveAuthor {
-                section_id: "cover-section".to_string(),
-                author_index: 1,
+            .apply_event(DocumentEvent::UpdateInput {
+                path: "/authors".to_string(),
+                value: serde_json::json!([
+                    { "name": "Ana" }
+                ]),
             })
             .unwrap();
         session
@@ -478,6 +755,7 @@ mod tests {
                         col_span: None,
                     }]],
                     column_sizes: vec!["1fr".to_string()],
+                    extra_fields: std::collections::HashMap::new(),
                 })),
             })
             .unwrap();
@@ -588,6 +866,7 @@ mod tests {
                     }),
                     caption: "Figura".to_string(),
                     placement: "auto".to_string(),
+                    extra_fields: std::collections::HashMap::new(),
                 }))),
             })
             .unwrap();
@@ -606,16 +885,22 @@ mod tests {
             ast.metadata.project_settings.language.as_deref(),
             Some("es")
         );
+        assert_eq!(
+            ast.inputs.get("abstract_text").and_then(|v| v.as_str()),
+            Some("Resumen con ñ")
+        );
+        assert_eq!(
+            ast.inputs.get("affiliations"),
+            Some(&serde_json::json!(["Universidad"]))
+        );
+        assert_eq!(
+            ast.inputs.get("authors"),
+            Some(&serde_json::json!([
+                { "name": "Ana" }
+            ]))
+        );
+
         match &ast.sections[0] {
-            DocumentSection::CoverPage(cover) => {
-                assert_eq!(cover.abstract_text, "Resumen con ñ");
-                assert_eq!(cover.affiliations, vec!["Universidad"]);
-                assert_eq!(cover.authors[0].email.as_deref(), Some("ana@example.com"));
-                assert_eq!(cover.authors.len(), 1);
-            }
-            _ => panic!("cover section missing"),
-        }
-        match &ast.sections[1] {
             DocumentSection::Content(content) => {
                 assert_eq!(content.elements.len(), 5);
                 match &content.elements[0] {
@@ -664,9 +949,8 @@ mod tests {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
         let ast = basic_document_ast("Título con ñ", "");
-        let removed = match &ast.sections[1] {
+        let removed = match &ast.sections[0] {
             DocumentSection::Content(content) => content.elements[0].clone(),
-            _ => panic!("content section missing"),
         };
         session.sync_snapshot(ast).unwrap();
 
@@ -698,9 +982,8 @@ mod tests {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
         let ast = basic_document_ast("Título con ñ", "");
-        let removed = match &ast.sections[1] {
+        let removed = match &ast.sections[0] {
             DocumentSection::Content(content) => content.elements[0].clone(),
-            _ => panic!("content section missing"),
         };
         session.sync_snapshot(ast).unwrap();
 
@@ -739,6 +1022,174 @@ mod tests {
         assert!(vfs
             .read_source("main.typ")
             .unwrap()
-            .contains("#bibliography(\"references.bib\")"));
+            .contains("#bibliography(\"references.bib\""));
+    }
+
+    #[test]
+    fn applies_reference_events_to_references_bib() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session
+            .sync_snapshot(basic_document_ast("Título con ñ", ""))
+            .unwrap();
+
+        session
+            .apply_event(DocumentEvent::InsertReference {
+                index: 0,
+                reference: ReferenceEntry {
+                    id: "ref-1".to_string(),
+                    citation_key: "garcia2024".to_string(),
+                    biblatex: "@article{garcia2024,\n  title = {Niñez}\n}".to_string(),
+                },
+            })
+            .unwrap();
+
+        assert!(vfs
+            .read_source("references.bib")
+            .unwrap()
+            .contains("@article{garcia2024"));
+
+        session
+            .apply_event(DocumentEvent::UpdateReference {
+                reference: ReferenceEntry {
+                    id: "ref-1".to_string(),
+                    citation_key: "garcia2025".to_string(),
+                    biblatex: "@book{garcia2025,\n  title = {Libro}\n}".to_string(),
+                },
+            })
+            .unwrap();
+
+        let updated_source = vfs.read_source("references.bib").unwrap();
+        assert!(updated_source.contains("@book{garcia2025"));
+        assert!(!updated_source.contains("@article{garcia2024"));
+
+        session
+            .apply_event(DocumentEvent::RemoveReference {
+                reference_id: "ref-1".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(vfs.read_source("references.bib").unwrap(), "");
+    }
+
+    #[test]
+    fn applies_asset_events_to_document_state() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session
+            .sync_snapshot(basic_document_ast("Título con ñ", ""))
+            .unwrap();
+
+        session
+            .apply_event(DocumentEvent::InsertAsset {
+                index: 0,
+                asset: crate::ast::AssetEntry {
+                    id: "asset-1".to_string(),
+                    path: "assets/chart.png".to_string(),
+                    kind: "image".to_string(),
+                    caption: Some("Chart".to_string()),
+                },
+            })
+            .unwrap();
+
+        assert_eq!(persisted_ast(&vfs).assets.len(), 1);
+
+        session
+            .apply_event(DocumentEvent::UpdateAsset {
+                asset: crate::ast::AssetEntry {
+                    id: "asset-1".to_string(),
+                    path: "assets/chart.png".to_string(),
+                    kind: "image".to_string(),
+                    caption: Some("Updated chart".to_string()),
+                },
+            })
+            .unwrap();
+
+        assert_eq!(
+            persisted_ast(&vfs).assets[0].caption.as_deref(),
+            Some("Updated chart")
+        );
+
+        session
+            .apply_event(DocumentEvent::RemoveAsset {
+                asset_id: "asset-1".to_string(),
+            })
+            .unwrap();
+
+        assert!(persisted_ast(&vfs).assets.is_empty());
+    }
+
+    #[test]
+    fn test_incremental_dirty_resource_tracking() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        
+        let mut ast = basic_document_ast("Title", "");
+        
+        let eq = Equation {
+            id: "eq-1".to_string(),
+            latex_source: "E = mc^2".to_string(),
+            is_block: true,
+        };
+        let fig = Figure {
+            id: "fig-1".to_string(),
+            asset_id: Some("asset-1".to_string()),
+            content: DocumentElement::Paragraph(Paragraph {
+                id: "fig-1-body".to_string(),
+                content: rich_text("Figure Body"),
+            }),
+            caption: "Figure Caption".to_string(),
+            placement: "h".to_string(),
+            extra_fields: std::collections::HashMap::new(),
+        };
+        let asset = AssetEntry {
+            id: "asset-1".to_string(),
+            path: "chart.png".to_string(),
+            kind: "image".to_string(),
+            caption: None,
+        };
+        
+        ast.assets.push(asset.clone());
+        
+        if let DocumentSection::Content(content) = &mut ast.sections[0] {
+            content.elements.push(DocumentElement::Equation(eq));
+            content.elements.push(DocumentElement::Figure(Box::new(fig)));
+        }
+        
+        let status = session.sync_snapshot(ast.clone()).unwrap();
+        assert!(status.dirty_resource_ids.contains(&"eq-1".to_string()));
+        assert!(status.dirty_resource_ids.contains(&"fig-1".to_string()));
+        assert!(status.dirty_resource_ids.contains(&"asset-1".to_string()));
+        
+        let mut acknowledged = HashSet::new();
+        acknowledged.insert("eq-1".to_string());
+        acknowledged.insert("fig-1".to_string());
+        acknowledged.insert("asset-1".to_string());
+        let state = session.resource_preview_state().unwrap();
+        session.acknowledge_resource_previews(&acknowledged, state.resource_preview_lib_hash);
+        
+        assert!(!session.resource_preview_state().unwrap().dirty_resource_ids.contains("eq-1"));
+        
+        let status_event = session.apply_event(DocumentEvent::UpdateEquation {
+            element_id: "eq-1".to_string(),
+            latex_source: Some("F = ma".to_string()),
+            is_block: None,
+        }).unwrap();
+        
+        assert!(status_event.dirty_resource_ids.contains(&"eq-1".to_string()));
+        assert!(!status_event.dirty_resource_ids.contains(&"fig-1".to_string()));
+        assert!(!status_event.dirty_resource_ids.contains(&"asset-1".to_string()));
+        
+        let mut ack_eq = HashSet::new();
+        ack_eq.insert("eq-1".to_string());
+        session.acknowledge_resource_previews(&ack_eq, session.resource_preview_state().unwrap().resource_preview_lib_hash);
+        
+        let mut updated_ast = session.ast().unwrap();
+        updated_ast.assets[0].caption = Some("New Caption".to_string());
+        
+        let status_sync = session.sync_snapshot(updated_ast).unwrap();
+        assert!(status_sync.dirty_resource_ids.contains(&"asset-1".to_string()));
+        assert!(status_sync.dirty_resource_ids.contains(&"fig-1".to_string()));
+        assert!(!status_sync.dirty_resource_ids.contains(&"eq-1".to_string()));
     }
 }

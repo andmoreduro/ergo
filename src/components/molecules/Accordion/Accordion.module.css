@@ -2,7 +2,6 @@
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   background-color: var(--color-bg-primary);
-  overflow: hidden;
   margin-bottom: var(--space-2);
 }
 
@@ -14,6 +13,7 @@
   padding: var(--space-3) var(--space-4);
   background-color: transparent;
   border: none;
+  border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
   cursor: pointer;
   text-align: left;
   transition: background-color 0.2s ease;
@@ -51,6 +51,7 @@
 .content {
   padding: var(--space-3) var(--space-4);
   border-top: 1px solid var(--color-border);
+  border-radius: 0 0 var(--border-radius-md) var(--border-radius-md);
   font-family: var(--font-family-sans);
   color: var(--color-text-primary);
   background-color: var(--color-bg-primary);

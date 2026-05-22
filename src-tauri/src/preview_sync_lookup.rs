@@ -18,6 +18,7 @@ pub(crate) fn preview_position(
         page_number: position.page.get(),
         x_pt: position.point.x.to_pt(),
         y_pt: position.point.y.to_pt(),
+        caret_cue: None,
         source_revision,
     }
 }

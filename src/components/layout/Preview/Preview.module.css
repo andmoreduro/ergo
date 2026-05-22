@@ -33,14 +33,15 @@
         var(--shadow-md);
 }
 
-.syncMarker {
+.syncCaret {
     position: absolute;
-    width: 0.75rem;
-    height: 0.75rem;
-    border: 2px solid var(--color-primary);
+    width: 1px;
+    min-height: 8px;
+    background-color: var(--color-primary);
     border-radius: 999px;
+    opacity: 0.72;
     pointer-events: none;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
 }
 
 .status {

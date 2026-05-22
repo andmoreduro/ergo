@@ -32,6 +32,15 @@ impl WorldSourceSnapshot {
             .cloned()
             .ok_or_else(|| format!("File not found: {}", path))
     }
+
+    pub fn with_source(mut self, path: &str, text: String) -> Self {
+        let path = normalize_virtual_path(path);
+        self.sources.insert(
+            path.clone(),
+            Source::new(crate::path_utils::file_id_for_virtual_path(&path), text),
+        );
+        self
+    }
 }
 
 pub struct ErgoWorld {
@@ -93,7 +102,6 @@ fn shared_font_book() -> &'static LazyHash<FontBook> {
     })
 }
 
-
 fn bundled_fonts() -> Arc<Vec<Font>> {
     static FONTS: OnceLock<Arc<Vec<Font>>> = OnceLock::new();
 
@@ -106,6 +114,70 @@ fn bundled_fonts() -> Arc<Vec<Font>> {
             )
         })
         .clone()
+}
+
+fn find_package_file(file_id: FileId) -> Option<std::path::PathBuf> {
+    let pkg = file_id.package()?;
+    let vpath = file_id.vpath().as_rootless_path();
+
+    // Check LOCALAPPDATA
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        let path = std::path::PathBuf::from(local_app_data)
+            .join("typst")
+            .join("packages")
+            .join(pkg.namespace.as_str())
+            .join(pkg.name.as_str())
+            .join(pkg.version.to_string())
+            .join(vpath);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    // Check APPDATA
+    if let Ok(app_data) = std::env::var("APPDATA") {
+        let path = std::path::PathBuf::from(app_data)
+            .join("typst")
+            .join("packages")
+            .join(pkg.namespace.as_str())
+            .join(pkg.name.as_str())
+            .join(pkg.version.to_string())
+            .join(vpath);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    // Fallback to home dir AppData
+    if let Ok(home) = std::env::var("USERPROFILE") {
+        let path = std::path::PathBuf::from(&home)
+            .join("AppData")
+            .join("Local")
+            .join("typst")
+            .join("packages")
+            .join(pkg.namespace.as_str())
+            .join(pkg.name.as_str())
+            .join(pkg.version.to_string())
+            .join(vpath);
+        if path.exists() {
+            return Some(path);
+        }
+
+        let path2 = std::path::PathBuf::from(&home)
+            .join("AppData")
+            .join("Roaming")
+            .join("typst")
+            .join("packages")
+            .join(pkg.namespace.as_str())
+            .join(pkg.name.as_str())
+            .join(pkg.version.to_string())
+            .join(vpath);
+        if path2.exists() {
+            return Some(path2);
+        }
+    }
+
+    None
 }
 
 impl World for ErgoWorld {
@@ -122,6 +194,12 @@ impl World for ErgoWorld {
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
+        if let Some(path) = find_package_file(id) {
+            let text = std::fs::read_to_string(&path)
+                .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
+            return Ok(Source::new(id, text));
+        }
+
         let path = path_from_file_id(id);
         self.vfs
             .read_typst_source(&path)
@@ -129,6 +207,12 @@ impl World for ErgoWorld {
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
+        if let Some(path) = find_package_file(id) {
+            let bytes = std::fs::read(&path)
+                .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
+            return Ok(Bytes::new(bytes));
+        }
+
         let path = path_from_file_id(id);
         self.vfs
             .read_binary_file(&path)
@@ -164,6 +248,12 @@ impl World for SnapshotWorld {
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
+        if let Some(path) = find_package_file(id) {
+            let text = std::fs::read_to_string(&path)
+                .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
+            return Ok(Source::new(id, text));
+        }
+
         let path = path_from_file_id(id);
         self.snapshot
             .sources
@@ -173,6 +263,12 @@ impl World for SnapshotWorld {
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
+        if let Some(path) = find_package_file(id) {
+            let bytes = std::fs::read(&path)
+                .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
+            return Ok(Bytes::new(bytes));
+        }
+
         let path = path_from_file_id(id);
         if let Some(bytes) = self.snapshot.files.get(&path) {
             return Ok(bytes.clone());

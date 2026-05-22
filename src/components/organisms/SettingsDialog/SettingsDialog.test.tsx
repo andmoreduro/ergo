@@ -107,6 +107,20 @@ describe("SettingsDialog global panel", () => {
             }),
         );
     });
+
+    it("edits the app language from settings", () => {
+        const handleGlobalSettingsChange = renderGlobalDialog();
+
+        fireEvent.change(screen.getByLabelText("Language"), {
+            target: { value: "es" },
+        });
+
+        expect(handleGlobalSettingsChange).toHaveBeenCalledWith(
+            expect.objectContaining({
+                locale: "es",
+            }),
+        );
+    });
 });
 
 describe("SettingsDialog keymap panel", () => {

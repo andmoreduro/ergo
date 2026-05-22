@@ -13,6 +13,9 @@ pub struct DocumentAST {
     #[serde(default)]
     pub assets: Vec<AssetEntry>,
     pub sections: Vec<DocumentSection>,
+    #[serde(default)]
+    #[ts(type = "Record<string, any>")]
+    pub inputs: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -23,6 +26,10 @@ pub struct ProjectMetadata {
     #[serde(default)]
     pub project_settings: ProjectSettings,
     pub local_overrides: GlobalSettings,
+    #[serde(default)]
+    pub running_head: Option<String>,
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -171,6 +178,28 @@ pub enum ActionId {
     EditorRemoveTableColumn,
     #[serde(rename = "editor::FocusField")]
     EditorFocusField,
+    #[serde(rename = "bibliography::CreateEntry")]
+    BibliographyCreateEntry,
+    #[serde(rename = "bibliography::OpenEntry")]
+    BibliographyOpenEntry,
+    #[serde(rename = "bibliography::SaveEntry")]
+    BibliographySaveEntry,
+    #[serde(rename = "bibliography::RemoveEntry")]
+    BibliographyRemoveEntry,
+    #[serde(rename = "bibliography::CancelEdit")]
+    BibliographyCancelEdit,
+    #[serde(rename = "resources::Create")]
+    ResourcesCreate,
+    #[serde(rename = "resources::Open")]
+    ResourcesOpen,
+    #[serde(rename = "resources::Edit")]
+    ResourcesEdit,
+    #[serde(rename = "resources::Save")]
+    ResourcesSave,
+    #[serde(rename = "resources::Remove")]
+    ResourcesRemove,
+    #[serde(rename = "resources::InsertReference")]
+    ResourcesInsertReference,
     #[serde(rename = "view::OpenCommandPalette")]
     ViewOpenCommandPalette,
     #[serde(rename = "view::ZoomIn")]
@@ -222,6 +251,17 @@ impl ActionId {
             ActionId::EditorRemoveTableRow => "editor::RemoveTableRow",
             ActionId::EditorRemoveTableColumn => "editor::RemoveTableColumn",
             ActionId::EditorFocusField => "editor::FocusField",
+            ActionId::BibliographyCreateEntry => "bibliography::CreateEntry",
+            ActionId::BibliographyOpenEntry => "bibliography::OpenEntry",
+            ActionId::BibliographySaveEntry => "bibliography::SaveEntry",
+            ActionId::BibliographyRemoveEntry => "bibliography::RemoveEntry",
+            ActionId::BibliographyCancelEdit => "bibliography::CancelEdit",
+            ActionId::ResourcesCreate => "resources::Create",
+            ActionId::ResourcesOpen => "resources::Open",
+            ActionId::ResourcesEdit => "resources::Edit",
+            ActionId::ResourcesSave => "resources::Save",
+            ActionId::ResourcesRemove => "resources::Remove",
+            ActionId::ResourcesInsertReference => "resources::InsertReference",
             ActionId::ViewOpenCommandPalette => "view::OpenCommandPalette",
             ActionId::ViewZoomIn => "view::ZoomIn",
             ActionId::ViewZoomOut => "view::ZoomOut",
@@ -271,6 +311,17 @@ impl FromStr for ActionId {
             "editor::RemoveTableRow" => Ok(ActionId::EditorRemoveTableRow),
             "editor::RemoveTableColumn" => Ok(ActionId::EditorRemoveTableColumn),
             "editor::FocusField" => Ok(ActionId::EditorFocusField),
+            "bibliography::CreateEntry" => Ok(ActionId::BibliographyCreateEntry),
+            "bibliography::OpenEntry" => Ok(ActionId::BibliographyOpenEntry),
+            "bibliography::SaveEntry" => Ok(ActionId::BibliographySaveEntry),
+            "bibliography::RemoveEntry" => Ok(ActionId::BibliographyRemoveEntry),
+            "bibliography::CancelEdit" => Ok(ActionId::BibliographyCancelEdit),
+            "resources::Create" => Ok(ActionId::ResourcesCreate),
+            "resources::Open" => Ok(ActionId::ResourcesOpen),
+            "resources::Edit" => Ok(ActionId::ResourcesEdit),
+            "resources::Save" => Ok(ActionId::ResourcesSave),
+            "resources::Remove" => Ok(ActionId::ResourcesRemove),
+            "resources::InsertReference" => Ok(ActionId::ResourcesInsertReference),
             "view::OpenCommandPalette" => Ok(ActionId::ViewOpenCommandPalette),
             "view::ZoomIn" => Ok(ActionId::ViewZoomIn),
             "view::ZoomOut" => Ok(ActionId::ViewZoomOut),
@@ -413,7 +464,7 @@ pub struct Package {
     pub version: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[ts(export, export_to = "../../src/bindings/")]
 pub struct ReferenceEntry {
     pub id: String,
@@ -421,7 +472,7 @@ pub struct ReferenceEntry {
     pub biblatex: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[ts(export, export_to = "../../src/bindings/")]
 pub struct AssetEntry {
     pub id: String,
@@ -435,7 +486,6 @@ pub struct AssetEntry {
 #[serde(tag = "type")]
 pub enum DocumentSection {
     Content(ContentSection),
-    CoverPage(CoverPageSection),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -448,23 +498,6 @@ pub struct ContentSection {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/bindings/")]
-pub struct CoverPageSection {
-    pub id: String,
-    pub is_optional: bool,
-    pub authors: Vec<Author>,
-    pub affiliations: Vec<String>,
-    pub abstract_text: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
-pub struct Author {
-    pub name: String,
-    pub email: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
 #[serde(tag = "type")]
 pub enum DocumentElement {
     Heading(Heading),
@@ -472,6 +505,16 @@ pub enum DocumentElement {
     Table(Table),
     Equation(Equation),
     Figure(Box<Figure>),
+    Custom(CustomElement),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
+pub struct CustomElement {
+    pub id: String,
+    pub element_type: String,
+    #[ts(type = "Record<string, any>")]
+    pub fields: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -511,6 +554,9 @@ pub struct Table {
     pub cols: i32,
     pub cells: Vec<Vec<TableCell>>,
     pub column_sizes: Vec<String>,
+    #[serde(default)]
+    #[ts(type = "Record<string, any>")]
+    pub extra_fields: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -540,4 +586,7 @@ pub struct Figure {
     pub content: DocumentElement,
     pub caption: String,
     pub placement: String,
+    #[serde(default)]
+    #[ts(type = "Record<string, any>")]
+    pub extra_fields: std::collections::HashMap<String, serde_json::Value>,
 }

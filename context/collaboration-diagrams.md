@@ -20,6 +20,7 @@ flowchart LR
     World["ErgoWorld"]
     Typst["Typst Engine"]
     Preview["Preview Renderer"]
+    Sidebar["Workspace Sidebar"]
 
     User -- "1: edits document" --> UI
     UI -- "2: dispatches command/action" --> Command
@@ -37,9 +38,12 @@ flowchart LR
     Queue -- "14: emits preview page paths" --> API
     API -- "15: read_preview_svg" --> VFS
     API -- "16: supplies SVG text" --> Preview
-    Preview -- "17: updates document view" --> User
+    Queue -- "17: supplies compiled outline + resources" --> API
+    Preview -- "18: updates sidebar outline, resources + displayed revision" --> Sidebar
+    Sidebar -- "19: dispatches outline focus action" --> Command
+    Preview -- "20: updates document view" --> User
 
-    class UI,Command,State,API,Session,Cache,VFS,Queue,World,Typst,Preview comp;
+    class UI,Command,State,API,Session,Cache,VFS,Queue,World,Typst,Preview,Sidebar comp;
 ```
 
 ## 2. Save And Archive

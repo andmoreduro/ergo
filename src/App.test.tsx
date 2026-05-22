@@ -42,6 +42,7 @@ const windowApiMock = vi.hoisted(() => {
         closeHandlers,
         getCurrentWindow: vi.fn(() => ({
             close,
+            destroy: close,
             onCloseRequested,
         })),
         onCloseRequested,
@@ -117,6 +118,7 @@ describe("App project lifecycle", () => {
             layout: {
                 documentStatePath: ".ergproj/document_state.json",
                 mainPath: "main.typ",
+                libPath: "lib.typ",
                 projectSettingsPath: ".ergproj/project_settings.json",
                 referencesPath: "references.bib",
                 sectionPaths: [],

@@ -7,6 +7,8 @@ import type { QueuedDocumentEvent } from "../state/DocumentContext";
 import { setActiveDocumentSync } from "./documentSyncBarrier";
 import { useCompileBridge } from "./useCompileBridge";
 import { loadChangedPreviewSvgs } from "./useSvgLoader";
+import type { DocumentOutline } from "../bindings/DocumentOutline";
+import type { DocumentResources } from "../bindings/DocumentResources";
 
 type SourceRevision = number;
 
@@ -16,6 +18,8 @@ interface UseCompilerResult {
     error: string | null;
     sourceMap: SourceMapEntry[];
     previewRevision: SourceRevision | null;
+    outline: DocumentOutline | null;
+    resources: DocumentResources | null;
 }
 
 export function useCompiler(
@@ -30,12 +34,15 @@ export function useCompiler(
     const [error, setError] = useState<string | null>(null);
     const [sourceMap, setSourceMap] = useState<SourceMapEntry[]>([]);
     const [previewRevision, setPreviewRevision] = useState<SourceRevision | null>(null);
+    const [outline, setOutline] = useState<DocumentOutline | null>(null);
+    const [resources, setResources] = useState<DocumentResources | null>(null);
     const desiredAstRef = useRef<DocumentAST | null>(null);
     const desiredEventsRef = useRef<QueuedDocumentEvent[]>([]);
     const desiredSessionIdRef = useRef(sessionId);
     const bootstrappedSessionIdRef = useRef<number | null>(null);
     const syncedEventIdRef = useRef(0);
     const latestRevisionRef = useRef<SourceRevision | null>(null);
+    const previewRevisionRef = useRef<SourceRevision | null>(null);
     const listenersReadyRef = useRef<Promise<void>>(Promise.resolve());
     const syncRunningRef = useRef(false);
     const syncFailedRef = useRef(false);
@@ -46,10 +53,11 @@ export function useCompiler(
     const previewDebounceMsRef = useRef(previewDebounceMs);
     previewDebounceMsRef.current = previewDebounceMs;
 
-    const isLatestPreviewResult = (result: CompilationResult): boolean => {
+    const isNewerPreviewResult = (result: CompilationResult): boolean => {
         return (
             result.kind.type === "previewSvg" &&
-            result.source_revision === latestRevisionRef.current
+            (previewRevisionRef.current === null ||
+                result.source_revision > previewRevisionRef.current)
         );
     };
 
@@ -62,9 +70,14 @@ export function useCompiler(
         try {
             nextSvgs = await loadChangedPreviewSvgs(result, svgsRef.current);
         } catch (error: unknown) {
-            if (isMountedRef.current && isLatestPreviewResult(result)) {
+            if (isMountedRef.current && isNewerPreviewResult(result)) {
                 setError(error instanceof Error ? error.message : String(error));
-                setIsCompiling(false);
+                if (
+                    latestRevisionRef.current === null ||
+                    result.source_revision >= latestRevisionRef.current
+                ) {
+                    setIsCompiling(false);
+                }
             }
             return;
         }
@@ -72,35 +85,53 @@ export function useCompiler(
         if (
             isMountedRef.current &&
             previewLoadTokenRef.current === loadToken &&
-            isLatestPreviewResult(result)
+            isNewerPreviewResult(result)
         ) {
             setSvgs(nextSvgs);
             svgsRef.current = nextSvgs;
             setPreviewRevision(result.source_revision);
+            previewRevisionRef.current = result.source_revision;
             setError(null);
-            setIsCompiling(false);
+            if (
+                latestRevisionRef.current === null ||
+                result.source_revision >= latestRevisionRef.current
+            ) {
+                setIsCompiling(false);
+            }
             recordTiming("preview-svg-load", started);
         }
     };
 
     const applyPreviewResult = async (result: CompilationResult) => {
-        if (!isLatestPreviewResult(result)) {
+        if (!isNewerPreviewResult(result)) {
             return;
         }
 
         if (result.status === "succeeded") {
+            setOutline(result.outline);
+            setResources(result.resources);
             await loadPreviewSvgs(result);
             return;
         }
 
         if (result.status === "failed") {
             setError(result.diagnostics.join("\n") || "Compilation failed");
-            setIsCompiling(false);
+            if (
+                latestRevisionRef.current === null ||
+                result.source_revision >= latestRevisionRef.current
+            ) {
+                setIsCompiling(false);
+            }
             return;
         }
 
         if (result.status === "dropped") {
-            setIsCompiling(false);
+            if (
+                latestRevisionRef.current === null ||
+                result.source_revision >= latestRevisionRef.current
+            ) {
+                setIsCompiling(false);
+            }
         }
     };
 
@@ -245,6 +276,9 @@ export function useCompiler(
             svgsRef.current = [];
             setSourceMap([]);
             setPreviewRevision(null);
+            previewRevisionRef.current = null;
+            setOutline(null);
+            setResources(null);
             return;
         }
 
@@ -257,6 +291,15 @@ export function useCompiler(
             (syncFailedRef.current && events.length > failedEventCountRef.current)
         ) {
             syncFailedRef.current = false;
+            if (didSessionChange) {
+                setSvgs([]);
+                svgsRef.current = [];
+                setPreviewRevision(null);
+                previewRevisionRef.current = null;
+                latestRevisionRef.current = null;
+                setOutline(null);
+                setResources(null);
+            }
         }
 
         setError(null);
@@ -266,7 +309,7 @@ export function useCompiler(
         }
     }, [ackDocumentEvents, ast, events, sessionId]);
 
-    return { svgs, isCompiling, error, sourceMap, previewRevision };
+    return { svgs, isCompiling, error, sourceMap, previewRevision, outline, resources };
 }
 
 type TimingSample = {

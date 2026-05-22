@@ -1,5 +1,7 @@
 import type { GlobalSettings } from "../../../bindings/GlobalSettings";
 import { m } from "../../../paraglide/messages.js";
+import { locales } from "../../../paraglide/runtime.js";
+import type { Locale } from "../../../paraglide/runtime.js";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import styles from "./SettingsDialog.module.css";
 import { toOptionalNumber } from "./settingsDialogUtils";
@@ -28,6 +30,26 @@ export const GlobalSettingsPanel = ({
                 <option value="system">{m.menubar_theme_system()}</option>
                 <option value="light">{m.menubar_theme_light()}</option>
                 <option value="dark">{m.menubar_theme_dark()}</option>
+            </select>
+        </label>
+        <label className={styles.field}>
+            <span>{m.settings_language()}</span>
+            <select
+                value={settings.locale ?? "en"}
+                onChange={(event) =>
+                    onChange({
+                        ...settings,
+                        locale: event.target.value as Locale,
+                    })
+                }
+            >
+                {locales.map((locale) => (
+                    <option value={locale} key={locale}>
+                        {locale === "es"
+                            ? m.menubar_language_spanish()
+                            : m.menubar_language_english()}
+                    </option>
+                ))}
             </select>
         </label>
         <label className={styles.field}>

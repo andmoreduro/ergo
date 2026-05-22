@@ -1,7 +1,8 @@
-import type { Author } from "../bindings/Author";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { DocumentElement } from "../bindings/DocumentElement";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
+import type { AssetEntry } from "../bindings/AssetEntry";
+import type { ReferenceEntry } from "../bindings/ReferenceEntry";
 import type { Table } from "../bindings/Table";
 import type { TableCell } from "../bindings/TableCell";
 import type { ASTAction } from "./ast/actions";
@@ -48,63 +49,58 @@ export const applyDocumentEventToAst = (
                 },
             };
 
-        case "updateCoverAbstract":
-            return mapSections(ast, (section) =>
-                section.type === "CoverPage" && section.id === event.section_id
-                    ? { ...section, abstract_text: event.text }
-                    : section,
-            );
+        case "updateInput": {
+            const pathParts = event.path.split("/").filter(Boolean);
+            return {
+                ...ast,
+                inputs: setValueAtPath(ast.inputs, pathParts, event.value),
+            };
+        }
 
-        case "updateCoverAffiliations":
-            return mapSections(ast, (section) =>
-                section.type === "CoverPage" && section.id === event.section_id
-                    ? { ...section, affiliations: [...event.affiliations] }
-                    : section,
-            );
+        case "insertInputArrayItem": {
+            const pathParts = event.path.split("/").filter(Boolean);
+            const currentArray = getValueAtPath(ast.inputs, pathParts) ?? [];
+            if (!Array.isArray(currentArray)) {
+                throw new Error(`Path ${event.path} does not point to an array`);
+            }
+            const nextArray = [...currentArray];
+            nextArray.splice(event.index, 0, event.value);
+            return {
+                ...ast,
+                inputs: setValueAtPath(ast.inputs, pathParts, nextArray),
+            };
+        }
 
-        case "insertAuthor":
-        case "restoreAuthor":
-            return mapSections(ast, (section) => {
-                if (section.type !== "CoverPage" || section.id !== event.section_id) {
-                    return section;
+        case "removeInputArrayItem": {
+            const pathParts = event.path.split("/").filter(Boolean);
+            const currentArray = getValueAtPath(ast.inputs, pathParts);
+            if (!Array.isArray(currentArray)) {
+                throw new Error(`Path ${event.path} does not point to an array`);
+            }
+            const nextArray = currentArray.filter((_, idx) => idx !== event.index);
+            return {
+                ...ast,
+                inputs: setValueAtPath(ast.inputs, pathParts, nextArray),
+            };
+        }
+
+        case "updateCustomElementField": {
+            return mapContentElements(ast, event.element_id, (element) => {
+                if (element.type !== "Custom") {
+                    return element;
                 }
-                const authors = [...section.authors];
-                authors.splice(event.type === "insertAuthor" ? event.index : event.author_index, 0, cloneValue(event.author));
-                return { ...section, authors };
-            });
-
-        case "updateAuthor":
-            return mapSections(ast, (section) => {
-                if (section.type !== "CoverPage" || section.id !== event.section_id) {
-                    return section;
+                const fields = { ...element.fields };
+                if (event.value === null || event.value === undefined) {
+                    delete fields[event.field];
+                } else {
+                    fields[event.field] = event.value;
                 }
                 return {
-                    ...section,
-                    authors: section.authors.map((author, index) =>
-                        index === event.author_index
-                            ? {
-                                  ...author,
-                                  [event.field]:
-                                      event.field === "email" && event.value.trim() === ""
-                                          ? null
-                                          : event.value,
-                              }
-                            : author,
-                    ),
+                    ...element,
+                    fields,
                 };
             });
-
-        case "removeAuthor":
-            return mapSections(ast, (section) =>
-                section.type === "CoverPage" && section.id === event.section_id
-                    ? {
-                          ...section,
-                          authors: section.authors.filter(
-                              (_, index) => index !== event.author_index,
-                          ),
-                      }
-                    : section,
-            );
+        }
 
         case "insertElement":
         case "restoreElement":
@@ -247,6 +243,74 @@ export const applyDocumentEventToAst = (
                               : element.content,
                 };
             });
+        case "updateElementExtraField":
+            return mapContentElements(ast, event.element_id, (element) => {
+                if (!("extra_fields" in element)) {
+                    return element;
+                }
+                const extra_fields = { ...(element.extra_fields || {}) };
+                if (event.field_value === null || event.field_value === "") {
+                    delete extra_fields[event.field_key];
+                } else {
+                    extra_fields[event.field_key] = event.field_value;
+                }
+                return {
+                    ...element,
+                    extra_fields,
+                } as typeof element;
+            });
+
+        case "insertReference":
+        case "restoreReference": {
+            const references = [...ast.references];
+            references.splice(event.index, 0, cloneValue(event.reference));
+            return {
+                ...ast,
+                references,
+            };
+        }
+
+        case "updateReference":
+            return {
+                ...ast,
+                references: ast.references.map((reference) =>
+                    reference.id === event.reference.id
+                        ? cloneValue(event.reference)
+                        : reference,
+                ),
+            };
+
+        case "removeReference":
+            return {
+                ...ast,
+                references: ast.references.filter(
+                    (reference) => reference.id !== event.reference_id,
+                ),
+            };
+
+        case "insertAsset":
+        case "restoreAsset": {
+            const assets = [...ast.assets];
+            assets.splice(event.index, 0, cloneValue(event.asset));
+            return {
+                ...ast,
+                assets,
+            };
+        }
+
+        case "updateAsset":
+            return {
+                ...ast,
+                assets: ast.assets.map((asset) =>
+                    asset.id === event.asset.id ? cloneValue(event.asset) : asset,
+                ),
+            };
+
+        case "removeAsset":
+            return {
+                ...ast,
+                assets: ast.assets.filter((asset) => asset.id !== event.asset_id),
+            };
 
         default:
             return assertNever(event);
@@ -271,46 +335,34 @@ const documentEventFromAction = (
                 settings: action.payload.settings,
             };
 
-        case "UPDATE_COVER_PAGE_ABSTRACT":
+        case "UPDATE_INPUT":
             return {
-                type: "updateCoverAbstract",
-                section_id: action.payload.sectionId,
-                text: action.payload.abstractText,
-            };
-
-        case "UPDATE_COVER_PAGE_AFFILIATIONS":
-            return {
-                type: "updateCoverAffiliations",
-                section_id: action.payload.sectionId,
-                affiliations: action.payload.affiliations,
-            };
-
-        case "ADD_AUTHOR": {
-            const previousCover = coverSection(previousAst, action.payload.sectionId);
-            const nextCover = coverSection(nextAst, action.payload.sectionId);
-            const index = previousCover.authors.length;
-            return {
-                type: "insertAuthor",
-                section_id: action.payload.sectionId,
-                index,
-                author: authorAt(nextCover.authors, index),
-            };
-        }
-
-        case "UPDATE_AUTHOR":
-            return {
-                type: "updateAuthor",
-                section_id: action.payload.sectionId,
-                author_index: action.payload.authorIndex,
-                field: action.payload.field,
+                type: "updateInput",
+                path: action.payload.path,
                 value: action.payload.value,
             };
 
-        case "REMOVE_AUTHOR":
+        case "INSERT_INPUT_ARRAY_ITEM":
             return {
-                type: "removeAuthor",
-                section_id: action.payload.sectionId,
-                author_index: action.payload.authorIndex,
+                type: "insertInputArrayItem",
+                path: action.payload.path,
+                index: action.payload.index,
+                value: action.payload.value,
+            };
+
+        case "REMOVE_INPUT_ARRAY_ITEM":
+            return {
+                type: "removeInputArrayItem",
+                path: action.payload.path,
+                index: action.payload.index,
+            };
+
+        case "UPDATE_CUSTOM_ELEMENT_FIELD":
+            return {
+                type: "updateCustomElementField",
+                element_id: action.payload.elementId,
+                field: action.payload.field,
+                value: action.payload.value,
             };
 
         case "ADD_PARAGRAPH":
@@ -416,6 +468,56 @@ const documentEventFromAction = (
                 body_text: action.payload.bodyText ?? null,
             };
 
+        case "UPDATE_ELEMENT_EXTRA_FIELD":
+            return {
+                type: "updateElementExtraField",
+                element_id: action.payload.elementId,
+                field_key: action.payload.fieldKey,
+                field_value: action.payload.fieldValue.trim() === "" ? null : action.payload.fieldValue,
+            };
+
+        case "ADD_REFERENCE":
+            return {
+                type: "insertReference",
+                index: nextAst.references.findIndex(
+                    (reference) => reference.id === action.payload.reference.id,
+                ),
+                reference: action.payload.reference,
+            };
+
+        case "UPDATE_REFERENCE":
+            return {
+                type: "updateReference",
+                reference: action.payload.reference,
+            };
+
+        case "REMOVE_REFERENCE":
+            return {
+                type: "removeReference",
+                reference_id: action.payload.referenceId,
+            };
+
+        case "ADD_ASSET":
+            return {
+                type: "insertAsset",
+                index: nextAst.assets.findIndex(
+                    (asset) => asset.id === action.payload.asset.id,
+                ),
+                asset: action.payload.asset,
+            };
+
+        case "UPDATE_ASSET":
+            return {
+                type: "updateAsset",
+                asset: action.payload.asset,
+            };
+
+        case "REMOVE_ASSET":
+            return {
+                type: "removeAsset",
+                asset_id: action.payload.assetId,
+            };
+
         case "REMOVE_ELEMENT":
             return {
                 type: "removeElement",
@@ -445,60 +547,48 @@ const inverseDocumentEventFromAction = (
                 settings: previousAst.metadata.project_settings,
             };
 
-        case "UPDATE_COVER_PAGE_ABSTRACT": {
-            const cover = coverSection(previousAst, action.payload.sectionId);
+        case "UPDATE_INPUT": {
+            const pathParts = action.payload.path.split("/").filter(Boolean);
+            const prevValue = getValueAtPath(previousAst.inputs, pathParts) ?? null;
             return {
-                type: "updateCoverAbstract",
-                section_id: action.payload.sectionId,
-                text: cover.abstract_text,
+                type: "updateInput",
+                path: action.payload.path,
+                value: prevValue,
             };
         }
 
-        case "UPDATE_COVER_PAGE_AFFILIATIONS": {
-            const cover = coverSection(previousAst, action.payload.sectionId);
+        case "INSERT_INPUT_ARRAY_ITEM":
             return {
-                type: "updateCoverAffiliations",
-                section_id: action.payload.sectionId,
-                affiliations: cover.affiliations,
+                type: "removeInputArrayItem",
+                path: action.payload.path,
+                index: action.payload.index,
+            };
+
+        case "REMOVE_INPUT_ARRAY_ITEM": {
+            const pathParts = action.payload.path.split("/").filter(Boolean);
+            const currentArray = getValueAtPath(previousAst.inputs, pathParts);
+            const prevValue = Array.isArray(currentArray) ? currentArray[action.payload.index] : null;
+            return {
+                type: "insertInputArrayItem",
+                path: action.payload.path,
+                index: action.payload.index,
+                value: prevValue,
             };
         }
 
-        case "ADD_AUTHOR": {
-            const index = coverSection(previousAst, action.payload.sectionId).authors.length;
+        case "UPDATE_CUSTOM_ELEMENT_FIELD": {
+            const element = elementById(previousAst, action.payload.elementId);
+            if (element.type !== "Custom") {
+                throw new Error(`Element ${action.payload.elementId} is not a custom element`);
+            }
+            const prevValue = element.fields[action.payload.field] ?? null;
             return {
-                type: "removeAuthor",
-                section_id: action.payload.sectionId,
-                author_index: index,
-            };
-        }
-
-        case "UPDATE_AUTHOR": {
-            const author = authorAt(
-                coverSection(previousAst, action.payload.sectionId).authors,
-                action.payload.authorIndex,
-            );
-            return {
-                type: "updateAuthor",
-                section_id: action.payload.sectionId,
-                author_index: action.payload.authorIndex,
+                type: "updateCustomElementField",
+                element_id: action.payload.elementId,
                 field: action.payload.field,
-                value:
-                    action.payload.field === "email"
-                        ? author.email ?? ""
-                        : author.name,
+                value: prevValue,
             };
         }
-
-        case "REMOVE_AUTHOR":
-            return {
-                type: "restoreAuthor",
-                section_id: action.payload.sectionId,
-                author_index: action.payload.authorIndex,
-                author: authorAt(
-                    coverSection(previousAst, action.payload.sectionId).authors,
-                    action.payload.authorIndex,
-                ),
-            };
 
         case "ADD_PARAGRAPH":
             return { type: "removeElement", element_id: action.payload.paragraphId };
@@ -621,6 +711,62 @@ const inverseDocumentEventFromAction = (
             };
         }
 
+        case "UPDATE_ELEMENT_EXTRA_FIELD": {
+            const element = elementById(previousAst, action.payload.elementId);
+            if (element.type !== "Table" && element.type !== "Figure") {
+                throw new Error(`Element ${action.payload.elementId} is not a table or figure`);
+            }
+            const prevValue = element.extra_fields?.[action.payload.fieldKey] ?? null;
+            return {
+                type: "updateElementExtraField",
+                element_id: action.payload.elementId,
+                field_key: action.payload.fieldKey,
+                field_value: prevValue,
+            };
+        }
+
+        case "ADD_REFERENCE":
+            return {
+                type: "removeReference",
+                reference_id: action.payload.reference.id,
+            };
+
+        case "UPDATE_REFERENCE":
+            return {
+                type: "updateReference",
+                reference: referenceById(previousAst, action.payload.reference.id),
+            };
+
+        case "REMOVE_REFERENCE": {
+            const location = referenceLocation(previousAst, action.payload.referenceId);
+            return {
+                type: "restoreReference",
+                index: location.index,
+                reference: location.reference,
+            };
+        }
+
+        case "ADD_ASSET":
+            return {
+                type: "removeAsset",
+                asset_id: action.payload.asset.id,
+            };
+
+        case "UPDATE_ASSET":
+            return {
+                type: "updateAsset",
+                asset: assetById(previousAst, action.payload.asset.id),
+            };
+
+        case "REMOVE_ASSET": {
+            const location = assetLocation(previousAst, action.payload.assetId);
+            return {
+                type: "restoreAsset",
+                index: location.index,
+                asset: location.asset,
+            };
+        }
+
         case "REMOVE_ELEMENT": {
             const location = elementLocation(previousAst, action.payload.elementId);
             return {
@@ -702,15 +848,45 @@ const insertAt = <T,>(values: T[], index: number, value: T): T[] => [
 
 const cloneValue = <T,>(value: T): T => structuredClone(value);
 
-const coverSection = (ast: DocumentAST, sectionId: string) => {
-    const section = ast.sections.find(
-        (entry) => entry.type === "CoverPage" && entry.id === sectionId,
-    );
-    if (!section || section.type !== "CoverPage") {
-        throw new Error(`Cover page section ${sectionId} was not found`);
+const setValueAtPath = (obj: any, pathParts: string[], value: any): any => {
+    if (pathParts.length === 0) {
+        return value;
     }
 
-    return section;
+    const [current, ...rest] = pathParts;
+
+    if (Array.isArray(obj)) {
+        const index = parseInt(current, 10);
+        if (isNaN(index)) {
+            throw new Error(`Invalid array index in path: ${current}`);
+        }
+        const nextArray = [...obj];
+        while (nextArray.length <= index) {
+            nextArray.push(null);
+        }
+        nextArray[index] = setValueAtPath(nextArray[index], rest, value);
+        return nextArray;
+    } else {
+        const nextObj = { ...obj };
+        nextObj[current] = setValueAtPath(nextObj[current], rest, value);
+        return nextObj;
+    }
+};
+
+const getValueAtPath = (obj: any, pathParts: string[]): any => {
+    let current = obj;
+    for (const part of pathParts) {
+        if (current === undefined || current === null) {
+            return undefined;
+        }
+        if (Array.isArray(current)) {
+            const index = parseInt(part, 10);
+            current = current[index];
+        } else {
+            current = current[part];
+        }
+    }
+    return current;
 };
 
 const contentSection = (ast: DocumentAST, sectionId: string) => {
@@ -793,14 +969,43 @@ const figureElement = (ast: DocumentAST, elementId: string) => {
     return element;
 };
 
-const authorAt = (authors: Author[], index: number): Author => {
-    const author = authors[index];
-    if (!author) {
-        throw new Error(`Author index ${index} was not found`);
+const referenceLocation = (ast: DocumentAST, referenceId: string): {
+    index: number;
+    reference: ReferenceEntry;
+} => {
+    const index = ast.references.findIndex((reference) => reference.id === referenceId);
+    if (index === -1) {
+        throw new Error(`Reference ${referenceId} was not found`);
     }
 
-    return author;
+    return {
+        index,
+        reference: ast.references[index],
+    };
 };
+
+const referenceById = (ast: DocumentAST, referenceId: string): ReferenceEntry =>
+    referenceLocation(ast, referenceId).reference;
+
+const assetLocation = (ast: DocumentAST, assetId: string): {
+    index: number;
+    asset: AssetEntry;
+} => {
+    const index = ast.assets.findIndex((asset) => asset.id === assetId);
+    if (index === -1) {
+        throw new Error(`Asset ${assetId} was not found`);
+    }
+
+    return {
+        index,
+        asset: ast.assets[index],
+    };
+};
+
+const assetById = (ast: DocumentAST, assetId: string): AssetEntry =>
+    assetLocation(ast, assetId).asset;
+
+
 
 const tableRow = (table: Table, rowIndex: number): TableCell[] => {
     const row = table.cells[rowIndex];
@@ -857,6 +1062,7 @@ const elementIdOf = (element: DocumentElement): string => {
         case "Table":
         case "Equation":
         case "Figure":
+        case "Custom":
             return element.id;
         default:
             return assertNever(element);

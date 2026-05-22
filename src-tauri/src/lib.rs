@@ -32,6 +32,8 @@ pub fn run() {
             document_session_commands::sync_document_event,
             document_session_commands::get_document_session_status,
             document_session_commands::read_preview_svg,
+            document_session_commands::read_resource_preview_svg,
+            document_session_commands::import_resource_file,
             preview_sync_commands::jump_from_preview_click,
             preview_sync_commands::get_preview_positions_for_element,
             preview_sync_commands::get_preview_positions_for_focus,
@@ -53,6 +55,8 @@ pub mod action_types;
 pub mod actions;
 pub mod actions_commands;
 pub mod app_state;
+#[cfg(test)]
+mod architecture_tests;
 pub mod archive;
 pub mod ast;
 pub mod backend_profile;
@@ -62,20 +66,21 @@ pub mod compile_artifacts;
 pub mod compile_events;
 pub mod compiler;
 pub mod core_errors;
+pub mod document_outline;
+pub mod document_resources;
+pub mod document_session;
 pub mod document_session_commands;
-pub mod document_source_builder;
 pub mod document_session_events;
 pub mod document_session_generation;
-pub mod document_session;
 pub mod document_session_types;
+pub mod document_source_builder;
 pub mod path_utils;
+pub mod preview_sync;
 pub mod preview_sync_commands;
 pub mod preview_sync_lookup;
-pub mod preview_sync;
 pub mod preview_sync_types;
 pub mod settings;
-#[cfg(test)]
-mod architecture_tests;
+pub mod template_spec;
 #[cfg(test)]
 pub mod test_fixtures;
 pub mod vfs;

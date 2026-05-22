@@ -1,4 +1,5 @@
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import '@testing-library/jest-dom';
@@ -55,5 +56,16 @@ describe('Accordion Component', () => {
     fireEvent.click(button);
     expect(screen.queryByText(content)).not.toBeInTheDocument();
     expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('does not clip content height with container overflow', () => {
+    const css = readFileSync(
+      'src/components/molecules/Accordion/Accordion.module.css',
+      'utf8',
+    );
+
+    expect(css).not.toMatch(/\.container\s*\{[^}]*overflow:\s*hidden/s);
+    expect(css).toMatch(/\.header\s*\{[^}]*border-radius:/s);
+    expect(css).toMatch(/\.content\s*\{[^}]*border-radius:/s);
   });
 });

@@ -16,6 +16,7 @@ describe("WelcomeScreen component", () => {
                 onNewProject={handleNewProject}
                 onOpenProject={handleOpenProject}
                 onOpenRecentProject={handleOpenProject}
+                onRemoveRecentProject={vi.fn()}
                 onCommandPalette={vi.fn()}
             />,
         );
@@ -29,5 +30,32 @@ describe("WelcomeScreen component", () => {
 
         fireEvent.click(screen.getByRole("button", { name: /open project/i }));
         expect(handleOpenProject).toHaveBeenCalledTimes(1);
+    });
+
+    it("removes a recent project without opening it", () => {
+        const handleOpenRecentProject = vi.fn();
+        const handleRemoveRecentProject = vi.fn();
+
+        render(
+            <WelcomeScreen
+                recentProjects={["C:\\Users\\ada\\Draft.ergproj"]}
+                onNewProject={vi.fn()}
+                onOpenProject={vi.fn()}
+                onOpenRecentProject={handleOpenRecentProject}
+                onRemoveRecentProject={handleRemoveRecentProject}
+                onCommandPalette={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: "Remove from recent projects",
+            }),
+        );
+
+        expect(handleRemoveRecentProject).toHaveBeenCalledWith(
+            "C:\\Users\\ada\\Draft.ergproj",
+        );
+        expect(handleOpenRecentProject).not.toHaveBeenCalled();
     });
 });

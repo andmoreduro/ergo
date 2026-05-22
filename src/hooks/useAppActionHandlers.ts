@@ -5,8 +5,8 @@ import type { DocumentAST } from "../bindings/DocumentAST";
 import type { CommandRegistry } from "../commands/registry";
 import type { CommandContext } from "../commands/types";
 import {
-    coverTitleFieldId,
     defaultFieldIdForElement,
+    editorFocusIdsForBackendField,
 } from "../editor/fieldIds";
 import type { DocumentFocusInput } from "../state/DocumentContext";
 
@@ -63,9 +63,6 @@ const defaultFieldIdForFocus = (
     elementId: string,
 ): string | null => {
     for (const section of state.sections) {
-        if (section.type === "CoverPage" && section.id === elementId) {
-            return coverTitleFieldId(section.id);
-        }
 
         if (section.type === "Content") {
             const element = section.elements.find((entry) => entry.id === elementId);
@@ -99,9 +96,13 @@ export const useAppActionHandlers = ({
             const fieldId =
                 target.fieldId ??
                 defaultFieldIdForFocus(stateRef.current, target.elementId);
-            setDocumentFocus({
-                elementId: target.elementId,
+            const editorTarget = editorFocusIdsForBackendField(
+                target.elementId,
                 fieldId,
+            );
+            setDocumentFocus({
+                elementId: editorTarget.elementId,
+                fieldId: editorTarget.fieldId,
                 caretUtf16Offset: target.caretUtf16Offset,
                 sourceRevision: target.sourceRevision,
                 focusSource: "preview",

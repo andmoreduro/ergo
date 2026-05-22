@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@fluentui/react-icons':
+        specifier: ^2.0.326
+        version: 2.0.326(react@18.3.1)
       '@tauri-apps/api':
         specifier: ^2
         version: 2.10.1
@@ -254,6 +257,9 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
+  '@emotion/hash@0.9.2':
+    resolution: {integrity: sha512-MyqliTZGuOm3+5ZRSaaBGP3USLw6+EGykkwZns2EPC5g8jJ4z9OrdZY9apkl3+UP9+sdz76YYkwCKP5gh8iY3g==}
+
   '@esbuild/aix-ppc64@0.25.12':
     resolution: {integrity: sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA==}
     engines: {node: '>=18'}
@@ -418,6 +424,22 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@fluentui/react-icons@2.0.326':
+    resolution: {integrity: sha512-iSN6YggrrQyZ46Jxk998Umm9jehWs6mrqCsrAvr7+uZWY6IwfYcoz94NCJ2SDiMO8Jompl4Y4Yu73SwljuUULQ==}
+    peerDependencies:
+      react: '>=16.8.0 <20.0.0'
+
+  '@griffel/core@1.21.0':
+    resolution: {integrity: sha512-QqMoewiNTT0DmLM7OY607c7yhg18SuKfzovTO3hPXGQvtdu/StnjvuBAs+1B1kYSVGReAo6s/dJVeLnPuHjE7Q==}
+
+  '@griffel/react@1.7.2':
+    resolution: {integrity: sha512-/+N+81e9ibNsh2wNlhGf2PcimEFrx8VbtWiLCmI6lsrTV5eBcQrIIDVQq737KPIJFtD4v6Txu9n0PXbN3hedNg==}
+    peerDependencies:
+      react: '>=16.14.0 <20.0.0'
+
+  '@griffel/style-types@1.4.0':
+    resolution: {integrity: sha512-vNDfOGV7RN/XkA7vxgf7Z5HgW8eiBm5cHT9wQPhsKB4pxWom5u6eQ9CkYE5mCCTSPl9H6Nd1NBai04d4P6BD7Q==}
 
   '@inlang/paraglide-js@2.17.0':
     resolution: {integrity: sha512-dY4yoQkQkF1En1m3qpO22cVGubluU2W78fatLb33s8qe6K8wDqP0mIGZ/oZ0/h609YC8/Y0CkceaLcYeJTcpwg==}
@@ -1466,6 +1488,9 @@ packages:
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
 
+  rtl-css-js@1.16.1:
+    resolution: {integrity: sha512-lRQgou1mu19e+Ya0LsTvKrVJ5TYUbqCVPAiImX3UfLTenarvPUl1QFdvu5Z3PYmHT9RCcwIfbjRQBntExyj3Zg==}
+
   run-applescript@7.1.0:
     resolution: {integrity: sha512-DPe5pVFaAsinSaV6QjQ6gdiedWDcRCbUuiQfQa2wmWV7+xC9bGulGI8+TdRmoFkAPaBXk8CrAbnlY2ISniJ47Q==}
     engines: {node: '>=18'}
@@ -1536,6 +1561,9 @@ packages:
   strip-indent@4.1.1:
     resolution: {integrity: sha512-SlyRoSkdh1dYP0PzclLE7r0M9sgbFKKMFXpFRUMNuKhQSbC6VQIGzq3E0qsfvGJaUFJPGv6Ws1NZ/haTAjfbMA==}
     engines: {node: '>=12'}
+
+  stylis@4.4.0:
+    resolution: {integrity: sha512-5Z9ZpRzfuH6l/UAvCPAPUo3665Nk2wLaZU3x+TLHKVzIz33+sbJqbtrYoC3KD4/uVOr2Zp+L0LySezP9OHV9yA==}
 
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
@@ -1952,6 +1980,8 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
+  '@emotion/hash@0.9.2': {}
+
   '@esbuild/aix-ppc64@0.25.12':
     optional: true
 
@@ -2031,6 +2061,31 @@ snapshots:
     optional: true
 
   '@exodus/bytes@1.15.0': {}
+
+  '@fluentui/react-icons@2.0.326(react@18.3.1)':
+    dependencies:
+      '@griffel/react': 1.7.2(react@18.3.1)
+      react: 18.3.1
+      tslib: 2.8.1
+
+  '@griffel/core@1.21.0':
+    dependencies:
+      '@emotion/hash': 0.9.2
+      '@griffel/style-types': 1.4.0
+      csstype: 3.2.3
+      rtl-css-js: 1.16.1
+      stylis: 4.4.0
+      tslib: 2.8.1
+
+  '@griffel/react@1.7.2(react@18.3.1)':
+    dependencies:
+      '@griffel/core': 1.21.0
+      react: 18.3.1
+      tslib: 2.8.1
+
+  '@griffel/style-types@1.4.0':
+    dependencies:
+      csstype: 3.2.3
 
   '@inlang/paraglide-js@2.17.0':
     dependencies:
@@ -3054,6 +3109,10 @@ snapshots:
       '@rollup/rollup-win32-x64-msvc': 4.59.0
       fsevents: 2.3.3
 
+  rtl-css-js@1.16.1:
+    dependencies:
+      '@babel/runtime': 7.29.2
+
   run-applescript@7.1.0: {}
 
   saxes@6.0.0:
@@ -3122,6 +3181,8 @@ snapshots:
       min-indent: 1.0.1
 
   strip-indent@4.1.1: {}
+
+  stylis@4.4.0: {}
 
   supports-color@7.2.0:
     dependencies:

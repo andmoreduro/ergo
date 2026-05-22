@@ -1,5 +1,4 @@
 import type { ContentSection } from "../../bindings/ContentSection";
-import type { CoverPageSection } from "../../bindings/CoverPageSection";
 import type { DocumentAST } from "../../bindings/DocumentAST";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
@@ -64,6 +63,7 @@ export const createTable = (
         Array.from({ length: cols }, createEmptyCell),
     ),
     column_sizes: Array.from({ length: cols }, () => "1fr"),
+    extra_fields: {},
 });
 
 export const createEquation = (
@@ -83,6 +83,7 @@ export const createFigure = (id = createId()): DocumentElement => ({
     content: createParagraph(""),
     caption: "",
     placement: "auto",
+    extra_fields: {},
 });
 
 export const createContentSection = (id = createId()): ContentSection => ({
@@ -91,19 +92,13 @@ export const createContentSection = (id = createId()): ContentSection => ({
     elements: [],
 });
 
-export const createCoverPageSection = (id = createId()): CoverPageSection => ({
-    id,
-    is_optional: true,
-    authors: [],
-    affiliations: [],
-    abstract_text: "",
-});
-
 export const createDefaultDocumentAST = (): DocumentAST => ({
     version: "1.0",
     metadata: {
-        template_id: "apa7",
+        template_id: "versatile-apa",
         title: "Untitled Document",
+        running_head: null,
+        keywords: [],
         project_settings: {
             paper_size: "us-letter",
             language: "en",
@@ -142,11 +137,19 @@ export const createDefaultDocumentAST = (): DocumentAST => ({
     },
     references: [],
     assets: [],
+    inputs: {
+        title: "Untitled Document",
+        running_head: "",
+        abstract_text: "",
+        affiliations: [],
+        authors: [],
+        course: "",
+        due_date: "",
+        instructor: "",
+        author_note: "",
+        keywords: []
+    },
     sections: [
-        {
-            type: "CoverPage",
-            ...createCoverPageSection(),
-        },
         {
             type: "Content",
             ...createContentSection(),

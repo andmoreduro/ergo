@@ -44,10 +44,8 @@ describe("astReducer", () => {
         expect(nextState).toBe(nextDocument);
     });
 
-    it("updates cover page metadata without mutating the original state", () => {
+    it("updates input values via UPDATE_INPUT without mutating the original state", () => {
         const state = createDefaultDocumentAST();
-        const coverPage = getCoverPage(state);
-        expect(coverPage).toBeDefined();
 
         let nextState = astReducer(state, {
             type: "UPDATE_PROJECT_TITLE",
@@ -55,39 +53,42 @@ describe("astReducer", () => {
         });
 
         nextState = astReducer(nextState, {
-            type: "UPDATE_COVER_PAGE_ABSTRACT",
+            type: "UPDATE_INPUT",
             payload: {
-                sectionId: coverPage?.id ?? "",
-                abstractText: "A compact abstract.",
+                path: "/abstract_text",
+                value: "A compact abstract.",
             },
         });
 
         expect(state.metadata.title).toBe("Untitled Document");
+        expect(state.inputs.abstract_text).toBe("");
         expect(nextState.metadata.title).toBe("Research Notes");
-        expect(getCoverPage(nextState)?.abstract_text).toBe("A compact abstract.");
+        expect(nextState.inputs.abstract_text).toBe("A compact abstract.");
     });
 
-    it("adds and updates authors", () => {
+    it("inserts and updates items in input arrays", () => {
         const state = createDefaultDocumentAST();
-        const coverPage = getCoverPage(state);
-        expect(coverPage).toBeDefined();
 
         const withAuthor = astReducer(state, {
-            type: "ADD_AUTHOR",
-            payload: { sectionId: coverPage?.id ?? "" },
+            type: "INSERT_INPUT_ARRAY_ITEM",
+            payload: {
+                path: "/authors",
+                index: 0,
+                value: { name: "", affiliations: [] },
+            },
         });
 
         const updated = astReducer(withAuthor, {
-            type: "UPDATE_AUTHOR",
+            type: "UPDATE_INPUT",
             payload: {
-                sectionId: coverPage?.id ?? "",
-                authorIndex: 0,
-                field: "name",
+                path: "/authors/0/name",
                 value: "Ada Lovelace",
             },
         });
 
-        expect(getCoverPage(updated)?.authors[0].name).toBe("Ada Lovelace");
+        expect(state.inputs.authors).toHaveLength(0); // default has 0 authors
+        expect(withAuthor.inputs.authors).toHaveLength(1);
+        expect(updated.inputs.authors[0].name).toBe("Ada Lovelace");
     });
 
     it("adds and updates paragraphs", () => {
@@ -226,5 +227,114 @@ describe("astReducer", () => {
         });
 
         expect(getContentSection(nextState)?.elements).toHaveLength(0);
+    });
+
+    it("updates element extra fields", () => {
+        const state = createDefaultDocumentAST();
+        const content = getContentSection(state);
+
+        const withFigure = astReducer(state, {
+            type: "ADD_FIGURE",
+            payload: { sectionId: content?.id ?? "", figureId: "fig-1" },
+        });
+
+        const updated = astReducer(withFigure, {
+            type: "UPDATE_ELEMENT_EXTRA_FIELD",
+            payload: {
+                elementId: "fig-1",
+                fieldKey: "note",
+                fieldValue: "General Note Content",
+            },
+        });
+
+        const elements = getContentSection(updated)?.elements ?? [];
+        const figure = elements.find((element) => element.id === "fig-1");
+        expect(figure?.type).toBe("Figure");
+        if (figure?.type === "Figure") {
+            expect(figure.extra_fields["note"]).toBe("General Note Content");
+        }
+    });
+
+    it("adds, updates, and removes references without mutating the original state", () => {
+        const state = createDefaultDocumentAST();
+
+        const withReference = astReducer(state, {
+            type: "ADD_REFERENCE",
+            payload: {
+                reference: {
+                    id: "ref-1",
+                    citation_key: "garcia2024",
+                    biblatex: "@article{garcia2024,\n  title = {Niñez}\n}",
+                },
+            },
+        });
+        const updated = astReducer(withReference, {
+            type: "UPDATE_REFERENCE",
+            payload: {
+                reference: {
+                    id: "ref-1",
+                    citation_key: "garcia2025",
+                    biblatex: "@book{garcia2025,\n  title = {Libro}\n}",
+                },
+            },
+        });
+        const removed = astReducer(updated, {
+            type: "REMOVE_REFERENCE",
+            payload: { referenceId: "ref-1" },
+        });
+
+        expect(state.references).toHaveLength(0);
+        expect(withReference.references).toEqual([
+            {
+                id: "ref-1",
+                citation_key: "garcia2024",
+                biblatex: "@article{garcia2024,\n  title = {Niñez}\n}",
+            },
+        ]);
+        expect(updated.references[0].citation_key).toBe("garcia2025");
+        expect(removed.references).toHaveLength(0);
+    });
+
+    it("adds, updates, and removes assets without mutating the original state", () => {
+        const state = createDefaultDocumentAST();
+
+        const withAsset = astReducer(state, {
+            type: "ADD_ASSET",
+            payload: {
+                asset: {
+                    id: "asset-1",
+                    path: "assets/chart.png",
+                    kind: "image",
+                    caption: "Chart",
+                },
+            },
+        });
+        const updated = astReducer(withAsset, {
+            type: "UPDATE_ASSET",
+            payload: {
+                asset: {
+                    id: "asset-1",
+                    path: "assets/chart.png",
+                    kind: "image",
+                    caption: "Updated chart",
+                },
+            },
+        });
+        const removed = astReducer(updated, {
+            type: "REMOVE_ASSET",
+            payload: { assetId: "asset-1" },
+        });
+
+        expect(state.assets).toHaveLength(0);
+        expect(withAsset.assets).toEqual([
+            {
+                id: "asset-1",
+                path: "assets/chart.png",
+                kind: "image",
+                caption: "Chart",
+            },
+        ]);
+        expect(updated.assets[0].caption).toBe("Updated chart");
+        expect(removed.assets).toHaveLength(0);
     });
 });

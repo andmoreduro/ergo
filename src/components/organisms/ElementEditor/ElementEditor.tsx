@@ -15,7 +15,9 @@ import {
     richTextFieldId,
     tableCellFieldId,
     tableColumnSizeFieldId,
+    elementExtraFieldFieldId,
 } from "../../../editor/fieldIds";
+import { getTemplateSpec } from "../../../templates/registry";
 import { Button } from "../../atoms/Button/Button";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { Select } from "../../atoms/Select/Select";
@@ -33,6 +35,7 @@ type ParagraphElement = Extract<DocumentElement, { type: "Paragraph" }>;
 type EquationElement = Extract<DocumentElement, { type: "Equation" }>;
 type TableElement = Extract<DocumentElement, { type: "Table" }>;
 type FigureElement = Extract<DocumentElement, { type: "Figure" }>;
+type CustomElementUnion = Extract<DocumentElement, { type: "Custom" }>;
 type RichTextElement = HeadingElement | ParagraphElement;
 
 const richTextToString = (element: RichTextElement) =>
@@ -213,7 +216,52 @@ const ElementContent = ({ element }: { element: DocumentElement }) => {
         return <TableEditor element={element} />;
     }
 
-    return <FigureEditor element={element} />;
+    if (element.type === "Custom") {
+        return <CustomElementEditor element={element} />;
+    }
+
+    if (element.type === "Figure") {
+        return <FigureEditor element={element} />;
+    }
+
+    return null;
+};
+
+const CustomElementEditor = ({ element }: { element: CustomElementUnion }) => {
+    const { state, dispatch } = useDocument();
+    const templateSpec = getTemplateSpec(state.metadata.template_id);
+    const customElements = templateSpec.custom_elements || [];
+    const spec = customElements.find((c) => c.kind === element.element_type);
+
+    if (!spec) {
+        return <div className={styles.placeholder}>Unknown custom element type: {element.element_type}</div>;
+    }
+
+    return (
+        <>
+            {(spec.fields || []).map((field) => {
+                const value = element.fields[field.key] ?? "";
+                return (
+                    <Textarea
+                        key={field.key}
+                        fullWidth
+                        label={field.label || field.key}
+                        value={value}
+                        onChange={(event) =>
+                            dispatch({
+                                type: "UPDATE_CUSTOM_ELEMENT_FIELD",
+                                payload: {
+                                    elementId: element.id,
+                                    field: field.key,
+                                    value: event.target.value,
+                                },
+                            })
+                        }
+                    />
+                );
+            })}
+        </>
+    );
 };
 
 const HeadingEditor = ({ element }: { element: HeadingElement }) => {
@@ -326,6 +374,10 @@ const EquationEditor = ({ element }: { element: EquationElement }) => {
 
 const TableEditor = ({ element }: { element: TableElement }) => {
     const dispatchAction = useActionDispatcher();
+    const { state, dispatch } = useDocument();
+    const templateId = state.metadata.template_id;
+    const templateSpec = getTemplateSpec(templateId);
+    const extraFields = templateSpec.element_overrides?.table?.extra_fields ?? [];
 
     return (
         <>
@@ -410,6 +462,25 @@ const TableEditor = ({ element }: { element: TableElement }) => {
                     {m.editor_table_remove_column()}
                 </Button>
             </div>
+            {extraFields.map((field) => (
+                <ExtraFieldInput
+                    key={field.key}
+                    elementId={element.id}
+                    fieldKey={field.key}
+                    label={field.label}
+                    value={element.extra_fields?.[field.key] ?? ""}
+                    onChange={(value) =>
+                        dispatch({
+                            type: "UPDATE_ELEMENT_EXTRA_FIELD",
+                            payload: {
+                                elementId: element.id,
+                                fieldKey: field.key,
+                                fieldValue: value,
+                            },
+                        })
+                    }
+                />
+            ))}
         </>
     );
 };
@@ -491,7 +562,11 @@ const TableCellEditor = ({
 };
 
 const FigureEditor = ({ element }: { element: FigureElement }) => {
-    const { dispatch } = useDocument();
+    const { state, dispatch } = useDocument();
+    const templateId = state.metadata.template_id;
+    const templateSpec = getTemplateSpec(templateId);
+    const extraFields = templateSpec.element_overrides?.figure?.extra_fields ?? [];
+
     const bodyText =
         element.content.type === "Paragraph" ? richTextToString(element.content) : "";
     const bodyField = useEditorFieldBinding<HTMLTextAreaElement>({
@@ -555,6 +630,56 @@ const FigureEditor = ({ element }: { element: FigureElement }) => {
                     })
                 }
             />
+            {extraFields.map((field) => (
+                <ExtraFieldInput
+                    key={field.key}
+                    elementId={element.id}
+                    fieldKey={field.key}
+                    label={field.label}
+                    value={element.extra_fields?.[field.key] ?? ""}
+                    onChange={(value) =>
+                        dispatch({
+                            type: "UPDATE_ELEMENT_EXTRA_FIELD",
+                            payload: {
+                                elementId: element.id,
+                                fieldKey: field.key,
+                                fieldValue: value,
+                            },
+                        })
+                    }
+                />
+            ))}
         </>
+    );
+};
+
+interface ExtraFieldInputProps {
+    elementId: string;
+    fieldKey: string;
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+}
+
+const ExtraFieldInput = ({
+    elementId,
+    fieldKey,
+    label,
+    value,
+    onChange,
+}: ExtraFieldInputProps) => {
+    const binding = useEditorFieldBinding<HTMLInputElement>({
+        elementId,
+        fieldId: elementExtraFieldFieldId(elementId, fieldKey),
+    });
+
+    return (
+        <TextInput
+            {...binding}
+            fullWidth
+            label={label}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+        />
     );
 };

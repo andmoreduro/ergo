@@ -6,6 +6,7 @@ export interface WelcomeScreenProps {
     onNewProject: () => void;
     onOpenProject: () => void;
     onOpenRecentProject: (path: string) => void;
+    onRemoveRecentProject: (path: string) => void;
     onCommandPalette: () => void;
 }
 
@@ -14,6 +15,7 @@ export const WelcomeScreen = ({
     onNewProject,
     onOpenProject,
     onOpenRecentProject,
+    onRemoveRecentProject,
     onCommandPalette,
 }: WelcomeScreenProps) => {
     return (
@@ -67,15 +69,25 @@ export const WelcomeScreen = ({
                     </div>
                     {recentProjects.length > 0 ? (
                         recentProjects.map((project) => (
-                            <button
-                                className={styles.action}
-                                type="button"
-                                key={project}
-                                onClick={() => onOpenRecentProject(project)}
-                            >
-                                <span className={styles.actionIcon}>[]</span>
-                                <span>{project}</span>
-                            </button>
+                            <div className={styles.recentProject} key={project}>
+                                <button
+                                    className={`${styles.action} ${styles.recentAction}`}
+                                    type="button"
+                                    onClick={() => onOpenRecentProject(project)}
+                                >
+                                    <span className={styles.actionIcon}>[]</span>
+                                    <span>{project}</span>
+                                </button>
+                                <button
+                                    aria-label={m.welcome_remove_recent_project()}
+                                    className={styles.recentRemove}
+                                    title={m.welcome_remove_recent_project()}
+                                    type="button"
+                                    onClick={() => onRemoveRecentProject(project)}
+                                >
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
                         ))
                     ) : (
                         <p className={styles.empty}>
