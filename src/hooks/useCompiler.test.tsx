@@ -4,15 +4,20 @@ import type { DocumentAST } from "../bindings/DocumentAST";
 import { createDefaultDocumentAST } from "../state/ast/defaults";
 
 const tauriApiMock = vi.hoisted(() => ({
-    enqueuePreviewCompile: vi.fn(),
-    getCompileStatus: vi.fn(),
+    startPreviewWatch: vi.fn(),
+    stopPreviewWatch: vi.fn(),
     listenToCompileEvents: vi.fn(),
+    listenToResourcesEvents: vi.fn(() => Promise.resolve(() => undefined)),
     patchSource: vi.fn(),
     readPreviewSvg: vi.fn(),
     syncDocumentEvent: vi.fn(),
+    syncDocumentEvents: vi.fn(),
     syncDocumentSnapshot: vi.fn(),
     writeSource: vi.fn(),
 }));
+
+const fetchMock = vi.fn();
+vi.stubGlobal("fetch", fetchMock);
 
 vi.mock("../api/tauri", () => ({
     TauriApi: tauriApiMock,
@@ -70,8 +75,20 @@ const CompilerHarness = ({
     events?: QueuedDocumentEvent[];
     sessionId?: number;
 }) => {
-    useCompiler(ast, events, sessionId);
+    useCompiler(ast, events, sessionId, undefined, events.length);
     return null;
+};
+
+const withDocumentStatusRetry = <T,>(
+    fn: (release: () => void) => T,
+): [T, () => void] => {
+    let release: (() => void) | null = null;
+    const value = fn(() => {
+        release?.();
+    });
+    return [value, () => {
+        release = null;
+    }];
 };
 
 describe("useCompiler source syncing", () => {
@@ -81,33 +98,19 @@ describe("useCompiler source syncing", () => {
 
     it("drains document events in order without sending snapshots for edits", async () => {
         const ast = createDocumentWithTitle("Me hago entender");
-        let revision = 0;
         let releaseFirstEvent: (() => void) | null = null;
         const syncedTitles: string[] = [];
 
         tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
-        tauriApiMock.getCompileStatus.mockResolvedValue({
-            active_job_id: null,
-            last_result: null,
-            latest_source_revision: 0,
-            queued_export_count: 0,
-            queued_preview_job_id: null,
-        });
-        tauriApiMock.enqueuePreviewCompile.mockImplementation(async () => {
-            revision += 1;
-            return {
-                job_id: revision,
-                kind: { type: "previewSvg" },
-                priority: "preview",
-                source_revision: revision,
-            };
-        });
+        tauriApiMock.startPreviewWatch.mockResolvedValue(undefined);
         tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
-        tauriApiMock.syncDocumentEvent.mockImplementation(
-            async (event: QueuedDocumentEvent["event"]) => {
-                syncedTitles.push(
-                    event.type === "setProjectTitle" ? event.title : "",
-                );
+        tauriApiMock.syncDocumentEvents.mockImplementation(
+            async (events: QueuedDocumentEvent["event"][]) => {
+                for (const event of events) {
+                    syncedTitles.push(
+                        event.type === "setProjectTitle" ? event.title : "",
+                    );
+                }
                 if (syncedTitles.length === 1) {
                     await new Promise<void>((resolve) => {
                         releaseFirstEvent = resolve;
@@ -157,51 +160,55 @@ describe("useCompiler source syncing", () => {
         expect(tauriApiMock.writeSource).not.toHaveBeenCalled();
         expect(tauriApiMock.patchSource).not.toHaveBeenCalled();
         expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalledTimes(1);
-        expect(tauriApiMock.syncDocumentEvent).toHaveBeenCalledTimes(2);
-        expect(tauriApiMock.enqueuePreviewCompile).toHaveBeenCalledTimes(3);
+        expect(tauriApiMock.syncDocumentEvents).toHaveBeenCalled();
+        expect(tauriApiMock.startPreviewWatch).toHaveBeenCalledTimes(2);
 
         unmount();
     });
 
     it("loads preview SVGs from backend preview files", async () => {
         const ast = createDocumentWithTitle("Vista previa");
+        let capturedListeners: any = {};
 
-        tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
-        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
-        tauriApiMock.enqueuePreviewCompile.mockResolvedValue({
-            job_id: 1,
-            kind: { type: "previewSvg" },
-            priority: "preview",
-            source_revision: 1,
+        tauriApiMock.listenToCompileEvents.mockImplementation((listeners) => {
+            capturedListeners = listeners;
+            return Promise.resolve(() => undefined);
         });
-        tauriApiMock.getCompileStatus.mockResolvedValue({
-            active_job_id: null,
-            latest_source_revision: 1,
-            queued_export_count: 0,
-            queued_preview_job_id: null,
-            last_result: {
-                diagnostics: [],
-                export_path: ".ergproj/preview/svg",
-                job_id: 1,
-                kind: { type: "previewSvg" },
+        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
+        tauriApiMock.startPreviewWatch.mockResolvedValue(undefined);
+        fetchMock.mockResolvedValue({
+            ok: true,
+            text: async () => "<svg />",
+        });
+
+        const { unmount } = render(<CompilerHarness ast={ast} />);
+
+        await waitFor(() => {
+            expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalled();
+        });
+
+        act(() => {
+            capturedListeners.onSucceeded?.({
+                source_revision: 1,
+                status: "succeeded",
                 preview_pages: [
                     {
                         changed: true,
                         page_number: 1,
                         path: ".ergproj/preview/svg/page-1.svg",
+                        content: null,
                     },
                 ],
-                source_revision: 1,
-                status: "succeeded",
-            },
+                export_path: ".ergproj/preview/svg",
+                diagnostics: [],
+                outline: null,
+                resources: null,
+            });
         });
-        tauriApiMock.readPreviewSvg.mockResolvedValue("<svg />");
-
-        const { unmount } = render(<CompilerHarness ast={ast} />);
 
         await waitFor(() => {
-            expect(tauriApiMock.readPreviewSvg).toHaveBeenCalledWith(
-                ".ergproj/preview/svg/page-1.svg",
+            expect(fetchMock).toHaveBeenCalledWith(
+                expect.stringMatching(/^(http:\/\/ergo-preview\.localhost|ergo-preview:\/\/localhost)\/\.ergproj\/preview\/svg\/page-1\.svg\?rev=1$/)
             );
         });
 
@@ -211,69 +218,43 @@ describe("useCompiler source syncing", () => {
     it("reuses unchanged preview SVG pages after incremental preview updates", async () => {
         const ast = createDocumentWithTitle("Vista previa");
         const updatedAst = createDocumentWithTitle("Vista previa actualizada");
-        let queuedRevision = 0;
+        let capturedListeners: any = {};
 
-        tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
-        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
-        tauriApiMock.syncDocumentEvent.mockResolvedValue(createStatus(2));
-        tauriApiMock.enqueuePreviewCompile.mockImplementation(async () => {
-            queuedRevision += 1;
-            return {
-                job_id: queuedRevision,
-                kind: { type: "previewSvg" },
-                priority: "preview",
-                source_revision: queuedRevision,
-            };
+        tauriApiMock.listenToCompileEvents.mockImplementation((listeners) => {
+            capturedListeners = listeners;
+            return Promise.resolve(() => undefined);
         });
-        tauriApiMock.getCompileStatus.mockImplementation(async () => ({
-            active_job_id: null,
-            latest_source_revision: queuedRevision,
-            queued_export_count: 0,
-            queued_preview_job_id: null,
-            last_result: {
-                diagnostics: [],
-                export_path: ".ergproj/preview/svg",
-                job_id: queuedRevision,
-                kind: { type: "previewSvg" },
-                preview_pages:
-                    queuedRevision === 1
-                        ? [
-                              {
-                                  changed: true,
-                                  page_number: 1,
-                                  path: ".ergproj/preview/svg/page-1.svg",
-                              },
-                              {
-                                  changed: true,
-                                  page_number: 2,
-                                  path: ".ergproj/preview/svg/page-2.svg",
-                              },
-                          ]
-                        : [
-                              {
-                                  changed: false,
-                                  page_number: 1,
-                                  path: ".ergproj/preview/svg/page-1.svg",
-                              },
-                              {
-                                  changed: true,
-                                  page_number: 2,
-                                  path: ".ergproj/preview/svg/page-2.svg",
-                              },
-                          ],
-                source_revision: queuedRevision,
-                status: "succeeded",
-            },
-        }));
-        tauriApiMock.readPreviewSvg
-            .mockResolvedValueOnce("<svg>one</svg>")
-            .mockResolvedValueOnce("<svg>two</svg>")
-            .mockResolvedValueOnce("<svg>three</svg>");
+        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
+        tauriApiMock.syncDocumentEvents.mockResolvedValue(createStatus(2));
+        tauriApiMock.startPreviewWatch.mockResolvedValue(undefined);
+        fetchMock
+            .mockResolvedValueOnce({ ok: true, text: async () => "<svg>one</svg>" })
+            .mockResolvedValueOnce({ ok: true, text: async () => "<svg>two</svg>" })
+            .mockResolvedValueOnce({ ok: true, text: async () => "<svg>three</svg>" });
 
         const { rerender, unmount } = render(<CompilerHarness ast={ast} />);
 
         await waitFor(() => {
-            expect(tauriApiMock.readPreviewSvg).toHaveBeenCalledTimes(2);
+            expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalled();
+        });
+
+        act(() => {
+            capturedListeners.onSucceeded?.({
+                source_revision: 1,
+                status: "succeeded",
+                preview_pages: [
+                    { changed: true, page_number: 1, path: ".ergproj/preview/svg/page-1.svg", content: null },
+                    { changed: true, page_number: 2, path: ".ergproj/preview/svg/page-2.svg", content: null },
+                ],
+                export_path: null,
+                diagnostics: [],
+                outline: null,
+                resources: null,
+            });
+        });
+
+        await waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledTimes(2);
         });
 
         rerender(
@@ -288,12 +269,27 @@ describe("useCompiler source syncing", () => {
             />,
         );
 
+        act(() => {
+            capturedListeners.onSucceeded?.({
+                source_revision: 2,
+                status: "succeeded",
+                preview_pages: [
+                    { changed: false, page_number: 1, path: ".ergproj/preview/svg/page-1.svg", content: null },
+                    { changed: true, page_number: 2, path: ".ergproj/preview/svg/page-2.svg", content: null },
+                ],
+                export_path: null,
+                diagnostics: [],
+                outline: null,
+                resources: null,
+            });
+        });
+
         await waitFor(() => {
-            expect(tauriApiMock.readPreviewSvg).toHaveBeenCalledTimes(3);
+            expect(fetchMock).toHaveBeenCalledTimes(3);
         });
         expect(
-            tauriApiMock.readPreviewSvg.mock.calls.filter(
-                ([path]) => path === ".ergproj/preview/svg/page-1.svg",
+            fetchMock.mock.calls.filter(
+                ([url]) => url.includes("/.ergproj/preview/svg/page-1.svg"),
             ),
         ).toHaveLength(1);
 
@@ -304,22 +300,10 @@ describe("useCompiler source syncing", () => {
         const ast = createDocumentWithTitle("Base");
         tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
         tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
-        tauriApiMock.syncDocumentEvent.mockRejectedValue(
+        tauriApiMock.syncDocumentEvents.mockRejectedValue(
             new Error("stale document event"),
         );
-        tauriApiMock.enqueuePreviewCompile.mockResolvedValue({
-            job_id: 1,
-            kind: { type: "previewSvg" },
-            priority: "preview",
-            source_revision: 1,
-        });
-        tauriApiMock.getCompileStatus.mockResolvedValue({
-            active_job_id: null,
-            last_result: null,
-            latest_source_revision: 1,
-            queued_export_count: 0,
-            queued_preview_job_id: null,
-        });
+        tauriApiMock.startPreviewWatch.mockResolvedValue(undefined);
 
         const { unmount } = render(
             <CompilerHarness
@@ -338,17 +322,17 @@ describe("useCompiler source syncing", () => {
         );
 
         await waitFor(() => {
-            expect(tauriApiMock.syncDocumentEvent).toHaveBeenCalledTimes(1);
+            expect(tauriApiMock.syncDocumentEvents).toHaveBeenCalledTimes(1);
         });
         expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalledTimes(1);
-        expect(tauriApiMock.syncDocumentEvent).not.toHaveBeenCalledWith(
+        expect(tauriApiMock.syncDocumentEvents).not.toHaveBeenCalledWith(
             expect.objectContaining({ title: "Must not continue" }),
         );
 
         unmount();
     });
 
-    it("renders intermediate revisions sequentially and preserves isCompiling until the latest queued revision finishes", async () => {
+    it("renders intermediate revisions sequentially and preserves isCompiling until the latest compile finishes", async () => {
         const ast = createDocumentWithTitle("Test");
         let capturedListeners: any = {};
 
@@ -357,47 +341,57 @@ describe("useCompiler source syncing", () => {
             return Promise.resolve(() => undefined);
         });
 
-        let nextRevision = 1;
-        tauriApiMock.enqueuePreviewCompile.mockImplementation(async () => {
-            const rev = nextRevision;
-            nextRevision += 1;
+        tauriApiMock.startPreviewWatch.mockResolvedValue(undefined);
+        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
+        tauriApiMock.syncDocumentEvents.mockImplementation(async () => {
+            return createStatus(2);
+        });
+        fetchMock.mockImplementation(async (url: string) => {
+            const pathMatch = url.match(/\.ergproj\/preview\/svg\/[^\?]+/);
+            const path = pathMatch ? pathMatch[0] : url;
             return {
-                job_id: rev,
-                kind: { type: "previewSvg" },
-                priority: "preview",
-                source_revision: rev,
+                ok: true,
+                text: async () => `<svg>Content for .ergproj/preview/svg/${path.split('/').pop()}</svg>`,
             };
         });
 
-        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
-        tauriApiMock.syncDocumentEvent.mockImplementation(async () => {
-            return createStatus(nextRevision);
-        });
-        tauriApiMock.getCompileStatus.mockResolvedValue({
-            active_job_id: null,
-            latest_source_revision: 1,
-            queued_export_count: 0,
-            queued_preview_job_id: null,
-            last_result: null,
-        });
-        tauriApiMock.readPreviewSvg.mockImplementation(async (path) => {
-            return `<svg>Content for ${path}</svg>`;
-        });
-
         const { result, rerender, unmount } = renderHook(
-            ({ ast, events, sessionId }) => useCompiler(ast, events, sessionId),
+            ({ ast, events, sessionId }) =>
+                useCompiler(ast, events, sessionId, undefined, events.length),
             {
                 initialProps: { ast, events: [] as QueuedDocumentEvent[], sessionId: 1 },
             }
         );
 
-        // Wait for first sync & enqueue to finish
         await waitFor(() => {
             expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalled();
-            expect(tauriApiMock.enqueuePreviewCompile).toHaveBeenCalledTimes(1);
+            expect(tauriApiMock.startPreviewWatch).toHaveBeenCalledTimes(1);
         });
 
-        // Trigger two events sequentially to queue up revision 2 and 3
+        // isCompiling should be true while waiting for the first compile result
+        expect(result.current.isCompiling).toBe(true);
+
+        // Simulate completion with source_revision 1 (latest was 1 from snapshot)
+        act(() => {
+            capturedListeners.onSucceeded?.({
+                source_revision: 1,
+                status: "succeeded",
+                preview_pages: [
+                    { changed: true, page_number: 1, path: ".ergproj/preview/svg/rev1-page1.svg", content: null },
+                ],
+                export_path: null,
+                diagnostics: [],
+                outline: null,
+                resources: null,
+            });
+        });
+
+        await waitFor(() => {
+            expect(result.current.svgs).toEqual(["<svg>Content for .ergproj/preview/svg/rev1-page1.svg</svg>"]);
+            expect(result.current.isCompiling).toBe(false);
+        });
+
+        // Trigger event that causes new sync and watch start
         rerender({
             ast,
             events: [queuedEvent(1, { type: "setProjectTitle", title: "Title 1" })],
@@ -405,65 +399,17 @@ describe("useCompiler source syncing", () => {
         });
 
         await waitFor(() => {
-            expect(tauriApiMock.enqueuePreviewCompile).toHaveBeenCalledTimes(2);
-        });
-
-        rerender({
-            ast,
-            events: [
-                queuedEvent(1, { type: "setProjectTitle", title: "Title 1" }),
-                queuedEvent(2, { type: "setProjectTitle", title: "Title 2" }),
-            ],
-            sessionId: 1,
-        });
-
-        await waitFor(() => {
-            expect(tauriApiMock.enqueuePreviewCompile).toHaveBeenCalledTimes(3);
-        });
-
-        // Now we have latest revision = 3
-        // Simulate completion of revision 1 (succeeded compile event)
-        act(() => {
-            capturedListeners.onSucceeded?.({
-                job_id: 1,
-                kind: { type: "previewSvg" },
-                source_revision: 1,
-                status: "succeeded",
-                preview_pages: [
-                    {
-                        changed: true,
-                        page_number: 1,
-                        path: ".ergproj/preview/svg/rev1-page1.svg",
-                    },
-                ],
-                export_path: null,
-                diagnostics: [],
-                outline: null,
-                resources: null,
-            });
-        });
-
-        // Wait for revision 1 to load and render.
-        // It is newer than null, so it should render, but isCompiling should remain true because 1 < 3
-        await waitFor(() => {
-            expect(result.current.svgs).toEqual(["<svg>Content for .ergproj/preview/svg/rev1-page1.svg</svg>"]);
+            expect(tauriApiMock.startPreviewWatch).toHaveBeenCalledTimes(2);
             expect(result.current.isCompiling).toBe(true);
-            expect(result.current.previewRevision).toBe(1);
         });
 
         // Simulate completion of revision 2
         act(() => {
             capturedListeners.onSucceeded?.({
-                job_id: 2,
-                kind: { type: "previewSvg" },
                 source_revision: 2,
                 status: "succeeded",
                 preview_pages: [
-                    {
-                        changed: true,
-                        page_number: 1,
-                        path: ".ergproj/preview/svg/rev2-page1.svg",
-                    },
+                    { changed: true, page_number: 1, path: ".ergproj/preview/svg/rev2-page1.svg", content: null },
                 ],
                 export_path: null,
                 diagnostics: [],
@@ -472,39 +418,8 @@ describe("useCompiler source syncing", () => {
             });
         });
 
-        // Wait for revision 2 to render, isCompiling still true
         await waitFor(() => {
-            expect(result.current.svgs).toEqual(["<svg>Content for .ergproj/preview/svg/rev2-page1.svg</svg>"]);
-            expect(result.current.isCompiling).toBe(true);
-            expect(result.current.previewRevision).toBe(2);
-        });
-
-        // Simulate completion of revision 3
-        act(() => {
-            capturedListeners.onSucceeded?.({
-                job_id: 3,
-                kind: { type: "previewSvg" },
-                source_revision: 3,
-                status: "succeeded",
-                preview_pages: [
-                    {
-                        changed: true,
-                        page_number: 1,
-                        path: ".ergproj/preview/svg/rev3-page1.svg",
-                    },
-                ],
-                export_path: null,
-                diagnostics: [],
-                outline: null,
-                resources: null,
-            });
-        });
-
-        // Wait for revision 3 to render. Since 3 >= 3, isCompiling should become false!
-        await waitFor(() => {
-            expect(result.current.svgs).toEqual(["<svg>Content for .ergproj/preview/svg/rev3-page1.svg</svg>"]);
             expect(result.current.isCompiling).toBe(false);
-            expect(result.current.previewRevision).toBe(3);
         });
 
         unmount();
@@ -519,53 +434,31 @@ describe("useCompiler source syncing", () => {
             return Promise.resolve(() => undefined);
         });
 
-        let nextRevision = 1;
-        tauriApiMock.enqueuePreviewCompile.mockImplementation(async () => {
-            const rev = nextRevision;
-            nextRevision += 1;
-            return {
-                job_id: rev,
-                kind: { type: "previewSvg" },
-                priority: "preview",
-                source_revision: rev,
-            };
-        });
-
+        tauriApiMock.startPreviewWatch.mockResolvedValue(undefined);
         tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
-        tauriApiMock.getCompileStatus.mockResolvedValue({
-            active_job_id: null,
-            latest_source_revision: 1,
-            queued_export_count: 0,
-            queued_preview_job_id: null,
-            last_result: null,
+        fetchMock.mockResolvedValue({
+            ok: true,
+            text: async () => "<svg />",
         });
-        tauriApiMock.readPreviewSvg.mockResolvedValue("<svg />");
 
         const { result, rerender, unmount } = renderHook(
-            ({ ast, events, sessionId }) => useCompiler(ast, events, sessionId),
+            ({ ast, events, sessionId }) =>
+                useCompiler(ast, events, sessionId, undefined, events.length),
             {
                 initialProps: { ast, events: [] as QueuedDocumentEvent[], sessionId: 1 },
             }
         );
 
-        // Wait for initial load
         await waitFor(() => {
             expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalled();
         });
 
-        // Simulate success for revision 1
         act(() => {
             capturedListeners.onSucceeded?.({
-                job_id: 1,
-                kind: { type: "previewSvg" },
                 source_revision: 1,
                 status: "succeeded",
                 preview_pages: [
-                    {
-                        changed: true,
-                        page_number: 1,
-                        path: ".ergproj/preview/svg/rev1-page1.svg",
-                    },
+                    { changed: true, page_number: 1, path: ".ergproj/preview/svg/rev1-page1.svg", content: null },
                 ],
                 export_path: null,
                 diagnostics: [],
@@ -579,17 +472,97 @@ describe("useCompiler source syncing", () => {
             expect(result.current.svgs.length).toBe(1);
         });
 
-        // Now, switch sessionId
         rerender({
             ast,
             events: [],
             sessionId: 2,
         });
 
-        // The states (svgs, previewRevision) should be cleared immediately
         expect(result.current.svgs).toEqual([]);
         expect(result.current.previewRevision).toBeNull();
 
+        unmount();
+    });
+
+    it("reports end-to-end latency after preview SVGs are painted", async () => {
+        const ast = createDocumentWithTitle("Test");
+        let capturedListeners: {
+            onSucceeded?: (result: unknown) => void;
+        } = {};
+        const editTimestamp = 1_700_000_000_000;
+
+        vi.spyOn(Date, "now").mockReturnValue(editTimestamp + 42);
+
+        tauriApiMock.listenToCompileEvents.mockImplementation((listeners) => {
+            capturedListeners = listeners;
+            return Promise.resolve(() => undefined);
+        });
+        tauriApiMock.startPreviewWatch.mockResolvedValue(undefined);
+        tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
+        tauriApiMock.syncDocumentEvents.mockResolvedValue(createStatus(2));
+
+        const { result, rerender, unmount } = renderHook(
+            ({ ast, events, sessionId }) =>
+                useCompiler(ast, events, sessionId, undefined, events.length),
+            {
+                initialProps: { ast, events: [] as QueuedDocumentEvent[], sessionId: 1 },
+            },
+        );
+
+        await waitFor(() => {
+            expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalled();
+        });
+
+        rerender({
+            ast,
+            events: [
+                {
+                    id: 1,
+                    timestamp: editTimestamp,
+                    event: { type: "setProjectTitle", title: "Updated" },
+                },
+            ],
+            sessionId: 1,
+        });
+
+        await waitFor(() => {
+            expect(tauriApiMock.syncDocumentEvents).toHaveBeenCalled();
+        });
+
+        act(() => {
+            capturedListeners.onSucceeded?.({
+                source_revision: 2,
+                status: "succeeded",
+                preview_pages: [
+                    {
+                        changed: true,
+                        page_number: 1,
+                        path: ".ergproj/preview/svg/page-1.svg",
+                        content: "<svg>page</svg>",
+                    },
+                ],
+                export_path: null,
+                diagnostics: [],
+                outline: null,
+                resources: null,
+            });
+        });
+
+        await waitFor(() => {
+            expect(result.current.svgs).toEqual(["<svg>page</svg>"]);
+        });
+
+        await act(async () => {
+            await new Promise<void>((resolve) => {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => resolve());
+                });
+            });
+        });
+
+        expect(result.current.latencyMs).toBe(42);
+
+        vi.mocked(Date.now).mockRestore();
         unmount();
     });
 });

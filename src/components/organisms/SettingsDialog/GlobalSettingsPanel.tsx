@@ -130,33 +130,6 @@ export const GlobalSettingsPanel = ({
             />
         </div>
         <label className={styles.field}>
-            <Checkbox
-                checked={settings.preview_debounce_enabled ?? false}
-                label={m.settings_preview_debounce_enabled()}
-                onChange={(event) =>
-                    onChange({
-                        ...settings,
-                        preview_debounce_enabled: event.target.checked,
-                    })
-                }
-            />
-        </label>
-        <label className={styles.field}>
-            <span>{m.settings_preview_debounce_ms()}</span>
-            <input
-                min="0"
-                type="number"
-                disabled={!(settings.preview_debounce_enabled ?? false)}
-                value={settings.preview_debounce_ms ?? 120}
-                onChange={(event) =>
-                    onChange({
-                        ...settings,
-                        preview_debounce_ms: toOptionalNumber(event.target.value),
-                    })
-                }
-            />
-        </label>
-        <label className={styles.field}>
             <span>{m.settings_default_font()}</span>
             <input
                 value={settings.default_font ?? ""}

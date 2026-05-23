@@ -10,12 +10,18 @@ import {
 import {
     NewProjectDialog,
 } from "./components/organisms/NewProjectDialog/NewProjectDialog";
-import { TauriApi } from "./api/tauri";
 import { DocumentProvider, useDocument } from "./state/DocumentContext";
 import { createId } from "./state/ast/defaults";
 import { m } from "./paraglide/messages.js";
 import { createCommandRegistry } from "./commands/registry";
 import type { Command, CommandContext } from "./commands/types";
+import { workspaceCommands } from "./commands/workspaceCommands";
+import { editorCommands } from "./commands/editorCommands";
+import { viewCommands } from "./commands/viewCommands";
+import { themeCommands } from "./commands/themeCommands";
+import { editCommands } from "./commands/editCommands";
+import { settingsCommands } from "./commands/settingsCommands";
+import { helpCommands } from "./commands/helpCommands";
 import {
     ActionContextProvider,
     ActionRuntimeProvider,
@@ -76,13 +82,12 @@ const AppShellContent = () => {
         rememberProject,
     });
     const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
+    const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
+    const [commandQuery, setCommandQuery] = useState("");
     const dispatchAction = useActionDispatcher();
     const recentProjects = globalSettings.recent_projects;
     const recentProjectsRef = useRef(recentProjects);
     recentProjectsRef.current = recentProjects;
-    const previewDebounceMs = globalSettings.preview_debounce_enabled
-        ? Math.max(0, globalSettings.preview_debounce_ms ?? 0)
-        : 0;
 
     useAutosave({
         globalSettings,
@@ -153,187 +158,33 @@ const AppShellContent = () => {
 
     const commands = useMemo<Command[]>(
         () => [
-            {
-                id: "workspace::NewProject",
-                label: m.menubar_new_project(),
-                scope: "global",
-                run: showNewProjectDialog,
-            },
-            {
-                id: "workspace::OpenProject",
-                label: m.menubar_open_project(),
-                scope: "global",
-                run: () => openProject(),
-            },
-            {
-                id: "workspace::OpenRecentProject",
-                label: m.action_workspace_open_recent_project(),
-                scope: "global",
-                run: () => {
-                    const recent = recentProjectsRef.current[0];
-                    if (recent) void openProject(recent);
-                },
-                isEnabled: () => recentProjectsRef.current.length > 0,
-            },
-            {
-                id: "workspace::SaveProject",
-                label: m.menubar_save_project(),
-                scope: "project",
-                isEnabled: (context) => context.hasActiveProject,
-                run: saveProject,
-            },
-            {
-                id: "workspace::CloseProject",
-                label: m.menubar_close_project(),
-                scope: "project",
-                isEnabled: (context) => context.hasActiveProject,
-                run: closeProject,
-            },
-            {
-                id: "workspace::ExportSvg",
-                label: m.menubar_export(),
-                scope: "project",
-                isEnabled: (context) => context.hasActiveProject,
-                run: () => void TauriApi.enqueueExport("svg"),
-            },
-            {
-                id: "editor::InsertParagraph",
-                label: m.menubar_insert_paragraph(),
-                scope: "editor",
-                run: () => insertElement("paragraph"),
-            },
-            {
-                id: "editor::InsertHeading",
-                label: m.menubar_insert_heading(),
-                scope: "editor",
-                run: () => insertElement("heading"),
-            },
-            {
-                id: "editor::InsertTable",
-                label: m.menubar_insert_table(),
-                scope: "editor",
-                run: () => insertElement("table"),
-            },
-            {
-                id: "editor::InsertEquation",
-                label: m.menubar_insert_equation(),
-                scope: "editor",
-                run: () => insertElement("equation"),
-            },
-            {
-                id: "editor::InsertFigure",
-                label: m.menubar_insert_figure(),
-                scope: "editor",
-                run: () => insertElement("figure"),
-            },
-            {
-                id: "view::OpenCommandPalette",
-                label: m.menubar_command_palette(),
-                scope: "global",
-                run: () => setCommandPaletteOpen(true),
-            },
-            {
-                id: "theme::UseSystem",
-                label: m.menubar_theme_system(),
-                scope: "global",
-                run: () => setThemeMode("system"),
-            },
-            {
-                id: "theme::UseLight",
-                label: m.menubar_theme_light(),
-                scope: "global",
-                run: () => setThemeMode("light"),
-            },
-            {
-                id: "theme::UseDark",
-                label: m.menubar_theme_dark(),
-                scope: "global",
-                run: () => setThemeMode("dark"),
-            },
-            {
-                id: "edit::Undo",
-                label: m.menubar_undo(),
-                scope: "project",
-                isEnabled: () => canUndo,
-                run: undo,
-            },
-            {
-                id: "edit::Redo",
-                label: m.menubar_redo(),
-                scope: "project",
-                isEnabled: () => canRedo,
-                run: redo,
-            },
-            {
-                id: "editor::DeleteElement",
-                label: m.menubar_delete_element(),
-                scope: "editor",
-                isEnabled: () => false,
-                run: () => undefined,
-            },
-            {
-                id: "editor::InsertReference",
-                label: m.menubar_insert_reference(),
-                scope: "editor",
-                isEnabled: () => false,
-                run: () => undefined,
-            },
-            {
-                id: "view::ZoomIn",
-                label: m.menubar_zoom_in(),
-                scope: "global",
-                isEnabled: () => false,
-                run: () => undefined,
-            },
-            {
-                id: "view::ZoomOut",
-                label: m.menubar_zoom_out(),
-                scope: "global",
-                isEnabled: () => false,
-                run: () => undefined,
-            },
-            {
-                id: "settings::OpenGlobal",
-                label: m.menubar_global_settings(),
-                scope: "global",
-                run: () => setSettingsPanel("global"),
-            },
-            {
-                id: "settings::OpenProject",
-                label: m.menubar_project_settings(),
-                scope: "project",
-                isEnabled: (context) => context.hasActiveProject,
-                run: () => setSettingsPanel("project"),
-            },
-            {
-                id: "settings::OpenKeymap",
-                label: m.menubar_keymap_settings(),
-                scope: "global",
-                run: () => setSettingsPanel("keymap"),
-            },
-            {
-                id: "settings::Close",
-                label: m.command_palette_close(),
-                scope: "global",
-                run: () => {
-                    setSettingsPanel(null);
-                    setCommandPaletteOpen(false);
-                },
-            },
-            {
-                id: "help::OpenDocumentation",
-                label: m.menubar_documentation(),
-                scope: "global",
-                isEnabled: () => false,
-                run: () => undefined,
-            },
-            {
-                id: "help::OpenAbout",
-                label: m.menubar_about(),
-                scope: "global",
-                isEnabled: () => false,
-                run: () => undefined,
-            },
+            ...workspaceCommands({
+                showNewProjectDialog,
+                openProject,
+                saveProject,
+                closeProject,
+                recentProjectsRef,
+            }),
+            ...editorCommands({
+                insertElement,
+            }),
+            ...viewCommands({
+                setCommandPaletteOpen,
+            }),
+            ...themeCommands({
+                setThemeMode,
+            }),
+            ...editCommands({
+                canUndo,
+                canRedo,
+                undo,
+                redo,
+            }),
+            ...settingsCommands({
+                setSettingsPanel,
+                setCommandPaletteOpen,
+            }),
+            ...helpCommands(),
         ],
         [
             closeProject,
@@ -352,13 +203,15 @@ const AppShellContent = () => {
         [commands],
     );
     const {
-        isOpen: isCommandPaletteOpen,
+        filteredCommands,
+        runCommand,
+    } = useCommandPalette({
+        commandRegistry,
+        dispatchAction,
         setOpen: setCommandPaletteOpen,
         query: commandQuery,
         setQuery: setCommandQuery,
-        filteredCommands,
-        runCommand,
-    } = useCommandPalette({ commandRegistry, dispatchAction });
+    });
     const appActionHandlers = useAppActionHandlers({
         state,
         commandRegistry,
@@ -387,7 +240,7 @@ const AppShellContent = () => {
                 />
                 {hasActiveProject ? (
                     <ActionContextProvider id="workspace" contexts={["workspace"]}>
-                        <Workspace previewDebounceMs={previewDebounceMs} />
+                        <Workspace />
                     </ActionContextProvider>
                 ) : (
                     <ActionContextProvider id="welcome" contexts={["welcome"]}>

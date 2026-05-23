@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { useDocument } from "../../../state/DocumentContext";
+import { useDocumentAst } from "../../../state/DocumentContext";
+import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import type { DocumentSection } from "../../../bindings/DocumentSection";
 import {
@@ -11,8 +12,7 @@ import { Button } from "../../atoms/Button/Button";
 import { Textarea } from "../../atoms/Textarea/Textarea";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Editor.module.css";
-import { getTemplateSpec } from "../../../templates/registry";
-import type { InputSchema } from "../../../templates/types";
+import type { InputSchema } from "../../../bindings/InputSchema";
 import { projectInputFieldId } from "../../../editor/fieldIds";
 import {
     TextHeader124Regular,
@@ -43,16 +43,16 @@ const getValueAtPath = (obj: any, path: string): any => {
 };
 
 export const Editor = () => {
-    const { state } = useDocument();
+    const { state } = useDocumentAst();
     const dispatchAction = useActionDispatcher();
 
-    const templateSpec = getTemplateSpec(state.metadata.template_id);
-    const groups = templateSpec.groups || [];
+    const { spec: templateSpec } = useTemplateSpecContext();
+    const groups = templateSpec?.groups || [];
     const inputsMap = useMemo(() => {
         return new Map<string, InputSchema>(
-            (templateSpec.inputs || []).map((input) => [input.id!, input])
+            (templateSpec?.inputs || []).map((input) => [input.id!, input])
         );
-    }, [templateSpec.inputs]);
+    }, [templateSpec?.inputs]);
 
     return (
         <ActionContextProvider id="editor" contexts={["editor"]}>
@@ -138,7 +138,7 @@ export const Editor = () => {
                                         key={inputId}
                                         schema={schema}
                                         path={`/${inputId}`}
-                                        label={schema.label}
+                                        label={schema.label ?? undefined}
                                     />
                                 );
                             })}
@@ -178,7 +178,7 @@ const DynamicField = ({ schema, path, label }: DynamicFieldProps) => {
 };
 
 const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
-    const { state, dispatch } = useDocument();
+    const { state, dispatch } = useDocumentAst();
     const fieldBinding = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: "project",
         fieldId: projectInputFieldId(path),
@@ -190,7 +190,7 @@ const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
             {...fieldBinding}
             fullWidth
             label={getFieldLabel(schema, label)}
-            placeholder={schema.description}
+            placeholder={schema.description ?? undefined}
             value={value}
             onChange={(event) =>
                 dispatch({
@@ -210,7 +210,7 @@ const AuthorAffiliationsSelector = ({
     authorPath: string;
     authorAffiliations: string[];
 }) => {
-    const { state, dispatch } = useDocument();
+    const { state, dispatch } = useDocumentAst();
     const allAffiliations = state.inputs.affiliations || [];
 
     const handleToggleAffiliation = (affRef: string, checked: boolean) => {
@@ -296,7 +296,7 @@ const AuthorAffiliationCheckbox = ({
 };
 
 const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
-    const { state, dispatch } = useDocument();
+    const { state, dispatch } = useDocumentAst();
     const items = getValueAtPath(state.inputs, path) ?? [];
 
     const handleAddItem = () => {
@@ -371,7 +371,7 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
                                                 key={prop.id}
                                                 schema={prop}
                                                 path={propPath}
-                                                label={prop.label}
+                                                label={prop.label ?? undefined}
                                             />
                                         );
                                     })

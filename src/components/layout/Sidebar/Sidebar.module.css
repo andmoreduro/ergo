@@ -82,6 +82,7 @@
 }
 
 .resourcePreview,
+.resourcePreviewLoading,
 .resourcePreviewPath,
 .resourcePreviewError {
     display: block;
@@ -96,6 +97,10 @@
     display: block;
     width: 100%;
     height: auto;
+}
+
+.resourcePreviewLoading {
+    min-height: 3rem;
 }
 
 .resourcePreviewPath,

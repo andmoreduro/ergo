@@ -6,6 +6,7 @@ import {
     Dispatch,
     useCallback,
     useMemo,
+    useRef,
 } from "react";
 import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
@@ -58,23 +59,37 @@ type DocumentSessionAction =
     | { type: "ACK_DOCUMENT_EVENTS"; upToEventId: number }
     | { type: "SET_DOCUMENT_FOCUS"; focus: DocumentFocusInput };
 
-interface DocumentContextType {
+interface DocumentAstContextType {
     state: DocumentAST;
     dispatch: Dispatch<ASTAction>;
     isDirty: boolean;
     canUndo: boolean;
     canRedo: boolean;
-    documentFocus: DocumentFocusState;
-    events: QueuedDocumentEvent[];
-    sessionId: number;
     undo: () => void;
     redo: () => void;
     markSaved: () => void;
+}
+
+interface DocumentSyncContextType {
+    events: QueuedDocumentEvent[];
+    sessionId: number;
     ackDocumentEvents: (upToEventId: number) => void;
+    eventsVersion: number;
+    lastEventId: number;
+}
+
+interface DocumentFocusContextType {
+    documentFocus: DocumentFocusState;
     setDocumentFocus: (focus: DocumentFocusInput) => void;
 }
 
-const DocumentContext = createContext<DocumentContextType | undefined>(
+const DocumentAstContext = createContext<DocumentAstContextType | undefined>(
+    undefined,
+);
+const DocumentSyncContext = createContext<DocumentSyncContextType | undefined>(
+    undefined,
+);
+const DocumentFocusContext = createContext<DocumentFocusContextType | undefined>(
     undefined,
 );
 
@@ -230,6 +245,8 @@ export const DocumentProvider = ({
         undefined,
         createInitialSessionState,
     );
+    const eventsVersionRef = useRef(0);
+
     const dispatch = useCallback(
         (action: ASTAction) =>
             sessionDispatch({ type: "APPLY_AST_ACTION", action }),
@@ -255,21 +272,16 @@ export const DocumentProvider = ({
         [],
     );
 
-    const contextValue = useMemo(
+    const astValue = useMemo(
         () => ({
             state: sessionState.ast,
             dispatch,
             isDirty: sessionState.isDirty,
             canUndo: sessionState.past.length > 0,
             canRedo: sessionState.future.length > 0,
-            documentFocus: sessionState.documentFocus,
-            events: sessionState.events,
-            sessionId: sessionState.sessionId,
             undo,
             redo,
             markSaved,
-            ackDocumentEvents,
-            setDocumentFocus,
         }),
         [
             sessionState.ast,
@@ -277,28 +289,80 @@ export const DocumentProvider = ({
             sessionState.isDirty,
             sessionState.past.length,
             sessionState.future.length,
-            sessionState.documentFocus,
-            sessionState.events,
-            sessionState.sessionId,
             undo,
             redo,
             markSaved,
-            ackDocumentEvents,
-            setDocumentFocus,
         ],
     );
 
+    const syncValue = useMemo(() => {
+        eventsVersionRef.current += 1;
+        const lastEventId =
+            sessionState.events[sessionState.events.length - 1]?.id ?? 0;
+        return {
+            events: sessionState.events,
+            sessionId: sessionState.sessionId,
+            ackDocumentEvents,
+            eventsVersion: eventsVersionRef.current,
+            lastEventId,
+        };
+    }, [sessionState.events, sessionState.sessionId, ackDocumentEvents]);
+
+    const focusValue = useMemo(
+        () => ({
+            documentFocus: sessionState.documentFocus,
+            setDocumentFocus,
+        }),
+        [sessionState.documentFocus, setDocumentFocus],
+    );
+
     return (
-        <DocumentContext.Provider value={contextValue}>
-            {children}
-        </DocumentContext.Provider>
+        <DocumentAstContext.Provider value={astValue}>
+            <DocumentSyncContext.Provider value={syncValue}>
+                <DocumentFocusContext.Provider value={focusValue}>
+                    {children}
+                </DocumentFocusContext.Provider>
+            </DocumentSyncContext.Provider>
+        </DocumentAstContext.Provider>
     );
 };
 
-export const useDocument = (): DocumentContextType => {
-    const context = useContext(DocumentContext);
+export const useDocumentAst = (): DocumentAstContextType => {
+    const context = useContext(DocumentAstContext);
     if (context === undefined) {
-        throw new Error("useDocument must be used within a DocumentProvider");
+        throw new Error("useDocumentAst must be used within a DocumentProvider");
     }
     return context;
+};
+
+export const useDocumentSync = (): DocumentSyncContextType => {
+    const context = useContext(DocumentSyncContext);
+    if (context === undefined) {
+        throw new Error(
+            "useDocumentSync must be used within a DocumentProvider",
+        );
+    }
+    return context;
+};
+
+export const useDocumentFocus = (): DocumentFocusContextType => {
+    const context = useContext(DocumentFocusContext);
+    if (context === undefined) {
+        throw new Error(
+            "useDocumentFocus must be used within a DocumentProvider",
+        );
+    }
+    return context;
+};
+
+/** @deprecated Prefer useDocumentAst, useDocumentSync, or useDocumentFocus */
+export const useDocument = () => {
+    const ast = useDocumentAst();
+    const sync = useDocumentSync();
+    const focus = useDocumentFocus();
+    return {
+        ...ast,
+        ...sync,
+        ...focus,
+    };
 };

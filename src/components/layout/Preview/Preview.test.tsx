@@ -4,17 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
 import "@testing-library/jest-dom";
 
-const useCompilerMock = vi.hoisted(() => vi.fn());
 const tauriApiMock = vi.hoisted(() => ({
     getPreviewPositionsForElement: vi.fn(),
     getPreviewPositionsForFocus: vi.fn(),
     jumpFromPreviewClick: vi.fn(),
 }));
 const dispatchActionMock = vi.hoisted(() => vi.fn());
-
-vi.mock("../../../hooks/useCompiler", () => ({
-    useCompiler: useCompilerMock,
-}));
 
 vi.mock("../../../api/tauri", () => ({
     TauriApi: tauriApiMock,
@@ -57,7 +52,28 @@ const FocusProjectInput = ({ fieldId }: { fieldId: string }) => {
     return null;
 };
 
-const renderPreview = (children: ReactNode = null) =>
+const createDefaultCompilerState = () => ({
+    error: null,
+    isCompiling: false,
+    previewRevision: 4,
+    sourceMap: [],
+    svgs: [svgPage],
+    outline: null,
+    resources: null,
+    latencyMs: null,
+});
+
+const createCompilerState = (
+    overrides: Partial<ReturnType<typeof createDefaultCompilerState>> = {},
+) => ({
+    ...createDefaultCompilerState(),
+    ...overrides,
+});
+
+const renderPreview = (
+    children: ReactNode = null,
+    compiler = createDefaultCompilerState(),
+) =>
     render(
         <DocumentProvider>
             {children}
@@ -65,20 +81,13 @@ const renderPreview = (children: ReactNode = null) =>
                 <button type="button">Delete</button>
                 <input aria-label="Heading editor" />
             </div>
-            <Preview />
+            <Preview compiler={compiler} />
         </DocumentProvider>,
     );
 
 describe("Preview sync", () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        useCompilerMock.mockReturnValue({
-            error: null,
-            isCompiling: false,
-            previewRevision: 4,
-            sourceMap: [],
-            svgs: [svgPage],
-        });
         tauriApiMock.getPreviewPositionsForFocus.mockResolvedValue({
             positions: [],
             sourceRevision: 4,
@@ -327,32 +336,6 @@ describe("Preview sync", () => {
         await waitFor(() => {
             expect(container.querySelector('[data-preview-sync-caret="true"]'))
                 .toHaveStyle({ left: "60%" });
-        });
-    });
-
-    it("publishes compiled outline updates to the workspace", async () => {
-        const handleOutlineChange = vi.fn();
-        useCompilerMock.mockReturnValue({
-            error: null,
-            isCompiling: false,
-            outline: {
-                entries: [{ level: 1, text: "Introduction", page: 1 }],
-            },
-            previewRevision: 4,
-            sourceMap: [],
-            svgs: [svgPage],
-        });
-
-        render(
-            <DocumentProvider>
-                <Preview onOutlineChange={handleOutlineChange} />
-            </DocumentProvider>,
-        );
-
-        await waitFor(() => {
-            expect(handleOutlineChange).toHaveBeenCalledWith({
-                entries: [{ level: 1, text: "Introduction", page: 1 }],
-            });
         });
     });
 

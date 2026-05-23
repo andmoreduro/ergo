@@ -117,8 +117,6 @@ export const createDefaultDocumentAST = (): DocumentAST => ({
             recent_projects: [],
             keymap_profile: "Default",
             keymap_overrides: [],
-            preview_debounce_enabled: false,
-            preview_debounce_ms: 120,
             history_limit: 100,
             autosave_enabled: true,
             autosave_interval_ms: 30_000,

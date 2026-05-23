@@ -64,24 +64,6 @@ const renderKeymapDialog = (
 };
 
 describe("SettingsDialog global panel", () => {
-    it("keeps preview debounce disabled by default and enables the debounce time field from the UI", () => {
-        const handleGlobalSettingsChange = renderGlobalDialog();
-
-        expect(
-            screen.getByLabelText("Debounce preview compilation"),
-        ).not.toBeChecked();
-        expect(screen.getByLabelText("Preview debounce time (ms)")).toBeDisabled();
-
-        fireEvent.click(screen.getByLabelText("Debounce preview compilation"));
-
-        expect(handleGlobalSettingsChange).toHaveBeenCalledWith(
-            expect.objectContaining({
-                preview_debounce_enabled: true,
-                preview_debounce_ms: 120,
-            }),
-        );
-    });
-
     it("edits interval and event-driven autosave settings", () => {
         const handleGlobalSettingsChange = renderGlobalDialog();
 

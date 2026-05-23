@@ -464,7 +464,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         }
 
         case "UPDATE_FIGURE": {
-            const { figureId, caption, placement, bodyText } = action.payload;
+            const { figureId, caption, placement, bodyText, assetId } = action.payload;
 
             return mapContentElements(state, (element) => {
                 if (element.type !== "Figure" || element.id !== figureId) {
@@ -482,6 +482,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                     ...element,
                     caption: caption ?? element.caption,
                     placement: placement ?? element.placement,
+                    asset_id: assetId ?? element.asset_id,
                     content,
                 };
             });

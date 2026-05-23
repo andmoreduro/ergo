@@ -15,8 +15,14 @@ const tauriApiMock = vi.hoisted(() => ({
     saveKeymapSettings: vi.fn(),
     saveProject: vi.fn(),
     openProject: vi.fn(),
-    enqueueExport: vi.fn(),
+    exportDocument: vi.fn(),
+    startPreviewWatch: vi.fn(),
+    stopPreviewWatch: vi.fn(),
     syncDocumentSnapshot: vi.fn(),
+    syncDocumentEvent: vi.fn(),
+    syncDocumentEvents: vi.fn(),
+    getTemplateSpec: vi.fn(),
+    listenToCompileEvents: vi.fn(),
     documentDir: vi.fn(),
 }));
 
@@ -66,7 +72,10 @@ vi.mock("./api/tauri", () => ({
     TauriApi: tauriApiMock,
 }));
 
-vi.mock("./hooks/documentSyncBarrier", () => syncBarrierMock);
+vi.mock("./hooks/documentSyncBarrier", () => ({
+    waitForDocumentSync: syncBarrierMock.waitForDocumentSync,
+    setActiveDocumentSync: vi.fn(),
+}));
 
 vi.mock("./components/layout/Workspace/Workspace", async () => {
     const React = await import("react");
@@ -111,9 +120,26 @@ describe("App project lifecycle", () => {
         });
         tauriApiMock.saveKeymapSettings.mockResolvedValue(undefined);
         tauriApiMock.saveProject.mockResolvedValue(undefined);
+        tauriApiMock.syncDocumentEvents.mockResolvedValue({
+            dirtyElementIds: [],
+            fragmentCount: 0,
+            layout: {
+                documentStatePath: ".ergproj/document_state.json",
+                mainPath: "main.typ",
+                libPath: "lib.typ",
+                projectSettingsPath: ".ergproj/project_settings.json",
+                referencesPath: "references.bib",
+                sectionPaths: [],
+                sourceMapPath: ".ergproj/source_map.json",
+                fieldSourceMapPath: ".ergproj/field_source_map.json",
+                templatePath: ".ergproj/template.json",
+            },
+            sourceMap: [],
+            fieldSourceMap: [],
+            sourceRevision: 2,
+        });
         tauriApiMock.syncDocumentSnapshot.mockResolvedValue({
             dirtyElementIds: [],
-            dirtySectionIds: [],
             fragmentCount: 0,
             layout: {
                 documentStatePath: ".ergproj/document_state.json",
@@ -132,11 +158,48 @@ describe("App project lifecycle", () => {
         });
         tauriApiMock.openProject.mockResolvedValue(createDefaultDocumentAST());
         tauriApiMock.documentDir.mockResolvedValue("C:\\Users\\ada\\Documents");
-        tauriApiMock.enqueueExport.mockResolvedValue({
-            job_id: 1,
-            kind: { type: "export", format: "Svg" },
-            priority: "Export",
+        tauriApiMock.exportDocument.mockResolvedValue({
             source_revision: 0,
+            status: "succeeded",
+            preview_pages: null,
+            export_path: null,
+            diagnostics: [],
+            outline: null,
+            resources: null,
+        });
+        tauriApiMock.getTemplateSpec.mockResolvedValue({
+            template: { id: "versatile-apa", name: "APA 7th Edition", version: "1.0.0" },
+            package: { name: "@preview/versatile-apa", version: "7.2.0" },
+            inputs: [
+                { id: "title", input_type: "string", label: "Title", importance: "required" },
+            ],
+            groups: [],
+            sections: [
+                { id: "title-page", kind: "function_call", function: "title-page", params: [] },
+                { id: "body", kind: "content" },
+            ],
+            custom_elements: [],
+        });
+        tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
+        tauriApiMock.startPreviewWatch.mockResolvedValue(undefined);
+        tauriApiMock.stopPreviewWatch.mockResolvedValue(undefined);
+        tauriApiMock.syncDocumentEvent.mockResolvedValue({
+            dirtyElementIds: [],
+            fragmentCount: 0,
+            layout: {
+                documentStatePath: ".ergproj/document_state.json",
+                mainPath: "main.typ",
+                libPath: "lib.typ",
+                projectSettingsPath: ".ergproj/project_settings.json",
+                referencesPath: "references.bib",
+                sectionPaths: [],
+                sourceMapPath: ".ergproj/source_map.json",
+                fieldSourceMapPath: ".ergproj/field_source_map.json",
+                templatePath: ".ergproj/template.json",
+            },
+            sourceMap: [],
+            fieldSourceMap: [],
+            sourceRevision: 1,
         });
         syncBarrierMock.waitForDocumentSync.mockResolvedValue(undefined);
     });
@@ -185,8 +248,10 @@ describe("App project lifecycle", () => {
                 "C:\\Users\\ada\\Documents\\taller_regresión_con_ñ.ergproj",
             ),
         );
-        expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalledWith(
-            astMatcherForTitle("Taller: regresión con Ñ"),
+        await waitFor(() =>
+            expect(tauriApiMock.syncDocumentSnapshot).toHaveBeenCalledWith(
+                astMatcherForTitle("Taller: regresión con Ñ"),
+            ),
         );
         expect(tauriApiMock.documentDir).toHaveBeenCalled();
         expect(dialogMock.open).not.toHaveBeenCalled();
@@ -331,6 +396,10 @@ describe("App project lifecycle", () => {
     });
 
     it("waits for document event sync before saving the backend session", async () => {
+        dialogMock.open.mockResolvedValue("C:\\Users\\ada\\Documents");
+
+        await createProjectAndInsertParagraph();
+
         let releaseSync: (() => void) | null = null;
         syncBarrierMock.waitForDocumentSync.mockImplementation(
             () =>
@@ -338,9 +407,6 @@ describe("App project lifecycle", () => {
                     releaseSync = resolve;
                 }),
         );
-        dialogMock.open.mockResolvedValue("C:\\Users\\ada\\Documents");
-
-        await createProjectAndInsertParagraph();
         tauriApiMock.saveProject.mockClear();
 
         fireEvent.click(screen.getByRole("button", { name: "File" }));
