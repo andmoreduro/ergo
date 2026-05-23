@@ -47,7 +47,8 @@ flowchart LR
         ActionTypesPkg["action_types"]:::gen
         ActionsPkg["actions"]:::mod
         CompilerCommands["compiler commands"]:::mod
-        CompilationQueuePkg["compilation_queue"]:::mod
+        TypstWatchPkg["typst_watch"]:::mod
+        ResourceWatchPkg["resource_watch"]:::mod
         CompileArtifactsPkg["compile_artifacts"]:::mod
         CompileEventsPkg["compile_events"]:::mod
         CompilationTypes["compilation_types"]:::gen
@@ -86,25 +87,29 @@ flowchart LR
         ActionKeymapPkg --> ActionContextPkg
         ActionKeymapPkg --> ActionTypesPkg
         CompilerCommands --> AppState
-        CompilerCommands --> CompilationQueuePkg
+        CompilerCommands --> TypstWatchPkg
         CompilerCommands --> CompilationTypes
         CompilerCommands --> CompileEventsPkg
         DocumentSessionCommands --> AppState
         DocumentSessionCommands --> DocumentSessionPkg
+        DocumentSessionCommands --> ResourceWatchPkg
+        DocumentSessionCommands --> CompileArtifactsPkg
         PreviewSyncCommands --> AppState
         PreviewSyncCommands --> PreviewSyncPkg
         AppState --> VfsPkg
-        AppState --> CompilationQueuePkg
+        AppState --> TypstWatchPkg
         AppState --> DocumentSessionPkg
         AppState --> PreviewSyncPkg
-        CompilationQueuePkg --> CompileArtifactsPkg
-        CompilationQueuePkg --> CompileEventsPkg
-        CompilationQueuePkg --> CompilationTypes
-        CompilationQueuePkg --> DocumentOutlinePkg
-        CompilationQueuePkg --> DocumentResourcesPkg
-        CompilationQueuePkg --> DocumentSessionPkg
-        CompilationQueuePkg --> PreviewSyncPkg
-        CompilationQueuePkg --> VfsPkg
+        TypstWatchPkg --> CompileArtifactsPkg
+        TypstWatchPkg --> CompileEventsPkg
+        TypstWatchPkg --> CompilationTypes
+        TypstWatchPkg --> DocumentOutlinePkg
+        TypstWatchPkg --> DocumentSessionPkg
+        TypstWatchPkg --> PreviewSyncPkg
+        TypstWatchPkg --> VfsPkg
+        ResourceWatchPkg --> DocumentResourcesPkg
+        ResourceWatchPkg --> TemplateSpecPkg
+        ResourceWatchPkg --> VfsPkg
         CompileArtifactsPkg --> CompilationTypes
         CompileArtifactsPkg --> DocumentOutlinePkg
         CompileArtifactsPkg --> VfsPkg
@@ -167,9 +172,10 @@ flowchart LR
 - `actions` owns key event resolution state. `action_catalog`, `action_context`, and `action_keymap` own action descriptors, context expression evaluation, and keymap validation.
 - `document_session` owns session state and VFS coordination. `document_session_events`, `document_session_generation`, and `document_source_builder` own AST event application, Typst source materialization, and field source mapping.
 - `preview_sync` owns retained preview documents. `preview_sync_lookup` owns source-map and field-map offset resolution.
-- `compilation_queue` owns scheduling. `compile_artifacts` owns Typst compilation, SVG page rendering, changed-page VFS writes, and export artifact generation.
+- `typst_watch` owns background preview compilation scheduling. `compile_artifacts` owns Typst compilation, SVG page rendering, changed-page VFS writes, and export artifact generation.
+- `resource_watch` owns resource VFS file materialization and catalog derivation. `document_session_commands` may invoke `compile_artifacts` for resource preview SVG generation on the sync path.
 - `document_outline` extracts heading outline entries from successful preview documents through Typst's introspector and exports the outline DTO bindings.
-- `document_resources` derives the compiled resource catalog, creates Typst mini-documents for resource SVG previews, writes disposable preview cache files into the VFS, and exports resource DTO bindings.
+- `document_resources` derives resource catalog rows, resource preview Typst sources, and resource DTO bindings.
 - `template_spec` owns bundled template specification loading, including template resource policies for paste behavior and resource preview defaults.
 - `compile_events` owns compile lifecycle event names.
 - `compilation_types`, `document_outline`, `document_resources`, `document_session_types`, `preview_sync_types`, `action_types`, and `ast` export IPC-facing TypeScript bindings through `ts-rs`.

@@ -1,6 +1,6 @@
 # State Diagrams
 
-This document models the most important runtime lifecycles: frontend document editing, backend document source materialization, and compilation queue execution.
+This document models the most important runtime lifecycles: frontend document editing, backend document source materialization, and background preview compilation.
 
 ## 1. Frontend Document Lifecycle
 
@@ -68,49 +68,32 @@ stateDiagram-v2
 - `DocumentSession` owns the canonical backend AST after bootstrap and applies typed document events before generation.
 - Invalid events fail without mutating the previous canonical AST.
 - `main.typ` changes only when document-wide structure changes, such as section order, references, template metadata, or global source setup.
-- `sections/{section-id}.typ` changes when a section's fragments change.
+- `elements/{element-id}.typ` changes when that element's generated fragment changes.
 - `.ergproj/source_map.json` is regenerated from backend source ranges.
 
-## 3. Compilation Queue Lifecycle
+## 3. TypstWatch Preview Lifecycle
 
 ```mermaid
 stateDiagram-v2
     direction TB
 
-    [*] --> Idle
-    Idle --> PreviewQueued : enqueue_preview_compile
-    Idle --> ExportQueued : enqueue_export
-
-    PreviewQueued --> PreviewQueued : newer preview replaces pending preview
-    PreviewQueued --> PreviewCompiling : debounce disabled
-    PreviewQueued --> Debouncing : debounce enabled
-    Debouncing --> PreviewCompiling : debounce elapsed
-    PreviewCompiling --> PreviewSucceeded : SVG compile ok and revision current
-    PreviewCompiling --> PreviewFailed : diagnostics and revision current
-    PreviewCompiling --> PreviewDropped : result revision stale
-
-    PreviewSucceeded --> Idle : no exports pending
-    PreviewFailed --> Idle : no exports pending
-    PreviewDropped --> Idle : no exports pending
-    PreviewSucceeded --> ExportQueued : exports pending
-    PreviewFailed --> ExportQueued : exports pending
-    PreviewDropped --> ExportQueued : exports pending
-
-    ExportQueued --> PreviewQueued : preview arrives first
-    ExportQueued --> ExportCompiling : preview queue clear
-    ExportCompiling --> ExportSucceeded : export written
-    ExportCompiling --> ExportFailed : diagnostics
-    ExportSucceeded --> Idle
-    ExportFailed --> Idle
+    [*] --> Stopped
+    Stopped --> Running : start_preview_watch
+    Running --> Waiting : vfs revision caught up
+    Waiting --> Compiling : vfs.latest_revision > last_compiled_revision
+    Compiling --> Emitting : compile finished
+    Emitting --> Waiting : emit started / succeeded / failed
+    Running --> Stopped : stop_preview_watch
+    Stopped --> [*]
 ```
 
 ### Notes
 
-- Preview SVG compilation has priority over exports.
-- Preview jobs are deduped to the latest source revision.
-- Preview debounce is disabled in default settings. Users can enable it and configure `preview_debounce_ms` in global settings.
-- Stale preview results are dropped and must not overwrite newer preview state.
-- Exports compile only after preview work is clear.
+- `TypstWatch` owns one background thread with a long-lived `ErgoWorld` and an incremental SVG page cache.
+- `sync_document_snapshot`, `sync_document_event`, and `patch_source` call `mark_vfs_changed()` after VFS writes so the watch thread wakes.
+- The watch loop compiles the current VFS revision, writes changed `.ergproj/preview/svg/page-N.svg` files, stores the retained preview in `PreviewSyncState`, extracts the outline, and emits `ergo-compile-started`, `ergo-compile-succeeded`, or `ergo-compile-failed`.
+- Resource catalog updates are emitted separately through `ergo-resources-updated` from document sync handlers when snapshots or dirty resource IDs require refreshed resource previews.
+- `export_document` is a separate synchronous command. It does not pass through `TypstWatch`.
 
 ## 4. Preview Renderer Lifecycle
 

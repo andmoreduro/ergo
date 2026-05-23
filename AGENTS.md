@@ -9,7 +9,7 @@ The `context/` folder holds the canonical design documents. Before proposing or 
 3. `context/package-diagrams.md` — source-module ownership and dependency boundaries
 4. `context/sequence-diagrams.md` — editing, compile, save, export, sync flows
 5. `context/collaboration-diagrams.md` — message passing between runtime objects
-6. `context/state-diagrams.md` — frontend, backend, compile queue, key sequence state machines
+6. `context/state-diagrams.md` — frontend, backend, typst watch, key sequence state machines
 7. `context/distribution-diagram.md` — deployment, archive layout, storage boundaries
 8. `context/user-stories.md` / `context/user-story-map.md` — feature scope and priority
 
@@ -123,12 +123,12 @@ Available scenarios are `small-document`, `typing-title`, and `large-document`. 
 1. User edits → `dispatch(ASTAction)` → reducer updates `DocumentAST` (immediate UI response)
 2. AST syncs to backend via `syncDocumentSnapshot()` / `syncDocumentEvent()`
 3. `DocumentSession` detects dirty fragments → assembles section `.typ` files → writes to VFS
-4. Compile queue triggers Typst compilation from VFS-backed `ErgoWorld` → emits SVG pages
+4. `TypstWatch` triggers Typst compilation from VFS-backed `ErgoWorld` → emits SVG pages
 5. Preview renders SVGs, handles click-to-source (backward sync) and source-to-preview (forward sync)
 
 ### Ownership split
 - **React owns**: UI, action context tree, local `DocumentAST` with undo/redo, settings UI
-- **Rust owns**: action catalog, keymap schema/validation, key sequence resolution, canonical Typst source generation, VFS, compile queue, preview sync, archive I/O
+- **Rust owns**: action catalog, keymap schema/validation, key sequence resolution, canonical Typst source generation, VFS, `TypstWatch` preview compilation, preview sync, archive I/O
 
 ### Action + keymap model
 - Rust owns typed action IDs, action catalog, context-expression matching, logical-key normalization, multi-stroke sequence state
@@ -156,7 +156,7 @@ src/
   commands/             — Command registry, keymap, types
   actions/runtime.tsx   — Action dispatch framework + context tree
   settings/             — Global settings, keymap defaults + merge
-  templates/            — Document template registry
+  hooks/useTemplateSpec.ts — Template spec from Rust via get_template_spec
   project/paths.ts      — .ergproj path helpers
   hooks/                — compile bridge, SVG loader, autosave, project/settings lifecycle hooks
   styles/               — global.css, variables.css (design tokens)
@@ -195,7 +195,7 @@ TypeScript strict mode (`noUnusedLocals`, `noUnusedParameters`) is the only enfo
 
 1. Read context files and relevant source before coding.
 2. Prefer existing architecture and source patterns over inventing new systems.
-3. Add or update tests alongside new behavior (especially VFS patching, document session generation, command/keymap logic, settings, source maps, archive save/open, compile queue).
+3. Add or update tests alongside new behavior (especially VFS patching, document session generation, command/keymap logic, settings, source maps, archive save/open, typst watch).
 4. Run focused tests first, then broader gates:
    - `pnpm test` (frontend)
    - `pnpm build` (typecheck)

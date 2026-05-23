@@ -52,8 +52,8 @@ An Érgo project file is a zip archive. The canonical project layout is:
 ```text
 main.typ
 lib.typ
-sections/
-  {section-id}.typ
+elements/
+  {element-id}.typ
 assets/
 references.bib
 .ergproj/
@@ -66,9 +66,9 @@ references.bib
 
 ### File Responsibilities
 
-- `main.typ`: small Typst entry point containing imports, document metadata, show rules, and includes for section files.
+- `main.typ`: Typst entry point containing imports, document metadata, template section wiring, and `#include` lines for element files.
 - `lib.typ`: styling preamble containing template/style rules, imports, show rules, and a wrapper function `apply(body)` imported by both `main.typ` and resource previews.
-- `sections/{section-id}.typ`: generated Typst source for one document section. Cover page, content, appendices, and template-defined sections all use section files.
+- `elements/{element-id}.typ`: generated Typst source for one document element (heading, paragraph, table, figure, equation, custom element).
 - `assets/`: project-local binary assets such as images.
 - `references.bib`: generated bibliography file from structured reference entries.
 - `.ergproj/document_state.json`: canonical structured document AST snapshot.
@@ -103,7 +103,7 @@ Runtime preview sync state is not part of the archive. The backend retains the l
   - Linux: `$XDG_CONFIG_HOME/Ergo/` or `~/.config/Ergo/`
 - `settings.json`
 - `keymap.json`
-- Preview debounce is disabled by default. When enabled, the app reads `preview_debounce_ms` from global settings and passes that delay to the backend preview queue.
+- Preview compilation wakes on VFS revision changes through `TypstWatch`.
 - Autosave is enabled by default. Global settings control `autosave_interval_ms`, `autosave_on_window_blur`, `autosave_on_app_close`, and `autosave_on_project_close`.
 - Bundled default configuration is installed with the app resources:
   - `defaults/default_settings.json`

@@ -7,7 +7,7 @@ This document is the high-level component design for Érgo. It describes the log
 Érgo is a local-first desktop application:
 
 1. **Frontend Container (React / TypeScript / Vite):** Owns the interactive UI, live action context tree, focused handler chain, local document editing state, undo/redo history, settings UI, and live preview rendering.
-2. **Backend Container (Tauri / Rust):** Owns typed action definitions, keymap schema/validation, logical-key sequence resolution, canonical Typst source materialization, retained in-memory Typst sources, retained preview documents for sync, project archive I/O, compile queue scheduling, embedded Typst compilation, SVG/PDF/PNG export, and global settings persistence.
+2. **Backend Container (Tauri / Rust):** Owns typed action definitions, keymap schema/validation, logical-key sequence resolution, canonical Typst source materialization, retained in-memory Typst sources, retained preview documents for sync, project archive I/O, background preview compilation via `TypstWatch`, embedded Typst compilation, SVG/PDF/PNG export, and global settings persistence.
 3. **Host OS Layer:** Provides the native WebView, local project files, app config files under the platform config root's `Ergo` folder, package cache, and installer/runtime environment.
 
 The current architecture intentionally separates **editable document state** from **compilable Typst source**:
@@ -15,7 +15,7 @@ The current architecture intentionally separates **editable document state** fro
 - React updates the `DocumentAST` immediately for responsive editing.
 - Rust `DocumentSession` receives a bootstrap snapshot for cold loads, then applies typed document events for edits, undo, and redo.
 - Rust `VirtualFileSystem` keeps retained `typst_syntax::Source` objects for incremental Typst parsing.
-- The compile queue compiles from VFS-backed `ErgoWorld`, writes SVG preview files, and emits lifecycle events.
+- `TypstWatch` compiles from a long-lived VFS-backed `ErgoWorld`, writes changed SVG preview pages, and emits lifecycle events.
 - The frontend preview loads SVG page files from the backend.
 - Preview/editor synchronization uses the latest successful, non-stale compiled `PagedDocument` retained in Rust, not SVG DOM attributes.
 
@@ -60,7 +60,7 @@ flowchart TB
         FragmentCache["Element Fragment Cache"]:::comp
         SourceGen["Section Source Generator"]:::comp
         VFS["VirtualFileSystem"]:::comp
-        Queue["CompilationQueue"]:::comp
+        TypstWatch["TypstWatch"]:::comp
         ArtifactPipeline["Compile / Export Artifact Pipeline"]:::comp
         PreviewSync["PreviewSyncState"]:::comp
         World["ErgoWorld"]:::comp
@@ -73,15 +73,16 @@ flowchart TB
         Handlers --> ActionCatalog
         Handlers --> KeyResolver
         Handlers --> Session
-        Handlers --> Queue
+        Handlers --> TypstWatch
         Handlers --> Archive
         Handlers --> SettingsStore
         Session --> FragmentCache
         Session --> SourceGen
         SourceGen --> VFS
-        Queue --> ArtifactPipeline
+        Session --> TypstWatch
+        TypstWatch --> ArtifactPipeline
         ArtifactPipeline --> Compiler
-        Queue --> PreviewSync
+        TypstWatch --> PreviewSync
         PreviewSync --> World
         Compiler --> World
         World --> VFS
@@ -97,7 +98,7 @@ flowchart TB
     end
 
     Frontend -. "Rendered in" .-> WebView
-    TauriClient == "resolve_key_event, get_action_catalog, sync_document_snapshot bootstrap, sync_document_event, save_project, enqueue_preview_compile, read_preview_svg, preview sync, settings/archive commands" ==> Handlers
+    TauriClient == "resolve_key_event, get_action_catalog, sync_document_snapshot bootstrap, sync_document_event, start_preview_watch, export_document, read_preview_svg, preview sync, settings/archive commands" ==> Handlers
     Handlers == "compile lifecycle events + preview page file paths" ==> TauriClient
     Archive <== "Read/Write Zip" ==> ProjectFiles
     SettingsStore <== "Read/Write JSON" ==> SettingsFile
@@ -123,9 +124,10 @@ flowchart TB
 - **Settings Store** reads installed default JSON resources first and persists user overrides under the platform config root's `Ergo` folder. Bundled defaults live at `defaults/default_settings.json` and `defaults/default_keymap.json`; user settings live at `settings.json` and `keymap.json`. App-level preferences, including interface language and recent projects, are edited through global app surfaces. The Welcome screen opens or removes recent project entries from global settings. Per-project settings are available from the Project menu when a project is active. Default keymap bindings come from bundled resources; user keymap files and the keymap settings UI store overrides.
 - **Autosave Scheduler** is controlled by global settings. It waits for the serialized document event sync loop before calling `save_project(path)`, saves dirty projects on a configurable interval, and can also save when the app window loses focus, when the app window is closing, or when the active project is closing because the user closes it or opens/creates another project.
 - **VirtualFileSystem** stores canonical Typst/text sources as retained Typst `Source` objects plus revisions. It stores generated preview SVGs, exports, assets, and other non-source artifacts as file bytes. Paths are normalized to `/` so Typst includes work consistently across Windows and Linux.
-- **CompilationQueue** is the only scheduler for preview and export compilation. Preview SVG jobs have priority over export jobs.
-- **Compile / Export Artifact Pipeline** owns Typst compilation snapshots, `typst-svg` page rendering, changed-page VFS writes, and PDF/PNG/SVG export artifact generation. Code-level package boundaries are described in the package diagram.
-- Preview debounce is disabled by default. Global settings can enable it and provide the debounce time sent to the queue when preview work is enqueued.
+- **TypstWatch** is a single background thread that waits for VFS revision changes, compiles `main.typ` incrementally, writes changed preview SVG pages, stores the retained preview in `PreviewSyncState`, extracts the document outline, and emits compile lifecycle events.
+- **Compile / Export Artifact Pipeline** owns Typst compilation, `typst-svg` page rendering, changed-page VFS writes, and PDF/PNG/SVG export artifact generation. Code-level package boundaries are described in the package diagram.
+- **Export** runs synchronously on the Tauri command thread through `export_document`. It does not share the `TypstWatch` thread.
+- Document sync handlers may compile resource mini-previews on the IPC path when snapshots or dirty resource IDs require updated catalog SVG files.
 - **ErgoWorld** implements Typst's `World` trait for compilation and Typst IDE's `IdeWorld` trait for source-to-preview mapping.
 - **PreviewSyncState** retains the latest successful, non-stale `PagedDocument` plus element source-map, field source-map, Typst source snapshot, and page metrics. Preview clicks call Typst IDE jump APIs on that retained document and retained sources, then map returned file offsets to Érgo field targets.
 - **Preview Renderer** treats SVG page files as canonical preview output. It reloads only page files marked as changed by the backend, converts click positions from SVG viewBox space into Typst page coordinates, dispatches `editor::FocusField` when backend sync returns an Érgo focus target, and publishes the latest compiled outline, compiled resources, and displayed preview revision to the workspace sidebar.
