@@ -1,19 +1,49 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let vfs = std::sync::Arc::new(vfs::VirtualFileSystem::new());
-    let compilation_queue = std::sync::Arc::new(compilation_queue::CompilationQueue::new());
+    let typst_watch = std::sync::Arc::new(typst_watch::TypstWatch::new(
+        std::sync::Arc::clone(&vfs),
+    ));
     let document_session = std::sync::Arc::new(document_session::DocumentSession::new(
         std::sync::Arc::clone(&vfs),
     ));
     let preview_sync = std::sync::Arc::new(preview_sync::PreviewSyncState::default());
     let state = app_state::TauriAppState {
-        vfs,
-        compilation_queue,
+        vfs: std::sync::Arc::clone(&vfs),
+        typst_watch,
         document_session,
         preview_sync,
     };
 
+    let protocol_vfs = std::sync::Arc::clone(&vfs);
     tauri::Builder::default()
+        .register_uri_scheme_protocol("ergo-preview", move |_ctx, request| {
+            let path = request.uri().path();
+            let relative_path = path.strip_prefix('/').unwrap_or(path);
+
+            match protocol_vfs.read_file(relative_path) {
+                Ok(bytes) => {
+                    let content_type = if relative_path.ends_with(".svg") {
+                        "image/svg+xml"
+                    } else if relative_path.ends_with(".png") {
+                        "image/png"
+                    } else {
+                        "application/octet-stream"
+                    };
+
+                    tauri::http::Response::builder()
+                        .status(200)
+                        .header("Content-Type", content_type)
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body(bytes)
+                        .unwrap()
+                }
+                Err(_) => tauri::http::Response::builder()
+                    .status(404)
+                    .body(Vec::new())
+                    .unwrap(),
+            }
+        })
         .manage(state)
         .manage(actions::ActionResolverState::default())
         .plugin(tauri_plugin_dialog::init())
@@ -23,13 +53,14 @@ pub fn run() {
             actions_commands::resolve_key_event,
             actions_commands::reset_key_sequence,
             actions_commands::validate_keymap_settings,
+            compiler::start_preview_watch,
+            compiler::stop_preview_watch,
+            compiler::export_document,
             compiler::write_source,
             compiler::patch_source,
-            compiler::enqueue_preview_compile,
-            compiler::enqueue_export,
-            compiler::get_compile_status,
             document_session_commands::sync_document_snapshot,
             document_session_commands::sync_document_event,
+            document_session_commands::sync_document_events,
             document_session_commands::get_document_session_status,
             document_session_commands::read_preview_svg,
             document_session_commands::read_resource_preview_svg,
@@ -42,6 +73,7 @@ pub fn run() {
             settings::save_global_settings,
             settings::load_keymap_settings,
             settings::save_keymap_settings,
+            settings::get_template_spec,
             archive::save_project,
             archive::open_project
         ])
@@ -60,7 +92,6 @@ mod architecture_tests;
 pub mod archive;
 pub mod ast;
 pub mod backend_profile;
-pub mod compilation_queue;
 pub mod compilation_types;
 pub mod compile_artifacts;
 pub mod compile_events;
@@ -79,9 +110,11 @@ pub mod preview_sync;
 pub mod preview_sync_commands;
 pub mod preview_sync_lookup;
 pub mod preview_sync_types;
+pub mod resource_watch;
 pub mod settings;
 pub mod template_spec;
 #[cfg(test)]
 pub mod test_fixtures;
+pub mod typst_watch;
 pub mod vfs;
 pub mod world;

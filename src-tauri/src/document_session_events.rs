@@ -154,6 +154,7 @@ pub(crate) fn apply_document_event(
             caption,
             placement,
             body_text,
+            asset_id,
         } => {
             let element = element_mut(ast, &element_id)?;
             match element {
@@ -166,6 +167,9 @@ pub(crate) fn apply_document_event(
                     }
                     if let Some(body_text) = body_text {
                         update_figure_body(figure, body_text);
+                    }
+                    if let Some(asset_id) = asset_id {
+                        figure.asset_id = Some(asset_id);
                     }
                     Ok(())
                 }

@@ -10,7 +10,7 @@ use crate::document_session::{
     REFERENCES_PATH, SOURCE_MAP_PATH, TEMPLATE_PATH,
 };
 use crate::document_session_types::{
-    FieldSourceMapEntry, GeneratedFragment, ProjectSourceLayout, SectionSource, SourceMapEntry,
+    FieldSourceMapEntry, GeneratedFragment, ProjectSourceLayout, SourceMapEntry,
 };
 use crate::document_source_builder::SourceBuilder;
 use crate::template_spec::{ParamSpec, ParamType, SectionKind, TemplateSpec};
@@ -19,11 +19,12 @@ pub(crate) struct GeneratedProjectSources {
     pub(crate) main_source: String,
     pub(crate) lib_source: String,
     pub(crate) references_source: String,
-    pub(crate) sections: Vec<SectionSource>,
+    pub(crate) element_paths: Vec<String>,
     pub(crate) fragments: HashMap<String, GeneratedFragment>,
     pub(crate) source_map: Vec<SourceMapEntry>,
     pub(crate) field_source_map: Vec<FieldSourceMapEntry>,
     pub(crate) layout: ProjectSourceLayout,
+    pub(crate) element_content_hashes: HashMap<String, u64>,
 }
 
 pub(crate) fn default_layout(section_paths: Vec<String>) -> ProjectSourceLayout {
@@ -44,58 +45,94 @@ pub(crate) fn generate_project_sources(
     ast: &DocumentAST,
     template: &TemplateSpec,
 ) -> GeneratedProjectSources {
-    let mut sections = Vec::new();
+    generate_project_sources_inner(ast, template, None, None)
+}
+
+pub(crate) fn generate_project_sources_incremental(
+    ast: &DocumentAST,
+    template: &TemplateSpec,
+    cached_fragments: &HashMap<String, GeneratedFragment>,
+    cached_hashes: &HashMap<String, u64>,
+) -> GeneratedProjectSources {
+    generate_project_sources_inner(
+        ast,
+        template,
+        Some(cached_fragments),
+        Some(cached_hashes),
+    )
+}
+
+fn element_content_hash(element: &DocumentElement) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    serde_json::to_string(element)
+        .unwrap_or_default()
+        .hash(&mut hasher);
+    hasher.finish()
+}
+
+fn generate_project_sources_inner(
+    ast: &DocumentAST,
+    template: &TemplateSpec,
+    cached_fragments: Option<&HashMap<String, GeneratedFragment>>,
+    cached_hashes: Option<&HashMap<String, u64>>,
+) -> GeneratedProjectSources {
     let mut fragments = HashMap::new();
     let mut source_map = Vec::new();
     let mut field_source_map = Vec::new();
+    let mut element_paths = Vec::new();
+    let mut element_content_hashes = HashMap::new();
 
     for section in &ast.sections {
         match section {
             DocumentSection::Content(content) => {
-                let section_id = content.id.clone();
-                let file_path = section_path(&section_id);
-                let mut source = String::new();
-                let mut fragment_ids = Vec::new();
-                let mut char_offset = 0;
-
                 for element in &content.elements {
-                    let start_byte = source.len();
-                    let start_char = char_offset;
-                    let fragment = element_fragment(
-                        element,
-                        &content.id,
-                        &file_path,
-                        start_byte,
-                        start_char,
-                        template,
-                        &ast.assets,
-                    );
+                    let element_id = element_id(element);
+                    let file_path = element_path(&element_id);
+                    let content_hash = element_content_hash(element);
+                    element_content_hashes.insert(element_id.clone(), content_hash);
+
+                    let fragment = match (cached_fragments, cached_hashes) {
+                        (Some(cached_fragments), Some(cached_hashes))
+                            if cached_hashes.get(&element_id) == Some(&content_hash) =>
+                        {
+                            cached_fragments
+                                .get(&element_id)
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    element_fragment(
+                                        element,
+                                        &content.id,
+                                        &file_path,
+                                        0,
+                                        0,
+                                        template,
+                                        &ast.assets,
+                                    )
+                                })
+                        }
+                        _ => element_fragment(
+                            element,
+                            &content.id,
+                            &file_path,
+                            0,
+                            0,
+                            template,
+                            &ast.assets,
+                        ),
+                    };
+
                     if !fragment.source.is_empty() {
-                        source.push_str(&fragment.source);
-                        char_offset += fragment.source.chars().count();
+                        element_paths.push(file_path.clone());
                         source_map.extend(fragment.source_map_ranges.clone());
                         field_source_map.extend(fragment.field_source_map_ranges.clone());
                     }
-                    fragment_ids.push(fragment.element_id.clone());
                     fragments.insert(fragment.element_id.clone(), fragment);
                 }
-
-                sections.push(SectionSource {
-                    section_id,
-                    file_path,
-                    source,
-                    fragment_ids,
-                    revision: 0,
-                });
             }
         }
     }
 
-    let section_paths = sections
-        .iter()
-        .map(|section| section.file_path.clone())
-        .collect::<Vec<_>>();
-    let layout = default_layout(section_paths);
+    let layout = default_layout(element_paths.clone());
 
     // Generate lib.typ source using SourceBuilder
     let lib_builder = generate_lib_typst(ast, template);
@@ -207,8 +244,8 @@ pub(crate) fn generate_project_sources(
                 }
             }
             SectionKind::Content => {
-                for section in &sections {
-                    main_builder.push_literal(&format!("#include \"{}\"\n\n", section.file_path));
+                for path in &element_paths {
+                    main_builder.push_literal(&format!("#include \"{}\"\n\n", path));
                 }
             }
             SectionKind::Bibliography => {
@@ -230,9 +267,6 @@ pub(crate) fn generate_project_sources(
             SectionKind::Appendix => {
                 if let Some(show_rule) = &section_spec.show_rule {
                     main_builder.push_literal(&format!("#show: {}\n\n", show_rule));
-                }
-                for section in &sections {
-                    main_builder.push_literal(&format!("#include \"{}\"\n\n", section.file_path));
                 }
             }
         }
@@ -278,12 +312,17 @@ pub(crate) fn generate_project_sources(
         main_source,
         lib_source,
         references_source,
-        sections,
+        element_paths,
         fragments,
         source_map,
         field_source_map,
         layout,
+        element_content_hashes,
     }
+}
+
+fn element_path(element_id: &str) -> String {
+    format!("elements/{}.typ", path_id_for_id(element_id))
 }
 
 fn section_path(section_id: &str) -> String {
@@ -942,7 +981,21 @@ fn generate_element_typst(
                 columns
             };
 
-            builder.push_literal(&format!("#table(\n  columns: ({columns})"));
+            let table_override = template
+                .element_overrides
+                .as_ref()
+                .and_then(|o| o.table.as_ref());
+
+            if let Some(over) = table_override {
+                if let Some(wrapper) = &over.wrapper {
+                    builder.push_literal(&format!("#{wrapper}(\n  table(\n    columns: ({columns})"));
+                } else {
+                    builder.push_literal(&format!("#table(\n  columns: ({columns})"));
+                }
+            } else {
+                builder.push_literal(&format!("#table(\n  columns: ({columns})"));
+            }
+
             for (row_index, row) in table.cells.iter().enumerate() {
                 for (col_index, cell) in row.iter().enumerate() {
                     builder.push_literal(",\n  [");
@@ -955,7 +1008,29 @@ fn generate_element_typst(
                     builder.push_literal("]");
                 }
             }
-            builder.push_literal(&format!("\n) <{label}>\n\n"));
+
+            if let Some(over) = table_override {
+                if let Some(wrapper) = &over.wrapper {
+                    builder.push_literal("\n  )");
+                    for field_spec in &over.extra_fields {
+                        if let Some(val) = table.extra_fields.get(&field_spec.key) {
+                            builder.push_literal(&format!(",\n  {}: ", field_spec.key));
+                            format_json_val_for_custom_field(
+                                &table.id,
+                                &field_spec.key,
+                                val,
+                                &param_type_from_str(&field_spec.param_type),
+                                &mut builder,
+                            );
+                        }
+                    }
+                    builder.push_literal(&format!("\n) <{label}>\n\n"));
+                } else {
+                    builder.push_literal(&format!("\n) <{label}>\n\n"));
+                }
+            } else {
+                builder.push_literal(&format!("\n) <{label}>\n\n"));
+            }
         }
         DocumentElement::Figure(figure) => {
             let mut body = SourceBuilder::default();
@@ -985,7 +1060,15 @@ fn generate_element_typst(
                 return builder;
             }
 
-            builder.push_literal("#figure(\n  [");
+            let figure_override = template
+                .element_overrides
+                .as_ref()
+                .and_then(|o| o.figure.as_ref());
+            let function_name = figure_override
+                .and_then(|over| over.function.as_deref())
+                .unwrap_or("figure");
+
+            builder.push_literal(&format!("#{function_name}(\n  ["));
             if let Some(path) = asset_path {
                 builder.push_generated_field_marker(
                     &figure.id,
@@ -1015,9 +1098,82 @@ fn generate_element_typst(
                 builder.push_literal("]");
             }
 
-            builder.push_literal(&format!(",\n  placement: {placement}\n) <{label}>\n\n"));
+            builder.push_literal(&format!(",\n  placement: {placement}"));
+
+            if let Some(over) = figure_override {
+                for field_spec in &over.extra_fields {
+                    if let Some(val) = figure.extra_fields.get(&field_spec.key) {
+                        builder.push_literal(&format!(",\n  {}: ", field_spec.key));
+                        format_json_val_for_custom_field(
+                            &figure.id,
+                            &field_spec.key,
+                            val,
+                            &param_type_from_str(&field_spec.param_type),
+                            &mut builder,
+                        );
+                    }
+                }
+            }
+
+            builder.push_literal(&format!("\n) <{label}>\n\n"));
         }
         DocumentElement::Custom(custom) => {
+            if let Some(spec) = template
+                .custom_elements
+                .iter()
+                .find(|ce| ce.kind == custom.element_type)
+            {
+                builder.push_literal(&format!("#{}", spec.function));
+                builder.push_literal("(\n");
+                let mut first = true;
+                for field_spec in &spec.fields {
+                    let field_val =
+                        custom
+                            .fields
+                            .get(&field_spec.key)
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                field_spec
+                                    .default
+                                    .clone()
+                                    .unwrap_or(serde_json::Value::Null)
+                            });
+
+                    if field_spec.key == "_positional" {
+                        if !first {
+                            builder.push_literal(",\n");
+                        }
+                        first = false;
+                        builder.push_literal("  ");
+                        format_json_val_for_custom_field(
+                            &custom.id,
+                            &field_spec.key,
+                            &field_val,
+                            &field_spec.param_type,
+                            &mut builder,
+                        );
+                    } else {
+                        if !first {
+                            builder.push_literal(",\n");
+                        }
+                        first = false;
+                        builder.push_literal(&format!("  {}: ", field_spec.key));
+                        format_json_val_for_custom_field(
+                            &custom.id,
+                            &field_spec.key,
+                            &field_val,
+                            &field_spec.param_type,
+                            &mut builder,
+                        );
+                    }
+                }
+                builder.push_literal(&format!("\n) <{label}>\n\n"));
+            } else {
+                builder.push_literal(&format!(
+                    "/* unknown custom element: {} */\n\n",
+                    custom.element_type
+                ));
+            }
             if let Some(spec) = template
                 .custom_elements
                 .iter()
@@ -1187,5 +1343,22 @@ fn push_rich_text_field(
         builder.push_escaped_field(element_id, field_id, &span.text, field_utf16_offset);
         builder.push_literal(suffix);
         field_utf16_offset += span.text.chars().map(char::len_utf16).sum::<usize>();
+    }
+}
+
+fn param_type_from_str(s: &str) -> ParamType {
+    match s {
+        "content" => ParamType::Content,
+        "string" => ParamType::String,
+        "length" => ParamType::Length,
+        "boolean" => ParamType::Boolean,
+        "integer" => ParamType::Integer,
+        "float" => ParamType::Float,
+        "string_array" => ParamType::StringArray,
+        "content_array" => ParamType::ContentArray,
+        "dictionary" => ParamType::Dictionary,
+        "author_list" => ParamType::AuthorList,
+        "affiliation_map" => ParamType::AffiliationMap,
+        _ => ParamType::String,
     }
 }

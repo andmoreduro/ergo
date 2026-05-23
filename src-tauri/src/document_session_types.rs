@@ -62,18 +62,6 @@ pub struct GeneratedFragment {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[ts(export, export_to = "../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
-pub struct SectionSource {
-    pub section_id: String,
-    pub file_path: String,
-    pub source: String,
-    pub fragment_ids: Vec<String>,
-    #[ts(type = "number")]
-    pub revision: u64,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
-#[serde(rename_all = "camelCase")]
 pub struct ProjectSourceLayout {
     pub main_path: String,
     pub lib_path: String,
@@ -95,7 +83,6 @@ pub struct DocumentSessionStatus {
     pub layout: ProjectSourceLayout,
     pub source_map: Vec<SourceMapEntry>,
     pub field_source_map: Vec<FieldSourceMapEntry>,
-    pub dirty_section_ids: Vec<String>,
     pub dirty_element_ids: Vec<String>,
     pub fragment_count: usize,
     pub dirty_resource_ids: Vec<String>,
@@ -184,6 +171,7 @@ pub enum DocumentEvent {
         caption: Option<String>,
         placement: Option<String>,
         body_text: Option<String>,
+        asset_id: Option<String>,
     },
     UpdateInput {
         path: String,

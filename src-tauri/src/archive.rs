@@ -82,10 +82,8 @@ pub fn open_project_from_path(
         .read_source(".ergproj/document_state.json")
         .map_err(|_| ".ergproj/document_state.json is required".to_string())?;
     let ast: DocumentAST = serde_json::from_str(&json_ast).map_err(|e| e.to_string())?;
-    let status = state.document_session.sync_snapshot(ast.clone())?;
-    state
-        .compilation_queue
-        .mark_source_revision(status.source_revision);
+    let _status = state.document_session.sync_snapshot(ast.clone())?;
+    state.typst_watch.mark_vfs_changed();
 
     Ok(ast)
 }
@@ -99,7 +97,6 @@ fn should_pack_file(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compilation_queue::CompilationQueue;
     use crate::document_session::DocumentSession;
     use crate::preview_sync::PreviewSyncState;
     use crate::test_fixtures::basic_document_ast;
@@ -111,12 +108,12 @@ mod tests {
 
     fn test_state() -> TauriAppState {
         let vfs = Arc::new(VirtualFileSystem::new());
-        let compilation_queue = Arc::new(CompilationQueue::new());
+        let typst_watch = Arc::new(crate::typst_watch::TypstWatch::new(Arc::clone(&vfs)));
         let document_session = Arc::new(DocumentSession::new(Arc::clone(&vfs)));
 
         TauriAppState {
             vfs,
-            compilation_queue,
+            typst_watch,
             document_session,
             preview_sync: Arc::new(PreviewSyncState::default()),
         }
@@ -155,7 +152,7 @@ mod tests {
         fs::remove_file(&path).ok();
 
         assert!(names.contains("main.typ"));
-        assert!(names.contains("sections/content-section.typ"));
+        assert!(names.contains("elements/heading-1.typ"));
 
         assert!(names.contains("references.bib"));
         assert!(names.contains(".ergproj/document_state.json"));
@@ -223,14 +220,14 @@ mod tests {
         assert_eq!(ast.metadata.title, "Proyecto con ñ");
         assert!(state
             .vfs
-            .read_source("sections/content-section.typ")
+            .read_source("elements/heading-1.typ")
             .unwrap()
             .contains("Introducción"));
         assert!(state
             .vfs
             .read_source("main.typ")
             .unwrap()
-            .contains("#include \"sections/content-section.typ\""));
+            .contains("#include \"elements/heading-1.typ\""));
     }
 
     #[test]
