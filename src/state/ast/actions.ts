@@ -186,6 +186,7 @@ export type UpdateFigureAction = {
     caption?: string;
     placement?: string;
     bodyText?: string;
+    assetId?: string;
   };
 };
 

@@ -1,8 +1,24 @@
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
+
+vi.mock("../../../api/tauri", () => ({
+    TauriApi: {
+        getTemplateSpec: vi.fn().mockResolvedValue({
+            id: "versatile-apa",
+            name: "Versatile APA",
+            version: "0.1.0",
+            inputs: [],
+            groups: [],
+            sections: [],
+            custom_elements: [],
+        }),
+    },
+}));
+
 import { DocumentProvider } from "../../../state/DocumentContext";
+import { TemplateSpecProvider } from "../../../state/TemplateSpecContext";
 import { ElementEditor } from "./ElementEditor";
 
 describe("ElementEditor", () => {
@@ -18,7 +34,9 @@ describe("ElementEditor", () => {
 
         render(
             <DocumentProvider>
-                <ElementEditor element={table} />
+                <TemplateSpecProvider templateId="versatile-apa">
+                    <ElementEditor element={table} />
+                </TemplateSpecProvider>
             </DocumentProvider>,
         );
 

@@ -10,14 +10,18 @@ import type { Command } from "../commands/types";
 interface UseCommandPaletteOptions {
     commandRegistry: CommandRegistry;
     dispatchAction: (invocation: ActionInvocation) => Promise<boolean>;
+    setOpen: (open: boolean) => void;
+    query: string;
+    setQuery: (query: string) => void;
 }
 
 export const useCommandPalette = ({
     commandRegistry,
     dispatchAction,
+    setOpen,
+    query,
+    setQuery,
 }: UseCommandPaletteOptions) => {
-    const [isOpen, setOpen] = useState(false);
-    const [query, setQuery] = useState("");
     const [actionCatalog, setActionCatalog] = useState<ActionDescriptor[]>([]);
 
     useEffect(() => {
@@ -79,10 +83,6 @@ export const useCommandPalette = ({
     );
 
     return {
-        isOpen,
-        setOpen,
-        query,
-        setQuery,
         filteredCommands,
         runCommand,
     };

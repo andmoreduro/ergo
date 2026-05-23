@@ -390,11 +390,18 @@ const findElementById = (
         return false;
     }) ?? null;
 
-const ResourcePreviewSvg = ({ path }: { path: string }) => {
+const ResourcePreviewSvg = ({
+    path,
+    revision,
+}: {
+    path: string;
+    revision: number;
+}) => {
     const [svg, setSvg] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
+        setSvg(null);
         TauriApi.readResourcePreviewSvg(path)
             .then((content) => {
                 if (!cancelled) {
@@ -410,10 +417,10 @@ const ResourcePreviewSvg = ({ path }: { path: string }) => {
         return () => {
             cancelled = true;
         };
-    }, [path]);
+    }, [path, revision]);
 
     if (!svg) {
-        return <span className={styles.resourcePreviewPath}>{path}</span>;
+        return <span aria-hidden className={styles.resourcePreviewLoading} />;
     }
 
     return (
@@ -544,7 +551,10 @@ const ResourcesPanel = memo(({
                                         onClick={() => openResource(entry)}
                                     >
                                         {entry.preview.status === "ready" && entry.preview.path ? (
-                                            <ResourcePreviewSvg path={entry.preview.path} />
+                                            <ResourcePreviewSvg
+                                                path={entry.preview.path}
+                                                revision={resources?.revision ?? 0}
+                                            />
                                         ) : (
                                             <span className={styles.resourcePreviewError}>
                                                 {entry.preview.diagnostic ??

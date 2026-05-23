@@ -17,55 +17,31 @@ import type { PreviewFocusTarget } from "../bindings/PreviewFocusTarget";
 import type { PreviewJumpResult } from "../bindings/PreviewJumpResult";
 import type { PreviewSyncStatus } from "../bindings/PreviewSyncStatus";
 import {
-    COMPILE_DROPPED_EVENT,
     COMPILE_FAILED_EVENT,
-    COMPILE_QUEUED_EVENT,
     COMPILE_STARTED_EVENT,
     COMPILE_SUCCEEDED_EVENT,
+    RESOURCES_UPDATED_EVENT,
 } from "./compileEvents";
-import type { CompilationJob } from "../bindings/CompilationJob";
-import type { CompilationQueueSnapshot } from "../bindings/CompilationQueueSnapshot";
 import type { CompilationResult } from "../bindings/CompilationResult";
+import type { DocumentResources } from "../bindings/DocumentResources";
 import type { ExportFormat } from "../bindings/ExportFormat";
+import type { TemplateSpec } from "../bindings/TemplateSpec";
 
 export type { DocumentOutline } from "../bindings/DocumentOutline";
 
 export type CompileEventHandler = (result: CompilationResult) => void;
 
 export interface CompileEventHandlers {
-    onQueued?: CompileEventHandler;
     onStarted?: CompileEventHandler;
     onSucceeded?: CompileEventHandler;
     onFailed?: CompileEventHandler;
-    onDropped?: CompileEventHandler;
 }
 
-/**
- * Tauri IPC Client API
- *
- * This module acts as the bridge between the React frontend and the Rust backend,
- * wrapping the Tauri `invoke` commands with strong TypeScript typing based on
- * the `ts-rs` auto-generated bindings.
- */
 export const TauriApi = {
-    /**
-     * Writes the complete text content to a file in the In-Memory Virtual File System.
-     *
-     * @param path - The virtual path of the file (e.g., "main.typ")
-     * @param text - The complete text content to write
-     */
     async writeSource(path: string, text: string): Promise<void> {
         return invoke("write_source", { path, text });
     },
 
-    /**
-     * Applies an incremental text patch to a file in the In-Memory Virtual File System.
-     *
-     * @param path - The virtual path of the file (e.g., "main.typ")
-     * @param start - The starting character index
-     * @param end - The ending character index
-     * @param text - The new text to insert or replace with
-     */
     async patchSource(
         path: string,
         start: number,
@@ -75,16 +51,16 @@ export const TauriApi = {
         return invoke("patch_source", { path, start, end, text });
     },
 
-    async enqueuePreviewCompile(debounceMs = 0): Promise<CompilationJob> {
-        return invoke("enqueue_preview_compile", { debounceMs });
+    async startPreviewWatch(): Promise<void> {
+        return invoke("start_preview_watch");
     },
 
-    async enqueueExport(format: ExportFormat): Promise<CompilationJob> {
-        return invoke("enqueue_export", { format });
+    async stopPreviewWatch(): Promise<void> {
+        return invoke("stop_preview_watch");
     },
 
-    async getCompileStatus(): Promise<CompilationQueueSnapshot> {
-        return invoke("get_compile_status");
+    async exportDocument(format: ExportFormat): Promise<CompilationResult> {
+        return invoke("export_document", { format });
     },
 
     async syncDocumentSnapshot(ast: DocumentAST): Promise<DocumentSessionStatus> {
@@ -95,12 +71,14 @@ export const TauriApi = {
         return invoke("sync_document_event", { event });
     },
 
-    async getDocumentSessionStatus(): Promise<DocumentSessionStatus> {
-        return invoke("get_document_session_status");
+    async syncDocumentEvents(
+        events: DocumentEvent[],
+    ): Promise<DocumentSessionStatus> {
+        return invoke("sync_document_events", { events });
     },
 
-    async readPreviewSvg(path: string): Promise<string> {
-        return invoke("read_preview_svg", { path });
+    async getDocumentSessionStatus(): Promise<DocumentSessionStatus> {
+        return invoke("get_document_session_status");
     },
 
     async readResourcePreviewSvg(path: string): Promise<string> {
@@ -154,9 +132,6 @@ export const TauriApi = {
     ): Promise<UnlistenFn | null> {
         try {
             const unlisteners = await Promise.all([
-                listen<CompilationResult>(COMPILE_QUEUED_EVENT, (event) =>
-                    handlers.onQueued?.(event.payload),
-                ),
                 listen<CompilationResult>(COMPILE_STARTED_EVENT, (event) =>
                     handlers.onStarted?.(event.payload),
                 ),
@@ -165,9 +140,6 @@ export const TauriApi = {
                 ),
                 listen<CompilationResult>(COMPILE_FAILED_EVENT, (event) =>
                     handlers.onFailed?.(event.payload),
-                ),
-                listen<CompilationResult>(COMPILE_DROPPED_EVENT, (event) =>
-                    handlers.onDropped?.(event.payload),
                 ),
             ]);
 
@@ -179,21 +151,23 @@ export const TauriApi = {
         }
     },
 
-    /**
-     * Saves the backend session and VFS state into a zipped `.ergproj` archive.
-     *
-     * @param path - The physical host OS path to save the archive to
-     */
+    async listenToResourcesEvents(
+        onUpdate: (resources: DocumentResources) => void,
+    ): Promise<UnlistenFn | null> {
+        try {
+            const unlisten = await listen<DocumentResources>(RESOURCES_UPDATED_EVENT, (event) => {
+                onUpdate(event.payload);
+            });
+            return unlisten;
+        } catch {
+            return null;
+        }
+    },
+
     async saveProject(path: string): Promise<void> {
         return invoke("save_project", { path });
     },
 
-    /**
-     * Opens and unzips a `.ergproj` archive, populating the VFS and returning the AST.
-     *
-     * @param path - The physical host OS path of the archive to open
-     * @returns The deserialized Document AST state extracted from the archive
-     */
     async openProject(path: string): Promise<DocumentAST> {
         return invoke("open_project", { path });
     },
@@ -236,6 +210,10 @@ export const TauriApi = {
         settings: KeymapSettings,
     ): Promise<KeymapValidationResult> {
         return invoke("validate_keymap_settings", { settings });
+    },
+
+    async getTemplateSpec(templateId: string): Promise<TemplateSpec> {
+        return invoke("get_template_spec", { templateId });
     },
 
     async documentDir(): Promise<string> {

@@ -1,13 +1,64 @@
 import { render, screen } from "@testing-library/react";
 import { useEffect } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DocumentAST } from "../../../bindings/DocumentAST";
 import { EditorFieldRegistryProvider } from "../../../state/EditorFieldRegistry";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
+import { TemplateSpecProvider } from "../../../state/TemplateSpecContext";
 import { createDefaultDocumentAST } from "../../../state/ast/defaults";
 import { Editor } from "./Editor";
 
 import "@testing-library/jest-dom";
+
+const tauriApiMock = vi.hoisted(() => ({
+    getTemplateSpec: vi.fn(),
+}));
+
+vi.mock("../../../api/tauri", () => ({
+    TauriApi: tauriApiMock,
+}));
+
+tauriApiMock.getTemplateSpec.mockResolvedValue({
+    template: { id: "versatile-apa", name: "APA 7th Edition", version: "1.0.0" },
+    package: { name: "@preview/versatile-apa", version: "7.2.0" },
+    inputs: [
+        { id: "title", type: "string", label: "Title", importance: "required" },
+        {
+            id: "authors",
+            type: "array",
+            label: "Authors",
+            importance: "required",
+            items: {
+                type: "object",
+                properties: [
+                    { id: "name", type: "string", label: "Name", importance: "required" },
+                    {
+                        id: "affiliations",
+                        type: "array",
+                        label: "Affiliations",
+                        importance: "optional",
+                        items: { type: "string" },
+                    },
+                ],
+            },
+        },
+        {
+            id: "affiliations",
+            type: "array",
+            label: "Affiliations",
+            importance: "recommended",
+            items: { type: "string", label: "Affiliation Name" },
+        },
+    ],
+    groups: [
+        { id: "cover_page", label: "Cover Page", inputs: ["title", "authors", "affiliations"] },
+    ],
+    sections: [
+        { id: "title-page", kind: "function_call", function: "title-page", params: [] },
+        { id: "body", kind: "content" },
+    ],
+    custom_elements: [],
+});
 
 const LoadDocument = ({ ast }: { ast: DocumentAST }) => {
     const { dispatch } = useDocument();
@@ -37,17 +88,19 @@ const createDocumentWithTemplateCollections = () => {
 };
 
 describe("Editor template input fields", () => {
-    it("registers selected author affiliation references with their template input path", () => {
+    it("registers selected author affiliation references with their template input path", async () => {
         render(
             <DocumentProvider>
-                <EditorFieldRegistryProvider>
-                    <LoadDocument ast={createDocumentWithTemplateCollections()} />
-                    <Editor />
-                </EditorFieldRegistryProvider>
+                <TemplateSpecProvider templateId="versatile-apa">
+                    <EditorFieldRegistryProvider>
+                        <LoadDocument ast={createDocumentWithTemplateCollections()} />
+                        <Editor />
+                    </EditorFieldRegistryProvider>
+                </TemplateSpecProvider>
             </DocumentProvider>,
         );
 
-        expect(screen.getByRole("checkbox", {
+        expect(await screen.findByRole("checkbox", {
             name: "Universidad Norte",
         })).toHaveAttribute(
             "data-editor-field-id",

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, type Dispatch } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 
 import { TauriApi } from "../api/tauri";
+import { waitForDocumentSync } from "./documentSyncBarrier";
 import type { GlobalSettings } from "../bindings/GlobalSettings";
 import { m } from "../paraglide/messages.js";
 import {
@@ -11,7 +12,6 @@ import {
 import type { ASTAction } from "../state/ast/actions";
 import { createDefaultDocumentAST } from "../state/ast/defaults";
 import type { NewProjectDialogValues } from "../components/organisms/NewProjectDialog/NewProjectDialog";
-import { waitForDocumentSync } from "./documentSyncBarrier";
 
 interface UseProjectLifecycleOptions {
     dispatch: Dispatch<ASTAction>;
@@ -110,12 +110,14 @@ export const useProjectLifecycle = ({
             );
 
             try {
-                await TauriApi.syncDocumentSnapshot(ast);
-                await TauriApi.saveProject(projectPath);
                 dispatch({
                     type: "LOAD_DOCUMENT",
                     payload: { ast },
                 });
+                // Workspace (and useCompiler) mount only after the first save, so
+                // materialize the backend session explicitly before writing .ergproj.
+                await TauriApi.syncDocumentSnapshot(ast);
+                await TauriApi.saveProject(projectPath);
                 rememberProject(projectPath);
                 setCurrentProjectPath(projectPath);
                 setHasActiveProject(true);

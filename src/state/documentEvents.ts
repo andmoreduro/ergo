@@ -232,6 +232,7 @@ export const applyDocumentEventToAst = (
                     ...element,
                     caption: event.caption ?? element.caption,
                     placement: event.placement ?? element.placement,
+                    asset_id: event.asset_id ?? element.asset_id,
                     content:
                         event.body_text === null
                             ? element.content
@@ -466,6 +467,7 @@ const documentEventFromAction = (
                 caption: action.payload.caption ?? null,
                 placement: action.payload.placement ?? null,
                 body_text: action.payload.bodyText ?? null,
+                asset_id: action.payload.assetId ?? null,
             };
 
         case "UPDATE_ELEMENT_EXTRA_FIELD":
@@ -708,6 +710,8 @@ const inverseDocumentEventFromAction = (
                         : figure.content.type === "Paragraph"
                           ? richTextPlainText(figure.content.content)
                           : "",
+                asset_id:
+                    action.payload.assetId === undefined ? null : figure.asset_id,
             };
         }
 

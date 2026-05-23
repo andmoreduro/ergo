@@ -20,14 +20,15 @@ interface UseCompilerResult {
     previewRevision: SourceRevision | null;
     outline: DocumentOutline | null;
     resources: DocumentResources | null;
+    latencyMs: number | null;
 }
 
 export function useCompiler(
     ast: DocumentAST | null | undefined,
     events: QueuedDocumentEvent[] = [],
     sessionId = 1,
-    previewDebounceMs = 0,
     ackDocumentEvents?: (upToEventId: number) => void,
+    eventsVersion = 0,
 ): UseCompilerResult {
     const [svgs, setSvgs] = useState<string[]>([]);
     const [isCompiling, setIsCompiling] = useState<boolean>(false);
@@ -36,6 +37,7 @@ export function useCompiler(
     const [previewRevision, setPreviewRevision] = useState<SourceRevision | null>(null);
     const [outline, setOutline] = useState<DocumentOutline | null>(null);
     const [resources, setResources] = useState<DocumentResources | null>(null);
+    const [latencyMs, setLatencyMs] = useState<number | null>(null);
     const desiredAstRef = useRef<DocumentAST | null>(null);
     const desiredEventsRef = useRef<QueuedDocumentEvent[]>([]);
     const desiredSessionIdRef = useRef(sessionId);
@@ -43,6 +45,8 @@ export function useCompiler(
     const syncedEventIdRef = useRef(0);
     const latestRevisionRef = useRef<SourceRevision | null>(null);
     const previewRevisionRef = useRef<SourceRevision | null>(null);
+    /** Timestamp (Date.now) of the last user edit in the sync batch driving the in-flight preview. */
+    const inputLatencyStartRef = useRef<number | null>(null);
     const listenersReadyRef = useRef<Promise<void>>(Promise.resolve());
     const syncRunningRef = useRef(false);
     const syncFailedRef = useRef(false);
@@ -50,15 +54,33 @@ export function useCompiler(
     const isMountedRef = useRef(false);
     const previewLoadTokenRef = useRef(0);
     const svgsRef = useRef<string[]>([]);
-    const previewDebounceMsRef = useRef(previewDebounceMs);
-    previewDebounceMsRef.current = previewDebounceMs;
 
     const isNewerPreviewResult = (result: CompilationResult): boolean => {
         return (
-            result.kind.type === "previewSvg" &&
-            (previewRevisionRef.current === null ||
-                result.source_revision > previewRevisionRef.current)
+            previewRevisionRef.current === null ||
+            result.source_revision > previewRevisionRef.current
         );
+    };
+
+    const scheduleEndToEndLatency = (loadToken: number) => {
+        const startedAt = inputLatencyStartRef.current;
+        if (startedAt === null) {
+            return;
+        }
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (
+                    !isMountedRef.current ||
+                    previewLoadTokenRef.current !== loadToken
+                ) {
+                    return;
+                }
+
+                setLatencyMs(Math.max(0, Math.round(Date.now() - startedAt)));
+                inputLatencyStartRef.current = null;
+            });
+        });
     };
 
     const loadPreviewSvgs = async (result: CompilationResult) => {
@@ -91,6 +113,7 @@ export function useCompiler(
             svgsRef.current = nextSvgs;
             setPreviewRevision(result.source_revision);
             previewRevisionRef.current = result.source_revision;
+
             setError(null);
             if (
                 latestRevisionRef.current === null ||
@@ -98,6 +121,7 @@ export function useCompiler(
             ) {
                 setIsCompiling(false);
             }
+            scheduleEndToEndLatency(loadToken);
             recordTiming("preview-svg-load", started);
         }
     };
@@ -109,7 +133,6 @@ export function useCompiler(
 
         if (result.status === "succeeded") {
             setOutline(result.outline);
-            setResources(result.resources);
             await loadPreviewSvgs(result);
             return;
         }
@@ -122,36 +145,7 @@ export function useCompiler(
             ) {
                 setIsCompiling(false);
             }
-            return;
         }
-
-        if (result.status === "dropped") {
-            if (
-                latestRevisionRef.current === null ||
-                result.source_revision >= latestRevisionRef.current
-            ) {
-                setIsCompiling(false);
-            }
-        }
-    };
-
-    const applyImmediateSnapshot = async (jobRevision: SourceRevision) => {
-        const snapshot = await TauriApi.getCompileStatus();
-        if (
-            snapshot.last_result &&
-            snapshot.last_result.source_revision === jobRevision &&
-            isMountedRef.current
-        ) {
-            await applyPreviewResult(snapshot.last_result);
-        }
-    };
-
-    const enqueuePreview = async () => {
-        const started = now();
-        const job = await TauriApi.enqueuePreviewCompile(previewDebounceMsRef.current);
-        recordTiming("preview-enqueue", started);
-        latestRevisionRef.current = job.source_revision;
-        await applyImmediateSnapshot(job.source_revision);
     };
 
     const hasPendingSync = () => {
@@ -168,10 +162,11 @@ export function useCompiler(
         );
     };
 
-    const nextUnsyncedEvent = () =>
-        desiredEventsRef.current.find(
-            (event) => event.id > syncedEventIdRef.current,
-        ) ?? null;
+    const startWatch = async () => {
+        const started = now();
+        await TauriApi.startPreviewWatch();
+        recordTiming("watch-start", started);
+    };
 
     const syncLatestDocumentState = async () => {
         if (syncRunningRef.current || syncFailedRef.current) {
@@ -181,6 +176,7 @@ export function useCompiler(
         syncRunningRef.current = true;
 
         try {
+            let lastStatus = null;
             while (isMountedRef.current) {
                 const ast = desiredAstRef.current;
                 const currentSessionId = desiredSessionIdRef.current;
@@ -201,21 +197,27 @@ export function useCompiler(
 
                     bootstrappedSessionIdRef.current = currentSessionId;
                     syncedEventIdRef.current = 0;
+                    latestRevisionRef.current = status.sourceRevision;
                     setSourceMap(status.sourceMap);
                     await listenersReadyRef.current;
-                    await enqueuePreview();
+                    await startWatch();
                     continue;
                 }
 
-                const nextEvent = nextUnsyncedEvent();
-                if (!nextEvent) {
+                const pendingEvents = desiredEventsRef.current.filter(
+                    (event) => event.id > syncedEventIdRef.current,
+                );
+                if (pendingEvents.length === 0) {
                     break;
                 }
 
-                recordDurationFromTimestamp("event-dispatch", nextEvent.timestamp);
+                const firstTimestamp = pendingEvents[0]?.timestamp ?? 0;
+                recordDurationFromTimestamp("event-dispatch", firstTimestamp);
                 const syncStarted = now();
-                const status = await TauriApi.syncDocumentEvent(nextEvent.event);
-                recordTiming("sync-event", syncStarted);
+                const status = await TauriApi.syncDocumentEvents(
+                    pendingEvents.map((event) => event.event),
+                );
+                recordTiming("sync-events", syncStarted);
                 if (
                     !isMountedRef.current ||
                     desiredSessionIdRef.current !== currentSessionId
@@ -223,11 +225,20 @@ export function useCompiler(
                     continue;
                 }
 
-                syncedEventIdRef.current = nextEvent.id;
-                ackDocumentEvents?.(nextEvent.id);
-                setSourceMap(status.sourceMap);
+                const lastEvent = pendingEvents[pendingEvents.length - 1];
+                inputLatencyStartRef.current = lastEvent.timestamp;
+
+                syncedEventIdRef.current = lastEvent.id;
+                latestRevisionRef.current = status.sourceRevision;
+                ackDocumentEvents?.(lastEvent.id);
+                lastStatus = status;
+            }
+
+            if (lastStatus && isMountedRef.current) {
+                latestRevisionRef.current = lastStatus.sourceRevision;
+                setSourceMap(lastStatus.sourceMap);
                 await listenersReadyRef.current;
-                await enqueuePreview();
+                await startWatch();
             }
         } catch (error: unknown) {
             if (isMountedRef.current) {
@@ -257,8 +268,9 @@ export function useCompiler(
 
     useCompileBridge({
         listenersReadyRef,
-        onPreviewQueued: () => setIsCompiling(true),
+        onPreviewStarted: () => setIsCompiling(true),
         onPreviewResult: applyPreviewResult,
+        onResourcesUpdated: setResources,
     });
 
     useEffect(() => {
@@ -279,6 +291,8 @@ export function useCompiler(
             previewRevisionRef.current = null;
             setOutline(null);
             setResources(null);
+            setLatencyMs(null);
+            TauriApi.stopPreviewWatch().catch(() => {});
             return;
         }
 
@@ -299,6 +313,7 @@ export function useCompiler(
                 latestRevisionRef.current = null;
                 setOutline(null);
                 setResources(null);
+                setLatencyMs(null);
             }
         }
 
@@ -307,9 +322,9 @@ export function useCompiler(
             setIsCompiling(true);
             startDocumentSync();
         }
-    }, [ackDocumentEvents, ast, events, sessionId]);
+    }, [ackDocumentEvents, ast, sessionId, eventsVersion]);
 
-    return { svgs, isCompiling, error, sourceMap, previewRevision, outline, resources };
+    return { svgs, isCompiling, error, sourceMap, previewRevision, outline, resources, latencyMs };
 }
 
 type TimingSample = {

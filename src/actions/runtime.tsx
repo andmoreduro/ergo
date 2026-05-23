@@ -179,6 +179,18 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
             if (!targetIsEditable && (event.ctrlKey || event.metaKey || event.altKey)) {
                 event.preventDefault();
             }
+
+            const isPlainTextInput =
+                targetIsEditable &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                !event.altKey &&
+                event.key.length === 1;
+
+            if (isPlainTextInput) {
+                return;
+            }
+
             const snapshot = getSnapshot({
                 includeInputContext: targetIsEditable,
             });

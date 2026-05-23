@@ -1,5 +1,7 @@
+import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useMemo } from "react";
-import { useDocument } from "../../../state/DocumentContext";
+import { TauriApi } from "../../../api/tauri";
+import { useDocumentAst } from "../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import {
@@ -17,7 +19,7 @@ import {
     tableColumnSizeFieldId,
     elementExtraFieldFieldId,
 } from "../../../editor/fieldIds";
-import { getTemplateSpec } from "../../../templates/registry";
+import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { Button } from "../../atoms/Button/Button";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { Select } from "../../atoms/Select/Select";
@@ -73,7 +75,7 @@ const elementLabel = (element: DocumentElement): string => {
 };
 
 export const ElementEditor = ({ element }: ElementEditorProps) => {
-    const { dispatch } = useDocument();
+    const { dispatch } = useDocumentAst();
     const dispatchAction = useActionDispatcher();
     const tableRows = element.type === "Table" ? element.rows : 0;
     const tableCols = element.type === "Table" ? element.cols : 0;
@@ -228,9 +230,9 @@ const ElementContent = ({ element }: { element: DocumentElement }) => {
 };
 
 const CustomElementEditor = ({ element }: { element: CustomElementUnion }) => {
-    const { state, dispatch } = useDocument();
-    const templateSpec = getTemplateSpec(state.metadata.template_id);
-    const customElements = templateSpec.custom_elements || [];
+    const { dispatch } = useDocumentAst();
+    const { spec: templateSpec } = useTemplateSpecContext();
+    const customElements = templateSpec?.custom_elements || [];
     const spec = customElements.find((c) => c.kind === element.element_type);
 
     if (!spec) {
@@ -265,7 +267,7 @@ const CustomElementEditor = ({ element }: { element: CustomElementUnion }) => {
 };
 
 const HeadingEditor = ({ element }: { element: HeadingElement }) => {
-    const { dispatch } = useDocument();
+    const { dispatch } = useDocumentAst();
     const textField = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: element.id,
         fieldId: richTextFieldId(element.id),
@@ -307,7 +309,7 @@ const HeadingEditor = ({ element }: { element: HeadingElement }) => {
 };
 
 const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
-    const { dispatch } = useDocument();
+    const { dispatch } = useDocumentAst();
     const textField = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: element.id,
         fieldId: richTextFieldId(element.id),
@@ -332,7 +334,7 @@ const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
 };
 
 const EquationEditor = ({ element }: { element: EquationElement }) => {
-    const { dispatch } = useDocument();
+    const { dispatch } = useDocumentAst();
     const sourceField = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: element.id,
         fieldId: equationSourceFieldId(element.id),
@@ -374,10 +376,9 @@ const EquationEditor = ({ element }: { element: EquationElement }) => {
 
 const TableEditor = ({ element }: { element: TableElement }) => {
     const dispatchAction = useActionDispatcher();
-    const { state, dispatch } = useDocument();
-    const templateId = state.metadata.template_id;
-    const templateSpec = getTemplateSpec(templateId);
-    const extraFields = templateSpec.element_overrides?.table?.extra_fields ?? [];
+    const { dispatch } = useDocumentAst();
+    const { spec: templateSpec } = useTemplateSpecContext();
+    const extraFields = templateSpec?.element_overrides?.table?.extra_fields ?? [];
 
     return (
         <>
@@ -494,7 +495,7 @@ const TableColumnSizeEditor = ({
     element: TableElement;
     size: string;
 }) => {
-    const { dispatch } = useDocument();
+    const { dispatch } = useDocumentAst();
     const columnField = useEditorFieldBinding<HTMLInputElement>({
         elementId: element.id,
         fieldId: tableColumnSizeFieldId(element.id, colIndex),
@@ -532,7 +533,7 @@ const TableCellEditor = ({
     element: TableElement;
     rowIndex: number;
 }) => {
-    const { dispatch } = useDocument();
+    const { dispatch } = useDocumentAst();
     const cellField = useEditorFieldBinding<HTMLInputElement>({
         elementId: element.id,
         fieldId: tableCellFieldId(element.id, rowIndex, colIndex),
@@ -562,10 +563,41 @@ const TableCellEditor = ({
 };
 
 const FigureEditor = ({ element }: { element: FigureElement }) => {
-    const { state, dispatch } = useDocument();
-    const templateId = state.metadata.template_id;
-    const templateSpec = getTemplateSpec(templateId);
-    const extraFields = templateSpec.element_overrides?.figure?.extra_fields ?? [];
+    const { state, dispatch } = useDocumentAst();
+    const { spec: templateSpec } = useTemplateSpecContext();
+    const extraFields = templateSpec?.element_overrides?.figure?.extra_fields ?? [];
+    const linkedAsset = element.asset_id
+        ? state.assets.find((asset) => asset.id === element.asset_id)
+        : null;
+
+    const chooseImage = async () => {
+        const selected = await open({
+            multiple: false,
+            directory: false,
+            filters: [
+                {
+                    name: "Images",
+                    extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"],
+                },
+            ],
+        });
+        if (typeof selected !== "string") {
+            return;
+        }
+
+        const asset = await TauriApi.importResourceFile(selected);
+        const existing = state.assets.some((entry) => entry.id === asset.id);
+        if (!existing) {
+            dispatch({ type: "ADD_ASSET", payload: { asset } });
+        }
+        dispatch({
+            type: "UPDATE_FIGURE",
+            payload: {
+                figureId: element.id,
+                assetId: asset.id,
+            },
+        });
+    };
 
     const bodyText =
         element.content.type === "Paragraph" ? richTextToString(element.content) : "";
@@ -584,6 +616,21 @@ const FigureEditor = ({ element }: { element: FigureElement }) => {
 
     return (
         <>
+            <div className={styles.figureAssetRow}>
+                <Button
+                    size="small"
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                        void chooseImage();
+                    }}
+                >
+                    {m.editor_figure_choose_image()}
+                </Button>
+                {linkedAsset && (
+                    <span className={styles.figureAssetPath}>{linkedAsset.path}</span>
+                )}
+            </div>
             <Textarea
                 {...bodyField}
                 fullWidth

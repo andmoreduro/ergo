@@ -6,10 +6,8 @@ import {
     type MouseEvent,
 } from "react";
 import { TauriApi } from "../../../api/tauri";
-import { useDocument } from "../../../state/DocumentContext";
-import { useCompiler } from "../../../hooks/useCompiler";
-import type { DocumentOutline } from "../../../bindings/DocumentOutline";
-import type { DocumentResources } from "../../../bindings/DocumentResources";
+import { useDocumentFocus } from "../../../state/DocumentContext";
+import type { useCompiler } from "../../../hooks/useCompiler";
 import type { PreviewElementPosition } from "../../../bindings/PreviewElementPosition";
 import type { PreviewFocusTarget } from "../../../bindings/PreviewFocusTarget";
 import { backendFocusIdsForEditorField } from "../../../editor/fieldIds";
@@ -17,29 +15,16 @@ import { useActionDispatcher } from "../../../actions/runtime";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Preview.module.css";
 
+export type PreviewCompilerState = ReturnType<typeof useCompiler>;
+
 export interface PreviewProps {
-    previewDebounceMs?: number;
-    onOutlineChange?: (outline: DocumentOutline | null) => void;
-    onResourcesChange?: (resources: DocumentResources | null) => void;
-    onPreviewRevisionChange?: (revision: number | null) => void;
+    compiler: PreviewCompilerState;
 }
 
-export const Preview = ({
-    previewDebounceMs = 0,
-    onOutlineChange,
-    onResourcesChange,
-    onPreviewRevisionChange,
-}: PreviewProps) => {
-    const { state, documentFocus, events, sessionId, ackDocumentEvents } =
-        useDocument();
+export const Preview = ({ compiler }: PreviewProps) => {
+    const { documentFocus } = useDocumentFocus();
     const dispatchAction = useActionDispatcher();
-    const { svgs, error, sourceMap, previewRevision, outline, resources } = useCompiler(
-        state,
-        events,
-        sessionId,
-        previewDebounceMs,
-        ackDocumentEvents,
-    );
+    const { svgs, error, sourceMap, previewRevision, latencyMs } = compiler;
     const previewRef = useRef<HTMLDivElement>(null);
     const syncCueRequestIdRef = useRef(0);
     const [highlightedPosition, setHighlightedPosition] =
@@ -47,18 +32,6 @@ export const Preview = ({
     const activeSource = sourceMap.find(
         (entry) => entry.elementId === documentFocus.elementId,
     );
-
-    useEffect(() => {
-        onOutlineChange?.(outline);
-    }, [onOutlineChange, outline]);
-
-    useEffect(() => {
-        onResourcesChange?.(resources);
-    }, [onResourcesChange, resources]);
-
-    useEffect(() => {
-        onPreviewRevisionChange?.(previewRevision);
-    }, [onPreviewRevisionChange, previewRevision]);
 
     const clearHighlightedPosition = useCallback(() => {
         syncCueRequestIdRef.current += 1;
@@ -225,6 +198,11 @@ export const Preview = ({
                     </div>
                 )}
             </div>
+            {latencyMs !== null && (
+                <div className={styles.telemetryOverlay}>
+                    {m.preview_telemetry({ latency: latencyMs })}
+                </div>
+            )}
         </aside>
     );
 };
