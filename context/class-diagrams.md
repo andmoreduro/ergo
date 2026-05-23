@@ -29,8 +29,6 @@ classDiagram
             +String? theme_mode
             +String? locale
             +String[] recent_projects
-            +Boolean? preview_debounce_enabled
-            +Int? preview_debounce_ms
             +Int? history_limit
             +Boolean? autosave_enabled
             +Int? autosave_interval_ms
@@ -299,7 +297,7 @@ classDiagram
     namespace Backend_Document_Source {
         class TauriAppState {
             +Arc~VirtualFileSystem~ vfs
-            +Arc~CompilationQueue~ compilation_queue
+            +Arc~TypstWatch~ typst_watch
             +Arc~DocumentSession~ document_session
             +Arc~PreviewSyncState~ preview_sync
         }
@@ -452,52 +450,29 @@ classDiagram
     VirtualFileSystem "1" *-- "0..*" VirtualTextFile
 ```
 
-## Compilation Queue
+## TypstWatch And Compile Pipeline
 
 ```mermaid
 classDiagram
-    namespace Backend_Compile_Queue {
-        class CompilationQueue {
-            +enqueue_preview(source_revision: UInt64) CompilationJob
-            +enqueue_export(format: ExportFormat) CompilationJob
-            +mark_source_revision(source_revision: UInt64)
-            +snapshot() CompilationQueueSnapshot
+    namespace Backend_Compile_Pipeline {
+        class TypstWatch {
+            +ensure_running(app, document_session, preview_sync)
+            +stop()
+            +mark_vfs_changed()
+            +snapshot() WatchSnapshot
         }
 
-        class CompilationQueueSnapshot {
+        class WatchSnapshot {
             +UInt64 latest_source_revision
-            +UInt64? active_job_id
-            +UInt64? queued_preview_job_id
-            +Int queued_export_count
+            +UInt64 last_compiled_revision
             +CompilationResult? last_result
-        }
-
-        class CompilationJob {
-            +UInt64 job_id
-            +CompilationJobKind kind
-            +CompilationPriority priority
-            +UInt64 source_revision
-        }
-
-        class CompilationJobKind {
-            <<enum>>
-            PreviewSvg
-            Export
-        }
-
-        class CompilationPriority {
-            <<enum>>
-            Preview
-            Export
         }
 
         class CompilationStatus {
             <<enum>>
-            Queued
             Started
             Succeeded
             Failed
-            Dropped
         }
 
         class ExportFormat {
@@ -508,19 +483,20 @@ classDiagram
         }
 
         class CompilationResult {
-            +UInt64 job_id
-            +CompilationJobKind kind
             +UInt64 source_revision
             +CompilationStatus status
             +PreviewPageFile[]? preview_pages
             +String? export_path
             +String[] diagnostics
+            +DocumentOutline? outline
+            +DocumentResources? resources
         }
 
         class PreviewPageFile {
             +Int page_number
             +String path
             +Boolean changed
+            +String? content
         }
 
         class ErgoWorld {
@@ -533,16 +509,12 @@ classDiagram
         }
     }
 
-    TauriAppState "1" *-- "1" CompilationQueue
-    CompilationQueue "1" *-- "0..*" CompilationJob
-    CompilationQueue "1" --> "1" CompilationQueueSnapshot
-    CompilationQueue ..> ErgoWorld : compiles with
-    CompilationJob "1" --> "1" CompilationJobKind
-    CompilationJob "1" --> "1" CompilationPriority
+    TauriAppState "1" *-- "1" TypstWatch
+    TypstWatch "1" --> "1" WatchSnapshot
+    TypstWatch ..> ErgoWorld : compiles with
     CompilationResult "1" --> "1" CompilationStatus
-    CompilationResult "1" --> "1" CompilationJobKind
     CompilationResult "1" *-- "0..*" PreviewPageFile
-    CompilationQueueSnapshot "1" --> "0..1" CompilationResult
+    WatchSnapshot "1" --> "0..1" CompilationResult
     ErgoWorld "1" o-- "1" VirtualFileSystem
 ```
 
@@ -622,7 +594,7 @@ classDiagram
     }
 
     TauriAppState "1" *-- "1" PreviewSyncState
-    CompilationQueue --> PreviewSyncState : stores successful preview
+    TypstWatch --> PreviewSyncState : stores successful preview
     PreviewSyncState "1" *-- "0..1" RetainedPreviewDocument
     PreviewSyncState "1" --> "1" PreviewSyncStatus
     RetainedPreviewDocument "1" *-- "0..*" PreviewPageMetrics
@@ -661,7 +633,7 @@ classDiagram
 
     class TauriAppState {
         +Arc~VirtualFileSystem~ vfs
-        +Arc~CompilationQueue~ compilation_queue
+        +Arc~TypstWatch~ typst_watch
         +Arc~DocumentSession~ document_session
         +Arc~PreviewSyncState~ preview_sync
     }
@@ -671,7 +643,7 @@ classDiagram
     class ActionInvocation
     class ActionContextNode
     class DocumentSession
-    class CompilationQueue
+    class TypstWatch
     class PreviewSyncState
     class VirtualFileSystem
 
@@ -684,7 +656,7 @@ classDiagram
     ReactRuntime ..> ActionInvocation : dispatches
     ReactRuntime ..> TauriAppState : invokes commands
     TauriAppState "1" *-- "1" DocumentSession
-    TauriAppState "1" *-- "1" CompilationQueue
+    TauriAppState "1" *-- "1" TypstWatch
     TauriAppState "1" *-- "1" PreviewSyncState
     TauriAppState "1" *-- "1" VirtualFileSystem
 ```
@@ -692,7 +664,7 @@ classDiagram
 ## Model Notes
 
 - Frontend document elements do not generate Typst source directly as the canonical path. Rust `DocumentSession` owns canonical source materialization.
-- `main.typ` is generated as a small entry point. Each enabled document section is generated as `sections/{section-id}.typ`.
+- `main.typ` is generated as the document entry point. Each document element is generated as `elements/{element-id}.typ`.
 - `GeneratedFragment` is an internal cache record for one element or section-level fragment. It supports dirty detection and source-map generation but is not persisted as a separate file in v1.
 - `FieldSourceMapEntry` maps generated Typst byte ranges back to editor field IDs. Plain text segments track UTF-16 offsets because browser text selection APIs use UTF-16 code units.
 - `RetainedTextFile.source` represents a retained Typst `Source`. The public `VirtualTextFile` status type exposes text and revision metadata, not the internal Typst source object. Generated preview SVGs are stored as VFS file bytes, not retained text sources.

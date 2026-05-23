@@ -15,7 +15,7 @@ sequenceDiagram
     participant API as Tauri API Client
     participant Session as Rust DocumentSession
     participant VFS as VirtualFileSystem
-    participant Queue as CompilationQueue
+    participant Watch as TypstWatch
     participant Sync as PreviewSyncState
     participant World as ErgoWorld
     participant Typst as Typst Engine
@@ -31,35 +31,30 @@ sequenceDiagram
     State->>API: sync_document_event(event)
     API->>Session: Apply typed DocumentEvent
     Session->>Session: Mutate canonical backend AST
-    Session->>Session: Update dirty element fragments
-    Session->>Session: Assemble dirty section files
-    Session->>VFS: write_source(main.typ, sections/*.typ, metadata)
+    Session->>Session: Regenerate project sources and update fragment cache
+    Session->>VFS: write main.typ, elements/*.typ, metadata
     VFS-->>Session: Return source revisions
     Session-->>API: DocumentSessionStatus(sourceMap, revision)
+    API->>API: emit_resources when snapshot or dirty resource IDs require it
+    API->>Watch: mark_vfs_changed()
 
-    API->>Queue: enqueue_preview_compile()
-    Queue-->>API: CompilationJob(source_revision)
-    Queue-->>API: emit queued / started events
-
-    Queue->>VFS: Snapshot retained Typst sources
-    Queue->>Typst: compile PagedDocument with source snapshot
+    Watch->>VFS: wait until latest_revision > last_compiled_revision
+    Watch->>Typst: compile PagedDocument with ErgoWorld
     Typst->>World: World::source("main.typ")
     World->>VFS: read retained Typst Source
     VFS-->>World: Source
     World-->>Typst: Source
-    Typst->>World: World::source("sections/{id}.typ")
+    Typst->>World: World::source("elements/{id}.typ")
     World->>VFS: read retained Typst Source
     VFS-->>World: Source
     World-->>Typst: Source
 
-    Typst-->>Queue: PagedDocument
-    Queue->>VFS: compare and write changed .ergproj/preview/svg/page-N.svg file bytes
-    Queue->>Sync: store_preview(revision, PagedDocument, sourceMap, sourceSnapshot)
-    Queue->>Queue: derive outline and resources
-    Queue->>Typst: compile missing or changed resource mini-previews
-    Queue->>VFS: write .ergproj/resource-previews/svg/{resource-id}-{hash}.svg
-    Queue-->>API: emit succeeded with preview_pages(changed), outline, and resources
-    API->>VFS: read_preview_svg(page path)
+    Typst-->>Watch: PagedDocument
+    Watch->>VFS: compare and write changed .ergproj/preview/svg/page-N.svg file bytes
+    Watch->>Sync: store_preview(revision, PagedDocument, sourceMap, sourceSnapshot)
+    Watch->>Watch: extract outline from introspector
+    Watch-->>API: emit succeeded with preview_pages(changed) and outline
+    API->>VFS: read_preview_svg(page path) when inline content missing
     VFS-->>API: SVG text
     API-->>Preview: SVG page strings
     Preview-->>Sidebar: Publish compiled outline, resources, and displayed revision
@@ -71,15 +66,14 @@ sequenceDiagram
 - The frontend does not own canonical full Typst source generation.
 - `sync_document_snapshot(ast)` is a cold-path bootstrap for new/opened documents. Normal edits, undo, and redo use `sync_document_event(event)`.
 - `patch_source` remains a lower-level VFS command for focused source edits, but normal document editing syncs typed events to `DocumentSession`.
-- The preview result must be rejected if its source revision is stale.
+- `start_preview_watch` ensures the background watch thread is running for the active project.
 - Preview SVG files under `.ergproj/preview/svg/` are generated artifacts, not authoritative document state.
 - Frontend Typst generation utilities must not be used in the compile path. Backend `DocumentSession` is the only canonical source generator.
 - The Tauri API client uses generated `ts-rs` bindings for all IPC DTOs. Hand-written frontend DTO shadows are not part of the flow.
 - The retained preview document is runtime state only. It contains the compiled `PagedDocument`, source-map snapshot, Typst source snapshot, and page metrics. It is kept for sync and discarded/replaced when a newer non-stale preview compile succeeds.
 - Preview page SVG writes are page-granular. The backend artifact pipeline renders each Typst page through `typst-svg`, compares rendered SVG text with the VFS file bytes, writes only changed pages as generated file artifacts, and marks each `PreviewPageFile.changed` value. The frontend SVG loader keeps unchanged page SVG strings in memory and reloads only changed pages.
-- Preview debounce is disabled by default. When enabled in global settings, `preview_debounce_ms` controls the backend delay used to coalesce pending preview jobs.
-- After a successful, non-stale preview compile, a `DocumentOutline` is extracted from `document.introspector` and attached to the `CompilationResult` emitted by the `COMPILE_SUCCEEDED` event. The preview hook stores the latest outline and the workspace sidebar renders it with heading text and compiled page numbers. Sidebar outline rows map to editor fields and ignore repeated compiled entries that would target the same field. Failed, dropped, and export results carry `outline: null`.
-- The same successful preview result carries `DocumentResources`. The backend derives imported-file, figure, table, equation, and custom resource rows from the canonical AST, compiles missing or changed Typst mini-previews immediately, reuses unchanged preview SVG files by cache key, and records per-resource preview failures without failing the main preview compile.
+- After a successful preview compile, a `DocumentOutline` is extracted from `document.introspector` and attached to the `CompilationResult` emitted by the `COMPILE_SUCCEEDED` event. The preview hook stores the latest outline and the workspace sidebar renders it with heading text and compiled page numbers. Sidebar outline rows map to editor fields and ignore repeated compiled entries that would target the same field. Failed preview results carry `outline: null`.
+- `DocumentResources` is emitted through `ergo-resources-updated` from document sync handlers. The backend derives imported-file, figure, table, equation, and custom resource rows from the canonical AST, compiles the resource preview document on the sync path when required, writes `.ergproj/resource-previews/svg/*`, and records per-resource preview failures without failing the main preview compile.
 
 Undo and redo use the same event pipe:
 
@@ -176,7 +170,7 @@ sequenceDiagram
 The canonical archive state is:
 
 - `main.typ`
-- `sections/{section-id}.typ`
+- `elements/{element-id}.typ`
 - `assets/`: imported resource file bytes referenced by `AssetEntry` metadata.
 - `references.bib`: materialized from form-managed `ReferenceEntry` values.
 - `.ergproj/document_state.json`
@@ -209,14 +203,14 @@ sequenceDiagram
     Archive-->>API: DocumentAST
 
     API->>Session: sync_snapshot(ast)
-    Session->>VFS: regenerate missing/outdated main.typ and sections/*.typ
+    Session->>VFS: regenerate missing/outdated main.typ and elements/*.typ
     Session-->>API: DocumentSessionStatus
     API-->>UI: load AST into frontend state
 ```
 
 ### Open Rule
 
-`.ergproj/document_state.json` is required. The backend mounts archive files into the VFS, reads the structured document state, and materializes `main.typ`, section files, source maps, and metadata from that document state.
+`.ergproj/document_state.json` is required. The backend mounts archive files into the VFS, reads the structured document state, and materializes `main.typ`, element files, source maps, and metadata from that document state.
 
 ## 4. Autosave And Close Events
 
@@ -262,7 +256,7 @@ sequenceDiagram
     end
 ```
 
-## 5. Export Queue
+## 5. Export
 
 ```mermaid
 sequenceDiagram
@@ -270,25 +264,21 @@ sequenceDiagram
 
     participant UI as React UI
     participant API as Tauri API Client
-    participant Queue as CompilationQueue
     participant VFS as VirtualFileSystem
     participant World as ErgoWorld
     participant Typst as Typst Engine
 
-    UI->>API: enqueue_export(format)
-    API->>Queue: enqueue export job
-    Queue-->>API: emit queued
-    Queue->>Queue: wait until preview work is clear
-    Queue->>Typst: compile with ErgoWorld
+    UI->>API: export_document(format)
+    API->>Typst: compile with ErgoWorld on command thread
     Typst->>World: request sources/files
     World->>VFS: read retained sources/assets
     VFS-->>World: Source/Bytes
-    Typst-->>Queue: rendered document
-    Queue->>VFS: write .ergproj/exports/*
-    Queue-->>API: emit succeeded or failed
+    Typst-->>API: rendered document
+    API->>VFS: write .ergproj/exports/*
+    API-->>UI: CompilationResult succeeded or failed
 ```
 
-Export jobs must not overtake pending preview jobs. Preview freshness is prioritized while the user is actively editing.
+Export runs synchronously on the Tauri command thread. It does not pass through `TypstWatch`.
 
 ## 6. Keymap Resolution
 

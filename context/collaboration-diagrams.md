@@ -16,7 +16,7 @@ flowchart LR
     Session["DocumentSession"]
     Cache["Fragment Cache"]
     VFS["Retained-Source VFS"]
-    Queue["CompilationQueue"]
+    Watch["TypstWatch"]
     World["ErgoWorld"]
     Typst["Typst Engine"]
     Preview["Preview Renderer"]
@@ -28,22 +28,23 @@ flowchart LR
     State -- "4: sync_document_event" --> API
     API -- "5: sends typed DocumentEvent" --> Session
     Session -- "6: applies event to canonical AST" --> Session
-    Session -- "7: regenerates dirty fragments" --> Cache
-    Session -- "8: writes main + section files" --> VFS
-    API -- "9: enqueue_preview_compile" --> Queue
-    Queue -- "10: compiles with world" --> Typst
-    Typst -- "11: requests sources/files" --> World
-    World -- "12: reads retained Source/Bytes" --> VFS
-    Queue -- "13: writes preview SVG files" --> VFS
-    Queue -- "14: emits preview page paths" --> API
-    API -- "15: read_preview_svg" --> VFS
-    API -- "16: supplies SVG text" --> Preview
-    Queue -- "17: supplies compiled outline + resources" --> API
-    Preview -- "18: updates sidebar outline, resources + displayed revision" --> Sidebar
-    Sidebar -- "19: dispatches outline focus action" --> Command
-    Preview -- "20: updates document view" --> User
+    Session -- "7: regenerates fragments" --> Cache
+    Session -- "8: writes main + section + element files" --> VFS
+    API -- "9: emit_resources when required" --> VFS
+    API -- "10: mark_vfs_changed" --> Watch
+    Watch -- "11: compiles with world" --> Typst
+    Typst -- "12: requests sources/files" --> World
+    World -- "13: reads retained Source/Bytes" --> VFS
+    Watch -- "14: writes preview SVG files" --> VFS
+    Watch -- "15: emits preview page paths" --> API
+    API -- "16: read_preview_svg or inline content" --> Preview
+    Watch -- "17: supplies compiled outline" --> API
+    API -- "18: supplies resources catalog" --> Preview
+    Preview -- "19: updates sidebar outline, resources + displayed revision" --> Sidebar
+    Sidebar -- "20: dispatches outline focus action" --> Command
+    Preview -- "21: updates document view" --> User
 
-    class UI,Command,State,API,Session,Cache,VFS,Queue,World,Typst,Preview,Sidebar comp;
+    class UI,Command,State,API,Session,Cache,VFS,Watch,World,Typst,Preview,Sidebar comp;
 ```
 
 ## 2. Save And Archive
@@ -71,35 +72,33 @@ flowchart TB
     class State,API,Session,VFS,Archive comp;
 ```
 
-## 3. Preview Vs Export Queueing
+## 3. Preview Watch Vs Export
 
 ```mermaid
 flowchart LR
     classDef comp fill:#f4f6f7,stroke:#34495e,stroke-width:2px,color:#2c3e50;
 
     API["Tauri API Client"]
-    Queue["CompilationQueue"]
-    PreviewJob["Preview SVG Job"]
-    ExportJob["Export Job"]
+    Watch["TypstWatch"]
+    ExportCmd["export_document command"]
     Compiler["Typst Engine"]
     VFS["VirtualFileSystem"]
 
-    API -- "1: enqueue preview on edit" --> Queue
-    API -- "2: enqueue export on user command" --> Queue
-    Queue -- "3: dedupe to latest preview revision" --> PreviewJob
-    Queue -- "4: wait behind preview queue" --> ExportJob
-    PreviewJob -- "5: compile first" --> Compiler
-    Compiler -- "6: write .ergproj/preview/svg" --> VFS
-    ExportJob -- "7: compile after preview work clears" --> Compiler
-    Compiler -- "8: write .ergproj/exports" --> VFS
+    API -- "1: mark_vfs_changed on document sync" --> Watch
+    Watch -- "2: background preview compile" --> Compiler
+    Compiler -- "3: write .ergproj/preview/svg" --> VFS
+    API -- "4: export_document on user command" --> ExportCmd
+    ExportCmd -- "5: synchronous compile on IPC thread" --> Compiler
+    Compiler -- "6: write .ergproj/exports" --> VFS
 
-    class API,Queue,PreviewJob,ExportJob,Compiler,VFS comp;
+    class API,Watch,ExportCmd,Compiler,VFS comp;
 ```
 
 ## Collaboration Notes
 
 - Bootstrap sends a document snapshot; normal edits, undo, and redo send typed document events, not canonical full Typst source or full AST snapshots.
 - Saves pack the backend session's mounted VFS state. They do not receive a frontend AST payload.
-- Dirty element fragments are cached in `DocumentSession`; dirty sections are assembled into section files.
+- Dirty element fragments are cached in `DocumentSession`; section files assemble fragment includes.
 - `VirtualFileSystem` is the compile surface. It normalizes paths and retains Typst `Source` objects for incremental parsing.
-- `CompilationQueue` is responsible for dedupe, preview priority, stale-result dropping, and export ordering.
+- `TypstWatch` owns background preview compilation. `export_document` is a separate synchronous export path.
+- Resource catalog updates and resource preview SVG writes run from document sync handlers when snapshots or dirty resource IDs require them.
