@@ -44,11 +44,11 @@ impl WorldSourceSnapshot {
 }
 
 pub struct ErgoWorld {
-    vfs: Arc<VirtualFileSystem>,
+    pub(crate) vfs: Arc<VirtualFileSystem>,
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
     fonts: Arc<Vec<Font>>,
-    main: FileId,
+    pub(crate) main: FileId,
 }
 
 impl ErgoWorld {

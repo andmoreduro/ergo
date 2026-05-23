@@ -49,10 +49,6 @@ pub struct GlobalSettings {
     #[serde(default)]
     pub keymap_overrides: Vec<KeyBindingPreference>,
     #[serde(default)]
-    pub preview_debounce_enabled: Option<bool>,
-    #[serde(default)]
-    pub preview_debounce_ms: Option<usize>,
-    #[serde(default)]
     pub history_limit: Option<usize>,
     #[serde(default)]
     pub autosave_enabled: Option<bool>,
@@ -76,8 +72,6 @@ impl Default for GlobalSettings {
             recent_projects: Vec::new(),
             keymap_profile: Some("Default".to_string()),
             keymap_overrides: Vec::new(),
-            preview_debounce_enabled: Some(false),
-            preview_debounce_ms: Some(120),
             history_limit: Some(100),
             autosave_enabled: Some(true),
             autosave_interval_ms: Some(30_000),

@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 const VERSATILE_APA_TEMPLATE: &str =
     include_str!("../resources/templates/versatile-apa/template.json");
 
 // ─── Template Spec Root ────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct TemplateSpec {
     pub template: TemplateIdentity,
     pub package: PackageSpec,
@@ -24,7 +26,8 @@ pub struct TemplateSpec {
     pub defaults: Option<DefaultsSpec>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct TemplateIdentity {
     pub id: String,
     pub name: String,
@@ -35,19 +38,23 @@ pub struct TemplateIdentity {
 
 // ─── Package & Imports ─────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct PackageSpec {
     pub name: String,
     pub version: String,
+    #[ts(skip)]
     pub imports: Vec<ImportSymbol>,
     #[serde(default)]
     pub dependencies: Vec<PackageDependency>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct PackageDependency {
     pub name: String,
     pub version: String,
+    #[ts(skip)]
     pub imports: Vec<ImportSymbol>,
 }
 
@@ -69,7 +76,8 @@ impl ImportSymbol {
 
 // ─── Show Rule ─────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct ShowRuleSpec {
     pub function: String,
     #[serde(default)]
@@ -78,8 +86,9 @@ pub struct ShowRuleSpec {
 
 // ─── Inputs Schema ──────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../src/bindings/")]
 pub enum InputType {
     String,
     Integer,
@@ -91,8 +100,9 @@ pub enum InputType {
     Content,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../src/bindings/")]
 pub enum Importance {
     Required,
     Recommended,
@@ -105,7 +115,8 @@ impl Default for Importance {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct InputSchema {
     #[serde(default)]
     pub id: Option<String>,
@@ -116,6 +127,7 @@ pub struct InputSchema {
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
+    #[ts(type = "unknown")]
     pub default: Option<serde_json::Value>,
     #[serde(default)]
     pub importance: Importance,
@@ -129,7 +141,8 @@ pub struct InputSchema {
 
 // ─── Groups Schema ──────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct InputGroupSpec {
     pub id: String,
     pub label: String,
@@ -138,7 +151,8 @@ pub struct InputGroupSpec {
 
 // ─── Custom Elements Schema ─────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct CustomElementSpec {
     pub kind: String,
     pub label: String,
@@ -150,7 +164,8 @@ pub struct CustomElementSpec {
 
 // ─── Parameters ────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct ParamSpec {
     pub key: String,
     #[serde(rename = "type")]
@@ -160,13 +175,15 @@ pub struct ParamSpec {
     #[serde(default)]
     pub label: Option<String>,
     #[serde(default)]
+    #[ts(type = "unknown")]
     pub default: Option<serde_json::Value>,
     #[serde(default)]
     pub required: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../src/bindings/")]
 pub enum ParamType {
     Content,
     String,
@@ -183,7 +200,8 @@ pub enum ParamType {
 
 // ─── Sections ──────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct SectionSpec {
     pub id: String,
     pub kind: SectionKind,
@@ -211,8 +229,9 @@ pub struct SectionSpec {
     pub pagebreak_before: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../src/bindings/")]
 pub enum SectionKind {
     FunctionCall,
     Literal,
@@ -221,7 +240,8 @@ pub enum SectionKind {
     Appendix,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct ExtraFieldSpec {
     pub key: String,
     #[serde(rename = "type")]
@@ -229,7 +249,8 @@ pub struct ExtraFieldSpec {
     pub label: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct ElementOverrideSpec {
     pub function: Option<String>,
     pub wrapper: Option<String>,
@@ -237,13 +258,15 @@ pub struct ElementOverrideSpec {
     pub extra_fields: Vec<ExtraFieldSpec>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct ElementOverrides {
     pub figure: Option<ElementOverrideSpec>,
     pub table: Option<ElementOverrideSpec>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct ResourcePolicySpec {
     #[serde(default)]
     pub preview: Option<ResourcePreviewPolicySpec>,
@@ -251,7 +274,8 @@ pub struct ResourcePolicySpec {
     pub pasted_image: Option<PastedImagePolicySpec>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct ResourcePreviewPolicySpec {
     #[serde(default)]
     pub width_pt: Option<f32>,
@@ -261,7 +285,8 @@ pub struct ResourcePreviewPolicySpec {
     pub wrapper: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct PastedImagePolicySpec {
     #[serde(default = "default_pasted_image_behavior")]
     pub behavior: String,
@@ -275,7 +300,8 @@ fn default_pasted_image_behavior() -> String {
 
 // ─── Defaults ──────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/bindings/")]
 pub struct DefaultsSpec {
     #[serde(default)]
     pub paper_size: Option<String>,

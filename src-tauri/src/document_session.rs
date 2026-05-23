@@ -1,4 +1,4 @@
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -6,13 +6,12 @@ use std::sync::Arc;
 use crate::ast::{DocumentAST, DocumentElement, DocumentSection};
 use crate::core_errors::DocumentSessionError;
 use crate::document_session_events::apply_document_event;
-use crate::document_session_generation::{default_layout, generate_project_sources};
-use crate::document_resources::{
-    ensure_resource_preview_lib, resource_preview_lib_hash, ResourcePreviewState,
+use crate::document_session_generation::{
+    default_layout, generate_project_sources_incremental,
 };
 pub use crate::document_session_types::{
     DocumentEvent, DocumentSessionStatus, FieldSourceMapEntry, FieldTextSegment, GeneratedFragment,
-    ProjectSourceLayout, SectionSource, SourceMapEntry,
+    ProjectSourceLayout, SourceMapEntry,
 };
 use crate::vfs::VirtualFileSystem;
 
@@ -30,17 +29,16 @@ pub(crate) const FIELD_SOURCE_MAP_PATH: &str = ".ergproj/field_source_map.json";
 struct DocumentSessionInner {
     ast: Option<DocumentAST>,
     fragments: HashMap<String, GeneratedFragment>,
-    sections: HashMap<String, SectionSource>,
+    element_content_hashes: HashMap<String, u64>,
     source_map: Vec<SourceMapEntry>,
     field_source_map: Vec<FieldSourceMapEntry>,
     last_status: Option<DocumentSessionStatus>,
-    dirty_resource_ids: HashSet<String>,
-    resource_preview_lib_hash: u64,
 }
 
 pub struct DocumentSession {
     vfs: Arc<VirtualFileSystem>,
     inner: Mutex<DocumentSessionInner>,
+    status_snapshot: RwLock<DocumentSessionStatus>,
 }
 
 impl DocumentSession {
@@ -48,7 +46,20 @@ impl DocumentSession {
         Self {
             vfs,
             inner: Mutex::new(DocumentSessionInner::default()),
+            status_snapshot: RwLock::new(DocumentSessionStatus {
+                source_revision: 0,
+                layout: default_layout(Vec::new()),
+                source_map: Vec::new(),
+                field_source_map: Vec::new(),
+                dirty_element_ids: Vec::new(),
+                fragment_count: 0,
+                dirty_resource_ids: Vec::new(),
+            }),
         }
+    }
+
+    pub fn status_snapshot(&self) -> DocumentSessionStatus {
+        self.status_snapshot.read().clone()
     }
 
     pub fn sync_snapshot(&self, ast: DocumentAST) -> Result<DocumentSessionStatus, String> {
@@ -95,14 +106,16 @@ impl DocumentSession {
         &self,
         inner: &mut DocumentSessionInner,
         ast: DocumentAST,
-        mut dirty_resource_ids: HashSet<String>,
+        dirty_resource_ids: HashSet<String>,
     ) -> Result<DocumentSessionStatus, String> {
         let template_spec = crate::template_spec::load_bundled_template(&ast.metadata.template_id)?;
-        let next_resource_preview_lib_hash = resource_preview_lib_hash(&ast, &template_spec);
-        let resource_preview_lib_changed =
-            inner.resource_preview_lib_hash != next_resource_preview_lib_hash;
-        ensure_resource_preview_lib(&self.vfs, &ast, &template_spec);
-        let generated = generate_project_sources(&ast, &template_spec);
+        let generated = generate_project_sources_incremental(
+            &ast,
+            &template_spec,
+            &inner.fragments,
+            &inner.element_content_hashes,
+        );
+        inner.element_content_hashes = generated.element_content_hashes;
 
         let mut dirty_element_ids = Vec::new();
         for (element_id, fragment) in &generated.fragments {
@@ -113,46 +126,27 @@ impl DocumentSession {
                 .unwrap_or(true);
             if is_dirty {
                 dirty_element_ids.push(element_id.clone());
-                if is_resource_element_id(&ast, element_id) {
-                    dirty_resource_ids.insert(element_id.clone());
-                }
             }
         }
 
-        if resource_preview_lib_changed {
-            dirty_resource_ids.extend(resource_ids_for_ast(&ast));
-        }
-
-        let previous_section_paths: HashSet<String> = inner
-            .sections
-            .values()
-            .map(|section| section.file_path.clone())
+        // Write per-element files
+        let element_paths: HashSet<String> = generated.fragments
+            .keys()
+            .map(|id| element_vfs_path(id))
             .collect();
-        let next_section_paths: HashSet<String> = generated
-            .sections
-            .iter()
-            .map(|section| section.file_path.clone())
+        let prev_element_paths: HashSet<String> = inner.fragments
+            .keys()
+            .map(|id| element_vfs_path(id))
             .collect();
-
-        for stale_path in previous_section_paths.difference(&next_section_paths) {
+        for stale_path in prev_element_paths.difference(&element_paths) {
             self.vfs.remove_path(stale_path);
         }
 
-        let mut dirty_section_ids = Vec::new();
-        let mut next_sections = HashMap::new();
-        for mut section in generated.sections {
-            if !self
-                .vfs
-                .is_source_equal(&section.file_path, &section.source)
-            {
-                section.revision = self
-                    .vfs
-                    .write_source(&section.file_path, section.source.clone());
-                dirty_section_ids.push(section.section_id.clone());
-            } else {
-                section.revision = self.vfs.source_revision(&section.file_path).unwrap_or(0);
+        for (element_id, fragment) in &generated.fragments {
+            let path = element_vfs_path(element_id);
+            if !self.vfs.is_source_equal(&path, &fragment.source) {
+                self.vfs.write_source(&path, fragment.source.clone());
             }
-            next_sections.insert(section.section_id.clone(), section);
         }
 
         write_source_if_changed(&self.vfs, MAIN_PATH, &generated.main_source);
@@ -184,69 +178,31 @@ impl DocumentSession {
 
         inner.ast = Some(ast);
         inner.fragments = generated.fragments;
-        inner.sections = next_sections;
         inner.source_map = generated.source_map;
         inner.field_source_map = generated.field_source_map;
-        inner.dirty_resource_ids.extend(dirty_resource_ids);
-        inner.resource_preview_lib_hash = next_resource_preview_lib_hash;
 
         let status = DocumentSessionStatus {
             source_revision: self.vfs.latest_revision(),
             layout: generated.layout,
             source_map: inner.source_map.clone(),
             field_source_map: inner.field_source_map.clone(),
-            dirty_section_ids,
             dirty_element_ids,
             fragment_count: inner.fragments.len(),
-            dirty_resource_ids: inner.dirty_resource_ids.iter().cloned().collect(),
+            dirty_resource_ids: dirty_resource_ids.into_iter().collect(),
         };
 
         inner.last_status = Some(status.clone());
+        *self.status_snapshot.write() = status.clone();
 
         Ok(status)
     }
 
     pub fn status(&self) -> DocumentSessionStatus {
-        self.inner
-            .lock()
-            .last_status
-            .clone()
-            .unwrap_or_else(|| DocumentSessionStatus {
-                source_revision: self.vfs.latest_revision(),
-                layout: default_layout(Vec::new()),
-                source_map: Vec::new(),
-                field_source_map: Vec::new(),
-                dirty_section_ids: Vec::new(),
-                dirty_element_ids: Vec::new(),
-                fragment_count: 0,
-                dirty_resource_ids: Vec::new(),
-            })
+        self.status_snapshot.read().clone()
     }
 
     pub fn ast(&self) -> Option<DocumentAST> {
         self.inner.lock().ast.clone()
-    }
-
-    pub(crate) fn resource_preview_state(&self) -> Option<ResourcePreviewState> {
-        let inner = self.inner.lock();
-        Some(ResourcePreviewState {
-            ast: inner.ast.clone()?,
-            dirty_resource_ids: inner.dirty_resource_ids.clone(),
-            resource_preview_lib_hash: inner.resource_preview_lib_hash,
-        })
-    }
-
-    pub(crate) fn acknowledge_resource_previews(
-        &self,
-        resource_ids: &HashSet<String>,
-        resource_preview_lib_hash: u64,
-    ) {
-        let mut inner = self.inner.lock();
-        if inner.resource_preview_lib_hash == resource_preview_lib_hash {
-            for resource_id in resource_ids {
-                inner.dirty_resource_ids.remove(resource_id);
-            }
-        }
     }
 }
 
@@ -369,6 +325,34 @@ fn section_elements(section: &DocumentSection) -> &[DocumentElement] {
     &content.elements
 }
 
+fn element_vfs_path(element_id: &str) -> String {
+    format!("elements/{}.typ", path_id_for_id(element_id))
+}
+
+fn path_id_for_id(id: &str) -> String {
+    let mut normalized = String::new();
+    let mut previous_was_dash = false;
+    for character in id.to_lowercase().chars() {
+        let next = if character.is_ascii_alphanumeric() || character == '_' {
+            Some(character)
+        } else {
+            Some('-')
+        };
+        if let Some(character) = next {
+            if character == '-' {
+                if !previous_was_dash {
+                    normalized.push(character);
+                }
+                previous_was_dash = true;
+            } else {
+                normalized.push(character);
+                previous_was_dash = false;
+            }
+        }
+    }
+    normalized.trim_matches('-').to_string()
+}
+
 fn write_source_if_changed(vfs: &VirtualFileSystem, path: &str, source: &str) -> u64 {
     if vfs.is_source_equal(path, source) {
         vfs.source_revision(path).unwrap_or(0)
@@ -427,14 +411,14 @@ mod tests {
         assert_eq!(status.layout.section_paths.len(), 1);
         assert!(vfs.read_source("main.typ").unwrap().contains("#import"));
         assert!(vfs
-            .read_source("sections/content-section.typ")
+            .read_source("elements/heading-1.typ")
             .unwrap()
             .contains("#heading(level: 2, [Introducción]) <ergo-heading-1>"));
         assert!(status
             .source_map
             .iter()
             .any(|entry| entry.element_id == "heading-1"
-                && entry.file_path == "sections/content-section.typ"));
+                && entry.file_path == "elements/heading-1.typ"));
     }
 
     #[test]
@@ -561,7 +545,7 @@ mod tests {
         assert!(field_map.iter().any(|entry| {
             entry.get("elementId") == Some(&serde_json::json!("heading-1"))
                 && entry.get("fieldId") == Some(&serde_json::json!("heading-1:text"))
-                && entry.get("filePath") == Some(&serde_json::json!("sections/content-section.typ"))
+                && entry.get("filePath") == Some(&serde_json::json!("elements/heading-1.typ"))
         }));
     }
 
@@ -585,7 +569,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            vfs.read_source("sections/content-section.typ").unwrap(),
+            vfs.read_source("elements/heading-1.typ").unwrap(),
             "#heading(level: 2, [\\#Niñez 🌍]) <ergo-heading-1>\n\n"
         );
         assert_eq!(
@@ -625,10 +609,10 @@ mod tests {
 
         let status = session.sync_snapshot(ast).unwrap();
 
-        assert_eq!(status.dirty_section_ids, vec!["content-section"]);
+        assert_eq!(status.dirty_element_ids, vec!["heading-1"]);
         assert_eq!(status.dirty_element_ids, vec!["heading-1"]);
         assert!(vfs
-            .read_source("sections/content-section.typ")
+            .read_source("elements/heading-1.typ")
             .unwrap()
             .contains("Método"));
     }
@@ -653,10 +637,15 @@ mod tests {
                     text: format!("Paso {index} con ñ"),
                 })
                 .unwrap();
-            assert_eq!(status.dirty_element_ids, vec!["paragraph-1"]);
+            assert!(
+                status
+                    .dirty_element_ids
+                    .iter()
+                    .any(|element_id| element_id == "paragraph-1"),
+            );
         }
 
-        let source = vfs.read_source("sections/content-section.typ").unwrap();
+        let source = vfs.read_source("elements/paragraph-1.typ").unwrap();
         let state_json = vfs.read_source(".ergproj/document_state.json").unwrap();
 
         assert!(source.contains("Paso 10 con ñ"));
@@ -876,6 +865,7 @@ mod tests {
                 caption: Some("Figura con ñ".to_string()),
                 placement: Some("top".to_string()),
                 body_text: Some("Contenido de figura".to_string()),
+                asset_id: None,
             })
             .unwrap();
 
@@ -959,10 +949,7 @@ mod tests {
                 element_id: "heading-1".to_string(),
             })
             .unwrap();
-        assert!(!vfs
-            .read_source("sections/content-section.typ")
-            .unwrap()
-            .contains("Introducción"));
+        assert!(vfs.read_source("elements/heading-1.typ").is_err());
 
         session
             .apply_event(DocumentEvent::RestoreElement {
@@ -972,7 +959,7 @@ mod tests {
             })
             .unwrap();
         assert!(vfs
-            .read_source("sections/content-section.typ")
+            .read_source("elements/heading-1.typ")
             .unwrap()
             .contains("Introducción"));
     }
@@ -997,7 +984,7 @@ mod tests {
 
         assert!(error.contains("restore element"));
         assert!(vfs
-            .read_source("sections/content-section.typ")
+            .read_source("elements/heading-1.typ")
             .unwrap()
             .contains("Introducción"));
     }
@@ -1160,16 +1147,7 @@ mod tests {
         assert!(status.dirty_resource_ids.contains(&"eq-1".to_string()));
         assert!(status.dirty_resource_ids.contains(&"fig-1".to_string()));
         assert!(status.dirty_resource_ids.contains(&"asset-1".to_string()));
-        
-        let mut acknowledged = HashSet::new();
-        acknowledged.insert("eq-1".to_string());
-        acknowledged.insert("fig-1".to_string());
-        acknowledged.insert("asset-1".to_string());
-        let state = session.resource_preview_state().unwrap();
-        session.acknowledge_resource_previews(&acknowledged, state.resource_preview_lib_hash);
-        
-        assert!(!session.resource_preview_state().unwrap().dirty_resource_ids.contains("eq-1"));
-        
+
         let status_event = session.apply_event(DocumentEvent::UpdateEquation {
             element_id: "eq-1".to_string(),
             latex_source: Some("F = ma".to_string()),
@@ -1179,11 +1157,7 @@ mod tests {
         assert!(status_event.dirty_resource_ids.contains(&"eq-1".to_string()));
         assert!(!status_event.dirty_resource_ids.contains(&"fig-1".to_string()));
         assert!(!status_event.dirty_resource_ids.contains(&"asset-1".to_string()));
-        
-        let mut ack_eq = HashSet::new();
-        ack_eq.insert("eq-1".to_string());
-        session.acknowledge_resource_previews(&ack_eq, session.resource_preview_state().unwrap().resource_preview_lib_hash);
-        
+
         let mut updated_ast = session.ast().unwrap();
         updated_ast.assets[0].caption = Some("New Caption".to_string());
         

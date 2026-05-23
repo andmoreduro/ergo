@@ -1,82 +1,19 @@
 use std::collections::hash_map::DefaultHasher;
-use std::fmt::Write as FmtWrite;
-use std::hash::Hasher;
-use std::sync::Arc;
+use std::hash::{Hash, Hasher};
 
 use typst::diag::{Severity, SourceDiagnostic};
-use typst::layout::{Page, PagedDocument};
+use typst::layout::{Frame, FrameItem, Page, PagedDocument};
 
-use crate::compilation_types::{
-    CompilationJob, CompilationResult, CompilationStatus, ExportFormat, PreviewPageFile,
-};
+use crate::compilation_types::PreviewPageFile;
 use crate::core_errors::CompileError;
-use crate::document_outline::DocumentOutline;
-use crate::path_utils::file_id_for_virtual_path;
 use crate::vfs::VirtualFileSystem;
-use crate::world::{ErgoWorld, SnapshotWorld, WorldSourceSnapshot};
+use crate::world::ErgoWorld;
 
-pub(crate) fn result_for_job(job: &CompilationJob, status: CompilationStatus) -> CompilationResult {
-    CompilationResult {
-        job_id: job.job_id,
-        kind: job.kind.clone(),
-        source_revision: job.source_revision,
-        status,
-        preview_pages: None,
-        export_path: None,
-        diagnostics: Vec::new(),
-        outline: None,
-        resources: None,
-    }
-}
-
-pub(crate) fn failed_result(job: &CompilationJob, message: String) -> CompilationResult {
-    let mut result = result_for_job(job, CompilationStatus::Failed);
-    result.diagnostics = vec![message];
-    result
-}
-
-pub(crate) fn successful_preview_result(
-    job: &CompilationJob,
-    preview_dir: &str,
-    preview_pages: Vec<PreviewPageFile>,
-    outline: DocumentOutline,
-    resources: crate::document_resources::DocumentResources,
-) -> CompilationResult {
-    let mut result = result_for_job(job, CompilationStatus::Succeeded);
-    result.preview_pages = Some(preview_pages);
-    result.export_path = Some(preview_dir.to_string());
-    result.outline = Some(outline);
-    result.resources = Some(resources);
-    result
-}
-
-fn compile_document(vfs: Arc<VirtualFileSystem>) -> Result<PagedDocument, CompileError> {
-    let world = ErgoWorld::new(vfs, file_id_for_virtual_path("main.typ"));
-
-    match typst::compile::<PagedDocument>(&world).output {
+pub(crate) fn compile_document(world: &ErgoWorld) -> Result<PagedDocument, CompileError> {
+    match typst::compile::<PagedDocument>(world).output {
         Ok(document) => Ok(document),
         Err(errors) => Err(CompileError::Operation(format_source_diagnostics(&errors))),
     }
-}
-
-pub(crate) fn compile_document_snapshot(
-    vfs: &Arc<VirtualFileSystem>,
-) -> Result<(PagedDocument, WorldSourceSnapshot), CompileError> {
-    let source_snapshot = WorldSourceSnapshot::from_vfs(vfs);
-    let world = SnapshotWorld::new(
-        source_snapshot.clone(),
-        file_id_for_virtual_path("main.typ"),
-    );
-
-    match typst::compile::<PagedDocument>(&world).output {
-        Ok(document) => Ok((document, source_snapshot)),
-        Err(errors) => Err(CompileError::Operation(format_source_diagnostics(&errors))),
-    }
-}
-
-fn compile_svgs(vfs: Arc<VirtualFileSystem>) -> Result<Vec<String>, CompileError> {
-    let document = compile_document(vfs)?;
-    Ok(render_svgs(&document))
 }
 
 fn format_source_diagnostics(errors: &[SourceDiagnostic]) -> String {
@@ -102,20 +39,45 @@ pub(crate) fn render_svgs(document: &PagedDocument) -> Vec<String> {
     document.pages.par_iter().map(typst_svg::svg).collect()
 }
 
-/// Feeds `fmt::Debug` output directly into a `Hasher` without allocating a String.
-struct DebugHasher(DefaultHasher);
-
-impl FmtWrite for DebugHasher {
-    fn write_str(&mut self, s: &str) -> std::fmt::Result {
-        self.0.write(s.as_bytes());
-        Ok(())
-    }
+fn fingerprint_page(page: &Page) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    page.frame.width().hash(&mut hasher);
+    page.frame.height().hash(&mut hasher);
+    page.number.hash(&mut hasher);
+    hash_frame_for_fingerprint(&page.frame, &mut hasher);
+    hasher.finish()
 }
 
-fn fingerprint_page(page: &Page) -> u64 {
-    let mut hasher = DebugHasher(DefaultHasher::new());
-    let _ = write!(hasher, "{:?}", page);
-    hasher.0.finish()
+fn hash_frame_for_fingerprint(frame: &Frame, hasher: &mut DefaultHasher) {
+    frame.items().len().hash(hasher);
+    for (_, item) in frame.items() {
+        match item {
+            FrameItem::Text(text) => {
+                text.font.hash(hasher);
+                text.size.hash(hasher);
+                text.glyphs.len().hash(hasher);
+                for glyph in &text.glyphs {
+                    glyph.span.hash(hasher);
+                    glyph.range.hash(hasher);
+                    glyph.x_advance.hash(hasher);
+                    glyph.y_offset.hash(hasher);
+                }
+            }
+            FrameItem::Group(group) => {
+                group.transform.hash(hasher);
+                hash_frame_for_fingerprint(&group.frame, hasher);
+            }
+            FrameItem::Shape(shape, size) => {
+                shape.hash(hasher);
+                size.hash(hasher);
+            }
+            FrameItem::Image(image, size, _) => {
+                image.hash(hasher);
+                size.hash(hasher);
+            }
+            FrameItem::Link(_, _) | FrameItem::Tag(_) => {}
+        }
+    }
 }
 
 struct CachedSvgPage {
@@ -123,8 +85,6 @@ struct CachedSvgPage {
     svg: String,
 }
 
-/// Per-page SVG rendering cache that stores fingerprints and rendered SVG
-/// strings to skip re-rendering unchanged pages across compilations.
 pub(crate) struct SvgPageCache {
     entries: Vec<CachedSvgPage>,
 }
@@ -137,25 +97,20 @@ impl SvgPageCache {
     }
 }
 
-/// Renders SVGs only for pages whose content fingerprint changed since the
-/// last compilation. Unchanged pages reuse their cached SVG strings.
 pub(crate) fn render_svgs_incremental(
     document: &PagedDocument,
     cache: &mut SvgPageCache,
 ) -> Vec<String> {
     use rayon::prelude::*;
 
-    // 1. Compute fingerprints for all pages (parallel, cheap)
     let fingerprints: Vec<u64> = document.pages.par_iter().map(fingerprint_page).collect();
 
-    // 2. Identify which pages need re-rendering
     let needs_render: Vec<bool> = fingerprints
         .iter()
         .enumerate()
         .map(|(i, fp)| cache.entries.get(i).map_or(true, |e| e.fingerprint != *fp))
         .collect();
 
-    // 3. Render only changed pages in parallel
     let rendered: Vec<Option<String>> = (0..document.pages.len())
         .into_par_iter()
         .map(|i| {
@@ -167,7 +122,6 @@ pub(crate) fn render_svgs_incremental(
         })
         .collect();
 
-    // 4. Assemble: new SVGs for changed pages, cached for unchanged
     let mut old_entries: Vec<Option<CachedSvgPage>> = cache.entries.drain(..).map(Some).collect();
 
     let svgs: Vec<String> = rendered
@@ -184,7 +138,6 @@ pub(crate) fn render_svgs_incremental(
         })
         .collect();
 
-    // 5. Rebuild cache
     cache.entries = fingerprints
         .into_iter()
         .zip(svgs.iter().cloned())
@@ -226,60 +179,13 @@ pub(crate) fn write_svg_pages(
             changed: changed_pages[index],
             page_number: index + 1,
             path: format!("{}/page-{}.svg", directory, index + 1),
+            content: if changed_pages[index] {
+                Some(svgs[index].clone())
+            } else {
+                None
+            },
         })
         .collect()
-}
-
-pub(crate) fn run_export_job(
-    vfs: &Arc<VirtualFileSystem>,
-    job: &CompilationJob,
-    format: &ExportFormat,
-) -> CompilationResult {
-    match format {
-        ExportFormat::Svg => match compile_svgs(Arc::clone(vfs)) {
-            Ok(svgs) => {
-                let export_dir = ".ergproj/exports/svg";
-                write_svg_pages(vfs, export_dir, &svgs);
-
-                let mut result = result_for_job(job, CompilationStatus::Succeeded);
-                result.export_path = Some(export_dir.to_string());
-                result
-            }
-            Err(error) => failed_result(job, error.to_string()),
-        },
-        ExportFormat::Pdf => match compile_document(Arc::clone(vfs)) {
-            Ok(document) => match typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default()) {
-                Ok(bytes) => {
-                    let export_path = ".ergproj/exports/document.pdf";
-                    vfs.write_file(export_path, bytes);
-                    let mut result = result_for_job(job, CompilationStatus::Succeeded);
-                    result.export_path = Some(export_path.to_string());
-                    result
-                }
-                Err(errors) => failed_result(job, format_source_diagnostics(&errors)),
-            },
-            Err(error) => failed_result(job, error.to_string()),
-        },
-        ExportFormat::Png => match compile_document(Arc::clone(vfs)) {
-            Ok(document) => {
-                let export_dir = ".ergproj/exports/png";
-                for (index, page) in document.pages.iter().enumerate() {
-                    let pixmap = typst_render::render(page, 2.0);
-                    match pixmap.encode_png() {
-                        Ok(bytes) => {
-                            vfs.write_file(&format!("{}/page-{}.png", export_dir, index + 1), bytes)
-                        }
-                        Err(error) => return failed_result(job, error.to_string()),
-                    }
-                }
-
-                let mut result = result_for_job(job, CompilationStatus::Succeeded);
-                result.export_path = Some(export_dir.to_string());
-                result
-            }
-            Err(error) => failed_result(job, error.to_string()),
-        },
-    }
 }
 
 #[cfg(test)]
@@ -287,101 +193,10 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::compilation_types::{CompilationJobKind, CompilationPriority};
-    use crate::document_outline::{DocumentOutline, OutlineEntry};
-    use crate::document_resources::{
-        DocumentResources, ResourceEntry, ResourceGroup, ResourceKind, ResourcePreview,
-        ResourcePreviewStatus,
-    };
     use crate::document_session::DocumentSession;
+    use crate::path_utils::file_id_for_virtual_path;
     use crate::test_fixtures::basic_document_ast;
-
-    fn preview_job() -> CompilationJob {
-        CompilationJob {
-            job_id: 42,
-            kind: CompilationJobKind::PreviewSvg,
-            priority: CompilationPriority::Preview,
-            source_revision: 7,
-        }
-    }
-
-    #[test]
-    fn successful_preview_result_includes_outline() {
-        let pages = vec![PreviewPageFile {
-            changed: true,
-            page_number: 1,
-            path: ".ergproj/preview/svg/page-1.svg".to_string(),
-        }];
-        let outline = DocumentOutline {
-            entries: vec![OutlineEntry {
-                level: 2,
-                text: "Method".to_string(),
-                page: 1,
-            }],
-        };
-
-        let result = successful_preview_result(
-            &preview_job(),
-            ".ergproj/preview/svg",
-            pages.clone(),
-            outline.clone(),
-            DocumentResources::default(),
-        );
-
-        assert_eq!(result.status, CompilationStatus::Succeeded);
-        assert_eq!(result.preview_pages, Some(pages));
-        assert_eq!(result.export_path, Some(".ergproj/preview/svg".to_string()));
-        assert_eq!(result.outline, Some(outline));
-    }
-
-    #[test]
-    fn successful_preview_result_includes_resources() {
-        let pages = vec![PreviewPageFile {
-            changed: true,
-            page_number: 1,
-            path: ".ergproj/preview/svg/page-1.svg".to_string(),
-        }];
-        let outline = DocumentOutline { entries: vec![] };
-        let resources = DocumentResources {
-            groups: vec![ResourceGroup {
-                kind: ResourceKind::Equation,
-                label: "Equations".to_string(),
-                entries: vec![ResourceEntry {
-                    id: "equation-1".to_string(),
-                    kind: ResourceKind::Equation,
-                    label: "Equation".to_string(),
-                    subtitle: None,
-                    reference_token: "@ergo-equation-1".to_string(),
-                    source_element_id: Some("equation-1".to_string()),
-                    asset_id: None,
-                    preview: ResourcePreview {
-                        status: ResourcePreviewStatus::Ready,
-                        path: Some(".ergproj/resource-previews/svg/equation-1.svg".to_string()),
-                        diagnostic: None,
-                    },
-                }],
-            }],
-        };
-
-        let result = successful_preview_result(
-            &preview_job(),
-            ".ergproj/preview/svg",
-            pages,
-            outline,
-            resources.clone(),
-        );
-
-        assert_eq!(result.resources, Some(resources));
-    }
-
-    #[test]
-    fn failed_preview_result_has_no_outline() {
-        let result = failed_result(&preview_job(), "compile failed".to_string());
-
-        assert_eq!(result.status, CompilationStatus::Failed);
-        assert_eq!(result.diagnostics, vec!["compile failed"]);
-        assert!(result.outline.is_none());
-    }
+    use crate::vfs::VirtualFileSystem;
 
     #[test]
     fn compiles_svg_from_multifile_vfs_sources() {
@@ -394,8 +209,10 @@ mod tests {
             "sections/content.typ",
             "= Título\n\nTexto con ñ.\n".to_string(),
         );
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
 
-        let svgs = compile_svgs(vfs).unwrap();
+        let document = compile_document(&world).unwrap();
+        let svgs = render_svgs(&document);
 
         assert!(!svgs.is_empty());
         assert!(svgs[0].contains("<svg"));
@@ -405,8 +222,9 @@ mod tests {
     fn compile_errors_use_plain_diagnostics() {
         let vfs = Arc::new(VirtualFileSystem::new());
         vfs.write_source("main.typ", "#let =".to_string());
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
 
-        let error = compile_svgs(vfs).unwrap_err().to_string();
+        let error = compile_document(&world).unwrap_err().to_string();
 
         assert!(!error.contains("SourceDiagnostic"));
         assert!(!error.contains("Tracepoint"));
@@ -418,24 +236,13 @@ mod tests {
     fn compiles_svg_from_document_session_sources() {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
         session
             .sync_snapshot(basic_document_ast("Título con ñ", "Resumen breve."))
             .unwrap();
 
-        if let Ok(main_content) = vfs.read_file("main.typ") {
-            println!(
-                "=== main.typ ===\n{}",
-                String::from_utf8(main_content).unwrap()
-            );
-        }
-        if let Ok(abstract_content) = vfs.read_file("sections/abstract-page.typ") {
-            println!(
-                "=== abstract-page.typ ===\n{}",
-                String::from_utf8(abstract_content).unwrap()
-            );
-        }
-
-        let svgs = compile_svgs(vfs).unwrap();
+        let document = compile_document(&world).unwrap();
+        let svgs = render_svgs(&document);
 
         assert!(!svgs.is_empty());
         assert!(svgs[0].contains("<svg"));
@@ -446,12 +253,13 @@ mod tests {
         let vfs = Arc::new(VirtualFileSystem::new());
         let mut cache = SvgPageCache::new();
         vfs.write_source("main.typ", "Alpha".to_string());
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
 
-        let (first_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let first_document = compile_document(&world).unwrap();
         let first_cached = render_svgs_incremental(&first_document, &mut cache);
 
         vfs.write_source("main.typ", "Beta".to_string());
-        let (second_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let second_document = compile_document(&world).unwrap();
         let second_fresh = render_svgs(&second_document);
         let second_cached = render_svgs_incremental(&second_document, &mut cache);
 
@@ -464,11 +272,12 @@ mod tests {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
         let mut cache = SvgPageCache::new();
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
 
         session
             .sync_snapshot(basic_document_ast("Título con ñ", "Resumen breve."))
             .unwrap();
-        let (first_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let first_document = compile_document(&world).unwrap();
         let first_svgs = render_svgs_incremental(&first_document, &mut cache);
         write_svg_pages(&vfs, ".ergproj/preview/svg", &first_svgs);
         let first_files = (1..=first_svgs.len())
@@ -487,7 +296,7 @@ mod tests {
                 },
             )
             .unwrap();
-        let (second_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let second_document = compile_document(&world).unwrap();
         let second_svgs = render_svgs_incremental(&second_document, &mut cache);
         let pages = write_svg_pages(&vfs, ".ergproj/preview/svg", &second_svgs);
         let second_files = (1..=second_svgs.len())
@@ -509,11 +318,12 @@ mod tests {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
         let mut cache = SvgPageCache::new();
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
 
         session
             .sync_snapshot(basic_document_ast("Título inicial", "Resumen breve."))
             .unwrap();
-        let (first_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let first_document = compile_document(&world).unwrap();
         let first_svgs = render_svgs_incremental(&first_document, &mut cache);
         write_svg_pages(&vfs, ".ergproj/preview/svg", &first_svgs);
         let first_files = (1..=first_svgs.len())
@@ -529,7 +339,7 @@ mod tests {
                 value: serde_json::json!("Título escrito"),
             })
             .unwrap();
-        let (second_document, _) = compile_document_snapshot(&vfs).unwrap();
+        let second_document = compile_document(&world).unwrap();
         let second_svgs = render_svgs_incremental(&second_document, &mut cache);
         let pages = write_svg_pages(&vfs, ".ergproj/preview/svg", &second_svgs);
         let second_files = (1..=second_svgs.len())
@@ -563,11 +373,13 @@ mod tests {
                     changed: true,
                     page_number: 1,
                     path: ".ergproj/preview/svg/page-1.svg".to_string(),
+                    content: Some("<svg>uno</svg>".to_string()),
                 },
                 PreviewPageFile {
                     changed: true,
                     page_number: 2,
                     path: ".ergproj/preview/svg/page-2.svg".to_string(),
+                    content: Some("<svg>dos</svg>".to_string()),
                 },
             ]
         );

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 use crate::ast::{GlobalSettings, KeymapSettings};
+use crate::template_spec::{load_bundled_template, TemplateSpec};
 
 const GLOBAL_SETTINGS_FILE_NAME: &str = "settings.json";
 const KEYMAP_SETTINGS_FILE_NAME: &str = "keymap.json";
@@ -156,6 +157,11 @@ pub fn save_keymap_settings(app: AppHandle, settings: KeymapSettings) -> Result<
     save_keymap_settings_to_path(&keymap_settings_path(&app)?, &settings)
 }
 
+#[tauri::command]
+pub fn get_template_spec(template_id: String) -> Result<TemplateSpec, String> {
+    load_bundled_template(&template_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,8 +230,6 @@ mod tests {
         let settings = load_global_settings_from_paths(&path, None).unwrap();
 
         assert_eq!(settings.theme_mode.as_deref(), Some("system"));
-        assert_eq!(settings.preview_debounce_enabled, Some(false));
-        assert_eq!(settings.preview_debounce_ms, Some(120));
         assert_eq!(settings.history_limit, Some(100));
         assert_eq!(settings.autosave_enabled, Some(true));
         assert_eq!(settings.autosave_interval_ms, Some(30_000));
@@ -247,8 +251,6 @@ mod tests {
   "theme_mode": "dark",
   "locale": "es",
   "recent_projects": ["paper.ergproj"],
-  "preview_debounce_enabled": true,
-  "preview_debounce_ms": 200,
   "history_limit": 42,
   "autosave_enabled": false,
   "autosave_interval_ms": 45000,
@@ -265,8 +267,6 @@ mod tests {
         assert_eq!(settings.theme_mode.as_deref(), Some("dark"));
         assert_eq!(settings.locale.as_deref(), Some("es"));
         assert_eq!(settings.recent_projects, vec!["paper.ergproj"]);
-        assert_eq!(settings.preview_debounce_enabled, Some(true));
-        assert_eq!(settings.preview_debounce_ms, Some(200));
         assert_eq!(settings.history_limit, Some(42));
         assert_eq!(settings.autosave_enabled, Some(false));
         assert_eq!(settings.autosave_interval_ms, Some(45_000));

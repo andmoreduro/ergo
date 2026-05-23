@@ -1,32 +1,66 @@
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::app_state::TauriAppState;
 use crate::ast::{AssetEntry, DocumentAST};
 use crate::document_session::{read_preview_svg_from_vfs, DocumentEvent, DocumentSessionStatus};
+use crate::compile_events::RESOURCES_UPDATED_EVENT;
 use crate::path_utils::normalize_virtual_path;
+use crate::resource_watch;
 
 #[tauri::command]
 pub fn sync_document_snapshot(
+    app: AppHandle,
     state: State<'_, TauriAppState>,
     ast: DocumentAST,
 ) -> Result<DocumentSessionStatus, String> {
     let status = state.document_session.sync_snapshot(ast)?;
-    state
-        .compilation_queue
-        .mark_source_revision(status.source_revision);
+    state.typst_watch.mark_vfs_changed();
+    schedule_resource_catalog_update(&app, &state);
     Ok(status)
 }
 
 #[tauri::command]
 pub fn sync_document_event(
+    app: AppHandle,
     state: State<'_, TauriAppState>,
     event: DocumentEvent,
 ) -> Result<DocumentSessionStatus, String> {
     let status = state.document_session.apply_event(event)?;
-    state
-        .compilation_queue
-        .mark_source_revision(status.source_revision);
+    state.typst_watch.mark_vfs_changed();
+    if !status.dirty_resource_ids.is_empty() {
+        schedule_resource_catalog_update(&app, &state);
+    }
     Ok(status)
+}
+
+#[tauri::command]
+pub fn sync_document_events(
+    app: AppHandle,
+    state: State<'_, TauriAppState>,
+    events: Vec<DocumentEvent>,
+) -> Result<DocumentSessionStatus, String> {
+    let mut status = state.document_session.status();
+    for event in events {
+        status = state.document_session.apply_event(event)?;
+    }
+    state.typst_watch.mark_vfs_changed();
+    if !status.dirty_resource_ids.is_empty() {
+        schedule_resource_catalog_update(&app, &state);
+    }
+    Ok(status)
+}
+
+fn schedule_resource_catalog_update(app: &AppHandle, state: &TauriAppState) {
+    let Some(ast) = state.document_session.ast() else {
+        return;
+    };
+    let template = crate::template_spec::load_bundled_template(&ast.metadata.template_id)
+        .unwrap_or_else(|_| crate::template_spec::load_bundled_template("versatile-apa").unwrap());
+    let lib_source = crate::document_resources::resource_preview_lib_source(&ast, &template);
+    resource_watch::write_resource_files(&state.vfs, &ast, &template, &lib_source);
+    let resources = resource_watch::build_resource_catalog(&ast, &template, &state.vfs);
+    let _ = app.emit(RESOURCES_UPDATED_EVENT, resources);
+    state.typst_watch.mark_resources_pending();
 }
 
 #[tauri::command]

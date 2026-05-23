@@ -2,9 +2,11 @@ use crate::ast::{
     ContentSection, DependencyManifest, DocumentAST, DocumentElement, DocumentSection,
     GlobalSettings, Heading, Paragraph, ProjectMetadata, RichText,
 };
-use crate::compile_artifacts::{compile_document_snapshot, render_svgs, write_svg_pages};
+use crate::compile_artifacts::{compile_document, render_svgs, write_svg_pages};
 use crate::document_session::DocumentSession;
+use crate::path_utils::file_id_for_virtual_path;
 use crate::vfs::VirtualFileSystem;
+use crate::world::ErgoWorld;
 use serde::Serialize;
 use std::fmt;
 use std::str::FromStr;
@@ -114,6 +116,7 @@ pub fn run_backend_profile(options: BackendProfileOptions) -> Result<BackendProf
     let iteration_count = options.iterations.max(1);
     let vfs = Arc::new(VirtualFileSystem::new());
     let session = DocumentSession::new(Arc::clone(&vfs));
+    let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
     let mut iterations = Vec::with_capacity(iteration_count);
     let mut total = BackendProfileTiming::default();
 
@@ -122,8 +125,8 @@ pub fn run_backend_profile(options: BackendProfileOptions) -> Result<BackendProf
         let ast = ast_for_iteration(options.scenario, index);
 
         let (status, sync_snapshot_ms) = measure(|| session.sync_snapshot(ast))?;
-        let ((document, _source_snapshot), compile_ms) =
-            measure(|| compile_document_snapshot(&vfs))?;
+        let (document, compile_ms) =
+            measure(|| compile_document(&world))?;
 
         let (preview_page_count, changed_page_count, render_svg_ms, write_svg_ms) = if options
             .render_svgs
@@ -153,7 +156,7 @@ pub fn run_backend_profile(options: BackendProfileOptions) -> Result<BackendProf
         iterations.push(BackendProfileIteration {
             iteration: index + 1,
             source_revision: status.source_revision,
-            dirty_section_count: status.dirty_section_ids.len(),
+            dirty_section_count: 0,
             dirty_element_count: status.dirty_element_ids.len(),
             fragment_count: status.fragment_count,
             preview_page_count,

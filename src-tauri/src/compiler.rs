@@ -1,15 +1,168 @@
-use std::time::Duration;
-
 use tauri::{AppHandle, State};
 
 use crate::app_state::TauriAppState;
-pub use crate::compilation_queue::CompilationQueue;
-pub use crate::compilation_types::{
-    CompilationJob, CompilationJobKind, CompilationPriority, CompilationQueueSnapshot,
-    CompilationResult, CompilationStatus, ExportFormat, PreviewPageFile, SourceRevision,
-};
-use crate::compile_artifacts::result_for_job;
-use crate::compile_events::{emit_compile_event, COMPILE_QUEUED_EVENT};
+use crate::compilation_types::{CompilationResult, CompilationStatus, ExportFormat};
+use crate::compile_artifacts::{compile_document, render_svgs, write_svg_pages};
+use crate::path_utils::file_id_for_virtual_path;
+use crate::world::ErgoWorld;
+
+#[tauri::command]
+pub fn start_preview_watch(
+    app: AppHandle,
+    state: State<'_, TauriAppState>,
+) -> Result<(), String> {
+    state.typst_watch.ensure_running(
+        app,
+        state.document_session.clone(),
+        state.preview_sync.clone(),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stop_preview_watch(
+    state: State<'_, TauriAppState>,
+) -> Result<(), String> {
+    state.typst_watch.stop();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn export_document(
+    state: State<'_, TauriAppState>,
+    format: ExportFormat,
+) -> Result<CompilationResult, String> {
+    let vfs = &state.vfs;
+    let world = ErgoWorld::new(
+        vfs.clone(),
+        file_id_for_virtual_path("main.typ"),
+    );
+    let source_revision = vfs.latest_revision();
+
+    match format {
+        ExportFormat::Svg => {
+            match compile_document(&world) {
+                Ok(document) => {
+                    let svgs = render_svgs(&document);
+                    let export_dir = ".ergproj/exports/svg";
+                    write_svg_pages(vfs, export_dir, &svgs);
+                    Ok(CompilationResult {
+                        source_revision,
+                        status: CompilationStatus::Succeeded,
+                        preview_pages: None,
+                        export_path: Some(export_dir.to_string()),
+                        diagnostics: Vec::new(),
+                        outline: None,
+                        resources: None,
+                    })
+                }
+                Err(error) => Ok(CompilationResult {
+                    source_revision,
+                    status: CompilationStatus::Failed,
+                    preview_pages: None,
+                    export_path: None,
+                    diagnostics: vec![error.to_string()],
+                    outline: None,
+                    resources: None,
+                }),
+            }
+        }
+        ExportFormat::Pdf => {
+            match compile_document(&world) {
+                Ok(document) => {
+                    match typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default()) {
+                        Ok(bytes) => {
+                            let export_path = ".ergproj/exports/document.pdf";
+                            vfs.write_file(export_path, bytes);
+                            Ok(CompilationResult {
+                                source_revision,
+                                status: CompilationStatus::Succeeded,
+                                preview_pages: None,
+                                export_path: Some(export_path.to_string()),
+                                diagnostics: Vec::new(),
+                                outline: None,
+                                resources: None,
+                            })
+                        }
+                        Err(errors) => {
+                            let diagnostics: Vec<String> = errors
+                                .iter()
+                                .map(|d| format!("{:?}: {}", d.severity, d.message))
+                                .collect();
+                            Ok(CompilationResult {
+                                source_revision,
+                                status: CompilationStatus::Failed,
+                                preview_pages: None,
+                                export_path: None,
+                                diagnostics,
+                                outline: None,
+                                resources: None,
+                            })
+                        }
+                    }
+                }
+                Err(error) => Ok(CompilationResult {
+                    source_revision,
+                    status: CompilationStatus::Failed,
+                    preview_pages: None,
+                    export_path: None,
+                    diagnostics: vec![error.to_string()],
+                    outline: None,
+                    resources: None,
+                }),
+            }
+        }
+        ExportFormat::Png => {
+            match compile_document(&world) {
+                Ok(document) => {
+                    let export_dir = ".ergproj/exports/png";
+                    for (index, page) in document.pages.iter().enumerate() {
+                        let pixmap = typst_render::render(page, 2.0);
+                        match pixmap.encode_png() {
+                            Ok(bytes) => {
+                                vfs.write_file(
+                                    &format!("{}/page-{}.png", export_dir, index + 1),
+                                    bytes,
+                                )
+                            }
+                            Err(error) => {
+                                return Ok(CompilationResult {
+                                    source_revision,
+                                    status: CompilationStatus::Failed,
+                                    preview_pages: None,
+                                    export_path: None,
+                                    diagnostics: vec![error.to_string()],
+                                    outline: None,
+                                    resources: None,
+                                })
+                            }
+                        }
+                    }
+                    Ok(CompilationResult {
+                        source_revision,
+                        status: CompilationStatus::Succeeded,
+                        preview_pages: None,
+                        export_path: Some(export_dir.to_string()),
+                        diagnostics: Vec::new(),
+                        outline: None,
+                        resources: None,
+                    })
+                }
+                Err(error) => Ok(CompilationResult {
+                    source_revision,
+                    status: CompilationStatus::Failed,
+                    preview_pages: None,
+                    export_path: None,
+                    diagnostics: vec![error.to_string()],
+                    outline: None,
+                    resources: None,
+                }),
+            }
+        }
+    }
+}
+
+// Low-level VFS commands (kept for direct VFS manipulation)
 
 #[tauri::command]
 pub fn write_source(
@@ -18,9 +171,7 @@ pub fn write_source(
     text: String,
 ) -> Result<(), String> {
     state.vfs.write_source(&path, text);
-    state
-        .compilation_queue
-        .mark_source_revision(state.vfs.latest_revision());
+    state.typst_watch.mark_vfs_changed();
     Ok(())
 }
 
@@ -33,65 +184,6 @@ pub fn patch_source(
     text: String,
 ) -> Result<(), String> {
     state.vfs.apply_patch(&path, start, end, &text)?;
-    state
-        .compilation_queue
-        .mark_source_revision(state.vfs.latest_revision());
+    state.typst_watch.mark_vfs_changed();
     Ok(())
-}
-
-#[tauri::command]
-pub fn enqueue_preview_compile(
-    app: AppHandle,
-    state: State<'_, TauriAppState>,
-    debounce_ms: Option<usize>,
-) -> Result<CompilationJob, String> {
-    state
-        .compilation_queue
-        .set_debounce(Duration::from_millis(debounce_ms.unwrap_or(0) as u64));
-    let source_revision = state
-        .document_session
-        .status()
-        .source_revision
-        .max(state.vfs.latest_revision());
-    let job = state.compilation_queue.enqueue_preview(source_revision);
-    emit_compile_event(
-        &app,
-        COMPILE_QUEUED_EVENT,
-        result_for_job(&job, CompilationStatus::Queued),
-    );
-    state.compilation_queue.ensure_worker(
-        app,
-        state.vfs.clone(),
-        state.document_session.clone(),
-        state.preview_sync.clone(),
-    );
-    Ok(job)
-}
-
-#[tauri::command]
-pub fn enqueue_export(
-    app: AppHandle,
-    state: State<'_, TauriAppState>,
-    format: ExportFormat,
-) -> Result<CompilationJob, String> {
-    let job = state.compilation_queue.enqueue_export(format);
-    emit_compile_event(
-        &app,
-        COMPILE_QUEUED_EVENT,
-        result_for_job(&job, CompilationStatus::Queued),
-    );
-    state.compilation_queue.ensure_worker(
-        app,
-        state.vfs.clone(),
-        state.document_session.clone(),
-        state.preview_sync.clone(),
-    );
-    Ok(job)
-}
-
-#[tauri::command]
-pub fn get_compile_status(
-    state: State<'_, TauriAppState>,
-) -> Result<CompilationQueueSnapshot, String> {
-    Ok(state.compilation_queue.snapshot())
 }

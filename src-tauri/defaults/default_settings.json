@@ -4,8 +4,6 @@
   "theme_mode": "system",
   "locale": "en",
   "recent_projects": [],
-  "preview_debounce_enabled": false,
-  "preview_debounce_ms": 120,
   "history_limit": 100,
   "autosave_enabled": true,
   "autosave_interval_ms": 30000,
