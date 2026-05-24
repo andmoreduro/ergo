@@ -19,6 +19,7 @@ typst-ide = "0.14.2"
 typst-pdf = "0.14.2"
 typst-render = "0.14.2"
 rayon = "1.12.0"
+fontdb = "0.23.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"

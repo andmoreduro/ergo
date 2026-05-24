@@ -1,15 +1,11 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let vfs = std::sync::Arc::new(vfs::VirtualFileSystem::new());
-    let typst_watch = std::sync::Arc::new(typst_watch::TypstWatch::new(
-        std::sync::Arc::clone(&vfs),
-    ));
     let document_session = std::sync::Arc::new(document_session::DocumentSession::new(
         std::sync::Arc::clone(&vfs),
     ));
     let state = app_state::TauriAppState {
         vfs: std::sync::Arc::clone(&vfs),
-        typst_watch,
         document_session,
     };
 
@@ -52,14 +48,15 @@ pub fn run() {
             actions_commands::reset_key_sequence,
             actions_commands::validate_keymap_settings,
             compiler::export_document,
-            compiler::load_system_fonts,
+            compiler::load_fonts_for_families,
+            compiler::load_fonts_for_document,
             compiler::write_source,
             compiler::patch_source,
+            compiler::open_devtools,
             document_session_commands::sync_document_snapshot,
             document_session_commands::sync_document_event,
             document_session_commands::sync_document_events,
             document_session_commands::get_document_session_status,
-            document_session_commands::read_resource_preview_svg,
             document_session_commands::import_resource_file,
             settings::load_global_settings,
             settings::save_global_settings,
@@ -90,11 +87,10 @@ pub mod document_session_commands;
 pub mod settings;
 #[cfg(test)]
 pub use ergo_core::test_fixtures;
-pub mod typst_watch;
-
 pub use ergo_core::{
     ast, compilation_types, compile_artifacts, core_errors, document_outline, document_resources,
     document_session, document_session_events, document_session_generation, document_session_types,
-    document_source_builder, path_utils, preview_pipeline, preview_sync, preview_sync_lookup,
+    document_source_builder, font_loader, font_requirements, path_utils, preview_pipeline,
+    preview_sync, preview_sync_lookup,
     preview_sync_types, resource_watch, template_spec, vfs, world,
 };

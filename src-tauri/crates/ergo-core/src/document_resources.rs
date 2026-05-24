@@ -29,6 +29,11 @@ pub enum ResourcePreviewStatus {
 pub struct ResourcePreview {
     pub status: ResourcePreviewStatus,
     pub path: Option<String>,
+    /// 1-based page index in the compiled `resources.typ` document (canvas preview).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_number: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
     pub diagnostic: Option<String>,
 }
 

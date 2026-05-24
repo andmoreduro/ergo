@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { documentDir as tauriDocumentDir } from "@tauri-apps/api/path";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { GlobalSettings } from "../bindings/GlobalSettings";
@@ -14,14 +13,16 @@ import type { LogicalKeyEvent } from "../bindings/LogicalKeyEvent";
 import type { ProjectFile } from "../bindings/ProjectFile";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
-import { RESOURCES_UPDATED_EVENT } from "./compileEvents";
-import type { DocumentResources } from "../bindings/DocumentResources";
 import type { ExportFormat } from "../bindings/ExportFormat";
 import type { TemplateSpec } from "../bindings/TemplateSpec";
 
 export type { DocumentOutline } from "../bindings/DocumentOutline";
 
 export const TauriApi = {
+    async openDevTools(): Promise<void> {
+        return invoke("open_devtools");
+    },
+
     async exportDocument(
         format: ExportFormat,
         bytes: Uint8Array,
@@ -30,8 +31,8 @@ export const TauriApi = {
         return invoke("export_document", { format, bytes, pageNumber });
     },
 
-    async loadSystemFonts(): Promise<Uint8Array[]> {
-        const buffers = await invoke<number[][]>("load_system_fonts");
+    async loadFontsForDocument(ast: DocumentAST): Promise<Uint8Array[]> {
+        const buffers = await invoke<number[][]>("load_fonts_for_document", { ast });
         return buffers.map((buf) => new Uint8Array(buf));
     },
 
@@ -45,28 +46,8 @@ export const TauriApi = {
         return invoke("sync_document_events", { events });
     },
 
-    async readResourcePreviewSvg(path: string): Promise<string> {
-        return invoke("read_resource_preview_svg", { path });
-    },
-
     async importResourceFile(sourcePath: string): Promise<ImportResourceResult> {
         return invoke("import_resource_file", { sourcePath });
-    },
-
-    async listenToResourcesEvents(
-        onUpdate: (resources: DocumentResources) => void,
-    ): Promise<UnlistenFn | null> {
-        try {
-            const unlisten = await listen<DocumentResources>(
-                RESOURCES_UPDATED_EVENT,
-                (event) => {
-                    onUpdate(event.payload);
-                },
-            );
-            return unlisten;
-        } catch {
-            return null;
-        }
     },
 
     async saveProject(path: string): Promise<void> {

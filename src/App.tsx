@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Workspace } from "./components/layout/Workspace/Workspace";
 import { Menubar } from "./components/layout/Menubar/Menubar";
 import { WelcomeScreen } from "./components/screens/WelcomeScreen/WelcomeScreen";
@@ -17,7 +17,7 @@ import { createCommandRegistry } from "./commands/registry";
 import type { Command, CommandContext } from "./commands/types";
 import { workspaceCommands } from "./commands/workspaceCommands";
 import { TauriApi } from "./api/tauri";
-import { CompilerClient } from "./workers/compilerClient";
+import { CompilerClient, warmupCompiler } from "./workers/compilerClient";
 import { editorCommands } from "./commands/editorCommands";
 import { viewCommands } from "./commands/viewCommands";
 import { themeCommands } from "./commands/themeCommands";
@@ -29,6 +29,7 @@ import {
     ActionRuntimeProvider,
     useActionDispatcher,
 } from "./actions/runtime";
+import { ContextMenuProvider } from "./contextMenu/ContextMenuProvider";
 import { useCommandPalette } from "./hooks/useCommandPalette";
 import { useAppActionHandlers } from "./hooks/useAppActionHandlers";
 import { useAutosave } from "./hooks/useAutosave";
@@ -152,12 +153,12 @@ const AppShellContent = () => {
 
     const exportDocument = useCallback(async () => {
         try {
-            const pdfBytes = await CompilerClient.exportPdf();
+            const pdfBytes = await CompilerClient.exportPdf(state);
             await TauriApi.exportDocument("pdf", pdfBytes);
         } catch (error) {
             window.alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
         }
-    }, []);
+    }, [state]);
 
     const commandContext = useMemo<CommandContext>(
         () => ({
@@ -238,14 +239,18 @@ const AppShellContent = () => {
             contexts={["app"]}
             handlers={appActionHandlers}
         >
-            <div
-                className={styles.app}
-                key={locale}
-                data-theme={themeMode === "system" ? undefined : themeMode}
+            <ContextMenuProvider
+                commandRegistry={commandRegistry}
+                commandContext={commandContext}
+                runCommand={runCommand}
             >
+                <div
+                    className={styles.app}
+                    key={locale}
+                    data-theme={themeMode === "system" ? undefined : themeMode}
+                >
                 <Menubar
                     hasActiveProject={hasActiveProject}
-                    themeMode={themeMode}
                     onCommand={runCommand}
                     isCommandEnabled={(commandId) =>
                         commandRegistry.enabled(commandId, commandContext)
@@ -348,6 +353,7 @@ const AppShellContent = () => {
                     />
                 )}
             </div>
+            </ContextMenuProvider>
         </ActionContextProvider>
     );
 };
@@ -361,6 +367,10 @@ const AppShell = () => (
 );
 
 function App() {
+    useEffect(() => {
+        warmupCompiler();
+    }, []);
+
     return (
         <DocumentProvider>
             <AppShell />

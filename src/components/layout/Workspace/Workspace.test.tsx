@@ -8,7 +8,6 @@ const useCompilerMock = vi.hoisted(() => vi.fn());
 
 const tauriApiMock = vi.hoisted(() => ({
     getTemplateSpec: vi.fn(),
-    listenToResourcesEvents: vi.fn(),
 }));
 
 vi.mock("../../../hooks/useCompiler", () => ({
@@ -45,7 +44,6 @@ describe("Workspace component", () => {
     beforeEach(() => {
         useCompilerMock.mockReturnValue(defaultCompilerState());
         tauriApiMock.getTemplateSpec.mockResolvedValue(defaultTemplateSpec);
-        tauriApiMock.listenToResourcesEvents.mockResolvedValue(() => undefined);
     });
 
     it("renders the Sidebar, Editor, and Preview columns", () => {

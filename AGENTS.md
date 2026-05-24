@@ -63,8 +63,9 @@ The context files describe the intended current design. They are not a changelog
 
 | Command | What it does |
 |---------|-------------|
-| `pnpm build:wasm` | Build `ergo-engine-wasm` into `src/wasm-compiler/` (requires `wasm-pack`) |
-| `pnpm dev` | `build:wasm` then Vite dev server (port 1420, strict port) |
+| `pnpm build:wasm` | Release WASM into `src/wasm-compiler/` with `wasm-opt` (production; requires `wasm-pack`) |
+| `pnpm build:wasm:dev` | Release WASM without `wasm-opt` (fast iteration; used by `pnpm dev`) |
+| `pnpm dev` | `build:wasm:dev` then Vite dev server (port 1420, strict port) |
 | `pnpm test` | Compile paraglide, then `vitest run` (full suite) |
 | `pnpm test:changed` | Compile paraglide, then `vitest run --changed` (only tests affected by working-tree diff) |
 | `pnpm build` | `build:wasm` → paraglide compile → `tsc` → `vite build` |
@@ -125,12 +126,13 @@ Available scenarios are `small-document`, `typing-title`, and `large-document`. 
 2. AST syncs to backend via `syncDocumentSnapshot()` / `syncDocumentEvent()`
 3. `DocumentSession` detects dirty fragments → assembles section `.typ` files → writes to VFS
 4. WASM worker (`ergo-engine-wasm`) compiles from the mirrored VFS → Canvas page renders in the preview pane
-5. `TypstWatch` on the backend compiles **resource preview SVGs** only; main preview sync runs in the WASM worker
+5. WASM worker compiles the main document and resource previews; backend mirrors AST for archive I/O only
 6. Backend `DocumentSession` mirrors AST via IPC for archive I/O and resource previews
 
 ### Ownership split
 - **React owns**: UI, action context tree, local `DocumentAST` with undo/redo, settings UI
-- **Rust owns**: action catalog, keymap schema/validation, key sequence resolution, canonical Typst source generation, VFS, `TypstWatch` preview compilation, preview sync, archive I/O
+- **Rust owns**: action catalog, keymap schema/validation, key sequence resolution, canonical Typst source generation, backend VFS mirror, archive I/O
+- **WASM worker owns**: all Typst compilation (main preview + resource previews), canvas rendering, preview sync
 
 ### Action + keymap model
 - Rust owns typed action IDs, action catalog, context-expression matching, logical-key normalization, multi-stroke sequence state

@@ -9,6 +9,7 @@ import type { ResourceEntry } from "../../../bindings/ResourceEntry";
 import { useDocument } from "../../../state/DocumentContext";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { TauriApi } from "../../../api/tauri";
+import { useTypstCanvasPage } from "../../../hooks/useTypstCanvasPage";
 import { CompilerClient } from "../../../workers/compilerClient";
 import {
     emptyReferenceFormValue,
@@ -391,44 +392,34 @@ const findElementById = (
         return false;
     }) ?? null;
 
-const ResourcePreviewSvg = ({
-    path,
+const RESOURCE_PREVIEW_PIXEL_PER_PT = 0.75 * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
+
+const ResourcePreviewCanvas = ({
+    pageNumber,
     revision,
 }: {
-    path: string;
+    pageNumber: number;
     revision: number;
 }) => {
-    const [svg, setSvg] = useState<string | null>(null);
-
-    useEffect(() => {
-        let cancelled = false;
-        setSvg(null);
-        TauriApi.readResourcePreviewSvg(path)
-            .then((content) => {
-                if (!cancelled) {
-                    setSvg(content);
-                }
-            })
-            .catch(() => {
-                if (!cancelled) {
-                    setSvg(null);
-                }
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [path, revision]);
-
-    if (!svg) {
-        return <span aria-hidden className={styles.resourcePreviewLoading} />;
-    }
+    const { canvasRef } = useTypstCanvasPage(
+        (requestId) =>
+            CompilerClient.renderResourcePage(
+                pageNumber,
+                RESOURCE_PREVIEW_PIXEL_PER_PT,
+                requestId,
+            ),
+        RESOURCE_PREVIEW_PIXEL_PER_PT,
+        [pageNumber, revision],
+    );
 
     return (
-        <span
-            className={styles.resourcePreview}
-            dangerouslySetInnerHTML={{ __html: svg }}
-        />
+        <span className={styles.resourcePreview}>
+            <canvas
+                ref={canvasRef}
+                aria-hidden="true"
+                style={{ width: "100%", height: "auto", display: "block" }}
+            />
+        </span>
     );
 };
 
@@ -554,9 +545,10 @@ const ResourcesPanel = memo(({
                                         type="button"
                                         onClick={() => openResource(entry)}
                                     >
-                                        {entry.preview.status === "ready" && entry.preview.path ? (
-                                            <ResourcePreviewSvg
-                                                path={entry.preview.path}
+                                        {entry.preview.status === "ready" &&
+                                        entry.preview.page_number ? (
+                                            <ResourcePreviewCanvas
+                                                pageNumber={entry.preview.page_number}
                                                 revision={revision}
                                             />
                                         ) : (

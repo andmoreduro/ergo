@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { m } from "../../../paraglide/messages.js";
 import type { ActionId } from "../../../commands/types";
@@ -10,8 +10,6 @@ export type InsertElementType =
     | "table"
     | "figure"
     | "equation";
-
-export type ThemeMode = "system" | "light" | "dark";
 
 interface MenuAction {
     label: string;
@@ -25,18 +23,37 @@ interface MenuGroup {
 
 export interface MenubarProps {
     hasActiveProject: boolean;
-    themeMode: ThemeMode;
     onCommand: (commandId: ActionId) => void;
     isCommandEnabled: (commandId: ActionId) => boolean;
 }
 
 export const Menubar = ({
     hasActiveProject,
-    themeMode,
     onCommand,
     isCommandEnabled,
 }: MenubarProps) => {
     const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
+    const menubarRef = useRef<HTMLElement>(null);
+
+    useEffect(() => {
+        if (openMenuIndex === null) {
+            return;
+        }
+
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target;
+            if (!(target instanceof Node)) {
+                return;
+            }
+            if (menubarRef.current?.contains(target)) {
+                return;
+            }
+            setOpenMenuIndex(null);
+        };
+
+        document.addEventListener("pointerdown", handlePointerDown);
+        return () => document.removeEventListener("pointerdown", handlePointerDown);
+    }, [openMenuIndex]);
 
     const menuGroups: MenuGroup[] = [
         {
@@ -68,29 +85,6 @@ export const Menubar = ({
         },
         ...(hasActiveProject
             ? [
-                  {
-                      title: m.menubar_project(),
-                      actions: [
-                          {
-                              label: m.menubar_project_settings(),
-                              commandId: "settings::OpenProject" as const,
-                          },
-                      ],
-                  },
-                  {
-                      title: m.menubar_edit(),
-                      actions: [
-                          { label: m.menubar_undo(), commandId: "edit::Undo" as const },
-                          { label: m.menubar_redo(), commandId: "edit::Redo" as const },
-                          { label: m.menubar_cut() },
-                          { label: m.menubar_copy() },
-                          { label: m.menubar_paste() },
-                          {
-                              label: m.menubar_delete_element(),
-                              commandId: "editor::DeleteElement" as const,
-                          },
-                      ],
-                  },
                   {
                       title: m.menubar_insert(),
                       actions: [
@@ -141,24 +135,20 @@ export const Menubar = ({
                           },
                       ]
                     : []),
-                {
-                    label: `${themeMode === "system" ? "* " : ""}${m.menubar_theme_system()}`,
-                    commandId: "theme::UseSystem",
-                },
-                {
-                    label: `${themeMode === "light" ? "* " : ""}${m.menubar_theme_light()}`,
-                    commandId: "theme::UseLight",
-                },
-                {
-                    label: `${themeMode === "dark" ? "* " : ""}${m.menubar_theme_dark()}`,
-                    commandId: "theme::UseDark",
-                },
             ],
         },
         {
             title: m.menubar_settings(),
             actions: [
                 { label: m.menubar_global_settings(), commandId: "settings::OpenGlobal" },
+                ...(hasActiveProject
+                    ? [
+                          {
+                              label: m.menubar_project_settings(),
+                              commandId: "settings::OpenProject" as const,
+                          },
+                      ]
+                    : []),
                 { label: m.menubar_keymap_settings(), commandId: "settings::OpenKeymap" },
             ],
         },
@@ -185,6 +175,7 @@ export const Menubar = ({
 
     return (
         <nav
+            ref={menubarRef}
             className={styles.menubar}
             aria-label="Application menu"
             data-tauri-drag-region=""

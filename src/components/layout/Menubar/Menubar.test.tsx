@@ -15,11 +15,29 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 describe("Menubar component", () => {
+    it("closes the open menu when clicking outside the menubar", () => {
+        render(
+            <>
+                <Menubar
+                    hasActiveProject={false}
+                    onCommand={vi.fn()}
+                    isCommandEnabled={() => true}
+                />
+                <button type="button">Outside</button>
+            </>,
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "File" }));
+        expect(screen.getByRole("menu", { name: "File" })).toBeInTheDocument();
+
+        fireEvent.pointerDown(screen.getByRole("button", { name: "Outside" }));
+        expect(screen.queryByRole("menu", { name: "File" })).not.toBeInTheDocument();
+    });
+
     it("moves the open menu when another top-level entry is hovered", () => {
         render(
             <Menubar
                 hasActiveProject
-                themeMode="system"
                 onCommand={vi.fn()}
                 isCommandEnabled={() => true}
             />,
@@ -30,18 +48,17 @@ describe("Menubar component", () => {
         expect(screen.getByRole("menu", { name: "File" })).toBeInTheDocument();
         expect(screen.getByText("New Project")).toBeInTheDocument();
 
-        fireEvent.mouseEnter(screen.getByRole("button", { name: "Edit" }));
+        fireEvent.mouseEnter(screen.getByRole("button", { name: "Insert" }));
 
         expect(screen.queryByRole("menu", { name: "File" })).not.toBeInTheDocument();
-        expect(screen.getByRole("menu", { name: "Edit" })).toBeInTheDocument();
-        expect(screen.getByText("Undo")).toBeInTheDocument();
+        expect(screen.getByRole("menu", { name: "Insert" })).toBeInTheDocument();
+        expect(screen.getByText("Paragraph")).toBeInTheDocument();
     });
 
     it("uses the menubar as a draggable titlebar with window controls", () => {
         render(
             <Menubar
                 hasActiveProject={false}
-                themeMode="system"
                 onCommand={vi.fn()}
                 isCommandEnabled={() => true}
             />,
@@ -66,7 +83,6 @@ describe("Menubar component", () => {
         const { rerender } = render(
             <Menubar
                 hasActiveProject={false}
-                themeMode="system"
                 onCommand={vi.fn()}
                 isCommandEnabled={() => true}
             />,
@@ -75,9 +91,11 @@ describe("Menubar component", () => {
         expect(screen.getByRole("button", { name: "File" })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "View" })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
-        expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Insert" })).not.toBeInTheDocument();
-        expect(screen.queryByRole("button", { name: "Project" })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+        expect(
+            screen.queryByRole("menuitem", { name: "Project Settings" }),
+        ).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "File" }));
         expect(screen.queryByRole("menuitem", { name: "Save Project" })).not.toBeInTheDocument();
@@ -87,17 +105,16 @@ describe("Menubar component", () => {
         rerender(
             <Menubar
                 hasActiveProject
-                themeMode="system"
                 onCommand={vi.fn()}
                 isCommandEnabled={() => true}
             />,
         );
 
-        expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Insert" })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Project" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Project" })).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", { name: "Project" }));
+        fireEvent.click(screen.getByRole("button", { name: "Settings" }));
         expect(screen.getByRole("menuitem", { name: "Project Settings" })).toBeInTheDocument();
     });
 });

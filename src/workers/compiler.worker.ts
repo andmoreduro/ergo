@@ -1,4 +1,4 @@
-import init, { ErgoWasmCompiler, initialize_fonts } from "../wasm-compiler/ergo_engine_wasm.js";
+import init, { ErgoWasmCompiler, append_font_buffers } from "../wasm-compiler/ergo_engine_wasm.js";
 import type { WorkerMessage, WorkerReply } from "./compilerProtocol";
 
 let compiler: ErgoWasmCompiler | null = null;
@@ -24,15 +24,18 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
         switch (type) {
             case "init": {
                 if (!initialized) {
-                    const { wasmUrl, fonts } = payload;
+                    const { wasmUrl } = payload;
                     await init({ module_or_path: wasmUrl });
-                    if (fonts.length > 0) {
-                        initialize_fonts(fonts);
-                    }
                     compiler = new ErgoWasmCompiler();
                     initialized = true;
                 }
                 reply({ type: "init_done", id });
+                break;
+            }
+            case "load_fonts": {
+                if (!compiler) return;
+                append_font_buffers(payload);
+                reply({ type: "load_fonts_done", id });
                 break;
             }
             case "sync_snapshot": {
@@ -51,6 +54,18 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                 if (!compiler) return;
                 const result = compiler.compile_preview();
                 reply({ type: "compile_done", result, id });
+                break;
+            }
+            case "bootstrap": {
+                if (!compiler) return;
+                const bootstrapResult = compiler.bootstrap_preview({
+                    ast: payload.ast,
+                    files: payload.files.map((file) => ({
+                        path: file.path,
+                        bytes: Array.from(file.bytes),
+                    })),
+                });
+                reply({ type: "bootstrap_done", payload: bootstrapResult, id });
                 break;
             }
             case "render_page": {
@@ -74,10 +89,42 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                 );
                 break;
             }
+            case "render_resource_page": {
+                if (!compiler) return;
+                const { pageNumber, pixelPerPt, requestId } = payload;
+                const pageImage = compiler.render_resource_page(pageNumber, pixelPerPt);
+                const pixels = pageImage.pixels;
+                reply(
+                    {
+                        type: "render_done",
+                        payload: {
+                            pageIndex: pageNumber,
+                            width: pageImage.width,
+                            height: pageImage.height,
+                            pixels,
+                            requestId,
+                        },
+                        id,
+                    },
+                    [pixels.buffer],
+                );
+                break;
+            }
             case "write_file": {
                 if (!compiler) return;
                 compiler.write_file(payload.path, new Uint8Array(payload.bytes));
                 reply({ type: "write_file_done", id });
+                break;
+            }
+            case "write_files": {
+                if (!compiler) return;
+                compiler.write_files(
+                    payload.map((file) => ({
+                        path: file.path,
+                        bytes: Array.from(file.bytes),
+                    })),
+                );
+                reply({ type: "write_files_done", id });
                 break;
             }
             case "write_source": {

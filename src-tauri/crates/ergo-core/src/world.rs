@@ -77,6 +77,10 @@ impl ErgoWorld {
             main,
         }
     }
+
+    pub fn vfs(&self) -> &VirtualFileSystem {
+        &self.vfs
+    }
 }
 
 pub struct SnapshotWorld {

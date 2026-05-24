@@ -7,10 +7,10 @@ const tauriApiMock = vi.hoisted(() => ({
     syncDocumentSnapshot: vi.fn(),
     syncDocumentEvents: vi.fn(),
     loadTemplatePackageFiles: vi.fn().mockResolvedValue([]),
-    listenToResourcesEvents: vi.fn().mockResolvedValue(() => undefined),
 }));
 
 const compilerClientMock = vi.hoisted(() => ({
+    bootstrap: vi.fn(),
     syncSnapshot: vi.fn(),
     syncEvents: vi.fn(),
     compile: vi.fn(),
@@ -89,20 +89,25 @@ const CompilerHarness = ({
 };
 
 describe("useCompiler source syncing", () => {
+    const succeededCompile = (sourceRevision: number) => ({
+        source_revision: sourceRevision,
+        status: "succeeded" as const,
+        preview_pages: [
+            { changed: true, page_number: 1, path: "page-1", content: null },
+        ],
+        export_path: null,
+        diagnostics: [],
+        outline: null,
+        resources: null,
+    });
+
     beforeEach(() => {
-        compilerClientMock.syncSnapshot.mockResolvedValue(createStatus(1));
-        compilerClientMock.syncEvents.mockResolvedValue(createStatus(2));
-        compilerClientMock.compile.mockResolvedValue({
-            source_revision: 1,
-            status: "succeeded",
-            preview_pages: [
-                { changed: true, page_number: 1, path: "page-1", content: null },
-            ],
-            export_path: null,
-            diagnostics: [],
-            outline: null,
-            resources: null,
+        compilerClientMock.bootstrap.mockResolvedValue({
+            status: createStatus(1),
+            result: succeededCompile(1),
         });
+        compilerClientMock.syncEvents.mockResolvedValue(createStatus(2));
+        compilerClientMock.compile.mockResolvedValue(succeededCompile(1));
         tauriApiMock.syncDocumentSnapshot.mockResolvedValue(createStatus(1));
         tauriApiMock.syncDocumentEvents.mockResolvedValue(createStatus(2));
     });
@@ -131,11 +136,14 @@ describe("useCompiler source syncing", () => {
         );
 
         await waitFor(() => {
-            expect(compilerClientMock.syncSnapshot).toHaveBeenCalledTimes(1);
-            expect(compilerClientMock.syncEvents).toHaveBeenCalledWith([
-                { type: "setProjectTitle", title: "Me hago entenderd" },
-                { type: "setProjectTitle", title: "Me hago entender" },
-            ]);
+            expect(compilerClientMock.bootstrap).toHaveBeenCalledTimes(1);
+            expect(compilerClientMock.syncEvents).toHaveBeenCalledWith(
+                ast,
+                [
+                    { type: "setProjectTitle", title: "Me hago entenderd" },
+                    { type: "setProjectTitle", title: "Me hago entender" },
+                ],
+            );
         });
 
         unmount();
@@ -153,7 +161,7 @@ describe("useCompiler source syncing", () => {
         );
 
         await waitFor(() => {
-            expect(compilerClientMock.syncSnapshot).toHaveBeenCalled();
+            expect(compilerClientMock.bootstrap).toHaveBeenCalled();
             expect(result.current.previewRevision).toBe(1);
         });
 
@@ -175,39 +183,7 @@ describe("useCompiler source syncing", () => {
 
         vi.spyOn(Date, "now").mockReturnValue(editTimestamp + 42);
 
-        compilerClientMock.compile
-            .mockResolvedValueOnce({
-                source_revision: 1,
-                status: "succeeded",
-                preview_pages: [
-                    {
-                        changed: true,
-                        page_number: 1,
-                        path: "page-1",
-                        content: null,
-                    },
-                ],
-                export_path: null,
-                diagnostics: [],
-                outline: null,
-                resources: null,
-            })
-            .mockResolvedValue({
-                source_revision: 2,
-                status: "succeeded",
-                preview_pages: [
-                    {
-                        changed: true,
-                        page_number: 1,
-                        path: "page-1",
-                        content: null,
-                    },
-                ],
-                export_path: null,
-                diagnostics: [],
-                outline: null,
-                resources: null,
-            });
+        compilerClientMock.compile.mockResolvedValue(succeededCompile(2));
 
         const { result, rerender, unmount } = renderHook(
             ({ ast, events, sessionId }) =>
@@ -218,7 +194,7 @@ describe("useCompiler source syncing", () => {
         );
 
         await waitFor(() => {
-            expect(compilerClientMock.syncSnapshot).toHaveBeenCalled();
+            expect(compilerClientMock.bootstrap).toHaveBeenCalled();
         });
 
         rerender({

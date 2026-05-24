@@ -1,3 +1,4 @@
+import { useContextMenuTrigger } from "../../../contextMenu/ContextMenuProvider";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./WelcomeScreen.module.css";
 
@@ -18,8 +19,10 @@ export const WelcomeScreen = ({
     onRemoveRecentProject,
     onCommandPalette,
 }: WelcomeScreenProps) => {
+    const contextMenu = useContextMenuTrigger("app");
+
     return (
-        <main className={styles.screen}>
+        <main className={styles.screen} {...contextMenu}>
             <section className={styles.panel} aria-labelledby="welcome-title">
                 <header className={styles.header}>
                     <div className={styles.logo} aria-hidden="true">
