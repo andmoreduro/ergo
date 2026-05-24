@@ -17,8 +17,7 @@ flowchart LR
         AutosaveHook["useAutosave"]:::mod
         CommandPaletteHook["useCommandPalette"]:::mod
         AppActionHandlers["useAppActionHandlers"]:::mod
-        CompileBridge["useCompileBridge"]:::mod
-        SvgLoader["useSvgLoader"]:::mod
+        WasmCompilerClient["workers/compilerClient"]:::mod
         TauriApiClient["api/tauri"]:::mod
         GeneratedBindings["src/bindings"]:::gen
 
@@ -27,8 +26,9 @@ flowchart LR
         AppRoot --> AutosaveHook
         AppRoot --> CommandPaletteHook
         AppRoot --> AppActionHandlers
-        CompileBridge --> TauriApiClient
-        SvgLoader --> TauriApiClient
+        UseCompiler["useCompiler"]:::mod
+        UseCompiler --> WasmCompilerClient
+        WasmCompilerClient --> TauriApiClient
         ProjectLifecycle --> TauriApiClient
         SettingsLifecycle --> TauriApiClient
         CommandPaletteHook --> TauriApiClient

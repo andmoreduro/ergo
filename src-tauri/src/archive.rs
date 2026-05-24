@@ -109,7 +109,6 @@ pub fn open_project_from_path(
         .map_err(|_| ".ergproj/document_state.json is required".to_string())?;
     let ast: DocumentAST = serde_json::from_str(&json_ast).map_err(|e| e.to_string())?;
     let _status = state.document_session.sync_snapshot(ast.clone())?;
-    state.typst_watch.mark_vfs_changed();
 
     Ok(ast)
 }
@@ -218,7 +217,6 @@ fn read_dir_recursive(
 mod tests {
     use super::*;
     use crate::document_session::DocumentSession;
-    use crate::preview_sync::PreviewSyncState;
     use crate::test_fixtures::basic_document_ast;
     use crate::vfs::VirtualFileSystem;
     use std::collections::HashSet;
@@ -235,7 +233,6 @@ mod tests {
             vfs,
             typst_watch,
             document_session,
-            preview_sync: Arc::new(PreviewSyncState::default()),
         }
     }
 

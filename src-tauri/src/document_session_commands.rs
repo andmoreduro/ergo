@@ -2,7 +2,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::app_state::TauriAppState;
 use crate::ast::{AssetEntry, DocumentAST};
-use crate::document_session::{read_preview_svg_from_vfs, DocumentEvent, DocumentSessionStatus};
+use crate::document_session::{DocumentEvent, DocumentSessionStatus};
 use crate::compile_events::RESOURCES_UPDATED_EVENT;
 use crate::path_utils::normalize_virtual_path;
 use crate::resource_watch;
@@ -14,7 +14,6 @@ pub fn sync_document_snapshot(
     ast: DocumentAST,
 ) -> Result<DocumentSessionStatus, String> {
     let status = state.document_session.sync_snapshot(ast)?;
-    state.typst_watch.mark_vfs_changed();
     schedule_resource_catalog_update(&app, &state);
     Ok(status)
 }
@@ -26,7 +25,6 @@ pub fn sync_document_event(
     event: DocumentEvent,
 ) -> Result<DocumentSessionStatus, String> {
     let status = state.document_session.apply_event(event)?;
-    state.typst_watch.mark_vfs_changed();
     if !status.dirty_resource_ids.is_empty() {
         schedule_resource_catalog_update(&app, &state);
     }
@@ -43,7 +41,6 @@ pub fn sync_document_events(
     for event in events {
         status = state.document_session.apply_event(event)?;
     }
-    state.typst_watch.mark_vfs_changed();
     if !status.dirty_resource_ids.is_empty() {
         schedule_resource_catalog_update(&app, &state);
     }
@@ -60,6 +57,9 @@ fn schedule_resource_catalog_update(app: &AppHandle, state: &TauriAppState) {
     resource_watch::write_resource_files(&state.vfs, &ast, &template, &lib_source);
     let resources = resource_watch::build_resource_catalog(&ast, &template, &state.vfs);
     let _ = app.emit(RESOURCES_UPDATED_EVENT, resources);
+    state
+        .typst_watch
+        .ensure_running(app.clone(), state.document_session.clone());
     state.typst_watch.mark_resources_pending();
 }
 
@@ -68,11 +68,6 @@ pub fn get_document_session_status(
     state: State<'_, TauriAppState>,
 ) -> Result<DocumentSessionStatus, String> {
     Ok(state.document_session.status())
-}
-
-#[tauri::command]
-pub fn read_preview_svg(state: State<'_, TauriAppState>, path: String) -> Result<String, String> {
-    read_preview_svg_from_vfs(&state.vfs, &path).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -182,17 +177,6 @@ mod tests {
     use crate::vfs::VirtualFileSystem;
     use std::fs;
     use uuid::Uuid;
-
-    #[test]
-    fn preview_svg_core_errors_convert_to_ipc_strings() {
-        let vfs = VirtualFileSystem::new();
-        let result = read_preview_svg_from_vfs(&vfs, "main.typ").map_err(|error| error.to_string());
-
-        assert_eq!(
-            result,
-            Err("Preview SVG path must be inside .ergproj/preview/svg".to_string()),
-        );
-    }
 
     #[test]
     fn import_resource_file_copies_bytes_to_unique_assets_path() {

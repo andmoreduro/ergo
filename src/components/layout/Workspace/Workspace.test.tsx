@@ -8,12 +8,7 @@ const useCompilerMock = vi.hoisted(() => vi.fn());
 
 const tauriApiMock = vi.hoisted(() => ({
     getTemplateSpec: vi.fn(),
-    startPreviewWatch: vi.fn(),
-    stopPreviewWatch: vi.fn(),
-    listenToCompileEvents: vi.fn(),
     listenToResourcesEvents: vi.fn(),
-    syncDocumentSnapshot: vi.fn(),
-    syncDocumentEvents: vi.fn(),
 }));
 
 vi.mock("../../../hooks/useCompiler", () => ({
@@ -50,28 +45,7 @@ describe("Workspace component", () => {
     beforeEach(() => {
         useCompilerMock.mockReturnValue(defaultCompilerState());
         tauriApiMock.getTemplateSpec.mockResolvedValue(defaultTemplateSpec);
-        tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
         tauriApiMock.listenToResourcesEvents.mockResolvedValue(() => undefined);
-        tauriApiMock.startPreviewWatch.mockResolvedValue(undefined);
-        tauriApiMock.stopPreviewWatch.mockResolvedValue(undefined);
-        tauriApiMock.syncDocumentSnapshot.mockResolvedValue({
-            dirtyElementIds: [],
-            fragmentCount: 0,
-            layout: {
-                documentStatePath: ".ergproj/document_state.json",
-                mainPath: "main.typ",
-                libPath: "lib.typ",
-                projectSettingsPath: ".ergproj/project_settings.json",
-                referencesPath: "references.bib",
-                sectionPaths: [],
-                sourceMapPath: ".ergproj/source_map.json",
-                fieldSourceMapPath: ".ergproj/field_source_map.json",
-                templatePath: ".ergproj/template.json",
-            },
-            sourceMap: [],
-            fieldSourceMap: [],
-            sourceRevision: 1,
-        });
     });
 
     it("renders the Sidebar, Editor, and Preview columns", () => {

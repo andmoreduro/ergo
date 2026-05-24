@@ -7,12 +7,10 @@ pub fn run() {
     let document_session = std::sync::Arc::new(document_session::DocumentSession::new(
         std::sync::Arc::clone(&vfs),
     ));
-    let preview_sync = std::sync::Arc::new(preview_sync::PreviewSyncState::default());
     let state = app_state::TauriAppState {
         vfs: std::sync::Arc::clone(&vfs),
         typst_watch,
         document_session,
-        preview_sync,
     };
 
     let protocol_vfs = std::sync::Arc::clone(&vfs);
@@ -53,8 +51,6 @@ pub fn run() {
             actions_commands::resolve_key_event,
             actions_commands::reset_key_sequence,
             actions_commands::validate_keymap_settings,
-            compiler::start_preview_watch,
-            compiler::stop_preview_watch,
             compiler::export_document,
             compiler::load_system_fonts,
             compiler::write_source,
@@ -63,13 +59,8 @@ pub fn run() {
             document_session_commands::sync_document_event,
             document_session_commands::sync_document_events,
             document_session_commands::get_document_session_status,
-            document_session_commands::read_preview_svg,
             document_session_commands::read_resource_preview_svg,
             document_session_commands::import_resource_file,
-            preview_sync_commands::jump_from_preview_click,
-            preview_sync_commands::get_preview_positions_for_element,
-            preview_sync_commands::get_preview_positions_for_focus,
-            preview_sync_commands::get_preview_sync_status,
             settings::load_global_settings,
             settings::save_global_settings,
             settings::load_keymap_settings,
@@ -96,7 +87,6 @@ pub mod backend_profile;
 pub mod compile_events;
 pub mod compiler;
 pub mod document_session_commands;
-pub mod preview_sync_commands;
 pub mod settings;
 #[cfg(test)]
 pub use ergo_core::test_fixtures;
@@ -105,6 +95,6 @@ pub mod typst_watch;
 pub use ergo_core::{
     ast, compilation_types, compile_artifacts, core_errors, document_outline, document_resources,
     document_session, document_session_events, document_session_generation, document_session_types,
-    document_source_builder, path_utils, preview_sync, preview_sync_lookup, preview_sync_types,
-    resource_watch, template_spec, vfs, world,
+    document_source_builder, path_utils, preview_pipeline, preview_sync, preview_sync_lookup,
+    preview_sync_types, resource_watch, template_spec, vfs, world,
 };

@@ -4,15 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
 import "@testing-library/jest-dom";
 
-const tauriApiMock = vi.hoisted(() => ({
-    getPreviewPositionsForElement: vi.fn(),
-    getPreviewPositionsForFocus: vi.fn(),
-    jumpFromPreviewClick: vi.fn(),
-}));
-
 const compilerClientMock = vi.hoisted(() => ({
     syncSnapshot: vi.fn(),
-    syncEvent: vi.fn(),
+    syncEvents: vi.fn(),
     compile: vi.fn(),
     renderPage: vi.fn(),
     writeFile: vi.fn(),
@@ -25,10 +19,6 @@ const compilerClientMock = vi.hoisted(() => ({
 }));
 
 const dispatchActionMock = vi.hoisted(() => vi.fn());
-
-vi.mock("../../../api/tauri", () => ({
-    TauriApi: tauriApiMock,
-}));
 
 vi.mock("../../../workers/compilerClient", () => ({
     CompilerClient: compilerClientMock,

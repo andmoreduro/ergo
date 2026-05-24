@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && tsc && vite build",
+    "build:wasm": "wasm-pack build src-tauri/crates/ergo-engine-wasm --target web --out-dir ../../../src/wasm-compiler --release",
+    "dev": "pnpm build:wasm && vite",
+    "build": "pnpm build:wasm && paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && vitest run",

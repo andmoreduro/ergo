@@ -46,7 +46,6 @@ export function useCompiler(
     const syncedEventIdRef = useRef(0);
     const latestRevisionRef = useRef<SourceRevision | null>(null);
     const previewRevisionRef = useRef<SourceRevision | null>(null);
-    /** Timestamp (Date.now) of the last user edit in the sync batch driving the in-flight preview. */
     const inputLatencyStartRef = useRef<number | null>(null);
     const syncRunningRef = useRef(false);
     const syncFailedRef = useRef(false);
@@ -84,7 +83,9 @@ export function useCompiler(
 
         if (result.status === "succeeded") {
             setOutline(result.outline);
-            setResources(result.resources);
+            if (result.resources) {
+                setResources(result.resources);
+            }
             setPreviewPages(result.preview_pages || []);
             setPreviewRevision(result.source_revision);
             previewRevisionRef.current = result.source_revision;
@@ -121,6 +122,22 @@ export function useCompiler(
         );
     };
 
+    const mirrorToBackend = async (
+        ast: DocumentAST,
+        pendingEvents: QueuedDocumentEvent[],
+        isBootstrap: boolean,
+    ) => {
+        if (isBootstrap) {
+            await TauriApi.syncDocumentSnapshot(ast);
+            return;
+        }
+        if (pendingEvents.length > 0) {
+            await TauriApi.syncDocumentEvents(
+                pendingEvents.map((event) => event.event),
+            );
+        }
+    };
+
     const syncLatestDocumentState = async () => {
         if (syncRunningRef.current || syncFailedRef.current) {
             return;
@@ -137,17 +154,20 @@ export function useCompiler(
                 }
 
                 if (bootstrappedSessionIdRef.current !== currentSessionId) {
-                    // Load and write template package files
                     try {
                         const templateId = ast.metadata.template_id;
                         if (templateId) {
-                            const files = await TauriApi.loadTemplatePackageFiles(templateId);
+                            const files =
+                                await TauriApi.loadTemplatePackageFiles(templateId);
                             for (const file of files) {
-                                await CompilerClient.writeFile(file.path, new Uint8Array(file.bytes));
+                                await CompilerClient.writeFile(
+                                    file.path,
+                                    new Uint8Array(file.bytes),
+                                );
                             }
                         }
-                    } catch (e) {
-                        console.error("Failed to load template package files:", e);
+                    } catch (loadError) {
+                        console.error("Failed to load template package files:", loadError);
                     }
 
                     const syncStarted = now();
@@ -170,8 +190,7 @@ export function useCompiler(
                     recordTiming("compile", compileStarted);
                     applyPreviewResult(result);
 
-                    // Sync to backend asynchronously
-                    void TauriApi.syncDocumentSnapshot(ast);
+                    await mirrorToBackend(ast, [], true);
                     continue;
                 }
 
@@ -186,10 +205,9 @@ export function useCompiler(
                 recordDurationFromTimestamp("event-dispatch", firstTimestamp);
                 const syncStarted = now();
 
-                let status = null;
-                for (const event of pendingEvents) {
-                    status = await CompilerClient.syncEvent(event.event);
-                }
+                const status = await CompilerClient.syncEvents(
+                    pendingEvents.map((event) => event.event),
+                );
 
                 recordTiming("sync-events", syncStarted);
                 if (
@@ -203,10 +221,8 @@ export function useCompiler(
                 inputLatencyStartRef.current = lastEvent.timestamp;
 
                 syncedEventIdRef.current = lastEvent.id;
-                if (status) {
-                    latestRevisionRef.current = status.sourceRevision;
-                    setSourceMap(status.sourceMap);
-                }
+                latestRevisionRef.current = status.sourceRevision;
+                setSourceMap(status.sourceMap);
                 ackDocumentEvents?.(lastEvent.id);
 
                 const compileStarted = now();
@@ -214,14 +230,15 @@ export function useCompiler(
                 recordTiming("compile", compileStarted);
                 applyPreviewResult(result);
 
-                // Sync to backend asynchronously
-                void TauriApi.syncDocumentEvents(pendingEvents.map((event) => event.event));
+                await mirrorToBackend(ast, pendingEvents, false);
             }
-        } catch (error: unknown) {
+        } catch (syncError: unknown) {
             if (isMountedRef.current) {
                 syncFailedRef.current = true;
                 failedEventCountRef.current = desiredEventsRef.current.length;
-                setError(error instanceof Error ? error.message : String(error));
+                setError(
+                    syncError instanceof Error ? syncError.message : String(syncError),
+                );
                 setIsCompiling(false);
             }
         } finally {
@@ -247,6 +264,28 @@ export function useCompiler(
         isMountedRef.current = true;
         return () => {
             isMountedRef.current = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        let isMounted = true;
+        let unlisten: (() => void) | null = null;
+
+        void TauriApi.listenToResourcesEvents((updated) => {
+            if (isMounted) {
+                setResources(updated);
+            }
+        }).then((dispose) => {
+            if (isMounted) {
+                unlisten = dispose;
+            } else {
+                dispose?.();
+            }
+        });
+
+        return () => {
+            isMounted = false;
+            unlisten?.();
         };
     }, []);
 
