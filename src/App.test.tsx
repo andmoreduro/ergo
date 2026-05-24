@@ -16,13 +16,11 @@ const tauriApiMock = vi.hoisted(() => ({
     saveProject: vi.fn(),
     openProject: vi.fn(),
     exportDocument: vi.fn(),
-    startPreviewWatch: vi.fn(),
-    stopPreviewWatch: vi.fn(),
     syncDocumentSnapshot: vi.fn(),
-    syncDocumentEvent: vi.fn(),
     syncDocumentEvents: vi.fn(),
     getTemplateSpec: vi.fn(),
-    listenToCompileEvents: vi.fn(),
+    listenToResourcesEvents: vi.fn(),
+    loadTemplatePackageFiles: vi.fn().mockResolvedValue([]),
     documentDir: vi.fn(),
 }));
 
@@ -62,8 +60,9 @@ const syncBarrierMock = vi.hoisted(() => ({
 const compilerClientMock = vi.hoisted(() => ({
     writeFile: vi.fn(),
     syncSnapshot: vi.fn(),
-    syncEvent: vi.fn(),
+    syncEvents: vi.fn(),
     compile: vi.fn(),
+    exportPdf: vi.fn().mockResolvedValue(new Uint8Array()),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -194,11 +193,10 @@ describe("App project lifecycle", () => {
             ],
             custom_elements: [],
         });
-        tauriApiMock.listenToCompileEvents.mockResolvedValue(() => undefined);
-        tauriApiMock.startPreviewWatch.mockResolvedValue(undefined);
-        tauriApiMock.stopPreviewWatch.mockResolvedValue(undefined);
-        tauriApiMock.syncDocumentEvent.mockResolvedValue({
+        tauriApiMock.listenToResourcesEvents.mockResolvedValue(() => undefined);
+        compilerClientMock.syncSnapshot.mockResolvedValue({
             dirtyElementIds: [],
+            dirtySectionIds: [],
             fragmentCount: 0,
             layout: {
                 documentStatePath: ".ergproj/document_state.json",
@@ -214,6 +212,15 @@ describe("App project lifecycle", () => {
             sourceMap: [],
             fieldSourceMap: [],
             sourceRevision: 1,
+        });
+        compilerClientMock.compile.mockResolvedValue({
+            source_revision: 1,
+            status: "succeeded",
+            preview_pages: [],
+            export_path: null,
+            diagnostics: [],
+            outline: null,
+            resources: null,
         });
         syncBarrierMock.waitForDocumentSync.mockResolvedValue(undefined);
     });

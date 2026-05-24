@@ -1,28 +1,7 @@
-use tauri::{AppHandle, State};
+use tauri::State;
 
 use crate::app_state::TauriAppState;
 use crate::compilation_types::ExportFormat;
-
-#[tauri::command]
-pub fn start_preview_watch(
-    app: AppHandle,
-    state: State<'_, TauriAppState>,
-) -> Result<(), String> {
-    state.typst_watch.ensure_running(
-        app,
-        state.document_session.clone(),
-        state.preview_sync.clone(),
-    );
-    Ok(())
-}
-
-#[tauri::command]
-pub fn stop_preview_watch(
-    state: State<'_, TauriAppState>,
-) -> Result<(), String> {
-    state.typst_watch.stop();
-    Ok(())
-}
 
 const COMMON_FONT_FILES: &[&str] = &[
     "arial.ttf", "arialbd.ttf", "ariali.ttf", "arialbi.ttf",
@@ -40,25 +19,55 @@ const COMMON_FONT_FILES: &[&str] = &[
 
 #[tauri::command]
 pub fn load_system_fonts() -> Result<Vec<Vec<u8>>, String> {
-    let fonts_dir = std::path::PathBuf::from("C:\\Windows\\Fonts");
     let mut font_buffers = Vec::new();
-    
-    if fonts_dir.exists() {
-        if let Ok(entries) = std::fs::read_dir(fonts_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
-                    let filename_lower = filename.to_lowercase();
-                    if COMMON_FONT_FILES.iter().any(|f| *f == filename_lower) {
-                        if let Ok(bytes) = std::fs::read(&path) {
-                            font_buffers.push(bytes);
-                        }
-                    }
+
+    let font_dirs: Vec<std::path::PathBuf> = {
+        #[cfg(windows)]
+        {
+            vec![std::path::PathBuf::from(r"C:\Windows\Fonts")]
+        }
+        #[cfg(target_os = "macos")]
+        {
+            vec![
+                std::path::PathBuf::from("/System/Library/Fonts"),
+                std::path::PathBuf::from("/Library/Fonts"),
+            ]
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            vec![
+                std::path::PathBuf::from("/usr/share/fonts"),
+                std::path::PathBuf::from("/usr/local/share/fonts"),
+            ]
+        }
+        #[cfg(not(any(windows, target_os = "macos", unix)))]
+        {
+            vec![]
+        }
+    };
+
+    for fonts_dir in font_dirs {
+        if !fonts_dir.exists() {
+            continue;
+        }
+        let entries = match std::fs::read_dir(&fonts_dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(filename) = path.file_name().and_then(|f| f.to_str()) else {
+                continue;
+            };
+            let filename_lower = filename.to_ascii_lowercase();
+            if COMMON_FONT_FILES.iter().any(|f| *f == filename_lower) {
+                if let Ok(bytes) = std::fs::read(&path) {
+                    font_buffers.push(bytes);
                 }
             }
         }
     }
-    
+
     Ok(font_buffers)
 }
 
@@ -85,7 +94,7 @@ pub fn export_document(
         ExportFormat::Png => {
             let page = page_number.unwrap_or(1);
             let export_dir = ".ergproj/exports/png";
-            let path = format!("{}/page-{}.png", export_dir, page);
+            let path = format!("{export_dir}/page-{page}.png");
             vfs.write_file(&path, bytes.clone());
             if let Err(e) = std::fs::create_dir_all(export_dir) {
                 return Err(format!("failed to create export directory: {e}"));
@@ -98,7 +107,7 @@ pub fn export_document(
         ExportFormat::Svg => {
             let page = page_number.unwrap_or(1);
             let export_dir = ".ergproj/exports/svg";
-            let path = format!("{}/page-{}.svg", export_dir, page);
+            let path = format!("{export_dir}/page-{page}.svg");
             vfs.write_file(&path, bytes.clone());
             if let Err(e) = std::fs::create_dir_all(export_dir) {
                 return Err(format!("failed to create export directory: {e}"));
@@ -111,8 +120,6 @@ pub fn export_document(
     }
 }
 
-// Low-level VFS commands (kept for direct VFS manipulation)
-
 #[tauri::command]
 pub fn write_source(
     state: State<'_, TauriAppState>,
@@ -120,7 +127,6 @@ pub fn write_source(
     text: String,
 ) -> Result<(), String> {
     state.vfs.write_source(&path, text);
-    state.typst_watch.mark_vfs_changed();
     Ok(())
 }
 
@@ -133,6 +139,5 @@ pub fn patch_source(
     text: String,
 ) -> Result<(), String> {
     state.vfs.apply_patch(&path, start, end, &text)?;
-    state.typst_watch.mark_vfs_changed();
     Ok(())
 }

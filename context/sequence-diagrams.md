@@ -28,35 +28,19 @@ sequenceDiagram
     State-->>UI: Immediate local UI update
 
     State->>State: Record forward/inverse DocumentEvent
-    State->>API: sync_document_event(event)
-    API->>Session: Apply typed DocumentEvent
-    Session->>Session: Mutate canonical backend AST
-    Session->>Session: Regenerate project sources and update fragment cache
-    Session->>VFS: write main.typ, elements/*.typ, metadata
-    VFS-->>Session: Return source revisions
-    Session-->>API: DocumentSessionStatus(sourceMap, revision)
+    State->>Worker: sync_document_events(batch) on WASM DocumentSession
+    Worker->>Worker: Regenerate Typst sources into worker VFS
+    Worker->>Worker: compile_preview() via ergo-core preview_pipeline
+    Worker->>Worker: store_preview in PreviewSyncState
+    Worker-->>Preview: CompilationResult with canvas page list + outline/resources
+    State->>API: sync_document_events mirror for backend archive/resource path
+    API->>Session: Apply typed DocumentEvents on backend DocumentSession
     API->>API: emit_resources when snapshot or dirty resource IDs require it
-    API->>Watch: mark_vfs_changed()
-
-    Watch->>VFS: wait until latest_revision > last_compiled_revision
-    Watch->>Typst: compile PagedDocument with ErgoWorld
-    Typst->>World: World::source("main.typ")
-    World->>VFS: read retained Typst Source
-    VFS-->>World: Source
-    World-->>Typst: Source
-    Typst->>World: World::source("elements/{id}.typ")
-    World->>VFS: read retained Typst Source
-    VFS-->>World: Source
-    World-->>Typst: Source
-
-    Typst-->>Watch: PagedDocument
-    Watch->>VFS: compare and write changed .ergproj/preview/svg/page-N.svg file bytes
-    Watch->>Sync: store_preview(revision, PagedDocument, sourceMap, sourceSnapshot)
-    Watch->>Watch: extract outline from introspector
-    Watch-->>API: emit succeeded with preview_pages(changed) and outline
-    API->>VFS: read_preview_svg(page path) when inline content missing
-    VFS-->>API: SVG text
-    API-->>Preview: SVG page strings
+    API->>Watch: mark_resources_pending()
+    Watch->>Typst: compile resource-preview document only
+    Watch->>VFS: write .ergproj/resource-previews/svg/*.svg
+    Watch-->>API: emit updated resource catalog
+    Preview->>Worker: render_page(page index) to Canvas pixels
     Preview-->>Sidebar: Publish compiled outline, resources, and displayed revision
     Preview-->>User: Updated live preview
 ```
@@ -66,8 +50,8 @@ sequenceDiagram
 - The frontend does not own canonical full Typst source generation.
 - `sync_document_snapshot(ast)` is a cold-path bootstrap for new/opened documents. Normal edits, undo, and redo use `sync_document_event(event)`.
 - `patch_source` remains a lower-level VFS command for focused source edits, but normal document editing syncs typed events to `DocumentSession`.
-- `start_preview_watch` ensures the background watch thread is running for the active project.
-- Preview SVG files under `.ergproj/preview/svg/` are generated artifacts, not authoritative document state.
+- Main preview compiles in the WASM worker. Backend `TypstWatch` compiles resource-preview SVGs only.
+- Preview page pixels are rendered on demand in the frontend Canvas; backend main-preview SVG artifacts are not used.
 - Frontend Typst generation utilities must not be used in the compile path. Backend `DocumentSession` is the only canonical source generator.
 - The Tauri API client uses generated `ts-rs` bindings for all IPC DTOs. Hand-written frontend DTO shadows are not part of the flow.
 - The retained preview document is runtime state only. It contains the compiled `PagedDocument`, source-map snapshot, Typst source snapshot, and page metrics. It is kept for sync and discarded/replaced when a newer non-stale preview compile succeeds.

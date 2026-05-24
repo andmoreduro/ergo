@@ -2,7 +2,6 @@ use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 use typst::layout::PagedDocument;
 use typst::foundations::Bytes;
-use typst::syntax::FileId;
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use parking_lot::RwLock;
@@ -14,6 +13,7 @@ use ergo_core::document_session_types::DocumentEvent;
 use ergo_core::ast::DocumentAST;
 use ergo_core::compilation_types::{CompilationResult, CompilationStatus};
 use ergo_core::preview_sync::{PreviewSyncState, PreviewFocusTarget};
+use ergo_core::preview_pipeline::{apply_document_events, compile_preview_success};
 
 static CUSTOM_FONTS: RwLock<Option<Arc<Vec<Font>>>> = RwLock::new(None);
 static CUSTOM_FONT_BOOK: RwLock<Option<LazyHash<FontBook>>> = RwLock::new(None);
@@ -27,15 +27,14 @@ pub fn initialize_fonts(font_buffers: js_sys::Array) {
         let buf = array.to_vec();
         fonts.extend(Font::iter(Bytes::new(buf)));
     }
-    
-    // Also include bundled fonts so they available as fallback
+
     fonts.extend(typst_assets::fonts().flat_map(|font| Font::iter(Bytes::new(font.to_vec()))));
-    
+
     let mut book = FontBook::new();
     for font in &fonts {
         book.push(font.info().clone());
     }
-    
+
     *CUSTOM_FONTS.write() = Some(Arc::new(fonts));
     *CUSTOM_FONT_BOOK.write() = Some(LazyHash::new(book));
 }
@@ -62,6 +61,15 @@ fn get_wasm_font_book() -> LazyHash<FontBook> {
         book.push(font.info().clone());
     }
     LazyHash::new(book)
+}
+
+fn preview_world(vfs: Arc<VirtualFileSystem>) -> ErgoWorld {
+    ErgoWorld::new_with_fonts(
+        vfs,
+        ergo_core::path_utils::file_id_for_virtual_path("main.typ"),
+        get_wasm_fonts(),
+        get_wasm_font_book(),
+    )
 }
 
 #[wasm_bindgen]
@@ -148,60 +156,43 @@ impl ErgoWasmCompiler {
     }
 
     #[wasm_bindgen]
+    pub fn sync_document_events(&mut self, events: JsValue) -> Result<JsValue, JsValue> {
+        let events: Vec<DocumentEvent> = serde_wasm_bindgen::from_value(events)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let status = apply_document_events(&mut self.session, events)
+            .map_err(|e| JsValue::from_str(&e))?;
+        serde_wasm_bindgen::to_value(&status)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    #[wasm_bindgen]
     pub fn compile_preview(&mut self) -> Result<JsValue, JsValue> {
         let source_revision = self.vfs.latest_revision();
-        let fonts = get_wasm_fonts();
-        let book = get_wasm_font_book();
-        let world = ErgoWorld::new_with_fonts(
-            Arc::clone(&self.vfs),
-            ergo_core::path_utils::file_id_for_virtual_path("main.typ"),
-            fonts,
-            book,
-        );
+        let world = preview_world(Arc::clone(&self.vfs));
 
-        match ergo_core::compile_artifacts::compile_document(&world) {
-            Ok(document) => {
-                let outline = ergo_core::document_outline::extract_outline(&document);
-                
-                let resources = self.session.ast().map(|ast| {
-                    let template = ergo_core::template_spec::load_bundled_template(&ast.metadata.template_id)
-                        .unwrap_or_else(|_| ergo_core::template_spec::load_bundled_template("versatile-apa").unwrap());
-                    let lib_source = ergo_core::document_resources::resource_preview_lib_source(&ast, &template);
-                    ergo_core::resource_watch::write_resource_files(&self.vfs, &ast, &template, &lib_source);
-                    ergo_core::resource_watch::build_resource_catalog(&ast, &template, &self.vfs)
-                });
-
+        match compile_preview_success(&world, &self.vfs, &self.session) {
+            Ok(success) => {
                 let status = self.session.status();
                 let source_snapshot = WorldSourceSnapshot::from_vfs(&self.vfs);
 
                 self.sync_state.store_preview(
                     source_revision,
-                    document.clone(),
+                    success.document.clone(),
                     status.source_map,
                     status.field_source_map,
                     source_snapshot,
                 );
 
-                let page_count = document.pages.len();
-                let preview_pages = (1..=page_count)
-                    .map(|i| ergo_core::compilation_types::PreviewPageFile {
-                        page_number: i,
-                        path: format!("page-{}", i),
-                        changed: true,
-                        content: None,
-                    })
-                    .collect::<Vec<_>>();
-
-                self.document = Some(document);
+                self.document = Some(success.document);
 
                 let result = CompilationResult {
                     source_revision,
                     status: CompilationStatus::Succeeded,
-                    preview_pages: Some(preview_pages),
+                    preview_pages: Some(success.preview_pages),
                     export_path: None,
                     diagnostics: Vec::new(),
-                    outline: Some(outline),
-                    resources,
+                    outline: Some(success.outline),
+                    resources: success.resources,
                 };
 
                 serde_wasm_bindgen::to_value(&result)
@@ -227,12 +218,12 @@ impl ErgoWasmCompiler {
     pub fn render_page(&self, page_index: usize, pixel_per_pt: f32) -> Result<WasmPageImage, JsValue> {
         let doc = self.document.as_ref()
             .ok_or_else(|| JsValue::from_str("No compiled document available"))?;
-        
+
         let page = doc.pages.get(page_index)
             .ok_or_else(|| JsValue::from_str(&format!("Page index out of bounds: {}", page_index)))?;
-            
+
         let pixmap = typst_render::render(page, pixel_per_pt);
-        
+
         Ok(WasmPageImage {
             width: pixmap.width(),
             height: pixmap.height(),
@@ -270,25 +261,21 @@ impl ErgoWasmCompiler {
     pub fn export_pdf(&self) -> Result<Vec<u8>, JsValue> {
         let doc = self.document.as_ref()
             .ok_or_else(|| JsValue::from_str("No compiled document available"))?;
-        
-        let pdf_bytes = typst_pdf::pdf(doc, &typst_pdf::PdfOptions::default())
-            .map_err(|e| JsValue::from_str(&format!("PDF export failed: {:?}", e)))?;
-            
-        Ok(pdf_bytes)
+
+        typst_pdf::pdf(doc, &typst_pdf::PdfOptions::default())
+            .map_err(|e| JsValue::from_str(&format!("PDF export failed: {:?}", e)))
     }
 
     #[wasm_bindgen]
     pub fn export_png(&self, page_index: usize, pixel_per_pt: f32) -> Result<Vec<u8>, JsValue> {
         let doc = self.document.as_ref()
             .ok_or_else(|| JsValue::from_str("No compiled document available"))?;
-        
+
         let page = doc.pages.get(page_index)
             .ok_or_else(|| JsValue::from_str(&format!("Page index out of bounds: {}", page_index)))?;
-            
+
         let pixmap = typst_render::render(page, pixel_per_pt);
-        let png_bytes = pixmap.encode_png()
-            .map_err(|e| JsValue::from_str(&format!("PNG export failed: {:?}", e)))?;
-            
-        Ok(png_bytes)
+        pixmap.encode_png()
+            .map_err(|e| JsValue::from_str(&format!("PNG export failed: {:?}", e)))
     }
 }

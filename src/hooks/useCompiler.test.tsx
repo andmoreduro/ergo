@@ -7,11 +7,12 @@ const tauriApiMock = vi.hoisted(() => ({
     syncDocumentSnapshot: vi.fn(),
     syncDocumentEvents: vi.fn(),
     loadTemplatePackageFiles: vi.fn().mockResolvedValue([]),
+    listenToResourcesEvents: vi.fn().mockResolvedValue(() => undefined),
 }));
 
 const compilerClientMock = vi.hoisted(() => ({
     syncSnapshot: vi.fn(),
-    syncEvent: vi.fn(),
+    syncEvents: vi.fn(),
     compile: vi.fn(),
     renderPage: vi.fn(),
     writeFile: vi.fn(),
@@ -90,7 +91,7 @@ const CompilerHarness = ({
 describe("useCompiler source syncing", () => {
     beforeEach(() => {
         compilerClientMock.syncSnapshot.mockResolvedValue(createStatus(1));
-        compilerClientMock.syncEvent.mockResolvedValue(createStatus(2));
+        compilerClientMock.syncEvents.mockResolvedValue(createStatus(2));
         compilerClientMock.compile.mockResolvedValue({
             source_revision: 1,
             status: "succeeded",
@@ -110,42 +111,10 @@ describe("useCompiler source syncing", () => {
         vi.clearAllMocks();
     });
 
-    it("drains document events in order without sending snapshots for edits", async () => {
+    it("batches pending document events into one wasm sync without resending snapshots", async () => {
         const ast = createDocumentWithTitle("Me hago entender");
-        let releaseFirstEvent: (() => void) | null = null;
-        const syncedTitles: string[] = [];
 
-        compilerClientMock.syncEvent.mockImplementation(
-            async (event: QueuedDocumentEvent["event"]) => {
-                syncedTitles.push(
-                    event.type === "setProjectTitle" ? event.title : "",
-                );
-                if (syncedTitles.length === 1) {
-                    await new Promise<void>((resolve) => {
-                        releaseFirstEvent = resolve;
-                    });
-                }
-                return createStatus(syncedTitles.length + 1);
-            },
-        );
-
-        const { rerender, unmount } = render(
-            <CompilerHarness
-                ast={ast}
-                events={[
-                    queuedEvent(1, {
-                        type: "setProjectTitle",
-                        title: "Me hago entenderd",
-                    }),
-                ]}
-            />,
-        );
-
-        await waitFor(() => {
-            expect(releaseFirstEvent).not.toBeNull();
-        });
-
-        rerender(
+        const { unmount } = render(
             <CompilerHarness
                 ast={ast}
                 events={[
@@ -160,13 +129,14 @@ describe("useCompiler source syncing", () => {
                 ]}
             />,
         );
-        releaseFirstEvent?.();
 
         await waitFor(() => {
-            expect(syncedTitles[syncedTitles.length - 1]).toBe("Me hago entender");
+            expect(compilerClientMock.syncSnapshot).toHaveBeenCalledTimes(1);
+            expect(compilerClientMock.syncEvents).toHaveBeenCalledWith([
+                { type: "setProjectTitle", title: "Me hago entenderd" },
+                { type: "setProjectTitle", title: "Me hago entender" },
+            ]);
         });
-        expect(compilerClientMock.syncSnapshot).toHaveBeenCalledTimes(1);
-        expect(compilerClientMock.syncEvent).toHaveBeenCalled();
 
         unmount();
     });
@@ -264,7 +234,7 @@ describe("useCompiler source syncing", () => {
         });
 
         await waitFor(() => {
-            expect(compilerClientMock.syncEvent).toHaveBeenCalled();
+            expect(compilerClientMock.syncEvents).toHaveBeenCalled();
         });
 
         await act(async () => {

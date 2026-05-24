@@ -63,10 +63,11 @@ The context files describe the intended current design. They are not a changelog
 
 | Command | What it does |
 |---------|-------------|
-| `pnpm dev` | Vite dev server (port 1420, strict port) |
+| `pnpm build:wasm` | Build `ergo-engine-wasm` into `src/wasm-compiler/` (requires `wasm-pack`) |
+| `pnpm dev` | `build:wasm` then Vite dev server (port 1420, strict port) |
 | `pnpm test` | Compile paraglide, then `vitest run` (full suite) |
 | `pnpm test:changed` | Compile paraglide, then `vitest run --changed` (only tests affected by working-tree diff) |
-| `pnpm build` | paraglide compile → `tsc` → `vite build` |
+| `pnpm build` | `build:wasm` → paraglide compile → `tsc` → `vite build` |
 | `pnpm storybook` | Storybook dev server (port 6006) |
 | `pnpm tauri dev` | Full Tauri desktop app (runs `pnpm dev` internally) |
 | `cargo run --release --bin backend_profile -- --scenario typing-title --iterations 200` | Profile the backend preview pipeline without Tauri/WebView |
@@ -123,8 +124,9 @@ Available scenarios are `small-document`, `typing-title`, and `large-document`. 
 1. User edits → `dispatch(ASTAction)` → reducer updates `DocumentAST` (immediate UI response)
 2. AST syncs to backend via `syncDocumentSnapshot()` / `syncDocumentEvent()`
 3. `DocumentSession` detects dirty fragments → assembles section `.typ` files → writes to VFS
-4. `TypstWatch` triggers Typst compilation from VFS-backed `ErgoWorld` → emits SVG pages
-5. Preview renders SVGs, handles click-to-source (backward sync) and source-to-preview (forward sync)
+4. WASM worker (`ergo-engine-wasm`) compiles from the mirrored VFS → Canvas page renders in the preview pane
+5. `TypstWatch` on the backend compiles **resource preview SVGs** only; main preview sync runs in the WASM worker
+6. Backend `DocumentSession` mirrors AST via IPC for archive I/O and resource previews
 
 ### Ownership split
 - **React owns**: UI, action context tree, local `DocumentAST` with undo/redo, settings UI

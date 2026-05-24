@@ -7,17 +7,17 @@ This document is the high-level component design for Érgo. It describes the log
 Érgo is a local-first desktop application:
 
 1. **Frontend Container (React / TypeScript / Vite):** Owns the interactive UI, live action context tree, focused handler chain, local document editing state, undo/redo history, settings UI, and live preview rendering.
-2. **Backend Container (Tauri / Rust):** Owns typed action definitions, keymap schema/validation, logical-key sequence resolution, canonical Typst source materialization, retained in-memory Typst sources, retained preview documents for sync, project archive I/O, background preview compilation via `TypstWatch`, embedded Typst compilation, SVG/PDF/PNG export, and global settings persistence.
-3. **Host OS Layer:** Provides the native WebView, local project files, app config files under the platform config root's `Ergo` folder, package cache, and installer/runtime environment.
+2. **Backend Container (Tauri / Rust):** Owns typed action definitions, keymap schema/validation, logical-key sequence resolution, canonical Typst source materialization, retained in-memory Typst sources, project archive I/O, resource-preview compilation via `TypstWatch`, export file I/O, and global settings persistence.
+3. **WASM Compiler Worker:** Owns the hot-path main-document preview compile, Canvas page rendering, and preview click-to-source sync via `PreviewSyncState` inside `ergo-engine-wasm`.
+4. **Host OS Layer:** Provides the native WebView, local project files, app config files under the platform config root's `Ergo` folder, package cache, and installer/runtime environment.
 
 The current architecture intentionally separates **editable document state** from **compilable Typst source**:
 
 - React updates the `DocumentAST` immediately for responsive editing.
-- Rust `DocumentSession` receives a bootstrap snapshot for cold loads, then applies typed document events for edits, undo, and redo.
-- Rust `VirtualFileSystem` keeps retained `typst_syntax::Source` objects for incremental Typst parsing.
-- `TypstWatch` compiles from a long-lived VFS-backed `ErgoWorld`, writes changed SVG preview pages, and emits lifecycle events.
-- The frontend preview loads SVG page files from the backend.
-- Preview/editor synchronization uses the latest successful, non-stale compiled `PagedDocument` retained in Rust, not SVG DOM attributes.
+- The WASM worker owns the hot-path `DocumentSession`, VFS, preview compile, Canvas rendering, and preview sync.
+- The backend `DocumentSession` mirrors AST snapshots and events over IPC for archive I/O and resource previews.
+- `TypstWatch` compiles resource-preview SVGs into the backend VFS; the main preview does not use backend SVG pages.
+- Preview/editor synchronization uses the latest successful `PagedDocument` retained in the WASM worker's `PreviewSyncState`.
 
 ## Component Diagram
 
@@ -37,7 +37,8 @@ flowchart TB
         AppOrchestration["App Orchestration"]:::comp
         Autosave["Autosave Scheduler"]:::comp
         Sidebar["Workspace Sidebar"]:::comp
-        Preview["SVG Preview Renderer"]:::comp
+        Preview["Canvas Preview Renderer"]:::comp
+        WasmWorker["WASM Compiler Worker"]:::comp
         TauriClient["Typed Tauri API Client"]:::comp
 
         UI --> Commands
@@ -48,9 +49,11 @@ flowchart TB
         SettingsUI --> TauriClient
         Autosave --> TauriClient
         DocState --> Autosave
+        DocState --> WasmWorker
+        Preview --> WasmWorker
         DocState --> TauriClient
-        Preview --> TauriClient
         Preview --> Sidebar
+        WasmWorker --> TauriClient
     end
 
     subgraph Backend ["Backend Container"]
@@ -62,7 +65,6 @@ flowchart TB
         VFS["VirtualFileSystem"]:::comp
         TypstWatch["TypstWatch"]:::comp
         ArtifactPipeline["Compile / Export Artifact Pipeline"]:::comp
-        PreviewSync["PreviewSyncState"]:::comp
         World["ErgoWorld"]:::comp
         Compiler["Embedded Typst Engine"]:::comp
         Archive["Archive Manager"]:::comp
@@ -82,8 +84,6 @@ flowchart TB
         Session --> TypstWatch
         TypstWatch --> ArtifactPipeline
         ArtifactPipeline --> Compiler
-        TypstWatch --> PreviewSync
-        PreviewSync --> World
         Compiler --> World
         World --> VFS
         Archive --> VFS
@@ -98,8 +98,9 @@ flowchart TB
     end
 
     Frontend -. "Rendered in" .-> WebView
-    TauriClient == "resolve_key_event, get_action_catalog, sync_document_snapshot bootstrap, sync_document_event, start_preview_watch, export_document, read_preview_svg, preview sync, settings/archive commands" ==> Handlers
-    Handlers == "compile lifecycle events + preview page file paths" ==> TauriClient
+    TauriClient == "resolve_key_event, get_action_catalog, sync_document_snapshot/events mirror, export_document, read_resource_preview_svg, settings/archive commands" ==> Handlers
+    Handlers == "resource catalog updates" ==> TauriClient
+    WasmWorker == "sync, compile, render, preview sync" ==> Preview
     Archive <== "Read/Write Zip" ==> ProjectFiles
     SettingsStore <== "Read/Write JSON" ==> SettingsFile
     Compiler <== "Resolve Packages" ==> TypstCache

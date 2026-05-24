@@ -10,6 +10,7 @@ pub mod document_session_generation;
 pub mod document_session_types;
 pub mod document_source_builder;
 pub mod path_utils;
+pub mod preview_pipeline;
 pub mod preview_sync;
 pub mod preview_sync_lookup;
 pub mod preview_sync_types;
