@@ -9,6 +9,9 @@ pub mod document_session_events;
 pub mod document_session_generation;
 pub mod document_session_types;
 pub mod document_source_builder;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod font_loader;
+pub mod font_requirements;
 pub mod path_utils;
 pub mod preview_pipeline;
 pub mod preview_sync;

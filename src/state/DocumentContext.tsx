@@ -11,6 +11,7 @@ import {
 import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
 import type { DocumentAST } from "../bindings/DocumentAST";
+import type { ProjectFile } from "../bindings/ProjectFile";
 import type { DocumentEvent as BackendDocumentEvent } from "../bindings/DocumentEvent";
 import { createDefaultDocumentAST } from "./ast/defaults";
 import {
@@ -47,6 +48,7 @@ interface DocumentSessionState {
     events: QueuedDocumentEvent[];
     nextEventId: number;
     sessionId: number;
+    bootstrapFiles: ProjectFile[] | null;
     isDirty: boolean;
     documentFocus: DocumentFocusState;
 }
@@ -73,6 +75,7 @@ interface DocumentAstContextType {
 interface DocumentSyncContextType {
     events: QueuedDocumentEvent[];
     sessionId: number;
+    bootstrapFiles: ProjectFile[] | null;
     ackDocumentEvents: (upToEventId: number) => void;
     eventsVersion: number;
     lastEventId: number;
@@ -108,6 +111,7 @@ const createInitialSessionState = (
     events: [],
     nextEventId: 1,
     sessionId,
+    bootstrapFiles: null,
     isDirty: false,
     documentFocus: {
         elementId: null,
@@ -205,6 +209,7 @@ const createSessionReducer =
             return {
                 ...createInitialSessionState(nextAST, state.sessionId + 1),
                 ast: nextAST,
+                bootstrapFiles: action.action.payload.projectFiles ?? null,
             };
         }
 
@@ -302,11 +307,17 @@ export const DocumentProvider = ({
         return {
             events: sessionState.events,
             sessionId: sessionState.sessionId,
+            bootstrapFiles: sessionState.bootstrapFiles,
             ackDocumentEvents,
             eventsVersion: eventsVersionRef.current,
             lastEventId,
         };
-    }, [sessionState.events, sessionState.sessionId, ackDocumentEvents]);
+    }, [
+        sessionState.events,
+        sessionState.sessionId,
+        sessionState.bootstrapFiles,
+        ackDocumentEvents,
+    ]);
 
     const focusValue = useMemo(
         () => ({

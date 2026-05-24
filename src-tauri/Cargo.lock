@@ -1343,6 +1343,7 @@ name = "ergo-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "fontdb",
  "js-sys",
  "parking_lot",
  "rayon",

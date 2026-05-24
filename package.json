@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build:wasm": "wasm-pack build src-tauri/crates/ergo-engine-wasm --target web --out-dir ../../../src/wasm-compiler --release",
-    "dev": "pnpm build:wasm && vite",
+    "build:wasm:dev": "wasm-pack build src-tauri/crates/ergo-engine-wasm --target web --out-dir ../../../src/wasm-compiler --release --no-opt",
+    "dev": "pnpm build:wasm:dev && vite",
     "build": "pnpm build:wasm && paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",

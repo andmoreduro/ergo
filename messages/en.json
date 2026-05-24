@@ -39,6 +39,7 @@
   "menubar_insert_figure": "Figure",
   "menubar_insert_equation": "Equation",
   "menubar_insert_reference": "Citation or Reference",
+  "context_menu_inspect": "Inspect",
   "menubar_command_palette": "Command Palette",
   "menubar_zoom_in": "Zoom In",
   "menubar_zoom_out": "Zoom Out",

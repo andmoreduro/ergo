@@ -2,11 +2,13 @@ import type { DocumentAST } from "../../bindings/DocumentAST";
 import type { ProjectSettings } from "../../bindings/ProjectSettings";
 import type { ReferenceEntry } from "../../bindings/ReferenceEntry";
 import type { AssetEntry } from "../../bindings/AssetEntry";
+import type { ProjectFile } from "../../bindings/ProjectFile";
 
 export type LoadDocumentAction = {
   type: 'LOAD_DOCUMENT';
   payload: {
     ast: DocumentAST;
+    projectFiles?: ProjectFile[];
   };
 };
 

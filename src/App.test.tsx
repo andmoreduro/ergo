@@ -19,7 +19,6 @@ const tauriApiMock = vi.hoisted(() => ({
     syncDocumentSnapshot: vi.fn(),
     syncDocumentEvents: vi.fn(),
     getTemplateSpec: vi.fn(),
-    listenToResourcesEvents: vi.fn(),
     loadTemplatePackageFiles: vi.fn().mockResolvedValue([]),
     documentDir: vi.fn(),
 }));
@@ -59,6 +58,7 @@ const syncBarrierMock = vi.hoisted(() => ({
 
 const compilerClientMock = vi.hoisted(() => ({
     writeFile: vi.fn(),
+    bootstrap: vi.fn(),
     syncSnapshot: vi.fn(),
     syncEvents: vi.fn(),
     compile: vi.fn(),
@@ -80,6 +80,7 @@ vi.mock("./api/tauri", () => ({
 
 vi.mock("./workers/compilerClient", () => ({
     CompilerClient: compilerClientMock,
+    warmupCompiler: vi.fn(),
 }));
 
 vi.mock("./hooks/documentSyncBarrier", () => ({
@@ -193,8 +194,7 @@ describe("App project lifecycle", () => {
             ],
             custom_elements: [],
         });
-        tauriApiMock.listenToResourcesEvents.mockResolvedValue(() => undefined);
-        compilerClientMock.syncSnapshot.mockResolvedValue({
+        const bootstrapStatus = {
             dirtyElementIds: [],
             dirtySectionIds: [],
             fragmentCount: 0,
@@ -212,6 +212,18 @@ describe("App project lifecycle", () => {
             sourceMap: [],
             fieldSourceMap: [],
             sourceRevision: 1,
+        };
+        compilerClientMock.bootstrap.mockResolvedValue({
+            status: bootstrapStatus,
+            result: {
+                source_revision: 1,
+                status: "succeeded",
+                preview_pages: [],
+                export_path: null,
+                diagnostics: [],
+                outline: null,
+                resources: null,
+            },
         });
         compilerClientMock.compile.mockResolvedValue({
             source_revision: 1,

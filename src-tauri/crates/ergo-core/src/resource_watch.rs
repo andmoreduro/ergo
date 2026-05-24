@@ -60,7 +60,7 @@ pub fn write_resource_files(
 
 pub fn build_resource_catalog(
     ast: &DocumentAST,
-    template: &TemplateSpec,
+    _template: &TemplateSpec,
     vfs: &VirtualFileSystem,
 ) -> DocumentResources {
     let seeds = assign_preview_pages(resource_seeds(ast));
@@ -74,35 +74,9 @@ pub fn build_resource_catalog(
     ] {
         let entries: Vec<ResourceEntry> = seeds
             .iter()
-            .enumerate()
-            .filter(|(_, seed)| seed.kind == kind)
-            .map(|(_, seed)| {
-                let has_preview = seed.preview_page.is_some();
-                let preview_path = seed
-                    .preview_page
-                    .map(|page| format!(".ergproj/resource-previews/svg/page-{page}.svg"));
-                let preview = if !has_preview {
-                    ResourcePreview {
-                        status: ResourcePreviewStatus::Missing,
-                        path: None,
-                        diagnostic: seed.missing_diagnostic.clone(),
-                    }
-                } else if preview_path
-                    .as_ref()
-                    .is_some_and(|path| vfs.read_file(path).is_ok())
-                {
-                    ResourcePreview {
-                        status: ResourcePreviewStatus::Ready,
-                        path: preview_path,
-                        diagnostic: None,
-                    }
-                } else {
-                    ResourcePreview {
-                        status: ResourcePreviewStatus::Missing,
-                        path: None,
-                        diagnostic: seed.missing_diagnostic.clone(),
-                    }
-                };
+            .filter(|seed| seed.kind == kind)
+            .map(|seed| {
+                let preview = preview_for_seed(seed);
                 ResourceEntry {
                     id: seed.id.clone(),
                     kind: seed.kind.clone(),
@@ -144,6 +118,8 @@ pub fn build_resource_catalog_with_failure(
                 entry.preview = ResourcePreview {
                     status: ResourcePreviewStatus::Failed,
                     path: None,
+                    page_number: None,
+                    content: None,
                     diagnostic: Some(diagnostic.clone()),
                 };
             }
@@ -165,6 +141,26 @@ struct ResourceSeed {
     missing_diagnostic: Option<String>,
 }
 
+fn preview_for_seed(seed: &ResourceSeed) -> ResourcePreview {
+    if let Some(page) = seed.preview_page {
+        ResourcePreview {
+            status: ResourcePreviewStatus::Ready,
+            path: None,
+            page_number: Some(page),
+            content: None,
+            diagnostic: None,
+        }
+    } else {
+        ResourcePreview {
+            status: ResourcePreviewStatus::Missing,
+            path: None,
+            page_number: None,
+            content: None,
+            diagnostic: seed.missing_diagnostic.clone(),
+        }
+    }
+}
+
 fn assign_preview_pages(mut seeds: Vec<ResourceSeed>) -> Vec<ResourceSeed> {
     let mut page = 0u32;
     for seed in &mut seeds {
@@ -184,10 +180,9 @@ fn resource_seeds(ast: &DocumentAST) -> Vec<ResourceSeed> {
         seeds.push(file_seed(asset));
     }
     for section in &ast.sections {
-        if let DocumentSection::Content(content) = section {
-            for element in &content.elements {
-                collect_element_seeds(element, &mut seeds, &ast.assets);
-            }
+        let DocumentSection::Content(content) = section;
+        for element in &content.elements {
+            collect_element_seeds(element, &mut seeds, &ast.assets);
         }
     }
     seeds

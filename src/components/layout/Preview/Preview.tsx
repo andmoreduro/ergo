@@ -5,6 +5,7 @@ import {
     useState,
     type MouseEvent,
 } from "react";
+import { useTypstCanvasPage } from "../../../hooks/useTypstCanvasPage";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { useDocumentFocus } from "../../../state/DocumentContext";
 import type { useCompiler } from "../../../hooks/useCompiler";
@@ -208,50 +209,16 @@ const PreviewPageCanvas = ({
     pixelPerPt,
     highlightedPosition,
 }: PreviewPageCanvasProps) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const renderRequestIdRef = useRef(0);
-    const [aspectRatio, setAspectRatio] = useState<number>(595.27 / 841.89);
-
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const requestId = renderRequestIdRef.current + 1;
-        renderRequestIdRef.current = requestId;
-
-        let cancelled = false;
-
-        CompilerClient.renderPage(pageIndex, pixelPerPt, requestId)
-            .then((result) => {
-                if (cancelled || result.requestId !== renderRequestIdRef.current) {
-                    return;
-                }
-
-                const ctx = canvas.getContext("2d");
-                if (!ctx) return;
-
-                canvas.width = result.width;
-                canvas.height = result.height;
-
-                const imgData = new ImageData(
-                    new Uint8ClampedArray(result.pixels.buffer, result.pixels.byteOffset, result.pixels.byteLength),
-                    result.width,
-                    result.height
-                );
-                ctx.putImageData(imgData, 0, 0);
-
-                const widthPt = result.width / pixelPerPt;
-                const heightPt = result.height / pixelPerPt;
-                setAspectRatio(widthPt / heightPt);
-            })
-            .catch((err) => {
+    const { canvasRef, aspectRatio } = useTypstCanvasPage(
+        (requestId) => CompilerClient.renderPage(pageIndex, pixelPerPt, requestId),
+        pixelPerPt,
+        [pageIndex, previewRevision, pixelPerPt],
+        {
+            onError: (err) => {
                 console.error("Failed to render page to canvas:", err);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [pageIndex, previewRevision, pixelPerPt]);
+            },
+        },
+    );
 
     const caretStyle =
         highlightedPosition && highlightedPosition.pageNumber === pageNumber

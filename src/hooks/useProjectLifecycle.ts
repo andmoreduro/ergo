@@ -2,7 +2,6 @@ import { useCallback, useRef, useState, type Dispatch } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 
 import { TauriApi } from "../api/tauri";
-import { CompilerClient } from "../workers/compilerClient";
 import { waitForDocumentSync } from "./documentSyncBarrier";
 import type { GlobalSettings } from "../bindings/GlobalSettings";
 import { m } from "../paraglide/messages.js";
@@ -169,10 +168,10 @@ export const useProjectLifecycle = ({
 
             try {
                 const result = await TauriApi.openProject(projectPath);
-                for (const file of result.files) {
-                    await CompilerClient.writeFile(file.path, new Uint8Array(file.bytes));
-                }
-                dispatch({ type: "LOAD_DOCUMENT", payload: { ast: result.ast } });
+                dispatch({
+                    type: "LOAD_DOCUMENT",
+                    payload: { ast: result.ast, projectFiles: result.files },
+                });
                 rememberProject(projectPath);
                 setCurrentProjectPath(projectPath);
                 setHasActiveProject(true);

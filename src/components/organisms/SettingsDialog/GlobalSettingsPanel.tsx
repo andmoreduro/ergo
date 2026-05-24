@@ -19,6 +19,7 @@ export const GlobalSettingsPanel = ({
         <label className={styles.field}>
             <span>{m.settings_theme()}</span>
             <select
+                aria-label={m.settings_theme()}
                 value={settings.theme_mode ?? "system"}
                 onChange={(event) =>
                     onChange({

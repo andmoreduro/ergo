@@ -5,12 +5,14 @@ body,
 #root {
     width: 100%;
     height: 100%;
+    overscroll-behavior: none;
 }
 
 *,
 *::before,
 *::after {
     box-sizing: border-box;
+    overscroll-behavior: none;
 }
 
 body,

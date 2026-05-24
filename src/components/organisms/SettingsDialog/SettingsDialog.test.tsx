@@ -103,6 +103,20 @@ describe("SettingsDialog global panel", () => {
             }),
         );
     });
+
+    it("edits the app theme from settings", () => {
+        const handleGlobalSettingsChange = renderGlobalDialog();
+
+        fireEvent.change(screen.getByLabelText("Theme"), {
+            target: { value: "dark" },
+        });
+
+        expect(handleGlobalSettingsChange).toHaveBeenCalledWith(
+            expect.objectContaining({
+                theme_mode: "dark",
+            }),
+        );
+    });
 });
 
 describe("SettingsDialog keymap panel", () => {

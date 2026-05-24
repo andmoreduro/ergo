@@ -19,6 +19,19 @@ vi.mock("../../../actions/runtime", () => ({
     useActionDispatcher: () => dispatchActionMock,
 }));
 
+vi.mock("../../../workers/compilerClient", () => ({
+    CompilerClient: {
+        renderResourcePage: vi.fn().mockResolvedValue({
+            pageIndex: 1,
+            width: 2,
+            height: 2,
+            pixels: new Uint8Array([0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255]),
+            requestId: 1,
+        }),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
 const LoadDocument = ({ ast }: { ast: DocumentAST }) => {
     const { dispatch } = useDocument();
 
@@ -259,6 +272,7 @@ describe("Sidebar outline", () => {
             <DocumentProvider>
                 <LoadDocument ast={ast} />
                 <Sidebar
+                    previewRevision={1}
                     resources={{
                         groups: [
                             {
@@ -275,7 +289,9 @@ describe("Sidebar outline", () => {
                                         asset_id: null,
                                         preview: {
                                             status: "ready",
-                                            path: ".ergproj/resource-previews/svg/equation-1.svg",
+                                            path: null,
+                                            page_number: 1,
+                                            content: null,
                                             diagnostic: null,
                                         },
                                     },
@@ -296,6 +312,8 @@ describe("Sidebar outline", () => {
                                         preview: {
                                             status: "failed",
                                             path: null,
+                                            page_number: null,
+                                            content: null,
                                             diagnostic: "preview failed",
                                         },
                                     },

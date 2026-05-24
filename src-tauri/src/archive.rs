@@ -226,12 +226,10 @@ mod tests {
 
     fn test_state() -> TauriAppState {
         let vfs = Arc::new(VirtualFileSystem::new());
-        let typst_watch = Arc::new(crate::typst_watch::TypstWatch::new(Arc::clone(&vfs)));
         let document_session = Arc::new(DocumentSession::new(Arc::clone(&vfs)));
 
         TauriAppState {
             vfs,
-            typst_watch,
             document_session,
         }
     }

@@ -21,7 +21,7 @@ use crate::world::{SnapshotWorld, WorldSourceSnapshot};
 #[derive(Clone)]
 struct RetainedPreviewDocument {
     source_revision: SourceRevision,
-    document: PagedDocument,
+    document: Arc<PagedDocument>,
     source_map: Vec<SourceMapEntry>,
     field_source_map: Vec<FieldSourceMapEntry>,
     source_snapshot: WorldSourceSnapshot,
@@ -37,7 +37,7 @@ impl PreviewSyncState {
     pub fn store_preview(
         &self,
         source_revision: SourceRevision,
-        document: PagedDocument,
+        document: Arc<PagedDocument>,
         source_map: Vec<SourceMapEntry>,
         field_source_map: Vec<FieldSourceMapEntry>,
         source_snapshot: WorldSourceSnapshot,
@@ -737,7 +737,7 @@ mod tests {
         let state = PreviewSyncState::default();
         state.store_preview(
             source_revision,
-            document,
+            Arc::new(document),
             source_map,
             field_source_map,
             source_snapshot,

@@ -19,7 +19,6 @@ pub(crate) struct GeneratedProjectSources {
     pub(crate) main_source: String,
     pub(crate) lib_source: String,
     pub(crate) references_source: String,
-    pub(crate) element_paths: Vec<String>,
     pub(crate) fragments: HashMap<String, GeneratedFragment>,
     pub(crate) source_map: Vec<SourceMapEntry>,
     pub(crate) field_source_map: Vec<FieldSourceMapEntry>,
@@ -39,13 +38,6 @@ pub(crate) fn default_layout(section_paths: Vec<String>) -> ProjectSourceLayout 
         project_settings_path: PROJECT_SETTINGS_PATH.to_string(),
         template_path: TEMPLATE_PATH.to_string(),
     }
-}
-
-pub(crate) fn generate_project_sources(
-    ast: &DocumentAST,
-    template: &TemplateSpec,
-) -> GeneratedProjectSources {
-    generate_project_sources_inner(ast, template, None, None)
 }
 
 pub(crate) fn generate_project_sources_incremental(
@@ -312,7 +304,6 @@ fn generate_project_sources_inner(
         main_source,
         lib_source,
         references_source,
-        element_paths,
         fragments,
         source_map,
         field_source_map,
@@ -323,10 +314,6 @@ fn generate_project_sources_inner(
 
 fn element_path(element_id: &str) -> String {
     format!("elements/{}.typ", path_id_for_id(element_id))
-}
-
-fn section_path(section_id: &str) -> String {
-    format!("sections/{}.typ", path_id_for_id(section_id))
 }
 
 fn element_id(element: &DocumentElement) -> String {
@@ -1010,7 +997,7 @@ fn generate_element_typst(
             }
 
             if let Some(over) = table_override {
-                if let Some(wrapper) = &over.wrapper {
+                if over.wrapper.is_some() {
                     builder.push_literal("\n  )");
                     for field_spec in &over.extra_fields {
                         if let Some(val) = table.extra_fields.get(&field_spec.key) {
