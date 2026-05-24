@@ -9,7 +9,7 @@ use crate::core_errors::CompileError;
 use crate::vfs::VirtualFileSystem;
 use crate::world::ErgoWorld;
 
-pub(crate) fn compile_document(world: &ErgoWorld) -> Result<PagedDocument, CompileError> {
+pub fn compile_document(world: &ErgoWorld) -> Result<PagedDocument, CompileError> {
     match typst::compile::<PagedDocument>(world).output {
         Ok(document) => Ok(document),
         Err(errors) => Err(CompileError::Operation(format_source_diagnostics(&errors))),
@@ -34,7 +34,7 @@ fn format_source_diagnostic(error: &SourceDiagnostic) -> String {
     lines.join("\n")
 }
 
-pub(crate) fn render_svgs(document: &PagedDocument) -> Vec<String> {
+pub fn render_svgs(document: &PagedDocument) -> Vec<String> {
     use rayon::prelude::*;
     document.pages.par_iter().map(typst_svg::svg).collect()
 }
@@ -85,7 +85,7 @@ struct CachedSvgPage {
     svg: String,
 }
 
-pub(crate) struct SvgPageCache {
+pub struct SvgPageCache {
     entries: Vec<CachedSvgPage>,
 }
 
@@ -97,7 +97,7 @@ impl SvgPageCache {
     }
 }
 
-pub(crate) fn render_svgs_incremental(
+pub fn render_svgs_incremental(
     document: &PagedDocument,
     cache: &mut SvgPageCache,
 ) -> Vec<String> {
@@ -147,7 +147,7 @@ pub(crate) fn render_svgs_incremental(
     svgs
 }
 
-pub(crate) fn write_svg_pages(
+pub fn write_svg_pages(
     vfs: &VirtualFileSystem,
     directory: &str,
     svgs: &[String],

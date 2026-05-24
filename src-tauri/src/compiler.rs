@@ -1,10 +1,7 @@
 use tauri::{AppHandle, State};
 
 use crate::app_state::TauriAppState;
-use crate::compilation_types::{CompilationResult, CompilationStatus, ExportFormat};
-use crate::compile_artifacts::{compile_document, render_svgs, write_svg_pages};
-use crate::path_utils::file_id_for_virtual_path;
-use crate::world::ErgoWorld;
+use crate::compilation_types::ExportFormat;
 
 #[tauri::command]
 pub fn start_preview_watch(
@@ -27,137 +24,89 @@ pub fn stop_preview_watch(
     Ok(())
 }
 
+const COMMON_FONT_FILES: &[&str] = &[
+    "arial.ttf", "arialbd.ttf", "ariali.ttf", "arialbi.ttf",
+    "times.ttf", "timesbd.ttf", "timesi.ttf", "timesbi.ttf",
+    "calibri.ttf", "calibrib.ttf", "calibrii.ttf", "calibriz.ttf",
+    "segoeui.ttf", "segoeuib.ttf", "segoeuii.ttf", "segoeuiz.ttf",
+    "cambria.ttc", "cambriab.ttf", "cambriai.ttf", "cambriaz.ttf",
+    "consola.ttf", "consolab.ttf", "consolai.ttf", "consolaz.ttf",
+    "cour.ttf", "courbd.ttf", "couri.ttf", "courbi.ttf",
+    "georgia.ttf", "georgiab.ttf", "georgiai.ttf", "georgiaz.ttf",
+    "tahoma.ttf", "tahomabd.ttf",
+    "verdana.ttf", "verdanab.ttf", "verdanai.ttf", "verdanaz.ttf",
+    "stxingkai.ttf", "simsun.ttc", "simhei.ttf", "msyh.ttc",
+];
+
+#[tauri::command]
+pub fn load_system_fonts() -> Result<Vec<Vec<u8>>, String> {
+    let fonts_dir = std::path::PathBuf::from("C:\\Windows\\Fonts");
+    let mut font_buffers = Vec::new();
+    
+    if fonts_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(fonts_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
+                    let filename_lower = filename.to_lowercase();
+                    if COMMON_FONT_FILES.iter().any(|f| *f == filename_lower) {
+                        if let Ok(bytes) = std::fs::read(&path) {
+                            font_buffers.push(bytes);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(font_buffers)
+}
+
 #[tauri::command]
 pub fn export_document(
     state: State<'_, TauriAppState>,
     format: ExportFormat,
-) -> Result<CompilationResult, String> {
+    bytes: Vec<u8>,
+    page_number: Option<usize>,
+) -> Result<(), String> {
     let vfs = &state.vfs;
-    let world = ErgoWorld::new(
-        vfs.clone(),
-        file_id_for_virtual_path("main.typ"),
-    );
-    let source_revision = vfs.latest_revision();
-
     match format {
-        ExportFormat::Svg => {
-            match compile_document(&world) {
-                Ok(document) => {
-                    let svgs = render_svgs(&document);
-                    let export_dir = ".ergproj/exports/svg";
-                    write_svg_pages(vfs, export_dir, &svgs);
-                    Ok(CompilationResult {
-                        source_revision,
-                        status: CompilationStatus::Succeeded,
-                        preview_pages: None,
-                        export_path: Some(export_dir.to_string()),
-                        diagnostics: Vec::new(),
-                        outline: None,
-                        resources: None,
-                    })
-                }
-                Err(error) => Ok(CompilationResult {
-                    source_revision,
-                    status: CompilationStatus::Failed,
-                    preview_pages: None,
-                    export_path: None,
-                    diagnostics: vec![error.to_string()],
-                    outline: None,
-                    resources: None,
-                }),
-            }
-        }
         ExportFormat::Pdf => {
-            match compile_document(&world) {
-                Ok(document) => {
-                    match typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default()) {
-                        Ok(bytes) => {
-                            let export_path = ".ergproj/exports/document.pdf";
-                            vfs.write_file(export_path, bytes);
-                            Ok(CompilationResult {
-                                source_revision,
-                                status: CompilationStatus::Succeeded,
-                                preview_pages: None,
-                                export_path: Some(export_path.to_string()),
-                                diagnostics: Vec::new(),
-                                outline: None,
-                                resources: None,
-                            })
-                        }
-                        Err(errors) => {
-                            let diagnostics: Vec<String> = errors
-                                .iter()
-                                .map(|d| format!("{:?}: {}", d.severity, d.message))
-                                .collect();
-                            Ok(CompilationResult {
-                                source_revision,
-                                status: CompilationStatus::Failed,
-                                preview_pages: None,
-                                export_path: None,
-                                diagnostics,
-                                outline: None,
-                                resources: None,
-                            })
-                        }
-                    }
-                }
-                Err(error) => Ok(CompilationResult {
-                    source_revision,
-                    status: CompilationStatus::Failed,
-                    preview_pages: None,
-                    export_path: None,
-                    diagnostics: vec![error.to_string()],
-                    outline: None,
-                    resources: None,
-                }),
+            let export_path = ".ergproj/exports/document.pdf";
+            vfs.write_file(export_path, bytes.clone());
+            if let Err(e) = std::fs::create_dir_all(".ergproj/exports") {
+                return Err(format!("failed to create export directory: {e}"));
             }
+            if let Err(e) = std::fs::write(export_path, &bytes) {
+                return Err(format!("failed to write PDF file: {e}"));
+            }
+            Ok(())
         }
         ExportFormat::Png => {
-            match compile_document(&world) {
-                Ok(document) => {
-                    let export_dir = ".ergproj/exports/png";
-                    for (index, page) in document.pages.iter().enumerate() {
-                        let pixmap = typst_render::render(page, 2.0);
-                        match pixmap.encode_png() {
-                            Ok(bytes) => {
-                                vfs.write_file(
-                                    &format!("{}/page-{}.png", export_dir, index + 1),
-                                    bytes,
-                                )
-                            }
-                            Err(error) => {
-                                return Ok(CompilationResult {
-                                    source_revision,
-                                    status: CompilationStatus::Failed,
-                                    preview_pages: None,
-                                    export_path: None,
-                                    diagnostics: vec![error.to_string()],
-                                    outline: None,
-                                    resources: None,
-                                })
-                            }
-                        }
-                    }
-                    Ok(CompilationResult {
-                        source_revision,
-                        status: CompilationStatus::Succeeded,
-                        preview_pages: None,
-                        export_path: Some(export_dir.to_string()),
-                        diagnostics: Vec::new(),
-                        outline: None,
-                        resources: None,
-                    })
-                }
-                Err(error) => Ok(CompilationResult {
-                    source_revision,
-                    status: CompilationStatus::Failed,
-                    preview_pages: None,
-                    export_path: None,
-                    diagnostics: vec![error.to_string()],
-                    outline: None,
-                    resources: None,
-                }),
+            let page = page_number.unwrap_or(1);
+            let export_dir = ".ergproj/exports/png";
+            let path = format!("{}/page-{}.png", export_dir, page);
+            vfs.write_file(&path, bytes.clone());
+            if let Err(e) = std::fs::create_dir_all(export_dir) {
+                return Err(format!("failed to create export directory: {e}"));
             }
+            if let Err(e) = std::fs::write(&path, &bytes) {
+                return Err(format!("failed to write PNG file: {e}"));
+            }
+            Ok(())
+        }
+        ExportFormat::Svg => {
+            let page = page_number.unwrap_or(1);
+            let export_dir = ".ergproj/exports/svg";
+            let path = format!("{}/page-{}.svg", export_dir, page);
+            vfs.write_file(&path, bytes.clone());
+            if let Err(e) = std::fs::create_dir_all(export_dir) {
+                return Err(format!("failed to create export directory: {e}"));
+            }
+            if let Err(e) = std::fs::write(&path, &bytes) {
+                return Err(format!("failed to write SVG file: {e}"));
+            }
+            Ok(())
         }
     }
 }

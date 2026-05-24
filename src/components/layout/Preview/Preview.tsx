@@ -5,7 +5,7 @@ import {
     useState,
     type MouseEvent,
 } from "react";
-import { TauriApi } from "../../../api/tauri";
+import { CompilerClient } from "../../../workers/compilerClient";
 import { useDocumentFocus } from "../../../state/DocumentContext";
 import type { useCompiler } from "../../../hooks/useCompiler";
 import type { PreviewElementPosition } from "../../../bindings/PreviewElementPosition";
@@ -24,7 +24,7 @@ export interface PreviewProps {
 export const Preview = ({ compiler }: PreviewProps) => {
     const { documentFocus } = useDocumentFocus();
     const dispatchAction = useActionDispatcher();
-    const { svgs, error, sourceMap, previewRevision, latencyMs } = compiler;
+    const { previewPages, error, sourceMap, previewRevision, latencyMs } = compiler;
     const previewRef = useRef<HTMLDivElement>(null);
     const syncCueRequestIdRef = useRef(0);
     const [highlightedPosition, setHighlightedPosition] =
@@ -44,7 +44,7 @@ export const Preview = ({ compiler }: PreviewProps) => {
             syncCueRequestIdRef.current = requestId;
 
             try {
-                const result = await TauriApi.getPreviewPositionsForFocus(
+                const result = await CompilerClient.positionsForFocus(
                     target,
                     displayedRevision,
                 );
@@ -111,14 +111,15 @@ export const Preview = ({ compiler }: PreviewProps) => {
             "[data-preview-page-number]",
         );
         const pageNumber = Number(pageElement?.dataset.previewPageNumber);
-        const svg = pageElement?.querySelector("svg");
-        const point = svg ? previewPointFromMouseEvent(event, svg) : null;
+        const canvas = pageElement?.querySelector("canvas");
+        const pixelPerPt = 1.3333 * (window.devicePixelRatio || 1);
+        const point = canvas ? previewPointFromCanvasMouseEvent(event, canvas, pixelPerPt) : null;
 
         if (!pageElement || !Number.isFinite(pageNumber) || !point) {
             return;
         }
 
-        void TauriApi.jumpFromPreviewClick(
+        void CompilerClient.jumpFromClick(
             pageNumber,
             point.xPt,
             point.yPt,
@@ -163,33 +164,18 @@ export const Preview = ({ compiler }: PreviewProps) => {
         >
             {error && <div className={styles.error}>{error}</div>}
             <div className={styles.svgContainer} ref={previewRef}>
-                {svgs.length > 0 ? (
-                    svgs.map((svg, index) => {
-                        const pageNumber = index + 1;
-                        const caretStyle =
-                            highlightedPosition?.pageNumber === pageNumber
-                                ? caretStyleForSvg(highlightedPosition, svg)
-                                : null;
-
+                {previewPages.length > 0 ? (
+                    previewPages.map((page, index) => {
+                        const pageNumber = page.page_number;
                         return (
-                            <div
+                            <PreviewPageCanvas
                                 key={index}
-                                className={styles.page}
-                                data-preview-page-number={pageNumber}
-                                data-active-preview-page={
-                                    caretStyle ? "true" : undefined
-                                }
-                            >
-                                <div dangerouslySetInnerHTML={{ __html: svg }} />
-                                {caretStyle && (
-                                    <span
-                                        key={`${highlightedPosition?.sourceRevision}-${highlightedPosition?.elementId}-${highlightedPosition?.fieldId}-${highlightedPosition?.caretUtf16Offset}-${caretStyle.left}-${caretStyle.top}`}
-                                        className={styles.syncCaret}
-                                        data-preview-sync-caret="true"
-                                        style={caretStyle}
-                                    />
-                                )}
-                            </div>
+                                pageIndex={index}
+                                pageNumber={pageNumber}
+                                previewRevision={previewRevision || 0}
+                                pixelPerPt={1.3333 * (window.devicePixelRatio || 1)}
+                                highlightedPosition={highlightedPosition}
+                            />
                         );
                     })
                 ) : (
@@ -207,98 +193,131 @@ export const Preview = ({ compiler }: PreviewProps) => {
     );
 };
 
-const caretStyleForSvg = (
+interface PreviewPageCanvasProps {
+    pageIndex: number;
+    pageNumber: number;
+    previewRevision: number;
+    pixelPerPt: number;
+    highlightedPosition: PreviewElementPosition | null;
+}
+
+const PreviewPageCanvas = ({
+    pageIndex,
+    pageNumber,
+    previewRevision,
+    pixelPerPt,
+    highlightedPosition,
+}: PreviewPageCanvasProps) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const renderRequestIdRef = useRef(0);
+    const [aspectRatio, setAspectRatio] = useState<number>(595.27 / 841.89);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const requestId = renderRequestIdRef.current + 1;
+        renderRequestIdRef.current = requestId;
+
+        let cancelled = false;
+
+        CompilerClient.renderPage(pageIndex, pixelPerPt, requestId)
+            .then((result) => {
+                if (cancelled || result.requestId !== renderRequestIdRef.current) {
+                    return;
+                }
+
+                const ctx = canvas.getContext("2d");
+                if (!ctx) return;
+
+                canvas.width = result.width;
+                canvas.height = result.height;
+
+                const imgData = new ImageData(
+                    new Uint8ClampedArray(result.pixels.buffer, result.pixels.byteOffset, result.pixels.byteLength),
+                    result.width,
+                    result.height
+                );
+                ctx.putImageData(imgData, 0, 0);
+
+                const widthPt = result.width / pixelPerPt;
+                const heightPt = result.height / pixelPerPt;
+                setAspectRatio(widthPt / heightPt);
+            })
+            .catch((err) => {
+                console.error("Failed to render page to canvas:", err);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [pageIndex, previewRevision, pixelPerPt]);
+
+    const caretStyle =
+        highlightedPosition && highlightedPosition.pageNumber === pageNumber
+            ? caretStyleForCanvas(highlightedPosition, canvasRef.current, pixelPerPt)
+            : null;
+
+    return (
+        <div
+            className={styles.page}
+            data-preview-page-number={pageNumber}
+            data-active-preview-page={caretStyle ? "true" : undefined}
+            style={{ aspectRatio, position: "relative" }}
+        >
+            <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+            {caretStyle && (
+                <span
+                    key={`${highlightedPosition?.sourceRevision}-${highlightedPosition?.elementId}-${highlightedPosition?.fieldId}-${highlightedPosition?.caretUtf16Offset}-${caretStyle.left}-${caretStyle.top}`}
+                    className={styles.syncCaret}
+                    data-preview-sync-caret="true"
+                    style={caretStyle}
+                />
+            )}
+        </div>
+    );
+};
+
+const caretStyleForCanvas = (
     position: PreviewElementPosition,
-    svg: string,
+    canvas: HTMLCanvasElement | null,
+    pixelPerPt: number,
 ): { left: string; top: string; height: string } | null => {
     const caretCue = position.caretCue;
-    if (!caretCue) {
+    if (!caretCue || !canvas || canvas.width === 0 || canvas.height === 0) {
         return null;
     }
 
-    const viewBox = parseSvgViewBoxString(svg);
-    if (!viewBox) {
-        return null;
-    }
+    const widthPt = canvas.width / pixelPerPt;
+    const heightPt = canvas.height / pixelPerPt;
 
     return {
-        left: toPercent((position.xPt - viewBox.x) / viewBox.width),
-        top: toPercent((caretCue.topYPt - viewBox.y) / viewBox.height),
-        height: toPercent(caretCue.heightPt / viewBox.height),
+        left: toPercent(position.xPt / widthPt),
+        top: toPercent(caretCue.topYPt / heightPt),
+        height: toPercent(caretCue.heightPt / heightPt),
     };
 };
 
 const toPercent = (ratio: number) => `${Number((ratio * 100).toFixed(4))}%`;
 
-const previewPointFromMouseEvent = (
+const previewPointFromCanvasMouseEvent = (
     event: MouseEvent<HTMLElement>,
-    svg: SVGSVGElement,
+    canvas: HTMLCanvasElement,
+    pixelPerPt: number,
 ): { xPt: number; yPt: number } | null => {
-    const rect = svg.getBoundingClientRect();
+    const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) {
         return null;
     }
 
-    const viewBox = parseSvgViewBox(svg.getAttribute("viewBox"), rect);
     const xRatio = (event.clientX - rect.left) / rect.width;
     const yRatio = (event.clientY - rect.top) / rect.height;
 
-    return {
-        xPt: viewBox.x + xRatio * viewBox.width,
-        yPt: viewBox.y + yRatio * viewBox.height,
-    };
-};
-
-const parseSvgViewBox = (
-    value: string | null,
-    fallback: DOMRect,
-): { x: number; y: number; width: number; height: number } => {
-    const parts =
-        value
-            ?.trim()
-            .split(/\s+/)
-            .map(Number)
-            .filter((part) => Number.isFinite(part)) ?? [];
-
-    if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
-        return {
-            x: parts[0],
-            y: parts[1],
-            width: parts[2],
-            height: parts[3],
-        };
-    }
+    const widthPt = canvas.width / pixelPerPt;
+    const heightPt = canvas.height / pixelPerPt;
 
     return {
-        x: 0,
-        y: 0,
-        width: fallback.width,
-        height: fallback.height,
-    };
-};
-
-const parseSvgViewBoxString = (
-    svg: string,
-): { x: number; y: number; width: number; height: number } | null => {
-    const match = svg.match(/\bviewBox=["']([^"']+)["']/);
-    if (!match) {
-        return null;
-    }
-
-    const parts = match[1]
-        .trim()
-        .split(/\s+/)
-        .map(Number)
-        .filter((part) => Number.isFinite(part));
-
-    if (parts.length !== 4 || parts[2] <= 0 || parts[3] <= 0) {
-        return null;
-    }
-
-    return {
-        x: parts[0],
-        y: parts[1],
-        width: parts[2],
-        height: parts[3],
+        xPt: xRatio * widthPt,
+        yPt: yRatio * heightPt,
     };
 };

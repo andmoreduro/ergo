@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useMemo } from "react";
 import { TauriApi } from "../../../api/tauri";
+import { CompilerClient } from "../../../workers/compilerClient";
 import { useDocumentAst } from "../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
@@ -585,16 +586,17 @@ const FigureEditor = ({ element }: { element: FigureElement }) => {
             return;
         }
 
-        const asset = await TauriApi.importResourceFile(selected);
-        const existing = state.assets.some((entry) => entry.id === asset.id);
+        const result = await TauriApi.importResourceFile(selected);
+        await CompilerClient.writeFile(result.asset.path, new Uint8Array(result.bytes));
+        const existing = state.assets.some((entry) => entry.id === result.asset.id);
         if (!existing) {
-            dispatch({ type: "ADD_ASSET", payload: { asset } });
+            dispatch({ type: "ADD_ASSET", payload: { asset: result.asset } });
         }
         dispatch({
             type: "UPDATE_FIGURE",
             payload: {
                 figureId: element.id,
-                assetId: asset.id,
+                assetId: result.asset.id,
             },
         });
     };

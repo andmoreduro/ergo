@@ -2,6 +2,7 @@ use parking_lot::RwLock;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::{SystemTime, UNIX_EPOCH};
 use ts_rs::TS;
 use typst::syntax::Source;
@@ -178,7 +179,14 @@ impl VirtualFileSystem {
     }
 
     pub fn write_file(&self, path: &str, content: Vec<u8>) {
-        self.write_binary_file(path, typst::foundations::Bytes::new(content));
+        let path = normalize_virtual_path(path);
+        if path.ends_with(".typ") {
+            if let Ok(text) = String::from_utf8(content.clone()) {
+                self.write_source(&path, text);
+                return;
+            }
+        }
+        self.write_binary_file(&path, typst::foundations::Bytes::new(content));
     }
 
     pub fn apply_patch(
@@ -238,6 +246,12 @@ impl VirtualFileSystem {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn now_millis() -> u64 {
+    js_sys::Date::now() as u64
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

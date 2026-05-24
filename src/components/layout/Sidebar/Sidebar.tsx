@@ -9,6 +9,7 @@ import type { ResourceEntry } from "../../../bindings/ResourceEntry";
 import { useDocument } from "../../../state/DocumentContext";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { TauriApi } from "../../../api/tauri";
+import { CompilerClient } from "../../../workers/compilerClient";
 import {
     emptyReferenceFormValue,
     formValueFromReference,
@@ -433,8 +434,10 @@ const ResourcePreviewSvg = ({
 
 const ResourcesPanel = memo(({
     resources,
+    revision,
 }: {
     resources: DocumentResources | null;
+    revision: number;
 }) => {
     const { state, dispatch } = useDocument();
     const dispatchAction = useActionDispatcher();
@@ -460,8 +463,9 @@ const ResourcesPanel = memo(({
         if (typeof selected !== "string") {
             return;
         }
-        const asset = await TauriApi.importResourceFile(selected);
-        dispatch({ type: "ADD_ASSET", payload: { asset } });
+        const result = await TauriApi.importResourceFile(selected);
+        await CompilerClient.writeFile(result.asset.path, new Uint8Array(result.bytes));
+        dispatch({ type: "ADD_ASSET", payload: { asset: result.asset } });
     };
 
     const openResource = (entry: ResourceEntry) => {
@@ -553,7 +557,7 @@ const ResourcesPanel = memo(({
                                         {entry.preview.status === "ready" && entry.preview.path ? (
                                             <ResourcePreviewSvg
                                                 path={entry.preview.path}
-                                                revision={resources?.revision ?? 0}
+                                                revision={revision}
                                             />
                                         ) : (
                                             <span className={styles.resourcePreviewError}>
@@ -773,7 +777,7 @@ export const Sidebar = ({
                 <BibliographyPanel references={state.references} />
             </Accordion>
             <Accordion title={m.sidebar_resources()}>
-                <ResourcesPanel resources={resources} />
+                <ResourcesPanel resources={resources} revision={previewRevision ?? 0} />
             </Accordion>
         </aside>
     );

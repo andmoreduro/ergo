@@ -27,7 +27,7 @@ vi.mock("../../../api/tauri", () => ({
 import { Workspace } from "./Workspace";
 
 const defaultCompilerState = () => ({
-    svgs: [],
+    previewPages: [],
     isCompiling: false,
     error: null,
     sourceMap: [],

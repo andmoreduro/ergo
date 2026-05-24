@@ -60,6 +60,6 @@ pub struct DocumentResources {
     pub revision: u64,
 }
 
-pub(crate) fn resource_preview_lib_source(ast: &DocumentAST, template: &TemplateSpec) -> String {
+pub fn resource_preview_lib_source(ast: &DocumentAST, template: &TemplateSpec) -> String {
     crate::document_session_generation::generate_lib_typst(ast, template).source
 }

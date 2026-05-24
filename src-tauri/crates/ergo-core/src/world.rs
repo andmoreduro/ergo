@@ -62,6 +62,21 @@ impl ErgoWorld {
             main,
         }
     }
+
+    pub fn new_with_fonts(
+        vfs: Arc<VirtualFileSystem>,
+        main: FileId,
+        fonts: Arc<Vec<Font>>,
+        book: LazyHash<FontBook>,
+    ) -> Self {
+        Self {
+            vfs,
+            library: shared_library().clone(),
+            book,
+            fonts,
+            main,
+        }
+    }
 }
 
 pub struct SnapshotWorld {
@@ -79,6 +94,21 @@ impl SnapshotWorld {
             snapshot,
             library: shared_library().clone(),
             book: shared_font_book().clone(),
+            fonts,
+            main,
+        }
+    }
+
+    pub fn new_with_fonts(
+        snapshot: WorldSourceSnapshot,
+        main: FileId,
+        fonts: Arc<Vec<Font>>,
+        book: LazyHash<FontBook>,
+    ) -> Self {
+        Self {
+            snapshot,
+            library: shared_library().clone(),
+            book,
             fonts,
             main,
         }
@@ -180,6 +210,17 @@ fn find_package_file(file_id: FileId) -> Option<std::path::PathBuf> {
     None
 }
 
+fn package_virtual_path(id: FileId) -> Option<String> {
+    let pkg = id.package()?;
+    Some(format!(
+        "packages/{}/{}/{}/{}",
+        pkg.namespace,
+        pkg.name,
+        pkg.version,
+        id.vpath().as_rootless_path().to_string_lossy().replace('\\', "/")
+    ))
+}
+
 impl World for ErgoWorld {
     fn library(&self) -> &LazyHash<Library> {
         &self.library
@@ -200,6 +241,12 @@ impl World for ErgoWorld {
             return Ok(Source::new(id, text));
         }
 
+        if let Some(vpath) = package_virtual_path(id) {
+            return self.vfs
+                .read_typst_source(&vpath)
+                .map_err(|_| FileError::NotFound(vpath.into()));
+        }
+
         let path = path_from_file_id(id);
         self.vfs
             .read_typst_source(&path)
@@ -211,6 +258,12 @@ impl World for ErgoWorld {
             let bytes = std::fs::read(&path)
                 .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
             return Ok(Bytes::new(bytes));
+        }
+
+        if let Some(vpath) = package_virtual_path(id) {
+            return self.vfs
+                .read_binary_file(&vpath)
+                .map_err(|_| FileError::NotFound(vpath.into()));
         }
 
         let path = path_from_file_id(id);
@@ -254,6 +307,13 @@ impl World for SnapshotWorld {
             return Ok(Source::new(id, text));
         }
 
+        if let Some(vpath) = package_virtual_path(id) {
+            if let Some(source) = self.snapshot.sources.get(&vpath) {
+                return Ok(source.clone());
+            }
+            return Err(FileError::NotFound(vpath.into()));
+        }
+
         let path = path_from_file_id(id);
         self.snapshot
             .sources
@@ -267,6 +327,16 @@ impl World for SnapshotWorld {
             let bytes = std::fs::read(&path)
                 .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
             return Ok(Bytes::new(bytes));
+        }
+
+        if let Some(vpath) = package_virtual_path(id) {
+            if let Some(bytes) = self.snapshot.files.get(&vpath) {
+                return Ok(bytes.clone());
+            }
+            if let Some(source) = self.snapshot.sources.get(&vpath) {
+                return Ok(Bytes::new(source.text().as_bytes().to_vec()));
+            }
+            return Err(FileError::NotFound(vpath.into()));
         }
 
         let path = path_from_file_id(id);

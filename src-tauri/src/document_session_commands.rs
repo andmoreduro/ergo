@@ -90,12 +90,22 @@ pub fn read_resource_preview_svg(
     String::from_utf8(bytes).map_err(|error| error.to_string())
 }
 
+#[derive(serde::Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../../src/bindings/")]
+#[serde(rename_all = "camelCase")]
+pub struct ImportResourceResult {
+    pub asset: AssetEntry,
+    pub bytes: Vec<u8>,
+}
+
 #[tauri::command]
 pub fn import_resource_file(
     state: State<'_, TauriAppState>,
     source_path: String,
-) -> Result<AssetEntry, String> {
-    import_resource_file_into_vfs(&state.vfs, source_path)
+) -> Result<ImportResourceResult, String> {
+    let asset = import_resource_file_into_vfs(&state.vfs, source_path)?;
+    let bytes = state.vfs.read_file(&asset.path)?;
+    Ok(ImportResourceResult { asset, bytes })
 }
 
 pub(crate) fn import_resource_file_into_vfs(

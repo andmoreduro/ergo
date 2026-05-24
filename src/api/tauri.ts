@@ -5,11 +5,13 @@ import type { DocumentAST } from "../bindings/DocumentAST";
 import type { GlobalSettings } from "../bindings/GlobalSettings";
 import type { KeymapSettings } from "../bindings/KeymapSettings";
 import type { ActionContextSnapshot } from "../bindings/ActionContextSnapshot";
-import type { AssetEntry } from "../bindings/AssetEntry";
+import type { ImportResourceResult } from "../bindings/ImportResourceResult";
+import type { OpenProjectResult } from "../bindings/OpenProjectResult";
 import type { ActionDescriptor } from "../bindings/ActionDescriptor";
 import type { ActionResolution } from "../bindings/ActionResolution";
 import type { KeymapValidationResult } from "../bindings/KeymapValidationResult";
 import type { LogicalKeyEvent } from "../bindings/LogicalKeyEvent";
+import type { ProjectFile } from "../bindings/ProjectFile";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import type { PreviewElementPositionsResult } from "../bindings/PreviewElementPositionsResult";
@@ -59,8 +61,17 @@ export const TauriApi = {
         return invoke("stop_preview_watch");
     },
 
-    async exportDocument(format: ExportFormat): Promise<CompilationResult> {
-        return invoke("export_document", { format });
+    async exportDocument(
+        format: ExportFormat,
+        bytes: Uint8Array,
+        pageNumber?: number,
+    ): Promise<void> {
+        return invoke("export_document", { format, bytes, pageNumber });
+    },
+
+    async loadSystemFonts(): Promise<Uint8Array[]> {
+        const buffers = await invoke<number[][]>("load_system_fonts");
+        return buffers.map((buf) => new Uint8Array(buf));
     },
 
     async syncDocumentSnapshot(ast: DocumentAST): Promise<DocumentSessionStatus> {
@@ -85,7 +96,7 @@ export const TauriApi = {
         return invoke("read_resource_preview_svg", { path });
     },
 
-    async importResourceFile(sourcePath: string): Promise<AssetEntry> {
+    async importResourceFile(sourcePath: string): Promise<ImportResourceResult> {
         return invoke("import_resource_file", { sourcePath });
     },
 
@@ -168,7 +179,7 @@ export const TauriApi = {
         return invoke("save_project", { path });
     },
 
-    async openProject(path: string): Promise<DocumentAST> {
+    async openProject(path: string): Promise<OpenProjectResult> {
         return invoke("open_project", { path });
     },
 
@@ -214,6 +225,10 @@ export const TauriApi = {
 
     async getTemplateSpec(templateId: string): Promise<TemplateSpec> {
         return invoke("get_template_spec", { templateId });
+    },
+
+    async loadTemplatePackageFiles(templateId: string): Promise<ProjectFile[]> {
+        return invoke("load_template_package_files", { templateId });
     },
 
     async documentDir(): Promise<string> {
