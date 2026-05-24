@@ -9,10 +9,29 @@ const tauriApiMock = vi.hoisted(() => ({
     getPreviewPositionsForFocus: vi.fn(),
     jumpFromPreviewClick: vi.fn(),
 }));
+
+const compilerClientMock = vi.hoisted(() => ({
+    syncSnapshot: vi.fn(),
+    syncEvent: vi.fn(),
+    compile: vi.fn(),
+    renderPage: vi.fn(),
+    writeFile: vi.fn(),
+    writeSource: vi.fn(),
+    applyPatch: vi.fn(),
+    jumpFromClick: vi.fn(),
+    positionsForFocus: vi.fn(),
+    exportPdf: vi.fn(),
+    exportPng: vi.fn(),
+}));
+
 const dispatchActionMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../../api/tauri", () => ({
     TauriApi: tauriApiMock,
+}));
+
+vi.mock("../../../workers/compilerClient", () => ({
+    CompilerClient: compilerClientMock,
 }));
 
 vi.mock("../../../actions/runtime", () => ({
@@ -20,9 +39,6 @@ vi.mock("../../../actions/runtime", () => ({
 }));
 
 import { Preview } from "./Preview";
-
-const svgPage =
-    '<svg viewBox="0 0 100 50" width="100" height="50"><text x="10" y="20">Título</text></svg>';
 
 const FocusElement = ({ elementId }: { elementId: string }) => {
     const { setDocumentFocus } = useDocument();
@@ -57,24 +73,17 @@ const createDefaultCompilerState = () => ({
     isCompiling: false,
     previewRevision: 4,
     sourceMap: [],
-    svgs: [svgPage],
+    previewPages: [{ page_number: 1, path: "page-1", changed: true, content: null }],
     outline: null,
     resources: null,
     latencyMs: null,
 });
 
-const createCompilerState = (
-    overrides: Partial<ReturnType<typeof createDefaultCompilerState>> = {},
-) => ({
-    ...createDefaultCompilerState(),
-    ...overrides,
-});
-
-const renderPreview = (
+const renderPreviewAndGetCanvas = async (
     children: ReactNode = null,
     compiler = createDefaultCompilerState(),
-) =>
-    render(
+) => {
+    const renderResult = render(
         <DocumentProvider>
             {children}
             <div data-element-id="heading-1">
@@ -84,19 +93,56 @@ const renderPreview = (
             <Preview compiler={compiler} />
         </DocumentProvider>,
     );
+    const canvas = await waitFor(() => {
+        const el = renderResult.container.querySelector("canvas");
+        if (!el || el.width !== 100) throw new Error("Canvas rendering pending");
+        return el;
+    });
+    return { ...renderResult, canvas };
+};
 
 describe("Preview sync", () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        tauriApiMock.getPreviewPositionsForFocus.mockResolvedValue({
+
+        // Stub devicePixelRatio to force pixelPerPt to be exactly 1.0 (1.3333 * 0.75... = 1.0)
+        vi.stubGlobal("devicePixelRatio", 0.7500187504687617);
+
+        // Stub getContext on HTMLCanvasElement prototype for JSDOM
+        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+            putImageData: () => {},
+        } as unknown as CanvasRenderingContext2D);
+
+        // Stub ImageData in global scope if not present in JSDOM
+        if (typeof global.ImageData === "undefined") {
+            (global as any).ImageData = class ImageData {
+                width: number;
+                height: number;
+                data: Uint8ClampedArray;
+                constructor(data: Uint8ClampedArray, width: number, height: number) {
+                    this.data = data;
+                    this.width = width;
+                    this.height = height;
+                }
+            };
+        }
+
+        compilerClientMock.positionsForFocus.mockResolvedValue({
             positions: [],
             sourceRevision: 4,
             status: "noMatch",
         });
+        compilerClientMock.renderPage.mockResolvedValue({
+            pageIndex: 0,
+            width: 100,
+            height: 50,
+            pixels: new Uint8Array(100 * 50 * 4),
+            requestId: 1,
+        });
     });
 
-    it("converts SVG clicks to Typst preview coordinates and dispatches field focus", async () => {
-        tauriApiMock.jumpFromPreviewClick.mockResolvedValue({
+    it("converts Canvas clicks to Typst preview coordinates and dispatches field focus", async () => {
+        compilerClientMock.jumpFromClick.mockResolvedValue({
             target: {
                 caretUtf16Offset: 0,
                 elementId: "heading-1",
@@ -107,9 +153,9 @@ describe("Preview sync", () => {
             status: "field",
         });
 
-        const { container } = renderPreview();
-        const svg = container.querySelector("svg") as SVGSVGElement;
-        vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+        const { canvas } = await renderPreviewAndGetCanvas();
+
+        vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
             bottom: 70,
             height: 50,
             left: 20,
@@ -121,16 +167,16 @@ describe("Preview sync", () => {
             y: 20,
         } as DOMRect);
 
-        fireEvent.click(svg, { clientX: 70, clientY: 45 });
+        fireEvent.click(canvas, { clientX: 70, clientY: 45 });
 
         await waitFor(() => {
-            expect(tauriApiMock.jumpFromPreviewClick).toHaveBeenCalledWith(
-                1,
-                50,
-                25,
-                4,
-            );
+            expect(compilerClientMock.jumpFromClick).toHaveBeenCalled();
         });
+        const callArgs = compilerClientMock.jumpFromClick.mock.calls[0];
+        expect(callArgs[0]).toBe(1);
+        expect(callArgs[1]).toBeCloseTo(50, 5);
+        expect(callArgs[2]).toBeCloseTo(25, 5);
+        expect(callArgs[3]).toBe(4);
         await waitFor(() => {
             expect(dispatchActionMock).toHaveBeenCalledWith({
                 id: "editor::FocusField",
@@ -145,7 +191,7 @@ describe("Preview sync", () => {
     });
 
     it("requests preview positions for the focused element without changing layout", async () => {
-        tauriApiMock.getPreviewPositionsForFocus.mockResolvedValue({
+        compilerClientMock.positionsForFocus.mockResolvedValue({
             positions: [
                 {
                     caretCue: null,
@@ -162,10 +208,10 @@ describe("Preview sync", () => {
             status: "matched",
         });
 
-        const { container } = renderPreview(<FocusElement elementId="heading-1" />);
+        const { container } = await renderPreviewAndGetCanvas(<FocusElement elementId="heading-1" />);
 
         await waitFor(() => {
-            expect(tauriApiMock.getPreviewPositionsForFocus).toHaveBeenCalledWith(
+            expect(compilerClientMock.positionsForFocus).toHaveBeenCalledWith(
                 {
                     caretUtf16Offset: 0,
                     elementId: "heading-1",
@@ -185,7 +231,7 @@ describe("Preview sync", () => {
     });
 
     it("renders a persistent caret cue when the backend returns click-equivalent caret geometry", async () => {
-        tauriApiMock.getPreviewPositionsForFocus.mockResolvedValue({
+        compilerClientMock.positionsForFocus.mockResolvedValue({
             positions: [
                 {
                     caretCue: {
@@ -205,7 +251,7 @@ describe("Preview sync", () => {
             status: "matched",
         });
 
-        const { container } = renderPreview(<FocusElement elementId="heading-1" />);
+        const { container } = await renderPreviewAndGetCanvas(<FocusElement elementId="heading-1" />);
 
         await waitFor(() => {
             expect(container.querySelector('[data-preview-sync-caret="true"]'))
@@ -227,12 +273,12 @@ describe("Preview sync", () => {
 
     it("shows the caret for the latest preview click and ignores stale click cue responses", async () => {
         let resolveFirstPosition:
-            | ((value: Awaited<ReturnType<typeof tauriApiMock.getPreviewPositionsForFocus>>) => void)
+            | ((value: Awaited<ReturnType<typeof compilerClientMock.positionsForFocus>>) => void)
             | null = null;
         let resolveSecondPosition:
-            | ((value: Awaited<ReturnType<typeof tauriApiMock.getPreviewPositionsForFocus>>) => void)
+            | ((value: Awaited<ReturnType<typeof compilerClientMock.positionsForFocus>>) => void)
             | null = null;
-        tauriApiMock.jumpFromPreviewClick
+        compilerClientMock.jumpFromClick
             .mockResolvedValueOnce({
                 target: {
                     caretUtf16Offset: 1,
@@ -253,7 +299,7 @@ describe("Preview sync", () => {
                 sourceRevision: 4,
                 status: "field",
             });
-        tauriApiMock.getPreviewPositionsForFocus
+        compilerClientMock.positionsForFocus
             .mockImplementationOnce(
                 () =>
                     new Promise((resolve) => {
@@ -267,9 +313,9 @@ describe("Preview sync", () => {
                     }),
             );
 
-        const { container } = renderPreview();
-        const svg = container.querySelector("svg") as SVGSVGElement;
-        vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+        const { container, canvas } = await renderPreviewAndGetCanvas();
+
+        vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
             bottom: 70,
             height: 50,
             left: 20,
@@ -281,11 +327,11 @@ describe("Preview sync", () => {
             y: 20,
         } as DOMRect);
 
-        fireEvent.click(svg, { clientX: 30, clientY: 30 });
-        fireEvent.click(svg, { clientX: 80, clientY: 30 });
+        fireEvent.click(canvas, { clientX: 30, clientY: 30 });
+        fireEvent.click(canvas, { clientX: 80, clientY: 30 });
 
         await waitFor(() => {
-            expect(tauriApiMock.getPreviewPositionsForFocus).toHaveBeenCalledTimes(2);
+            expect(compilerClientMock.positionsForFocus).toHaveBeenCalledTimes(2);
         });
 
         resolveSecondPosition?.({
@@ -340,10 +386,10 @@ describe("Preview sync", () => {
     });
 
     it("maps project input field ids to backend input source map targets", async () => {
-        renderPreview(<FocusProjectInput fieldId="project-input-/abstract_text" />);
+        await renderPreviewAndGetCanvas(<FocusProjectInput fieldId="project-input-/abstract_text" />);
 
         await waitFor(() => {
-            expect(tauriApiMock.getPreviewPositionsForFocus).toHaveBeenCalledWith(
+            expect(compilerClientMock.positionsForFocus).toHaveBeenCalledWith(
                 {
                     caretUtf16Offset: 0,
                     elementId: "inputs",

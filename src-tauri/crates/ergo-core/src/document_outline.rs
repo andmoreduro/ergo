@@ -28,7 +28,7 @@ pub struct DocumentOutline {
 /// Extracts an ordered heading outline from a compiled [`PagedDocument`] using
 /// `document.introspector`. This is a fast in-memory query over an already-built
 /// index; for a typical academic document the cost is in the low microseconds.
-pub(crate) fn extract_outline(document: &PagedDocument) -> DocumentOutline {
+pub fn extract_outline(document: &PagedDocument) -> DocumentOutline {
     use typst::foundations::Selector;
 
     let selector = Selector::Elem(HeadingElem::ELEM, None);

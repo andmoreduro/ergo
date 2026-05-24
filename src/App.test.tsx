@@ -59,6 +59,13 @@ const syncBarrierMock = vi.hoisted(() => ({
     waitForDocumentSync: vi.fn(),
 }));
 
+const compilerClientMock = vi.hoisted(() => ({
+    writeFile: vi.fn(),
+    syncSnapshot: vi.fn(),
+    syncEvent: vi.fn(),
+    compile: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/plugin-dialog", () => ({
     open: dialogMock.open,
     save: dialogMock.save,
@@ -70,6 +77,10 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 vi.mock("./api/tauri", () => ({
     TauriApi: tauriApiMock,
+}));
+
+vi.mock("./workers/compilerClient", () => ({
+    CompilerClient: compilerClientMock,
 }));
 
 vi.mock("./hooks/documentSyncBarrier", () => ({
@@ -156,7 +167,10 @@ describe("App project lifecycle", () => {
             fieldSourceMap: [],
             sourceRevision: 1,
         });
-        tauriApiMock.openProject.mockResolvedValue(createDefaultDocumentAST());
+        tauriApiMock.openProject.mockResolvedValue({
+            ast: createDefaultDocumentAST(),
+            files: [],
+        });
         tauriApiMock.documentDir.mockResolvedValue("C:\\Users\\ada\\Documents");
         tauriApiMock.exportDocument.mockResolvedValue({
             source_revision: 0,
@@ -326,7 +340,10 @@ describe("App project lifecycle", () => {
         const ast = createDefaultDocumentAST();
         ast.metadata.title = "Opened Project";
         dialogMock.open.mockResolvedValue("C:\\Users\\ada\\Paper.ergproj");
-        tauriApiMock.openProject.mockResolvedValue(ast);
+        tauriApiMock.openProject.mockResolvedValue({
+            ast,
+            files: [],
+        });
 
         render(<App />);
 

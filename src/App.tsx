@@ -16,6 +16,8 @@ import { m } from "./paraglide/messages.js";
 import { createCommandRegistry } from "./commands/registry";
 import type { Command, CommandContext } from "./commands/types";
 import { workspaceCommands } from "./commands/workspaceCommands";
+import { TauriApi } from "./api/tauri";
+import { CompilerClient } from "./workers/compilerClient";
 import { editorCommands } from "./commands/editorCommands";
 import { viewCommands } from "./commands/viewCommands";
 import { themeCommands } from "./commands/themeCommands";
@@ -148,6 +150,15 @@ const AppShellContent = () => {
         });
     }, [dispatch, ensureActiveProject, state.sections]);
 
+    const exportDocument = useCallback(async () => {
+        try {
+            const pdfBytes = await CompilerClient.exportPdf();
+            await TauriApi.exportDocument("pdf", pdfBytes);
+        } catch (error) {
+            window.alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }, []);
+
     const commandContext = useMemo<CommandContext>(
         () => ({
             hasActiveProject,
@@ -164,6 +175,7 @@ const AppShellContent = () => {
                 saveProject,
                 closeProject,
                 recentProjectsRef,
+                exportDocument,
             }),
             ...editorCommands({
                 insertElement,
@@ -196,6 +208,7 @@ const AppShellContent = () => {
             saveProject,
             showNewProjectDialog,
             undo,
+            exportDocument,
         ],
     );
     const commandRegistry = useMemo(

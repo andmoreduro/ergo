@@ -1,6 +1,5 @@
 import type { Command } from "./types";
 import { m } from "../paraglide/messages.js";
-import { TauriApi } from "../api/tauri";
 
 export interface WorkspaceCommandDeps {
     showNewProjectDialog: () => void;
@@ -8,6 +7,7 @@ export interface WorkspaceCommandDeps {
     saveProject: () => void;
     closeProject: () => Promise<void>;
     recentProjectsRef: { current: string[] };
+    exportDocument: () => Promise<void>;
 }
 
 export const workspaceCommands = (deps: WorkspaceCommandDeps): Command[] => [
@@ -52,6 +52,6 @@ export const workspaceCommands = (deps: WorkspaceCommandDeps): Command[] => [
         label: m.menubar_export(),
         scope: "project",
         isEnabled: (context) => context.hasActiveProject,
-        run: () => void TauriApi.exportDocument("svg"),
+        run: deps.exportDocument,
     },
 ];

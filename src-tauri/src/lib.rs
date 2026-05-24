@@ -56,6 +56,7 @@ pub fn run() {
             compiler::start_preview_watch,
             compiler::stop_preview_watch,
             compiler::export_document,
+            compiler::load_system_fonts,
             compiler::write_source,
             compiler::patch_source,
             document_session_commands::sync_document_snapshot,
@@ -75,7 +76,8 @@ pub fn run() {
             settings::save_keymap_settings,
             settings::get_template_spec,
             archive::save_project,
-            archive::open_project
+            archive::open_project,
+            archive::load_template_package_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -90,31 +92,19 @@ pub mod app_state;
 #[cfg(test)]
 mod architecture_tests;
 pub mod archive;
-pub mod ast;
 pub mod backend_profile;
-pub mod compilation_types;
-pub mod compile_artifacts;
 pub mod compile_events;
 pub mod compiler;
-pub mod core_errors;
-pub mod document_outline;
-pub mod document_resources;
-pub mod document_session;
 pub mod document_session_commands;
-pub mod document_session_events;
-pub mod document_session_generation;
-pub mod document_session_types;
-pub mod document_source_builder;
-pub mod path_utils;
-pub mod preview_sync;
 pub mod preview_sync_commands;
-pub mod preview_sync_lookup;
-pub mod preview_sync_types;
-pub mod resource_watch;
 pub mod settings;
-pub mod template_spec;
 #[cfg(test)]
-pub mod test_fixtures;
+pub use ergo_core::test_fixtures;
 pub mod typst_watch;
-pub mod vfs;
-pub mod world;
+
+pub use ergo_core::{
+    ast, compilation_types, compile_artifacts, core_errors, document_outline, document_resources,
+    document_session, document_session_events, document_session_generation, document_session_types,
+    document_source_builder, path_utils, preview_sync, preview_sync_lookup, preview_sync_types,
+    resource_watch, template_spec, vfs, world,
+};

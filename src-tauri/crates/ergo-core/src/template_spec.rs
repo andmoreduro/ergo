@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 const VERSATILE_APA_TEMPLATE: &str =
-    include_str!("../resources/templates/versatile-apa/template.json");
+    include_str!("../../../resources/templates/versatile-apa/template.json");
+
 
 // ─── Template Spec Root ────────────────────────────────────────────
 

@@ -7,12 +7,14 @@ edition = "2021"
 
 default-run = "ergo"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace]
+resolver = "2"
+members = [
+    "crates/ergo-core",
+    "crates/ergo-engine-wasm",
+]
 
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "ergo_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
@@ -26,16 +28,13 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-typst = "0.14.2"
-typst-library = "0.14.2"
-typst-assets = { version = "0.14.2", features = ["fonts"] }
 ts-rs = { version = "12.0.1", features = ["serde-compat"] }
-uuid = { version = "1.23.1", features = ["v4"] }
+uuid = { version = "1.23.1", features = ["v4", "js"] }
 chrono = "0.4.44"
 parking_lot = "0.12.5"
-typst-svg = "0.14.2"
-typst-ide = "0.14.2"
 zip = "8.6.0"
-typst-pdf = "0.14.2"
-typst-render = "0.14.2"
-rayon = "1.12.0"
+ergo-core = { path = "crates/ergo-core" }
+typst = "0.14.2"
+typst-assets = { version = "0.14.2", features = ["fonts"] }
+typst-ide = "0.14.2"
+
