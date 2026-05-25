@@ -2,4 +2,4 @@
 import type { GlobalSettings } from "./GlobalSettings";
 import type { ProjectSettings } from "./ProjectSettings";
 
-export type ProjectMetadata = { template_id: string, title: string, project_settings: ProjectSettings, local_overrides: GlobalSettings, running_head: string | null, keywords: Array<string>, };
+export type ProjectMetadata = { template_id: string, template_variant_id: string | null, title: string, project_settings: ProjectSettings, local_overrides: GlobalSettings, running_head: string | null, keywords: Array<string>, };

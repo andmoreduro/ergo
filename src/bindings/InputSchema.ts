@@ -2,4 +2,4 @@
 import type { Importance } from "./Importance";
 import type { InputType } from "./InputType";
 
-export type InputSchema = { id: string | null, type: InputType, label: string | null, description: string | null, default: unknown, importance: Importance, properties: Array<InputSchema> | null, items: InputSchema | null, target: string | null, };
+export type InputSchema = { id: string | null, type: InputType, label: string | null, description: string | null, default: unknown, importance: Importance, variants: Array<string> | null, properties: Array<InputSchema> | null, items: InputSchema | null, target: string | null, };
