@@ -1,6 +1,6 @@
 # State Diagrams
 
-This document models the most important runtime lifecycles: frontend document editing, backend document source materialization, and background preview compilation.
+Runtime lifecycles for frontend editing, backend document materialization, WASM preview compile, Canvas rendering, and keymap sequences. See `README.md` for the section index.
 
 ## 1. Frontend Document Lifecycle
 
@@ -9,35 +9,25 @@ stateDiagram-v2
     direction LR
 
     [*] --> Welcome
-    Welcome --> OpeningProject : Open .ergproj
-    Welcome --> ActiveProject : New Project
+    Welcome --> OpeningProject : open .ergproj
+    Welcome --> ActiveProject : new project
 
     OpeningProject --> ActiveProject : AST loaded
     OpeningProject --> Error : open failed
-    Error --> Welcome : dismiss
+    Error --> Welcome
 
-    ActiveProject --> Editing : document action
-    Editing --> Editing : continuous input
+    ActiveProject --> Editing : user edit
     Editing --> SyncPending : enqueue DocumentEvent
-    SyncPending --> Syncing : sync_document_event
-    Syncing --> ActiveProject : session status received
-    Syncing --> SyncPending : queued event remains
+    SyncPending --> Syncing : WASM sync + compile
+    Syncing --> ActiveProject : preview applied
     Syncing --> Error : sync failed
 
-    ActiveProject --> Saving : manual save / autosave interval / configured save event
-    Editing --> Saving : autosave interval / window blur / project close / app close
+    ActiveProject --> Saving : save / autosave
     Saving --> ActiveProject : archive written
-    Saving --> Error : save failed
-
     ActiveProject --> Welcome : close project
 ```
 
-### Notes
-
-- React state updates immediately during `Editing`.
-- Backend sync is asynchronous and serialized. Bootstrap sends an AST snapshot; edits, undo, and redo send queued typed events in order.
-- The frontend does not wait for compilation before letting users continue editing.
-- Autosave is governed by global settings. Periodic autosave uses the configured interval and save-event toggles cover window blur, app close, and project close.
+React updates immediately during `Editing`. WASM sync runs asynchronously without blocking further input.
 
 ## 2. Backend DocumentSession Lifecycle
 
@@ -46,135 +36,77 @@ stateDiagram-v2
     direction TB
 
     [*] --> Empty
-    Empty --> SnapshotLoaded : sync_snapshot(ast)
-    SnapshotLoaded --> DetectingChanges : compare with cached fragments
-    DetectingChanges --> UpdatingFragments : dirty elements found
-    DetectingChanges --> WritingMetadata : no element changes
-    UpdatingFragments --> AssemblingSections
-    AssemblingSections --> WritingSources
-    WritingMetadata --> WritingSources
-    WritingSources --> Ready : VFS revisions updated
-    Ready --> ApplyingEvent : sync_document_event(event)
-    ApplyingEvent --> DetectingChanges : canonical AST mutated
-    ApplyingEvent --> Error : invalid ID / invalid restore payload
-    Ready --> DetectingChanges : bootstrap snapshot
-    Error --> Ready : state unchanged
+    Empty --> SnapshotLoaded : sync_snapshot
+    SnapshotLoaded --> Ready : sources written to VFS
+    Ready --> ApplyingEvent : sync_document_event(s)
+    ApplyingEvent --> Ready : event applied
+    ApplyingEvent --> Error : invalid event
+    Error --> Ready : no mutation
     Ready --> [*] : clear project
 ```
 
-### Notes
+The backend session mirrors events for archive I/O; it does not compile Typst on the sync path.
 
-- `DocumentSession` owns the fragment cache, section assembly, source map, and project source layout.
-- `DocumentSession` owns the canonical backend AST after bootstrap and applies typed document events before generation.
-- Invalid events fail without mutating the previous canonical AST.
-- `main.typ` changes only when document-wide structure changes, such as section order, references, template metadata, or global source setup.
-- `elements/{element-id}.typ` changes when that element's generated fragment changes.
-- `.ergproj/source_map.json` is regenerated from backend source ranges.
-
-## 3. TypstWatch Preview Lifecycle
+## 3. WASM Preview Compile Lifecycle
 
 ```mermaid
 stateDiagram-v2
     direction TB
 
-    [*] --> Stopped
-    Stopped --> Running : start_preview_watch
-    Running --> Waiting : vfs revision caught up
-    Waiting --> Compiling : vfs.latest_revision > last_compiled_revision
-    Compiling --> Emitting : compile finished
-    Emitting --> Waiting : emit started / succeeded / failed
-    Running --> Stopped : stop_preview_watch
-    Stopped --> [*]
+    [*] --> Idle
+    Idle --> Syncing : sync_events / bootstrap
+    Syncing --> Compiling : VFS updated
+    Compiling --> Retained : compile_preview succeeded
+    Compiling --> Failed : diagnostics
+    Failed --> Idle : user continues editing
+    Retained --> Compiling : newer events
+    Retained --> Stale : newer source_revision compiling
+    Stale --> Retained : compile succeeded
 ```
 
-### Notes
+`PreviewSyncState` updates on successful main compile. Resource document may be cached (comemo) until `dirty_resource_ids` changes.
 
-- `TypstWatch` owns one background thread with a long-lived `ErgoWorld` and an incremental SVG page cache.
-- `sync_document_snapshot`, `sync_document_event`, and `patch_source` call `mark_vfs_changed()` after VFS writes so the watch thread wakes.
-- The watch loop compiles the current VFS revision, writes changed `.ergproj/preview/svg/page-N.svg` files, stores the retained preview in `PreviewSyncState`, extracts the outline, and emits `ergo-compile-started`, `ergo-compile-succeeded`, or `ergo-compile-failed`.
-- Resource catalog updates are emitted separately through `ergo-resources-updated` from document sync handlers when snapshots or dirty resource IDs require refreshed resource previews.
-- `export_document` is a separate synchronous command. It does not pass through `TypstWatch`.
+While **Retained**, `PreviewSyncState` serves `jump_from_click` and `positions_for_focus` for the displayed revision; **Unavailable** when the requested revision does not match the retained preview.
 
-## 4. Preview Renderer Lifecycle
+## 4. Canvas Preview Renderer Lifecycle
 
 ```mermaid
 stateDiagram-v2
     direction LR
 
     [*] --> Empty
-    Empty --> WaitingForPreview : project active
-    WaitingForPreview --> LoadingSvgFiles : changed preview_pages
-    WaitingForPreview --> ReusingSvgFiles : unchanged preview_pages
-    LoadingSvgFiles --> ShowingPreview : read_preview_svg complete
-    ReusingSvgFiles --> ShowingPreview : keep cached SVG text
-    LoadingSvgFiles --> Error : SVG file read failed
-    ShowingPreview --> LoadingSvgFiles : newer compile result
-    ShowingPreview --> ResolvingSync : click page / active editor element
-    ResolvingSync --> ShowingPreview : element or position resolved
-    ResolvingSync --> ShowingPreview : no match / unavailable
-    Error --> LoadingSvgFiles : newer compile result
-    ShowingPreview --> Empty : close project
+    Empty --> Waiting : project active
+    Waiting --> Rasterizing : page enters viewport
+    Rasterizing --> Showing : render_page complete
+    Showing --> Rasterizing : scroll / zoom debounce
+    Showing --> ResolvingSync : click or focus change
+    ResolvingSync --> Showing : positions resolved
+    Showing --> Empty : close project
 ```
 
-The preview must not insert or remove visible compile-status UI in a way that causes the page to jump while typing.
+No visible compile-status UI may resize the preview pane during typing.
 
-## 5. Preview Sync Lifecycle
-
-```mermaid
-stateDiagram-v2
-    direction LR
-
-    [*] --> Empty
-    Empty --> Retained : successful non-stale preview compile
-    Retained --> Retained : newer successful non-stale preview compile
-    Retained --> StaleForDocument : document session revision advances
-    StaleForDocument --> Retained : newer successful non-stale preview compile
-
-    Retained --> ResolvingClick : jump_from_preview_click
-    Retained --> ResolvingElement : get_preview_positions_for_element
-    Retained --> ResolvingFocus : get_preview_positions_for_focus
-    ResolvingClick --> Retained : element / position / no match
-    ResolvingElement --> Retained : positions / no match
-    ResolvingFocus --> Retained : positions / no match
-
-    StaleForDocument --> Unavailable : sync request
-    Unavailable --> StaleForDocument
-```
-
-### Notes
-
-- The retained preview state contains the compiled `PagedDocument`, element source-map snapshot, field source-map snapshot, Typst source snapshot, source revision, and page metrics.
-- Preview sync accepts requests for the retained preview revision. The current document-session revision may be newer while the displayed preview waits for the next successful compile.
-- Backward sync resolves clicks with Typst IDE frame hit testing and maps file offsets to `FieldSourceMapEntry` ranges, falling back to `SourceMapEntry` ranges.
-- Forward sync resolves focused fields with Typst IDE cursor-to-preview mapping.
-
-## 6. Key Sequence Resolver Lifecycle
+## 5. Key Sequence Resolver Lifecycle
 
 ```mermaid
 stateDiagram-v2
     direction LR
 
     [*] --> Idle
-    Idle --> Matched : single-stroke exact match
-    Idle --> Pending : sequence prefix match
-    Idle --> NoMatch : no binding matches
+    Idle --> Matched : exact single-stroke match
+    Idle --> Pending : prefix match
+    Idle --> NoMatch
 
-    Pending --> Matched : next stroke completes sequence
-    Pending --> Pending : next stroke extends valid prefix
-    Pending --> Cancelled : next stroke invalidates sequence
-    Pending --> FallbackMatched : timeout with exact fallback
-    Pending --> Idle : timeout without fallback / reset_key_sequence
+    Pending --> Matched : sequence complete
+    Pending --> Pending : valid extension
+    Pending --> Cancelled : invalid stroke
+    Pending --> FallbackMatched : timeout with prefix fallback
+    Pending --> Idle : reset_key_sequence
 
-    Matched --> Idle : ActionInvocation returned
-    FallbackMatched --> Idle : fallback ActionInvocation dispatched
+    Matched --> Idle
+    FallbackMatched --> Idle
     Cancelled --> Idle
     NoMatch --> Idle
 ```
 
-### Notes
-
-- The resolver state is owned by Rust per window/session.
-- Strokes use logical keys from `KeyboardEvent.key`, normalized for matching while preserving mnemonic shortcuts across layouts and languages.
-- Context expressions are evaluated against React's current `ActionContextSnapshot`.
-- If an exact binding is also a prefix of a longer binding, Rust returns `PendingSequence` with a fallback action. React dispatches that fallback when the sequence timeout expires.
-- Bundled defaults should avoid prefix ambiguity. For example, `Ctrl+O` is only a prefix by default: `Ctrl+O Ctrl+O` opens a project and `Ctrl+O Ctrl+R` opens recent projects. Users may still opt into ambiguous prefix shortcuts through the keymap settings UI or JSON.
+Resolver state lives in Rust per window. Logical keys come from `KeyboardEvent.key`.

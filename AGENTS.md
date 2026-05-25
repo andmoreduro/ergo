@@ -12,6 +12,7 @@ The `context/` folder holds the canonical design documents. Before proposing or 
 6. `context/state-diagrams.md` — frontend, backend, typst watch, key sequence state machines
 7. `context/distribution-diagram.md` — deployment, archive layout, storage boundaries
 8. `context/user-stories.md` / `context/user-story-map.md` — feature scope and priority
+9. `context/README.md` — index of which diagram file owns each topic (avoids duplicate lookups)
 
 When implementation and design docs conflict, preserve working code and update the design docs deliberately.
 
@@ -37,7 +38,7 @@ The context files describe the intended current design. They are not a changelog
 
 ## Product intent
 
-Érgo is a local-first, no-code Typst IDE for academic documents. Users edit structured forms — the app generates Typst, compiles it in Rust, and shows a live SVG preview. Target: authors/academics who want predictable formatting without writing raw Typst.
+Érgo is a local-first, no-code Typst IDE for academic documents. Users edit structured forms — the app generates Typst, compiles it in WASM (Rust/`ergo-core`), and shows a live Canvas preview. Target: authors/academics who want predictable formatting without writing raw Typst.
 
 ## Hard constraints
 

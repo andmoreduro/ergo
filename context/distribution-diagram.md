@@ -1,10 +1,10 @@
 # Distribution Diagram
 
-This document describes Érgo's deployment topology, storage boundaries, project archive format, and generated-artifact locations.
+Deployment topology, `.ergproj` layout, config files, and storage boundaries.
 
 ## Deployment Topology
 
-Érgo is distributed as a native desktop app for Windows and Linux. It uses the OS WebView for the React frontend and a Rust/Tauri backend for file I/O, Typst compilation, settings, and archive management.
+Érgo ships as a native desktop app (Windows, Linux) using the OS WebView for the React UI and a Rust/Tauri backend for file I/O, settings, and archives. Typst compilation runs in a bundled WASM module inside the WebView worker.
 
 ```mermaid
 flowchart TB
@@ -15,39 +15,42 @@ flowchart TB
     classDef db fill:#fcf3cf,stroke:#f1c40f,stroke-width:1px,color:#2c3e50;
 
     subgraph Internet ["External Network"]
-        Registry["Typst Universe Package Registry"]:::cloud
+        Registry["Typst Universe"]:::cloud
     end
 
-    subgraph LocalMachine ["User's Local Machine"]
-        subgraph OS ["Host Operating System"]
-            WebView["Native WebView"]:::os
-            UserDocs[("User Documents / .ergproj Archives")]:::db
-            AppConfig[("Ergo App Config Files")]:::db
-            TypstCache[("Typst Package Cache")]:::db
+    subgraph LocalMachine ["User Machine"]
+        subgraph OS ["Host OS"]
+            WebView["WebView + WASM worker"]:::os
+            UserDocs[(".ergproj")]:::db
+            AppConfig[("Ergo config")]:::db
+            TypstCache[("Typst package cache")]:::db
         end
 
-        subgraph App ["Érgo Installed Executable"]
-            Frontend["React Frontend Bundle"]:::artifact
-            Backend["Rust Backend Binary"]:::artifact
-            DefaultConfig[("Bundled Default JSON")]:::artifact
+        subgraph App ["Érgo install"]
+            FrontendBundle["React bundle"]:::artifact
+            BackendBinary["Tauri backend"]:::artifact
+            WasmModule["ergo-engine-wasm"]:::artifact
+            Defaults["Bundled default JSON"]:::artifact
         end
     end
 
-    Frontend -. "rendered inside" .-> WebView
-    Frontend == "Tauri IPC" ==> Backend
-    Backend -- "read/write archives" --> UserDocs
-    Backend -- "read/write user settings + keymaps" --> AppConfig
-    Backend -- "read default settings + keymaps" --> DefaultConfig
-    Backend -- "resolve cached packages" --> TypstCache
-    Backend -- "download missing packages" --> Registry
+    FrontendBundle -.-> WebView
+    WasmModule -.-> WebView
+    FrontendBundle == IPC ==> BackendBinary
+    BackendBinary --> UserDocs
+    BackendBinary --> AppConfig
+    BackendBinary --> Defaults
+    BackendBinary --> TypstCache
+    TypstCache -. package sources .-> WebView
+    TypstCache -. package sources .-> UserDocs
+    Registry -. package sources .-> TypstCache
 
     class LocalMachine machine
-    class OS,App os
 ```
 
 ## `.ergproj` Archive Layout
 
-An Érgo project file is a zip archive. The canonical project layout is:
+Zip archive canonical layout:
 
 ```text
 main.typ
@@ -62,59 +65,54 @@ references.bib
   project_settings.json
   template.json
   source_map.json
+  field_source_map.json
 ```
 
-### File Responsibilities
+| Path | Role |
+|------|------|
+| `main.typ` | Document entry: imports, metadata, section includes |
+| `lib.typ` | Template preamble and `apply(body)` wrapper |
+| `elements/{id}.typ` | Generated source per document element |
+| `assets/` | Binary files referenced by `AssetEntry` |
+| `references.bib` | Bibliography from `ReferenceEntry` rows |
+| `.ergproj/document_state.json` | Canonical structured AST (required on open) |
+| `.ergproj/source_map.json` | Element → Typst byte ranges |
+| `.ergproj/field_source_map.json` | Field → Typst byte ranges and UTF-16 segments |
+| `.ergproj/template.json` | Template identity and variant |
 
-- `main.typ`: Typst entry point containing imports, document metadata, template section wiring, and `#include` lines for element files.
-- `lib.typ`: styling preamble containing template/style rules, imports, show rules, and a wrapper function `apply(body)` imported by both `main.typ` and resource previews.
-- `elements/{element-id}.typ`: generated Typst source for one document element (heading, paragraph, table, figure, equation, custom element).
-- `assets/`: project-local binary assets such as images.
-- `references.bib`: generated bibliography file from structured reference entries.
-- `.ergproj/document_state.json`: canonical structured document AST snapshot.
-- `.ergproj/dependency_manifest.json`: required Typst package declarations.
-- `.ergproj/project_settings.json`: per-project settings overrides.
-- `.ergproj/template.json`: template identity and template metadata needed to reopen/generate the project.
-- `.ergproj/source_map.json`: generated mapping from Érgo IDs to Typst source ranges.
-- `.ergproj/field_source_map.json`: generated mapping from Érgo field IDs to Typst source byte ranges and UTF-16 field offsets.
-
-Generated preview and export artifacts may exist under these VFS paths:
+Optional cache paths (regenerable, not required to reopen):
 
 ```text
-.ergproj/preview/svg/page-{n}.svg
 .ergproj/exports/
 ```
 
-These are cache/output artifacts. They can be regenerated from the canonical source-of-truth files and must not be required to reopen the project.
+Preview pixels, `PreviewSyncState`, and export files are cache artifacts. They are not archive-authoritative.
 
-Runtime preview sync state is not part of the archive. The backend retains the latest successful, non-stale compiled `PagedDocument`, page metrics, element source-map snapshot, field source-map snapshot, and Typst source snapshot in memory so editor-preview sync can use Typst IDE jump APIs against the same sources that produced the displayed preview. Saving or reopening a project regenerates that runtime state through the normal preview compile path.
+## App Configuration
 
-## Online And Offline Modes
+Global settings outside project archives:
 
-- **Online mode:** The archive stores dependency metadata and relies on the local Typst package cache, downloading missing packages when needed.
-- **Offline mode:** The archive bundles required package sources/assets so the project can compile without internet access.
+| Location | Files |
+|----------|-------|
+| Windows `%APPDATA%\Ergo\` | `settings.json`, `keymap.json` |
+| Linux `$XDG_CONFIG_HOME/Ergo/` or `~/.config/Ergo/` | same |
+
+Bundled install resources:
+
+- `defaults/default_settings.json`
+- `defaults/default_keymap.json`
+
+Per-project overrides: `.ergproj/project_settings.json`.
+
+## Online And Offline
+
+- `dependency_manifest.json` references packages resolved from the mirrored project VFS first, then the local Typst package cache.
+- Archive package sources use `packages/{namespace}/{name}/{version}/...` paths so the WASM worker can compile without direct host-cache access.
+- External package download belongs to the Typst package cache outside the archive.
 
 ## Storage Notes
 
-- Global settings are app-level preferences and live outside project archives.
-- The visible app name is `Érgo`, but the user config folder is named `Ergo` for predictable ASCII filesystem paths.
-- App-level user configuration is stored as separate JSON files in the platform config root under the `Ergo` folder:
-  - Windows: `%APPDATA%\Ergo\`
-  - Linux: `$XDG_CONFIG_HOME/Ergo/` or `~/.config/Ergo/`
-- `settings.json`
-- `keymap.json`
-- Preview compilation wakes on VFS revision changes through `TypstWatch`.
-- Autosave is enabled by default. Global settings control `autosave_interval_ms`, `autosave_on_window_blur`, `autosave_on_app_close`, and `autosave_on_project_close`.
-- Bundled default configuration is installed with the app resources:
-  - `defaults/default_settings.json`
-  - `defaults/default_keymap.json`, including the default action bindings
-- Keymap files use the Rust-owned schema:
-  - `action_id`: typed action name such as `workspace::OpenProject`
-  - `context`: expression such as `app`, `workspace && !input`, or `element && element.kind == "Table"`
-  - `sequence`: ordered logical key strokes using `key` from `KeyboardEvent.key` and modifiers `Control`, `Alt`, `Shift`, `Meta`
-- Bundled defaults should reserve prefix strokes for sequences. The default open-project binding is `Ctrl+O Ctrl+O`, while open-recent is `Ctrl+O Ctrl+R`; a bare `Ctrl+O` is not assigned by default.
-- Keymap overrides can be customized either by editing `keymap.json` or through the keymap settings UI; both paths persist to the same user file and use the same strict schema.
-- Project settings live inside `.ergproj/project_settings.json`.
-- The VFS is the active in-memory compile surface. Disk archives are persistence snapshots.
-- Preview SVG page files are updated page-by-page. The backend compares rendered SVG text with the VFS file-byte copy, writes changed pages as generated artifacts rather than retained Typst sources, and reports `changed` in preview page metadata.
-- Paths inside the archive and VFS should use `/` separators, even on Windows.
+- VFS paths use `/` separators on all platforms.
+- Saves pack the backend session VFS after worker sync and backend mirror sync drain.
+- Autosave defaults are controlled in global `settings.json` (`autosave_interval_ms`, blur/close toggles).
+- Keymap schema: `action_id`, `context` expression, `sequence` of logical keys with modifiers.
