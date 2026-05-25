@@ -199,10 +199,7 @@ fn collect_element_seeds(
             let body = if source.is_empty() {
                 String::new()
             } else {
-                format!(
-                    "#math.equation(block: {}, ${source}$)",
-                    equation.is_block
-                )
+                format!("#math.equation(block: {}, ${source}$)", equation.is_block)
             };
             seeds.push(ResourceSeed {
                 id: equation.id.clone(),
@@ -257,12 +254,7 @@ fn collect_element_seeds(
                 caption.to_string()
             };
             let body = asset_ref
-                .map(|a| {
-                    format!(
-                        "#image(\"{}\", width: 100%)",
-                        escape_typst_string(&a.path)
-                    )
-                })
+                .map(|a| format!("#image(\"{}\", width: 100%)", escape_typst_string(&a.path)))
                 .unwrap_or_else(|| "[Figure]".to_string());
             seeds.push(ResourceSeed {
                 id: figure.id.clone(),
@@ -405,13 +397,15 @@ mod tests {
             caption: None,
         });
 
-        if let DocumentSection::Content(content) = &mut ast.sections[0] {
-            content.elements.push(DocumentElement::Equation(Equation {
-                id: "eq-1".to_string(),
-                latex_source: "E=mc^2".to_string(),
-                is_block: false,
-            }));
-            content.elements.push(DocumentElement::Figure(Box::new(Figure {
+        let DocumentSection::Content(content) = &mut ast.sections[0];
+        content.elements.push(DocumentElement::Equation(Equation {
+            id: "eq-1".to_string(),
+            latex_source: "E=mc^2".to_string(),
+            is_block: false,
+        }));
+        content
+            .elements
+            .push(DocumentElement::Figure(Box::new(Figure {
                 id: "fig-1".to_string(),
                 asset_id: Some("asset-1".to_string()),
                 caption: "Caption".to_string(),
@@ -422,15 +416,20 @@ mod tests {
                 }),
                 extra_fields: std::collections::HashMap::new(),
             })));
-        }
 
         let seeds = assign_preview_pages(resource_seeds(&ast));
-        let file_seed = seeds.iter().find(|seed| seed.kind == ResourceKind::File).unwrap();
+        let file_seed = seeds
+            .iter()
+            .find(|seed| seed.kind == ResourceKind::File)
+            .unwrap();
         let equation_seed = seeds
             .iter()
             .find(|seed| seed.kind == ResourceKind::Equation)
             .unwrap();
-        let figure_seed = seeds.iter().find(|seed| seed.kind == ResourceKind::Figure).unwrap();
+        let figure_seed = seeds
+            .iter()
+            .find(|seed| seed.kind == ResourceKind::Figure)
+            .unwrap();
 
         assert_eq!(file_seed.preview_page, Some(1));
         assert_eq!(equation_seed.preview_page, Some(2));

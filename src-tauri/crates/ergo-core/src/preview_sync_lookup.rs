@@ -55,6 +55,56 @@ pub(crate) fn field_entry_for_offset<'a>(
         })
 }
 
+pub(crate) fn caret_utf16_distance_to_entry(
+    entry: &FieldSourceMapEntry,
+    caret_utf16_offset: usize,
+) -> usize {
+    let mut best = usize::MAX;
+
+    for segment in &entry.segments {
+        if caret_utf16_offset >= segment.field_utf16_start
+            && caret_utf16_offset <= segment.field_utf16_end
+        {
+            return 0;
+        }
+
+        best = best
+            .min(caret_utf16_offset.abs_diff(segment.field_utf16_start))
+            .min(caret_utf16_offset.abs_diff(segment.field_utf16_end));
+    }
+
+    if best != usize::MAX {
+        return best;
+    }
+
+    entry
+        .fallback_caret_utf16_offset
+        .map(|offset| caret_utf16_offset.abs_diff(offset))
+        .unwrap_or(usize::MAX)
+}
+
+pub(crate) fn field_entry_closest_to_caret<'a>(
+    entries: &[&'a FieldSourceMapEntry],
+    caret_utf16_offset: Option<usize>,
+) -> Option<&'a FieldSourceMapEntry> {
+    if entries.is_empty() {
+        return None;
+    }
+
+    let Some(caret_utf16_offset) = caret_utf16_offset else {
+        return entries
+            .iter()
+            .copied()
+            .find(|entry| !entry.segments.is_empty())
+            .or_else(|| entries.first().copied());
+    };
+
+    entries
+        .iter()
+        .copied()
+        .min_by_key(|entry| caret_utf16_distance_to_entry(entry, caret_utf16_offset))
+}
+
 pub(crate) fn field_entries_for_target<'a>(
     field_source_map: &'a [FieldSourceMapEntry],
     target: &PreviewFocusTarget,
@@ -78,6 +128,7 @@ pub(crate) fn focus_target_for_field_offset(
         element_id: entry.element_id.clone(),
         field_id: Some(entry.field_id.clone()),
         caret_utf16_offset: caret_for_source_offset(entry, offset),
+        anchor_page_number: None,
         source_revision,
     }
 }

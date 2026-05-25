@@ -8,9 +8,9 @@ use crate::compilation_types::SourceRevision;
 use crate::document_session::{FieldSourceMapEntry, SourceMapEntry};
 use crate::path_utils::path_from_file_id;
 use crate::preview_sync_lookup::{
-    candidate_offsets, field_entries_for_target, field_entry_for_offset,
-    focus_target_for_field_offset, preview_position, source_entry_for_offset,
-    source_offset_for_caret,
+    candidate_offsets, field_entries_for_target, field_entry_closest_to_caret,
+    field_entry_for_offset, focus_target_for_field_offset, preview_position,
+    source_entry_for_offset, source_offset_for_caret,
 };
 pub use crate::preview_sync_types::{
     PreviewCaretCue, PreviewElementPosition, PreviewElementPositionsResult, PreviewFocusTarget,
@@ -286,12 +286,7 @@ impl PreviewSyncState {
         };
 
         let entries = field_entries_for_target(&preview.field_source_map, target);
-        let Some(entry) = entries
-            .iter()
-            .copied()
-            .find(|entry| !entry.segments.is_empty())
-            .or_else(|| entries.first().copied())
-        else {
+        let Some(entry) = field_entry_closest_to_caret(&entries, target.caret_utf16_offset) else {
             return self.positions_for_element(&target.element_id, source_revision);
         };
 
@@ -324,6 +319,7 @@ impl PreviewSyncState {
             field_id,
             target.caret_utf16_offset,
             preferred_offset,
+            target.anchor_page_number,
         );
 
         if positions.is_empty() {
@@ -355,6 +351,7 @@ impl PreviewSyncState {
                     field_id,
                     target.caret_utf16_offset,
                     fallback_offset,
+                    target.anchor_page_number,
                 );
                 if !positions.is_empty() {
                     break;
@@ -414,6 +411,7 @@ fn positions_for_field_entry(
     field_id: &str,
     caret_utf16_offset: Option<usize>,
     preferred_offset: usize,
+    anchor_page_number: Option<usize>,
 ) -> Vec<PreviewElementPosition> {
     if let Some(caret_utf16_offset) = caret_utf16_offset {
         let positions = roundtrip_positions_for_field_caret(
@@ -423,6 +421,8 @@ fn positions_for_field_entry(
             element_id,
             field_id,
             caret_utf16_offset,
+            preferred_offset,
+            anchor_page_number,
         );
         if !positions.is_empty() {
             return positions;
@@ -437,26 +437,27 @@ fn positions_for_field_entry(
     );
     offsets.dedup();
 
+    let mut candidates = Vec::new();
     for offset in offsets {
-        let positions = jump_from_cursor(&preview.document, source, offset)
-            .into_iter()
-            .map(|position| {
-                preview_position(
-                    position,
-                    Some(element_id.to_string()),
-                    Some(field_id.to_string()),
-                    caret_utf16_offset,
-                    preview.source_revision,
-                )
-            })
-            .collect::<Vec<_>>();
-
-        if !positions.is_empty() {
-            return positions;
-        }
+        candidates.extend(
+            jump_from_cursor(&preview.document, source, offset)
+                .into_iter()
+                .map(|position| {
+                    (
+                        preview_position(
+                            position,
+                            Some(element_id.to_string()),
+                            Some(field_id.to_string()),
+                            caret_utf16_offset,
+                            preview.source_revision,
+                        ),
+                        offset,
+                    )
+                }),
+        );
     }
 
-    Vec::new()
+    pick_closest_preview_position(candidates, preferred_offset, anchor_page_number)
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -485,6 +486,8 @@ fn roundtrip_positions_for_field_caret(
     element_id: &str,
     field_id: &str,
     caret_utf16_offset: usize,
+    preferred_source_offset: usize,
+    anchor_page_number: Option<usize>,
 ) -> Vec<PreviewElementPosition> {
     let source_targets = caret_source_targets(entry, caret_utf16_offset);
     if source_targets.is_empty() {
@@ -493,43 +496,85 @@ fn roundtrip_positions_for_field_caret(
 
     let main_id = FileId::new(None, VirtualPath::new("main.typ"));
     let world = SnapshotWorld::new(preview.source_snapshot.clone(), main_id);
-    let mut positions = Vec::new();
+    let mut candidates = Vec::new();
 
     for (index, page) in preview.document.pages.iter().enumerate() {
         let page_number = index + 1;
-        for candidate in
-            click_candidates_for_source_targets(&page.frame, source, &source_targets, Point::zero())
-        {
-            if !candidate_roundtrips_to_focus(
-                preview,
-                &world,
-                page_number,
-                candidate.point,
-                element_id,
-                field_id,
-                caret_utf16_offset,
+        for target in &source_targets {
+            for candidate in click_candidates_for_source_targets(
+                &page.frame,
+                source,
+                std::slice::from_ref(target),
+                Point::zero(),
             ) {
-                continue;
-            }
+                if !candidate_roundtrips_to_focus(
+                    preview,
+                    &world,
+                    page_number,
+                    candidate.point,
+                    element_id,
+                    field_id,
+                    caret_utf16_offset,
+                ) {
+                    continue;
+                }
 
-            positions.push(PreviewElementPosition {
-                element_id: Some(element_id.to_string()),
-                field_id: Some(field_id.to_string()),
-                caret_utf16_offset: Some(caret_utf16_offset),
-                page_number,
-                x_pt: candidate.point.x.to_pt(),
-                y_pt: candidate.point.y.to_pt(),
-                caret_cue: Some(PreviewCaretCue {
-                    top_y_pt: candidate.top_y.to_pt(),
-                    height_pt: candidate.height.to_pt(),
-                }),
-                source_revision: preview.source_revision,
-            });
-            break;
+                candidates.push((
+                    PreviewElementPosition {
+                        element_id: Some(element_id.to_string()),
+                        field_id: Some(field_id.to_string()),
+                        caret_utf16_offset: Some(caret_utf16_offset),
+                        page_number,
+                        x_pt: candidate.point.x.to_pt(),
+                        y_pt: candidate.point.y.to_pt(),
+                        caret_cue: Some(PreviewCaretCue {
+                            top_y_pt: candidate.top_y.to_pt(),
+                            height_pt: candidate.height.to_pt(),
+                        }),
+                        source_revision: preview.source_revision,
+                    },
+                    target.source_byte_offset,
+                ));
+            }
         }
     }
 
-    positions
+    pick_closest_preview_position(candidates, preferred_source_offset, anchor_page_number)
+}
+
+fn page_distance_from_anchor(page_number: usize, anchor_page_number: Option<usize>) -> usize {
+    match anchor_page_number {
+        Some(anchor) => page_number.abs_diff(anchor),
+        None => 0,
+    }
+}
+
+fn pick_closest_preview_position(
+    candidates: Vec<(PreviewElementPosition, usize)>,
+    preferred_source_offset: usize,
+    anchor_page_number: Option<usize>,
+) -> Vec<PreviewElementPosition> {
+    let Some((position, _)) = candidates.into_iter().min_by(|left, right| {
+        let left_source = left.1.abs_diff(preferred_source_offset);
+        let right_source = right.1.abs_diff(preferred_source_offset);
+        left_source
+            .cmp(&right_source)
+            .then_with(|| {
+                page_distance_from_anchor(left.0.page_number, anchor_page_number).cmp(
+                    &page_distance_from_anchor(right.0.page_number, anchor_page_number),
+                )
+            })
+            .then_with(|| {
+                left.0
+                    .y_pt
+                    .partial_cmp(&right.0.y_pt)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    }) else {
+        return Vec::new();
+    };
+
+    vec![position]
 }
 
 fn caret_source_targets(
@@ -714,515 +759,5 @@ fn field_text(entry: &FieldSourceMapEntry, source_text: &str) -> String {
 
 #[cfg(test)]
 #[allow(irrefutable_let_patterns)]
-mod tests {
-    use super::*;
-    use crate::ast::{DocumentElement, DocumentSection};
-    use crate::document_session::{DocumentSession, FieldSourceMapEntry};
-    use crate::test_fixtures::preview_sync_document_ast;
-    use crate::vfs::VirtualFileSystem;
-    use crate::world::ErgoWorld;
-    use std::sync::Arc;
-    use typst_ide::IdeWorld;
-
-    fn compile_preview(
-        vfs: Arc<VirtualFileSystem>,
-        source_revision: SourceRevision,
-        source_map: Vec<SourceMapEntry>,
-        field_source_map: Vec<FieldSourceMapEntry>,
-    ) -> PreviewSyncState {
-        let main_id = FileId::new(None, VirtualPath::new("main.typ"));
-        let source_snapshot = WorldSourceSnapshot::from_vfs(&vfs);
-        let world = SnapshotWorld::new(source_snapshot.clone(), main_id);
-        let document = typst::compile::<PagedDocument>(&world).output.unwrap();
-        let state = PreviewSyncState::default();
-        state.store_preview(
-            source_revision,
-            Arc::new(document),
-            source_map,
-            field_source_map,
-            source_snapshot,
-        );
-        state
-    }
-
-    #[test]
-    fn ergo_world_satisfies_ide_world() {
-        fn assert_ide_world<T: IdeWorld>() {}
-        assert_ide_world::<ErgoWorld>();
-    }
-
-    #[test]
-    fn returns_positions_for_heading_and_unicode_paragraph() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let status = session.sync_snapshot(preview_sync_document_ast()).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map,
-            status.field_source_map,
-        );
-
-        let heading = sync.positions_for_element("heading-ñ", status.source_revision);
-        let paragraph = sync.positions_for_element("paragraph-emoji", status.source_revision);
-
-        assert!(matches!(
-            heading,
-            PreviewElementPositionsResult::Matched { ref positions, .. } if !positions.is_empty()
-        ));
-        assert!(matches!(
-            paragraph,
-            PreviewElementPositionsResult::Matched { ref positions, .. } if !positions.is_empty()
-        ));
-    }
-
-    #[test]
-    fn maps_preview_click_to_heading_element() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let status = session.sync_snapshot(preview_sync_document_ast()).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map.clone(),
-            status.field_source_map.clone(),
-        );
-
-        let positions = match sync.positions_for_element("heading-ñ", status.source_revision) {
-            PreviewElementPositionsResult::Matched { positions, .. } => positions,
-            result => panic!("expected heading preview position, got {result:?}"),
-        };
-        let first = positions.first().unwrap();
-        let result = sync.jump_from_click(
-            first.page_number,
-            first.x_pt + 1.0,
-            first.y_pt - 1.0,
-            status.source_revision,
-        );
-
-        match result {
-            PreviewJumpResult::Field { target, .. } => {
-                assert_eq!(target.element_id, "heading-ñ");
-            }
-            result => panic!("expected heading field jump, got {result:?}"),
-        }
-    }
-
-    #[test]
-    fn maps_preview_click_to_heading_field_target() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let status = session.sync_snapshot(preview_sync_document_ast()).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map.clone(),
-            status.field_source_map.clone(),
-        );
-
-        let positions = match sync.positions_for_element("heading-ñ", status.source_revision) {
-            PreviewElementPositionsResult::Matched { positions, .. } => positions,
-            result => panic!("expected heading preview position, got {result:?}"),
-        };
-        let first = positions.first().unwrap();
-        let result = sync.jump_from_click(
-            first.page_number,
-            first.x_pt + 1.0,
-            first.y_pt - 1.0,
-            status.source_revision,
-        );
-        let result_json = serde_json::to_value(result).unwrap();
-
-        assert_eq!(
-            result_json,
-            serde_json::json!({
-                "status": "field",
-                "target": {
-                    "elementId": "heading-ñ",
-                    "fieldId": "heading-ñ:text",
-                    "caretUtf16Offset": 0,
-                    "sourceRevision": status.source_revision,
-                },
-                "sourceRevision": status.source_revision,
-            })
-        );
-    }
-
-    #[test]
-    fn returns_preview_position_for_field_focus_target() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let status = session.sync_snapshot(preview_sync_document_ast()).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map.clone(),
-            status.field_source_map.clone(),
-        );
-
-        let result = sync.positions_for_focus(
-            &PreviewFocusTarget {
-                element_id: "heading-ñ".to_string(),
-                field_id: Some("heading-ñ:text".to_string()),
-                caret_utf16_offset: Some(0),
-                source_revision: status.source_revision,
-            },
-            status.source_revision,
-        );
-
-        assert!(matches!(
-            result,
-            PreviewElementPositionsResult::Matched { ref positions, .. }
-                if positions
-                    .iter()
-                    .any(|position| position.field_id.as_deref() == Some("heading-ñ:text"))
-        ));
-    }
-
-    #[test]
-    fn returns_preview_position_for_abstract_input_focus_target() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let mut ast = preview_sync_document_ast();
-        ast.inputs.insert(
-            "abstract_text".to_string(),
-            serde_json::json!("Resumen con contenido visible."),
-        );
-        let status = session.sync_snapshot(ast).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map.clone(),
-            status.field_source_map.clone(),
-        );
-
-        let result = sync.positions_for_focus(
-            &PreviewFocusTarget {
-                element_id: "inputs".to_string(),
-                field_id: Some("/abstract_text".to_string()),
-                caret_utf16_offset: Some(0),
-                source_revision: status.source_revision,
-            },
-            status.source_revision,
-        );
-
-        assert!(matches!(
-            result,
-            PreviewElementPositionsResult::Matched { ref positions, .. }
-                if positions
-                    .iter()
-                    .any(|position| position.field_id.as_deref() == Some("/abstract_text"))
-        ));
-    }
-
-    #[test]
-    fn focused_heading_caret_position_roundtrips_through_preview_click() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let status = session.sync_snapshot(preview_sync_document_ast()).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map.clone(),
-            status.field_source_map.clone(),
-        );
-        let target = PreviewFocusTarget {
-            element_id: "heading-ñ".to_string(),
-            field_id: Some("heading-ñ:text".to_string()),
-            caret_utf16_offset: Some("Introducción".encode_utf16().count()),
-            source_revision: status.source_revision,
-        };
-
-        let result = sync.positions_for_focus(&target, status.source_revision);
-        let position = match result {
-            PreviewElementPositionsResult::Matched { positions, .. } => positions
-                .into_iter()
-                .find(|position| position.field_id.as_deref() == target.field_id.as_deref())
-                .expect("expected focused field position"),
-            result => panic!("expected matched preview position, got {result:?}"),
-        };
-
-        let jump = sync.jump_from_click(
-            position.page_number,
-            position.x_pt,
-            position.y_pt,
-            status.source_revision,
-        );
-
-        assert!(matches!(
-            jump,
-            PreviewJumpResult::Field { target: ref actual, .. }
-                if actual.element_id == target.element_id
-                    && actual.field_id == target.field_id
-                    && actual.caret_utf16_offset == target.caret_utf16_offset
-        ));
-    }
-
-    #[test]
-    fn apa_title_caret_position_roundtrips_through_preview_click() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let status = session.sync_snapshot(preview_sync_document_ast()).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map.clone(),
-            status.field_source_map.clone(),
-        );
-        let target = PreviewFocusTarget {
-            element_id: "inputs".to_string(),
-            field_id: Some("/title".to_string()),
-            caret_utf16_offset: Some("Título con ñ".encode_utf16().count()),
-            source_revision: status.source_revision,
-        };
-
-        let result = sync.positions_for_focus(&target, status.source_revision);
-        let position = match result {
-            PreviewElementPositionsResult::Matched { positions, .. } => positions
-                .into_iter()
-                .find(|position| {
-                    position.field_id.as_deref() == target.field_id.as_deref()
-                        && position.caret_cue.is_some()
-                })
-                .unwrap_or_else(|| panic!("expected focused title caret position")),
-            result => panic!("expected matched preview position, got {result:?}"),
-        };
-
-        let jump = sync.jump_from_click(
-            position.page_number,
-            position.x_pt,
-            position.y_pt,
-            status.source_revision,
-        );
-
-        assert!(matches!(
-            jump,
-            PreviewJumpResult::Field { target: ref actual, .. }
-                if actual.element_id == target.element_id
-                    && actual.field_id == target.field_id
-                    && actual.caret_utf16_offset == target.caret_utf16_offset
-        ));
-    }
-
-    #[test]
-    fn returns_preview_positions_for_nested_template_input_focus_targets() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let mut ast = preview_sync_document_ast();
-        ast.inputs.insert(
-            "affiliations".to_string(),
-            serde_json::json!(["Universidad Norte"]),
-        );
-        ast.inputs.insert(
-            "authors".to_string(),
-            serde_json::json!([
-                {
-                    "name": "Ada Lovelace",
-                    "affiliations": ["1"]
-                }
-            ]),
-        );
-        let status = session.sync_snapshot(ast).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map.clone(),
-            status.field_source_map.clone(),
-        );
-
-        for field_id in [
-            "/authors/0/name",
-            "/authors/0/affiliations/0",
-            "/affiliations/0",
-        ] {
-            let result = sync.positions_for_focus(
-                &PreviewFocusTarget {
-                    element_id: "inputs".to_string(),
-                    field_id: Some(field_id.to_string()),
-                    caret_utf16_offset: Some(0),
-                    source_revision: status.source_revision,
-                },
-                status.source_revision,
-            );
-
-            assert!(
-                matches!(
-                    result,
-                    PreviewElementPositionsResult::Matched { ref positions, .. }
-                        if positions
-                            .iter()
-                            .any(|position| position.field_id.as_deref() == Some(field_id))
-                ),
-                "expected matched preview position for {field_id}, got {result:?}",
-            );
-        }
-    }
-
-    #[test]
-    fn apa_author_and_affiliation_caret_positions_roundtrip_through_preview_click() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let mut ast = preview_sync_document_ast();
-        ast.inputs.insert(
-            "affiliations".to_string(),
-            serde_json::json!(["Universidad Norte"]),
-        );
-        ast.inputs.insert(
-            "authors".to_string(),
-            serde_json::json!([
-                {
-                    "name": "Ada Lovelace",
-                    "affiliations": ["1"]
-                }
-            ]),
-        );
-        let status = session.sync_snapshot(ast).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map.clone(),
-            status.field_source_map.clone(),
-        );
-
-        for (field_id, text) in [
-            ("/authors/0/name", "Ada Lovelace"),
-            ("/affiliations/0", "Universidad Norte"),
-        ] {
-            let target = PreviewFocusTarget {
-                element_id: "inputs".to_string(),
-                field_id: Some(field_id.to_string()),
-                caret_utf16_offset: Some(text.encode_utf16().count()),
-                source_revision: status.source_revision,
-            };
-            let result = sync.positions_for_focus(&target, status.source_revision);
-            let position = match result {
-                PreviewElementPositionsResult::Matched { positions, .. } => positions
-                    .into_iter()
-                    .find(|position| {
-                        position.field_id.as_deref() == Some(field_id)
-                            && position.caret_cue.is_some()
-                    })
-                    .unwrap_or_else(|| {
-                        panic!("expected focused APA caret position for {field_id}")
-                    }),
-                result => {
-                    panic!("expected matched preview position for {field_id}, got {result:?}")
-                }
-            };
-
-            let jump = sync.jump_from_click(
-                position.page_number,
-                position.x_pt,
-                position.y_pt,
-                status.source_revision,
-            );
-
-            assert!(
-                matches!(
-                    jump,
-                    PreviewJumpResult::Field { target: ref actual, .. }
-                        if actual.element_id == target.element_id
-                            && actual.field_id == target.field_id
-                            && actual.caret_utf16_offset == target.caret_utf16_offset
-                ),
-                "expected APA preview click to roundtrip to {field_id}, got {jump:?}",
-            );
-        }
-    }
-
-    #[test]
-    fn maps_preview_click_to_paragraph_element() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let status = session.sync_snapshot(preview_sync_document_ast()).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map.clone(),
-            status.field_source_map.clone(),
-        );
-
-        let positions = match sync.positions_for_element("paragraph-emoji", status.source_revision)
-        {
-            PreviewElementPositionsResult::Matched { positions, .. } => positions,
-            result => panic!("expected paragraph preview position, got {result:?}"),
-        };
-        let first = positions.first().unwrap();
-        let result = sync.jump_from_click(
-            first.page_number,
-            first.x_pt + 1.0,
-            first.y_pt - 1.0,
-            status.source_revision,
-        );
-
-        match result {
-            PreviewJumpResult::Field { target, .. } => {
-                assert_eq!(target.element_id, "paragraph-emoji");
-            }
-            result => panic!("expected paragraph field jump, got {result:?}"),
-        }
-    }
-
-    #[test]
-    fn preview_click_uses_retained_sources_after_document_edits() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let mut ast = preview_sync_document_ast();
-        let status = session.sync_snapshot(ast.clone()).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map.clone(),
-            status.field_source_map.clone(),
-        );
-
-        if let DocumentSection::Content(content) = &mut ast.sections[0] {
-            if let DocumentElement::Paragraph(paragraph) = &mut content.elements[1] {
-                paragraph.content[0].text = "Texto cambiado después del render.".to_string();
-            }
-        }
-
-        let edited_status = session.sync_snapshot(ast).unwrap();
-        assert_ne!(edited_status.source_revision, status.source_revision);
-
-        let positions = match sync.positions_for_element("paragraph-emoji", status.source_revision)
-        {
-            PreviewElementPositionsResult::Matched { positions, .. } => positions,
-            result => panic!("expected retained paragraph preview position, got {result:?}"),
-        };
-        let first = positions.first().unwrap();
-        let result = sync.jump_from_click(
-            first.page_number,
-            first.x_pt + 1.0,
-            first.y_pt - 1.0,
-            status.source_revision,
-        );
-
-        match result {
-            PreviewJumpResult::Field { target, .. } => {
-                assert_eq!(target.element_id, "paragraph-emoji");
-            }
-            result => panic!("expected retained paragraph field jump, got {result:?}"),
-        }
-    }
-
-    #[test]
-    fn stale_revision_is_unavailable() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let status = session.sync_snapshot(preview_sync_document_ast()).unwrap();
-        let sync = compile_preview(
-            Arc::clone(&vfs),
-            status.source_revision,
-            status.source_map,
-            status.field_source_map,
-        );
-
-        let result = sync.positions_for_element("heading-ñ", status.source_revision + 1);
-
-        assert!(matches!(
-            result,
-            PreviewElementPositionsResult::Unavailable { .. }
-        ));
-    }
-}
+#[path = "preview_sync_tests.rs"]
+mod tests;

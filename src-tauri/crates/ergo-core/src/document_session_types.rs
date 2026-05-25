@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::ast::{DocumentElement, ProjectSettings, TableCell, ReferenceEntry, AssetEntry};
+use crate::ast::{AssetEntry, DocumentElement, ProjectSettings, ReferenceEntry, TableCell};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub struct SourceMapEntry {
     pub element_id: String,
@@ -20,7 +20,7 @@ pub struct SourceMapEntry {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub struct FieldTextSegment {
     pub source_byte_start: usize,
@@ -30,7 +30,7 @@ pub struct FieldTextSegment {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub struct FieldSourceMapEntry {
     pub element_id: String,
@@ -45,7 +45,7 @@ pub struct FieldSourceMapEntry {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub struct GeneratedFragment {
     pub element_id: String,
@@ -60,7 +60,7 @@ pub struct GeneratedFragment {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSourceLayout {
     pub main_path: String,
@@ -75,7 +75,7 @@ pub struct ProjectSourceLayout {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentSessionStatus {
     #[ts(type = "number")]
@@ -89,7 +89,7 @@ pub struct DocumentSessionStatus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum DocumentEvent {
     SetProjectTitle {
@@ -97,6 +97,9 @@ pub enum DocumentEvent {
     },
     SetProjectSettings {
         settings: ProjectSettings,
+    },
+    SetTemplateVariant {
+        variant_id: String,
     },
     InsertElement {
         section_id: String,
@@ -115,9 +118,18 @@ pub enum DocumentEvent {
         element_id: String,
         text: String,
     },
+    UpdateParagraphContent {
+        element_id: String,
+        content: Vec<crate::ast::RichText>,
+    },
     UpdateHeading {
         element_id: String,
         text: Option<String>,
+        level: Option<i32>,
+    },
+    UpdateHeadingContent {
+        element_id: String,
+        content: Vec<crate::ast::RichText>,
         level: Option<i32>,
     },
     UpdateEquation {

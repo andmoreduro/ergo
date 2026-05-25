@@ -7,7 +7,7 @@ use crate::document_resources::DocumentResources;
 pub type SourceRevision = u64;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub enum ExportFormat {
     Pdf,
@@ -16,7 +16,7 @@ pub enum ExportFormat {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub enum CompilationStatus {
     Started,
@@ -25,7 +25,7 @@ pub enum CompilationStatus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct CompilationResult {
     #[ts(type = "number")]
     pub source_revision: SourceRevision,
@@ -38,7 +38,7 @@ pub struct CompilationResult {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct PreviewPageFile {
     pub page_number: usize,
     pub path: String,

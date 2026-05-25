@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct DocumentAST {
     pub version: String,
     pub metadata: ProjectMetadata,
@@ -19,9 +19,11 @@ pub struct DocumentAST {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ProjectMetadata {
     pub template_id: String,
+    #[serde(default)]
+    pub template_variant_id: Option<String>,
     pub title: String,
     #[serde(default)]
     pub project_settings: ProjectSettings,
@@ -34,7 +36,7 @@ pub struct ProjectMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct GlobalSettings {
     pub default_font: Option<String>,
     pub default_font_size: Option<f32>,
@@ -86,7 +88,7 @@ impl Default for GlobalSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ProjectSettings {
     #[serde(default)]
     pub paper_size: Option<String>,
@@ -122,14 +124,14 @@ impl Default for ProjectSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct TemplateOverride {
     pub key: String,
     pub value: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub enum ActionId {
     #[serde(rename = "workspace::NewProject")]
     WorkspaceNewProject,
@@ -337,7 +339,7 @@ impl FromStr for ActionId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub enum KeyModifier {
     Control,
     Alt,
@@ -346,7 +348,7 @@ pub enum KeyModifier {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct KeyStroke {
     pub key: String,
     #[serde(default)]
@@ -355,7 +357,7 @@ pub struct KeyStroke {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct KeyBindingPreference {
     pub action_id: ActionId,
     pub context: String,
@@ -428,7 +430,7 @@ fn push_modifier(modifiers: &mut Vec<KeyModifier>, modifier: KeyModifier) {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct KeymapSettings {
     #[serde(default)]
     pub keymap_profile: Option<String>,
@@ -449,20 +451,20 @@ impl Default for KeymapSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct DependencyManifest {
     pub packages: Vec<Package>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct Package {
     pub name: String,
     pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ReferenceEntry {
     pub id: String,
     pub citation_key: String,
@@ -470,7 +472,7 @@ pub struct ReferenceEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct AssetEntry {
     pub id: String,
     pub path: String,
@@ -479,14 +481,14 @@ pub struct AssetEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(tag = "type")]
 pub enum DocumentSection {
     Content(ContentSection),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ContentSection {
     pub id: String,
     pub is_optional: bool,
@@ -494,7 +496,7 @@ pub struct ContentSection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(tag = "type")]
 pub enum DocumentElement {
     Heading(Heading),
@@ -506,7 +508,7 @@ pub enum DocumentElement {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct CustomElement {
     pub id: String,
     pub element_type: String,
@@ -515,7 +517,7 @@ pub struct CustomElement {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct Heading {
     pub id: String,
     pub level: i32,
@@ -523,14 +525,14 @@ pub struct Heading {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct Paragraph {
     pub id: String,
     pub content: Vec<RichText>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct RichText {
     pub text: String,
     pub bold: Option<bool>,
@@ -544,7 +546,7 @@ pub struct RichText {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct Table {
     pub id: String,
     pub rows: i32,
@@ -557,7 +559,7 @@ pub struct Table {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct TableCell {
     pub content: String,
     #[serde(default)]
@@ -567,7 +569,7 @@ pub struct TableCell {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct Equation {
     pub id: String,
     pub latex_source: String,
@@ -575,7 +577,7 @@ pub struct Equation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct Figure {
     pub id: String,
     #[serde(default)]

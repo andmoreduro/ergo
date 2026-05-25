@@ -97,10 +97,7 @@ impl SvgPageCache {
     }
 }
 
-pub fn render_svgs_incremental(
-    document: &PagedDocument,
-    cache: &mut SvgPageCache,
-) -> Vec<String> {
+pub fn render_svgs_incremental(document: &PagedDocument, cache: &mut SvgPageCache) -> Vec<String> {
     use rayon::prelude::*;
 
     let fingerprints: Vec<u64> = document.pages.par_iter().map(fingerprint_page).collect();
