@@ -3,9 +3,27 @@
   "template": {
     "id": "versatile-apa",
     "name": "APA 7th Edition",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "American Psychological Association 7th Edition formatting via the versatile-apa Typst package."
   },
+  "variants": [
+    {
+      "id": "student",
+      "label": "Student paper",
+      "description": "For course assignments. Page numbers in the header; no running head or author note on the title page.",
+      "default": true
+    },
+    {
+      "id": "professional",
+      "label": "Professional paper",
+      "description": "For journal or publication manuscripts. Running head in the header and an author note on the title page."
+    },
+    {
+      "id": "complete",
+      "label": "Complete",
+      "description": "Shows every template field (student and professional) in the editor. Preview uses the student layout."
+    }
+  ],
   "package": {
     "name": "@preview/versatile-apa",
     "version": "7.2.0",
@@ -29,7 +47,8 @@
       {
         "key": "running-head",
         "type": "content",
-        "source": "inputs.running_head"
+        "source": "inputs.running_head",
+        "variants": ["professional"]
       }
     ]
   },
@@ -45,7 +64,8 @@
       "id": "running_head",
       "type": "string",
       "label": "Running Head",
-      "importance": "recommended"
+      "importance": "recommended",
+      "variants": ["professional"]
     },
     {
       "id": "abstract_text",
@@ -105,32 +125,45 @@
       "id": "course",
       "type": "string",
       "label": "Course",
-      "importance": "optional"
+      "importance": "optional",
+      "variants": ["student"]
     },
     {
       "id": "instructor",
       "type": "string",
       "label": "Instructor",
-      "importance": "optional"
+      "importance": "optional",
+      "variants": ["student"]
     },
     {
       "id": "due_date",
       "type": "string",
       "label": "Due Date",
-      "importance": "optional"
+      "importance": "optional",
+      "variants": ["student"]
     },
     {
       "id": "author_note",
       "type": "content",
       "label": "Author Note",
-      "importance": "optional"
+      "importance": "optional",
+      "variants": ["professional"]
     }
   ],
   "groups": [
     {
       "id": "cover_page",
       "label": "Cover Page",
-      "inputs": ["title", "running_head", "authors", "affiliations", "course", "instructor", "due_date", "author_note"]
+      "inputs": [
+        "title",
+        "running_head",
+        "authors",
+        "affiliations",
+        "course",
+        "instructor",
+        "due_date",
+        "author_note"
+      ]
     },
     {
       "id": "abstract",
@@ -168,22 +201,26 @@
         {
           "key": "course",
           "type": "content",
-          "source": "inputs.course"
+          "source": "inputs.course",
+          "variants": ["student"]
         },
         {
           "key": "instructor",
           "type": "content",
-          "source": "inputs.instructor"
+          "source": "inputs.instructor",
+          "variants": ["student"]
         },
         {
           "key": "due-date",
           "type": "content",
-          "source": "inputs.due_date"
+          "source": "inputs.due_date",
+          "variants": ["student"]
         },
         {
           "key": "author-note",
           "type": "content",
-          "source": "inputs.author_note"
+          "source": "inputs.author_note",
+          "variants": ["professional"]
         }
       ]
     },

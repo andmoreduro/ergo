@@ -4,14 +4,15 @@ use ts_rs::TS;
 const VERSATILE_APA_TEMPLATE: &str =
     include_str!("../../../resources/templates/versatile-apa/template.json");
 
-
 // ─── Template Spec Root ────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct TemplateSpec {
     pub template: TemplateIdentity,
     pub package: PackageSpec,
+    #[serde(default)]
+    pub variants: Vec<TemplateVariantSpec>,
     pub show_rule: Option<ShowRuleSpec>,
     #[serde(default)]
     pub inputs: Vec<InputSchema>,
@@ -28,7 +29,18 @@ pub struct TemplateSpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
+pub struct TemplateVariantSpec {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct TemplateIdentity {
     pub id: String,
     pub name: String,
@@ -40,7 +52,7 @@ pub struct TemplateIdentity {
 // ─── Package & Imports ─────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct PackageSpec {
     pub name: String,
     pub version: String,
@@ -51,7 +63,7 @@ pub struct PackageSpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct PackageDependency {
     pub name: String,
     pub version: String,
@@ -78,18 +90,20 @@ impl ImportSymbol {
 // ─── Show Rule ─────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ShowRuleSpec {
     pub function: String,
     #[serde(default)]
     pub params: Vec<ParamSpec>,
+    #[serde(default)]
+    pub variants: Option<Vec<String>>,
 }
 
 // ─── Inputs Schema ──────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "lowercase")]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub enum InputType {
     String,
     Integer,
@@ -103,7 +117,7 @@ pub enum InputType {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "lowercase")]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub enum Importance {
     Required,
     Recommended,
@@ -117,7 +131,7 @@ impl Default for Importance {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct InputSchema {
     #[serde(default)]
     pub id: Option<String>,
@@ -132,6 +146,9 @@ pub struct InputSchema {
     pub default: Option<serde_json::Value>,
     #[serde(default)]
     pub importance: Importance,
+    // When set, the input is only available for these variant ids.
+    #[serde(default)]
+    pub variants: Option<Vec<String>>,
     #[serde(default)]
     pub properties: Option<Vec<InputSchema>>,
     #[serde(default)]
@@ -143,17 +160,19 @@ pub struct InputSchema {
 // ─── Groups Schema ──────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct InputGroupSpec {
     pub id: String,
     pub label: String,
     pub inputs: Vec<String>,
+    #[serde(default)]
+    pub variants: Option<Vec<String>>,
 }
 
 // ─── Custom Elements Schema ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct CustomElementSpec {
     pub kind: String,
     pub label: String,
@@ -166,7 +185,7 @@ pub struct CustomElementSpec {
 // ─── Parameters ────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ParamSpec {
     pub key: String,
     #[serde(rename = "type")]
@@ -180,11 +199,13 @@ pub struct ParamSpec {
     pub default: Option<serde_json::Value>,
     #[serde(default)]
     pub required: bool,
+    #[serde(default)]
+    pub variants: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub enum ParamType {
     Content,
     String,
@@ -202,7 +223,7 @@ pub enum ParamType {
 // ─── Sections ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct SectionSpec {
     pub id: String,
     pub kind: SectionKind,
@@ -212,16 +233,18 @@ pub struct SectionSpec {
     pub function: Option<String>,
     #[serde(default)]
     pub params: Vec<ParamSpec>,
-    /// Literal Typst source (for `literal` kind).
+    #[serde(default)]
+    pub variants: Option<Vec<String>>,
+    // Literal Typst source for `literal` sections.
     #[serde(default)]
     pub source: Option<String>,
-    /// Bibliography file path (for `bibliography` kind).
+    // Bibliography file path for `bibliography` sections.
     #[serde(default)]
     pub file: Option<String>,
-    /// Section title in Typst (e.g. "References").
+    // Section title in Typst.
     #[serde(default)]
     pub title: Option<String>,
-    /// Show rule function (for `appendix` kind).
+    // Show rule function for `appendix` sections.
     #[serde(default)]
     pub show_rule: Option<String>,
     #[serde(default)]
@@ -232,7 +255,7 @@ pub struct SectionSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub enum SectionKind {
     FunctionCall,
     Literal,
@@ -242,7 +265,7 @@ pub enum SectionKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ExtraFieldSpec {
     pub key: String,
     #[serde(rename = "type")]
@@ -251,7 +274,7 @@ pub struct ExtraFieldSpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ElementOverrideSpec {
     pub function: Option<String>,
     pub wrapper: Option<String>,
@@ -260,14 +283,14 @@ pub struct ElementOverrideSpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ElementOverrides {
     pub figure: Option<ElementOverrideSpec>,
     pub table: Option<ElementOverrideSpec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ResourcePolicySpec {
     #[serde(default)]
     pub preview: Option<ResourcePreviewPolicySpec>,
@@ -276,7 +299,7 @@ pub struct ResourcePolicySpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct ResourcePreviewPolicySpec {
     #[serde(default)]
     pub width_pt: Option<f32>,
@@ -287,7 +310,7 @@ pub struct ResourcePreviewPolicySpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct PastedImagePolicySpec {
     #[serde(default = "default_pasted_image_behavior")]
     pub behavior: String,
@@ -302,7 +325,7 @@ fn default_pasted_image_behavior() -> String {
 // ─── Defaults ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 pub struct DefaultsSpec {
     #[serde(default)]
     pub paper_size: Option<String>,
@@ -331,6 +354,108 @@ pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> 
     match template_id {
         "versatile-apa" | "apa7" => Ok(spec.clone()),
         _ => Err(format!("unknown template: {template_id}")),
+    }
+}
+
+/// UI-only variant: expose every input/group/section regardless of per-field `variants`.
+pub const COMPLETE_TEMPLATE_VARIANT_ID: &str = "complete";
+
+/// Variant id passed to Typst when the stored variant is UI-only.
+pub fn typst_template_variant_id(variant_id: &str) -> &str {
+    if variant_id == COMPLETE_TEMPLATE_VARIANT_ID {
+        "student"
+    } else {
+        variant_id
+    }
+}
+
+pub fn default_template_variant_id(spec: &TemplateSpec) -> String {
+    spec.variants
+        .iter()
+        .find(|variant| variant.default)
+        .map(|variant| variant.id.clone())
+        .or_else(|| spec.variants.first().map(|variant| variant.id.clone()))
+        .unwrap_or_else(|| "student".to_string())
+}
+
+pub fn resolve_template_variant(spec: &TemplateSpec, variant_id: Option<&str>) -> TemplateSpec {
+    if spec.variants.is_empty() {
+        return spec.clone();
+    }
+
+    let active_variant = variant_id
+        .map(str::to_string)
+        .filter(|id| spec.variants.iter().any(|variant| variant.id == *id))
+        .unwrap_or_else(|| default_template_variant_id(spec));
+
+    if active_variant == COMPLETE_TEMPLATE_VARIANT_ID {
+        return spec.clone();
+    }
+
+    let mut resolved = spec.clone();
+    resolved.inputs = spec
+        .inputs
+        .iter()
+        .filter(|input| applies_to_variant(input.variants.as_ref(), &active_variant))
+        .cloned()
+        .collect();
+    resolved.groups = spec
+        .groups
+        .iter()
+        .filter(|group| applies_to_variant(group.variants.as_ref(), &active_variant))
+        .map(|group| InputGroupSpec {
+            inputs: group
+                .inputs
+                .iter()
+                .filter(|input_id| {
+                    spec.inputs.iter().any(|input| {
+                        input.id.as_deref() == Some(input_id.as_str())
+                            && applies_to_variant(input.variants.as_ref(), &active_variant)
+                    })
+                })
+                .cloned()
+                .collect(),
+            ..group.clone()
+        })
+        .filter(|group| !group.inputs.is_empty())
+        .collect();
+    resolved.sections = spec
+        .sections
+        .iter()
+        .filter(|section| applies_to_variant(section.variants.as_ref(), &active_variant))
+        .map(|section| SectionSpec {
+            params: section
+                .params
+                .iter()
+                .filter(|param| applies_to_variant(param.variants.as_ref(), &active_variant))
+                .cloned()
+                .collect(),
+            ..section.clone()
+        })
+        .collect();
+    if let Some(show_rule) = spec.show_rule.as_ref() {
+        resolved.show_rule = Some(ShowRuleSpec {
+            params: show_rule
+                .params
+                .iter()
+                .filter(|param| applies_to_variant(param.variants.as_ref(), &active_variant))
+                .cloned()
+                .collect(),
+            ..show_rule.clone()
+        });
+    }
+    resolved
+}
+
+fn applies_to_variant(variants: Option<&Vec<String>>, active_variant: &str) -> bool {
+    if active_variant == COMPLETE_TEMPLATE_VARIANT_ID {
+        return true;
+    }
+
+    match variants {
+        None => true,
+        Some(ids) if ids.is_empty() => true,
+        Some(ids) => ids.iter().any(|id| id == active_variant),
     }
 }
 
@@ -374,11 +499,93 @@ mod tests {
         assert_eq!(spec.template.name, "APA 7th Edition");
         assert_eq!(spec.package.name, "@preview/versatile-apa");
         assert_eq!(spec.package.version, "7.2.0");
+        assert_eq!(spec.variants.len(), 3);
         assert_eq!(spec.sections.len(), 5);
         assert!(spec.show_rule.is_some());
         assert!(!spec.inputs.is_empty());
         assert!(!spec.groups.is_empty());
         assert!(spec.defaults.is_some());
+    }
+
+    #[test]
+    fn student_variant_omits_professional_only_fields() {
+        let spec = load_bundled_template("versatile-apa").unwrap();
+        let resolved = resolve_template_variant(&spec, Some("student"));
+        let input_ids: Vec<_> = resolved
+            .inputs
+            .iter()
+            .filter_map(|input| input.id.clone())
+            .collect();
+        assert!(input_ids.contains(&"course".to_string()));
+        assert!(!input_ids.contains(&"running_head".to_string()));
+        assert!(!input_ids.contains(&"author_note".to_string()));
+        let show_rule = resolved.show_rule.expect("show rule");
+        assert!(show_rule
+            .params
+            .iter()
+            .all(|param| param.key != "running-head"));
+        let title_page = resolved
+            .sections
+            .iter()
+            .find(|section| section.id == "title-page")
+            .expect("title page");
+        let param_keys: Vec<_> = title_page
+            .params
+            .iter()
+            .map(|param| param.key.as_str())
+            .collect();
+        assert!(param_keys.contains(&"course"));
+        assert!(!param_keys.contains(&"author-note"));
+    }
+
+    #[test]
+    fn complete_variant_includes_every_field() {
+        let spec = load_bundled_template("versatile-apa").unwrap();
+        let resolved = resolve_template_variant(&spec, Some("complete"));
+        let input_ids: Vec<_> = resolved
+            .inputs
+            .iter()
+            .filter_map(|input| input.id.clone())
+            .collect();
+        assert!(input_ids.contains(&"course".to_string()));
+        assert!(input_ids.contains(&"running_head".to_string()));
+        assert!(input_ids.contains(&"author_note".to_string()));
+        let show_rule = resolved.show_rule.expect("show rule");
+        assert!(show_rule
+            .params
+            .iter()
+            .any(|param| param.key == "running-head"));
+        let title_page = resolved
+            .sections
+            .iter()
+            .find(|section| section.id == "title-page")
+            .expect("title page");
+        let param_keys: Vec<_> = title_page
+            .params
+            .iter()
+            .map(|param| param.key.as_str())
+            .collect();
+        assert!(param_keys.contains(&"course"));
+        assert!(param_keys.contains(&"author-note"));
+    }
+
+    #[test]
+    fn professional_variant_omits_student_only_fields() {
+        let spec = load_bundled_template("versatile-apa").unwrap();
+        let resolved = resolve_template_variant(&spec, Some("professional"));
+        let input_ids: Vec<_> = resolved
+            .inputs
+            .iter()
+            .filter_map(|input| input.id.clone())
+            .collect();
+        assert!(input_ids.contains(&"running_head".to_string()));
+        assert!(input_ids.contains(&"author_note".to_string()));
+        assert!(!input_ids.contains(&"course".to_string()));
+        let show_rule = resolved.show_rule.expect("show rule");
+        assert!(show_rule
+            .params
+            .iter()
+            .any(|param| param.key == "running-head"));
     }
 
     #[test]
