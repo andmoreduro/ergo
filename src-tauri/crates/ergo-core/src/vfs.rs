@@ -23,7 +23,7 @@ struct RetainedTextFile {
 }
 
 #[derive(Clone, Debug, Serialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export, export_to = "../../../../src/bindings/")]
 #[serde(rename_all = "camelCase")]
 pub struct VirtualTextFile {
     pub path: String,
