@@ -8,6 +8,7 @@ use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World};
 use typst_ide::IdeWorld;
 
+use crate::package_resolver::{find_package_file, package_virtual_path_from_file_id};
 use crate::path_utils::{normalize_virtual_path, path_from_file_id};
 use crate::vfs::VirtualFileSystem;
 
@@ -150,81 +151,6 @@ fn bundled_fonts() -> Arc<Vec<Font>> {
         .clone()
 }
 
-fn find_package_file(file_id: FileId) -> Option<std::path::PathBuf> {
-    let pkg = file_id.package()?;
-    let vpath = file_id.vpath().as_rootless_path();
-
-    // Check LOCALAPPDATA
-    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-        let path = std::path::PathBuf::from(local_app_data)
-            .join("typst")
-            .join("packages")
-            .join(pkg.namespace.as_str())
-            .join(pkg.name.as_str())
-            .join(pkg.version.to_string())
-            .join(vpath);
-        if path.exists() {
-            return Some(path);
-        }
-    }
-
-    // Check APPDATA
-    if let Ok(app_data) = std::env::var("APPDATA") {
-        let path = std::path::PathBuf::from(app_data)
-            .join("typst")
-            .join("packages")
-            .join(pkg.namespace.as_str())
-            .join(pkg.name.as_str())
-            .join(pkg.version.to_string())
-            .join(vpath);
-        if path.exists() {
-            return Some(path);
-        }
-    }
-
-    // Fallback to home dir AppData
-    if let Ok(home) = std::env::var("USERPROFILE") {
-        let path = std::path::PathBuf::from(&home)
-            .join("AppData")
-            .join("Local")
-            .join("typst")
-            .join("packages")
-            .join(pkg.namespace.as_str())
-            .join(pkg.name.as_str())
-            .join(pkg.version.to_string())
-            .join(vpath);
-        if path.exists() {
-            return Some(path);
-        }
-
-        let path2 = std::path::PathBuf::from(&home)
-            .join("AppData")
-            .join("Roaming")
-            .join("typst")
-            .join("packages")
-            .join(pkg.namespace.as_str())
-            .join(pkg.name.as_str())
-            .join(pkg.version.to_string())
-            .join(vpath);
-        if path2.exists() {
-            return Some(path2);
-        }
-    }
-
-    None
-}
-
-fn package_virtual_path(id: FileId) -> Option<String> {
-    let pkg = id.package()?;
-    Some(format!(
-        "packages/{}/{}/{}/{}",
-        pkg.namespace,
-        pkg.name,
-        pkg.version,
-        id.vpath().as_rootless_path().to_string_lossy().replace('\\', "/")
-    ))
-}
-
 impl World for ErgoWorld {
     fn library(&self) -> &LazyHash<Library> {
         &self.library
@@ -239,16 +165,16 @@ impl World for ErgoWorld {
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
-        if let Some(path) = find_package_file(id) {
-            let text = std::fs::read_to_string(&path)
-                .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
-            return Ok(Source::new(id, text));
-        }
-
-        if let Some(vpath) = package_virtual_path(id) {
-            return self.vfs
-                .read_typst_source(&vpath)
-                .map_err(|_| FileError::NotFound(vpath.into()));
+        if let Some(vpath) = package_virtual_path_from_file_id(id) {
+            if let Ok(source) = self.vfs.read_typst_source(&vpath) {
+                return Ok(source);
+            }
+            if let Some(path) = find_package_file(id) {
+                let text = std::fs::read_to_string(&path)
+                    .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
+                return Ok(Source::new(id, text));
+            }
+            return Err(FileError::NotFound(vpath.into()));
         }
 
         let path = path_from_file_id(id);
@@ -258,16 +184,19 @@ impl World for ErgoWorld {
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        if let Some(path) = find_package_file(id) {
-            let bytes = std::fs::read(&path)
-                .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
-            return Ok(Bytes::new(bytes));
-        }
-
-        if let Some(vpath) = package_virtual_path(id) {
-            return self.vfs
-                .read_binary_file(&vpath)
-                .map_err(|_| FileError::NotFound(vpath.into()));
+        if let Some(vpath) = package_virtual_path_from_file_id(id) {
+            if let Ok(bytes) = self.vfs.read_binary_file(&vpath) {
+                return Ok(bytes);
+            }
+            if let Ok(source) = self.vfs.read_typst_source(&vpath) {
+                return Ok(Bytes::new(source.text().as_bytes().to_vec()));
+            }
+            if let Some(path) = find_package_file(id) {
+                let bytes = std::fs::read(&path)
+                    .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
+                return Ok(Bytes::new(bytes));
+            }
+            return Err(FileError::NotFound(vpath.into()));
         }
 
         let path = path_from_file_id(id);
@@ -305,15 +234,14 @@ impl World for SnapshotWorld {
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
-        if let Some(path) = find_package_file(id) {
-            let text = std::fs::read_to_string(&path)
-                .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
-            return Ok(Source::new(id, text));
-        }
-
-        if let Some(vpath) = package_virtual_path(id) {
+        if let Some(vpath) = package_virtual_path_from_file_id(id) {
             if let Some(source) = self.snapshot.sources.get(&vpath) {
                 return Ok(source.clone());
+            }
+            if let Some(path) = find_package_file(id) {
+                let text = std::fs::read_to_string(&path)
+                    .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
+                return Ok(Source::new(id, text));
             }
             return Err(FileError::NotFound(vpath.into()));
         }
@@ -327,18 +255,17 @@ impl World for SnapshotWorld {
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        if let Some(path) = find_package_file(id) {
-            let bytes = std::fs::read(&path)
-                .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
-            return Ok(Bytes::new(bytes));
-        }
-
-        if let Some(vpath) = package_virtual_path(id) {
+        if let Some(vpath) = package_virtual_path_from_file_id(id) {
             if let Some(bytes) = self.snapshot.files.get(&vpath) {
                 return Ok(bytes.clone());
             }
             if let Some(source) = self.snapshot.sources.get(&vpath) {
                 return Ok(Bytes::new(source.text().as_bytes().to_vec()));
+            }
+            if let Some(path) = find_package_file(id) {
+                let bytes = std::fs::read(&path)
+                    .map_err(|_| FileError::NotFound(path.to_string_lossy().to_string().into()))?;
+                return Ok(Bytes::new(bytes));
             }
             return Err(FileError::NotFound(vpath.into()));
         }
@@ -367,5 +294,31 @@ impl World for SnapshotWorld {
 impl IdeWorld for SnapshotWorld {
     fn upcast(&self) -> &dyn World {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use typst::syntax::{package::PackageSpec, FileId, VirtualPath};
+
+    use super::*;
+    use crate::path_utils::file_id_for_virtual_path;
+
+    #[test]
+    fn package_sources_are_read_from_vfs_archive_layout() {
+        let vfs = Arc::new(VirtualFileSystem::new());
+        vfs.write_source(
+            "packages/preview/test-package/1.0.0/lib.typ",
+            "#let value = 1".to_string(),
+        );
+        let package: PackageSpec = "@preview/test-package:1.0.0".parse().unwrap();
+        let package_file = FileId::new(Some(package), VirtualPath::new("lib.typ"));
+        let world = ErgoWorld::new(vfs, file_id_for_virtual_path("main.typ"));
+
+        let source = world.source(package_file).unwrap();
+
+        assert_eq!(source.text(), "#let value = 1");
     }
 }
