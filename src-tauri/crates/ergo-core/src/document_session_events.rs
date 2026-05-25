@@ -17,6 +17,10 @@ pub(crate) fn apply_document_event(
             ast.metadata.project_settings = settings;
             Ok(())
         }
+        DocumentEvent::SetTemplateVariant { variant_id } => {
+            ast.metadata.template_variant_id = Some(variant_id);
+            Ok(())
+        }
         DocumentEvent::UpdateInput { path, value } => {
             if path == "/title" {
                 if let Some(title) = value.as_str() {
@@ -52,6 +56,19 @@ pub(crate) fn apply_document_event(
                 _ => Err(format!("Element {element_id} is not a paragraph")),
             }
         }
+        DocumentEvent::UpdateParagraphContent {
+            element_id,
+            content,
+        } => {
+            let element = element_mut(ast, &element_id)?;
+            match element {
+                DocumentElement::Paragraph(paragraph) => {
+                    paragraph.content = content;
+                    Ok(())
+                }
+                _ => Err(format!("Element {element_id} is not a paragraph")),
+            }
+        }
         DocumentEvent::UpdateHeading {
             element_id,
             text,
@@ -63,6 +80,23 @@ pub(crate) fn apply_document_event(
                     if let Some(text) = text {
                         heading.content = rich_text_from_string(text);
                     }
+                    if let Some(level) = level {
+                        heading.level = level;
+                    }
+                    Ok(())
+                }
+                _ => Err(format!("Element {element_id} is not a heading")),
+            }
+        }
+        DocumentEvent::UpdateHeadingContent {
+            element_id,
+            content,
+            level,
+        } => {
+            let element = element_mut(ast, &element_id)?;
+            match element {
+                DocumentElement::Heading(heading) => {
+                    heading.content = content;
                     if let Some(level) = level {
                         heading.level = level;
                     }

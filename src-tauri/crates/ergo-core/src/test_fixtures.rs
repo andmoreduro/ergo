@@ -35,6 +35,7 @@ pub fn basic_document_ast(title: &str, abstract_text: &str) -> DocumentAST {
         version: "1.0".to_string(),
         metadata: ProjectMetadata {
             template_id: "apa7".to_string(),
+            template_variant_id: Some("student".to_string()),
             title: title.to_string(),
             project_settings: ProjectSettings::default(),
             local_overrides: GlobalSettings::default(),

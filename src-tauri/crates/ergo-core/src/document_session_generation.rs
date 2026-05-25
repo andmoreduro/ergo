@@ -5,6 +5,10 @@ use std::hash::{Hash, Hasher};
 use crate::ast::{
     AssetEntry, DocumentAST, DocumentElement, DocumentSection, ReferenceEntry, RichText,
 };
+use crate::document_generation_lib::{
+    escape_typst_string, format_json_val, format_typst_length, format_typst_length_number,
+    generate_lib_typst, is_sized_unit, resolve_param_builder,
+};
 use crate::document_session::{
     DOCUMENT_STATE_PATH, FIELD_SOURCE_MAP_PATH, LIB_PATH, MAIN_PATH, PROJECT_SETTINGS_PATH,
     REFERENCES_PATH, SOURCE_MAP_PATH, TEMPLATE_PATH,
@@ -13,7 +17,7 @@ use crate::document_session_types::{
     FieldSourceMapEntry, GeneratedFragment, ProjectSourceLayout, SourceMapEntry,
 };
 use crate::document_source_builder::SourceBuilder;
-use crate::template_spec::{ParamSpec, ParamType, SectionKind, TemplateSpec};
+use crate::template_spec::{ParamType, SectionKind, TemplateSpec};
 
 pub(crate) struct GeneratedProjectSources {
     pub(crate) main_source: String,
@@ -46,12 +50,7 @@ pub(crate) fn generate_project_sources_incremental(
     cached_fragments: &HashMap<String, GeneratedFragment>,
     cached_hashes: &HashMap<String, u64>,
 ) -> GeneratedProjectSources {
-    generate_project_sources_inner(
-        ast,
-        template,
-        Some(cached_fragments),
-        Some(cached_hashes),
-    )
+    generate_project_sources_inner(ast, template, Some(cached_fragments), Some(cached_hashes))
 }
 
 fn element_content_hash(element: &DocumentElement) -> u64 {
@@ -99,6 +98,7 @@ fn generate_project_sources_inner(
                                         0,
                                         template,
                                         &ast.assets,
+                                        &ast.references,
                                     )
                                 })
                         }
@@ -110,6 +110,7 @@ fn generate_project_sources_inner(
                             0,
                             template,
                             &ast.assets,
+                            &ast.references,
                         ),
                     };
 
@@ -246,14 +247,8 @@ fn generate_project_sources_inner(
                         main_builder.push_literal("#pagebreak()\n");
                     }
                     let file = section_spec.file.as_deref().unwrap_or("references.bib");
-                    if let Some(title) = &section_spec.title {
-                        main_builder.push_literal(&format!(
-                            "#bibliography(\"{}\", title: [{}])\n\n",
-                            file, title
-                        ));
-                    } else {
-                        main_builder.push_literal(&format!("#bibliography(\"{}\")\n\n", file));
-                    }
+                    main_builder
+                        .push_literal(&format!("#bibliography(\"{}\", full: true)\n\n", file));
                 }
             }
             SectionKind::Appendix => {
@@ -390,10 +385,6 @@ fn path_id_for_id(id: &str) -> String {
     normalized.trim_matches('-').to_string()
 }
 
-fn escape_typst_string(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
 fn sanitize_table_column_size(value: &str) -> String {
     let trimmed = value.trim();
     if trimmed == "auto" || is_sized_unit(trimmed) {
@@ -401,16 +392,6 @@ fn sanitize_table_column_size(value: &str) -> String {
     } else {
         "1fr".to_string()
     }
-}
-
-fn is_sized_unit(value: &str) -> bool {
-    let units = ["fr", "pt", "mm", "cm", "in", "em", "%"];
-    units.iter().any(|unit| {
-        value
-            .strip_suffix(unit)
-            .and_then(|number| number.parse::<f32>().ok())
-            .is_some()
-    })
 }
 
 fn sanitize_placement(value: &str) -> &'static str {
@@ -429,422 +410,6 @@ fn hash_source(source: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     source.hash(&mut hasher);
     hasher.finish()
-}
-
-pub(crate) fn generate_lib_typst(
-    ast: &DocumentAST,
-    template: &TemplateSpec,
-) -> SourceBuilder {
-    let mut builder = SourceBuilder::default();
-
-    // Package imports (placed at the top level of lib.typ)
-    builder.push_literal(&template.package.to_typst_import_line());
-    builder.push_literal("\n");
-    for dep in &template.package.dependencies {
-        builder.push_literal(&dep.to_typst_import_line());
-        builder.push_literal("\n");
-    }
-    builder.push_literal("\n");
-
-    // Define apply function (which wraps the content in a content block to propagate set/show rules)
-    builder.push_literal("#let apply(body) = [\n");
-
-    // Show rule
-    if let Some(show_rule) = &template.show_rule {
-        builder.push_literal(&format!("  #show: {}.with(\n", show_rule.function));
-        let mut pushed_any = false;
-        let cover_id = "inputs";
-        for param in &show_rule.params {
-            let mut val_builder = SourceBuilder::default();
-            let pushed = resolve_param_builder(param, ast, cover_id, &mut val_builder);
-            if pushed {
-                if pushed_any {
-                    builder.push_literal(",\n");
-                }
-                builder.push_literal(&format!("    {}: ", param.key));
-                builder.push_builder(val_builder);
-                pushed_any = true;
-            } else if let Some(default_val) = &param.default {
-                if let Some(formatted) = format_json_val(default_val, &param.param_type) {
-                    if pushed_any {
-                        builder.push_literal(",\n");
-                    }
-                    builder.push_literal(&format!("    {}: {}", param.key, formatted));
-                    pushed_any = true;
-                }
-            }
-        }
-        builder.push_literal("\n  )\n\n");
-    }
-
-    // Set rules immediately after show rule
-    let settings = &ast.metadata.project_settings;
-    if let Some(font) = &settings.text_font {
-        let size_str = settings
-            .font_size
-            .map(|s| format!(", size: {}pt", s))
-            .unwrap_or_default();
-        builder.push_literal(&format!(
-            "  #set text(font: \"{}\"{})\n",
-            escape_typst_string(font),
-            size_str
-        ));
-    } else if let Some(size) = settings.font_size {
-        builder.push_literal(&format!("  #set text(size: {}pt)\n", size));
-    }
-    if let Some(lang) = &settings.language {
-        builder.push_literal(&format!(
-            "  #set text(lang: \"{}\")\n",
-            escape_typst_string(lang)
-        ));
-    }
-
-    builder.push_literal("  #body\n");
-    builder.push_literal("]\n");
-
-    builder
-}
-
-
-fn resolve_param_builder(
-    param: &ParamSpec,
-    ast: &DocumentAST,
-    _section_id: &str,
-    builder: &mut SourceBuilder,
-) -> bool {
-    let source = match &param.source {
-        Some(s) => s,
-        None => return false,
-    };
-    let parts: Vec<&str> = source.split('.').collect();
-    if parts.len() < 2 {
-        return false;
-    }
-
-    match parts[0] {
-        "settings" => {
-            let settings = &ast.metadata.project_settings;
-            match parts[1] {
-                "font_size" => {
-                    if let Some(f) = settings.font_size {
-                        builder.push_literal(&format!("{}pt", f));
-                        true
-                    } else {
-                        false
-                    }
-                }
-                "paper_size" => {
-                    if let Some(s) = &settings.paper_size {
-                        builder.push_literal(&format!("\"{}\"", escape_typst_string(s)));
-                        true
-                    } else {
-                        false
-                    }
-                }
-                "language" => {
-                    if let Some(s) = &settings.language {
-                        builder.push_literal(&format!("\"{}\"", escape_typst_string(s)));
-                        true
-                    } else {
-                        false
-                    }
-                }
-                "text_font" => {
-                    if let Some(s) = &settings.text_font {
-                        builder.push_literal(&format!("\"{}\"", escape_typst_string(s)));
-                        true
-                    } else {
-                        false
-                    }
-                }
-                "math_font" => {
-                    if let Some(s) = &settings.math_font {
-                        builder.push_literal(&format!("\"{}\"", escape_typst_string(s)));
-                        true
-                    } else {
-                        false
-                    }
-                }
-                "raw_font" => {
-                    if let Some(s) = &settings.raw_font {
-                        builder.push_literal(&format!("\"{}\"", escape_typst_string(s)));
-                        true
-                    } else {
-                        false
-                    }
-                }
-                "table_stroke_width" => {
-                    if let Some(f) = settings.table_stroke_width {
-                        builder.push_literal(&format!("{}pt", f));
-                        true
-                    } else {
-                        false
-                    }
-                }
-                _ => false,
-            }
-        }
-        "inputs" | "cover_page" | "metadata" => {
-            let key = parts[1];
-            let val = match ast.inputs.get(key) {
-                Some(v) => v,
-                None => return false,
-            };
-
-            match &param.param_type {
-                ParamType::Content => {
-                    if let Some(s) = val.as_str() {
-                        let trimmed = s.trim();
-                        if trimmed.is_empty() {
-                            if param.key != "_positional" {
-                                return false;
-                            }
-                            builder.push_literal("[]");
-                        } else {
-                            builder.push_literal("[");
-                            builder.push_escaped_field("inputs", &format!("/{}", key), trimmed, 0);
-                            builder.push_literal("]");
-                        }
-                        true
-                    } else {
-                        false
-                    }
-                }
-                ParamType::String => {
-                    if let Some(s) = val.as_str() {
-                        builder.push_literal("\"");
-                        builder.push_escaped_field("inputs", &format!("/{}", key), s, 0);
-                        builder.push_literal("\"");
-                        true
-                    } else {
-                        false
-                    }
-                }
-                ParamType::Length => {
-                    if let Some(s) = val.as_str() {
-                        builder.push_literal(s);
-                        true
-                    } else if let Some(n) = val.as_f64() {
-                        builder.push_literal(&format!("{}pt", n));
-                        true
-                    } else {
-                        false
-                    }
-                }
-                ParamType::Boolean => {
-                    if let Some(b) = val.as_bool() {
-                        builder.push_literal(&b.to_string());
-                        true
-                    } else {
-                        false
-                    }
-                }
-                ParamType::Integer => {
-                    if let Some(i) = val.as_i64() {
-                        builder.push_literal(&i.to_string());
-                        true
-                    } else {
-                        false
-                    }
-                }
-                ParamType::Float => {
-                    if let Some(f) = val.as_f64() {
-                        builder.push_literal(&f.to_string());
-                        true
-                    } else {
-                        false
-                    }
-                }
-                ParamType::StringArray => {
-                    if let Some(arr) = val.as_array() {
-                        if arr.is_empty() {
-                            builder.push_literal("()");
-                            return true;
-                        }
-                        builder.push_literal("(");
-                        let mut first = true;
-                        let mut item_count = 0;
-                        for (idx, item) in arr.iter().enumerate() {
-                            if let Some(s) = item.as_str() {
-                                if !first {
-                                    builder.push_literal(", ");
-                                }
-                                first = false;
-                                item_count += 1;
-                                builder.push_literal("\"");
-                                builder.push_escaped_field(
-                                    "inputs",
-                                    &format!("/{}/{}", key, idx),
-                                    s,
-                                    0,
-                                );
-                                builder.push_literal("\"");
-                            }
-                        }
-                        if item_count == 1 {
-                            builder.push_literal(",");
-                        }
-                        builder.push_literal(")");
-                        true
-                    } else {
-                        false
-                    }
-                }
-                ParamType::AuthorList => {
-                    if let Some(arr) = val.as_array() {
-                        if arr.is_empty() {
-                            return false;
-                        }
-                        builder.push_literal("(");
-                        let mut first = true;
-                        let mut author_count = 0;
-                        for (idx, item) in arr.iter().enumerate() {
-                            if let Some(obj) = item.as_object() {
-                                if !first {
-                                    builder.push_literal(", ");
-                                }
-                                first = false;
-                                author_count += 1;
-                                builder.push_literal("(");
-                                let mut has_field = false;
-                                if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
-                                    builder.push_literal("name: [");
-                                    builder.push_escaped_field(
-                                        "inputs",
-                                        &format!("/authors/{}/name", idx),
-                                        name,
-                                        0,
-                                    );
-                                    builder.push_literal("]");
-                                    has_field = true;
-                                }
-                                if let Some(email) = obj.get("email").and_then(|v| v.as_str()) {
-                                    if !email.trim().is_empty() {
-                                        if has_field {
-                                            builder.push_literal(", ");
-                                        }
-                                        builder.push_literal("email: \"");
-                                        builder.push_escaped_field(
-                                            "inputs",
-                                            &format!("/authors/{}/email", idx),
-                                            email,
-                                            0,
-                                        );
-                                        builder.push_literal("\"");
-                                        has_field = true;
-                                    }
-                                }
-                                if let Some(affs) =
-                                    obj.get("affiliations").and_then(|v| v.as_array())
-                                {
-                                    let aff_refs = affs
-                                        .iter()
-                                        .enumerate()
-                                        .filter_map(|(aff_idx, value)| {
-                                            value
-                                                .as_str()
-                                                .filter(|s| !s.trim().is_empty())
-                                                .map(|s| (aff_idx, s))
-                                        })
-                                        .collect::<Vec<_>>();
-                                    if !aff_refs.is_empty() {
-                                        if has_field {
-                                            builder.push_literal(", ");
-                                        }
-                                        builder.push_literal("affiliations: (");
-                                        for (aff_position, (aff_idx, aff_ref)) in
-                                            aff_refs.iter().enumerate()
-                                        {
-                                            if aff_position > 0 {
-                                                builder.push_literal(", ");
-                                            }
-                                            builder.push_literal("\"");
-                                            builder.push_escaped_field(
-                                                "inputs",
-                                                &format!(
-                                                    "/authors/{}/affiliations/{}",
-                                                    idx, aff_idx
-                                                ),
-                                                aff_ref,
-                                                0,
-                                            );
-                                            builder.push_literal("\"");
-                                        }
-                                        if aff_refs.len() == 1 {
-                                            builder.push_literal(",");
-                                        }
-                                        builder.push_literal(")");
-                                    }
-                                }
-                                builder.push_literal(")");
-                            }
-                        }
-                        if author_count == 1 {
-                            builder.push_literal(",");
-                        }
-                        builder.push_literal(")");
-                        true
-                    } else {
-                        false
-                    }
-                }
-                ParamType::AffiliationMap => {
-                    if let Some(arr) = val.as_array() {
-                        let has_any = arr
-                            .iter()
-                            .any(|v| v.as_str().map(|s| !s.trim().is_empty()).unwrap_or(false));
-                        if !has_any {
-                            builder.push_literal("(:)");
-                            return true;
-                        }
-                        builder.push_literal("(");
-                        let mut first = true;
-                        for (idx, item) in arr.iter().enumerate() {
-                            if let Some(aff_name) = item.as_str() {
-                                if aff_name.trim().is_empty() {
-                                    continue;
-                                }
-                                if !first {
-                                    builder.push_literal(", ");
-                                }
-                                first = false;
-                                builder.push_literal(&format!("\"{}\": [", idx + 1));
-                                builder.push_escaped_field(
-                                    "inputs",
-                                    &format!("/affiliations/{}", idx),
-                                    aff_name,
-                                    0,
-                                );
-                                builder.push_literal("]");
-                            }
-                        }
-                        if first {
-                            builder.push_literal(":");
-                        }
-                        builder.push_literal(")");
-                        true
-                    } else {
-                        false
-                    }
-                }
-                _ => false,
-            }
-        }
-        _ => false,
-    }
-}
-
-fn format_json_val(val: &serde_json::Value, param_type: &ParamType) -> Option<String> {
-    match (param_type, val) {
-        (ParamType::Length, serde_json::Value::String(s)) => Some(s.clone()),
-        (ParamType::String, serde_json::Value::String(s)) => {
-            Some(format!("\"{}\"", escape_typst_string(s)))
-        }
-        (ParamType::Boolean, serde_json::Value::Bool(b)) => Some(b.to_string()),
-        (ParamType::Integer, serde_json::Value::Number(n)) => Some(n.to_string()),
-        (ParamType::Float, serde_json::Value::Number(n)) => Some(n.to_string()),
-        _ => None,
-    }
 }
 
 fn generate_references_bib(references: &[ReferenceEntry]) -> String {
@@ -866,6 +431,24 @@ fn generate_references_bib(references: &[ReferenceEntry]) -> String {
     source
 }
 
+fn bibliography_citation_keys(references: &[ReferenceEntry]) -> HashMap<String, String> {
+    references
+        .iter()
+        .map(|reference| (reference.id.clone(), reference.citation_key.clone()))
+        .collect()
+}
+
+fn typst_reference_marker(
+    reference_id: &str,
+    bibliography_keys: &HashMap<String, String>,
+) -> String {
+    if let Some(citation_key) = bibliography_keys.get(reference_id) {
+        format!("@{citation_key}")
+    } else {
+        format!("@{}", label_for_id(reference_id))
+    }
+}
+
 fn element_fragment(
     element: &DocumentElement,
     section_id: &str,
@@ -874,11 +457,13 @@ fn element_fragment(
     section_char_start: usize,
     template: &TemplateSpec,
     assets: &[AssetEntry],
+    references: &[ReferenceEntry],
 ) -> GeneratedFragment {
     let element_id = element_id(element);
     let kind = element_kind(element);
     let label = label_for_id(&element_id);
-    let builder = generate_element_typst(element, &label, template, assets);
+    let bibliography_keys = bibliography_citation_keys(references);
+    let builder = generate_element_typst(element, &label, template, assets, &bibliography_keys);
     let source = builder.source.clone();
     let field_source_map_ranges =
         builder.into_absolute_field_ranges(section_id, file_path, section_byte_start);
@@ -915,6 +500,7 @@ fn generate_element_typst(
     label: &str,
     template: &TemplateSpec,
     assets: &[AssetEntry],
+    bibliography_keys: &HashMap<String, String>,
 ) -> SourceBuilder {
     let mut builder = SourceBuilder::default();
     match element {
@@ -925,7 +511,13 @@ fn generate_element_typst(
             builder.push_literal(&format!("#heading(level: {}, [", level));
 
             let mut title = SourceBuilder::default();
-            push_rich_text_field(&mut title, element_id, &field_id, &heading.content);
+            push_rich_text_field(
+                &mut title,
+                element_id,
+                &field_id,
+                &heading.content,
+                bibliography_keys,
+            );
             if title.source.trim().is_empty() {
                 builder.push_generated_field_marker(element_id, &field_id, "Untitled heading", 0);
             } else {
@@ -937,7 +529,13 @@ fn generate_element_typst(
             let element_id = &paragraph.id;
             let field_id = rich_text_field_id(element_id);
             let mut par_builder = SourceBuilder::default();
-            push_rich_text_field(&mut par_builder, element_id, &field_id, &paragraph.content);
+            push_rich_text_field(
+                &mut par_builder,
+                element_id,
+                &field_id,
+                &paragraph.content,
+                bibliography_keys,
+            );
             if par_builder.source.trim().is_empty() {
                 builder.clear();
             } else {
@@ -975,7 +573,8 @@ fn generate_element_typst(
 
             if let Some(over) = table_override {
                 if let Some(wrapper) = &over.wrapper {
-                    builder.push_literal(&format!("#{wrapper}(\n  table(\n    columns: ({columns})"));
+                    builder
+                        .push_literal(&format!("#{wrapper}(\n  table(\n    columns: ({columns})"));
                 } else {
                     builder.push_literal(&format!("#table(\n  columns: ({columns})"));
                 }
@@ -1027,6 +626,7 @@ fn generate_element_typst(
                     &figure.id,
                     &figure_body_field_id(&figure.id),
                     &paragraph.content,
+                    bibliography_keys,
                 );
             }
             let caption = figure.caption.trim();
@@ -1161,62 +761,6 @@ fn generate_element_typst(
                     custom.element_type
                 ));
             }
-            if let Some(spec) = template
-                .custom_elements
-                .iter()
-                .find(|ce| ce.kind == custom.element_type)
-            {
-                builder.push_literal(&format!("#{}", spec.function));
-                builder.push_literal("(\n");
-                let mut first = true;
-                for field_spec in &spec.fields {
-                    let field_val =
-                        custom
-                            .fields
-                            .get(&field_spec.key)
-                            .cloned()
-                            .unwrap_or_else(|| {
-                                field_spec
-                                    .default
-                                    .clone()
-                                    .unwrap_or(serde_json::Value::Null)
-                            });
-
-                    if field_spec.key == "_positional" {
-                        if !first {
-                            builder.push_literal(",\n");
-                        }
-                        first = false;
-                        builder.push_literal("  ");
-                        format_json_val_for_custom_field(
-                            &custom.id,
-                            &field_spec.key,
-                            &field_val,
-                            &field_spec.param_type,
-                            &mut builder,
-                        );
-                    } else {
-                        if !first {
-                            builder.push_literal(",\n");
-                        }
-                        first = false;
-                        builder.push_literal(&format!("  {}: ", field_spec.key));
-                        format_json_val_for_custom_field(
-                            &custom.id,
-                            &field_spec.key,
-                            &field_val,
-                            &field_spec.param_type,
-                            &mut builder,
-                        );
-                    }
-                }
-                builder.push_literal(&format!("\n) <{label}>\n\n"));
-            } else {
-                builder.push_literal(&format!(
-                    "/* unknown custom element: {} */\n\n",
-                    custom.element_type
-                ));
-            }
         }
     };
     builder
@@ -1251,7 +795,18 @@ fn format_json_val_for_custom_field(
             builder.push_literal(&n.to_string());
         }
         (ParamType::Length, serde_json::Value::String(s)) => {
-            builder.push_literal(s);
+            if let Some(length) = format_typst_length(s) {
+                builder.push_literal(&length);
+            } else {
+                builder.push_literal("none");
+            }
+        }
+        (ParamType::Length, serde_json::Value::Number(n)) => {
+            if let Some(length) = format_typst_length_number(n) {
+                builder.push_literal(&length);
+            } else {
+                builder.push_literal("none");
+            }
         }
         (ParamType::StringArray, serde_json::Value::Array(arr)) => {
             builder.push_literal("(");
@@ -1289,6 +844,7 @@ fn push_rich_text_field(
     element_id: &str,
     field_id: &str,
     content: &[RichText],
+    bibliography_keys: &HashMap<String, String>,
 ) {
     let mut field_utf16_offset = 0;
 
@@ -1298,7 +854,7 @@ fn push_rich_text_field(
                 builder.push_generated_field_marker(
                     element_id,
                     field_id,
-                    &format!("@{}", label_for_id(reference_id)),
+                    &typst_reference_marker(reference_id, bibliography_keys),
                     field_utf16_offset,
                 );
             }
@@ -1349,3 +905,7 @@ fn param_type_from_str(s: &str) -> ParamType {
         _ => ParamType::String,
     }
 }
+
+#[cfg(test)]
+#[path = "document_session_generation_tests.rs"]
+mod reference_marker_tests;

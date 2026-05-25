@@ -61,8 +61,14 @@ pub fn compile_resource_previews(
 }
 
 pub fn load_template_for_ast(ast: &DocumentAST) -> Result<TemplateSpec, CompileError> {
-    load_bundled_template(&ast.metadata.template_id)
-        .map_err(CompileError::Operation)
+    let spec = load_bundled_template(&ast.metadata.template_id).map_err(CompileError::Operation)?;
+    Ok(crate::template_spec::resolve_template_variant(
+        &spec,
+        ast.metadata
+            .template_variant_id
+            .as_deref()
+            .map(crate::template_spec::typst_template_variant_id),
+    ))
 }
 
 pub fn compile_preview_success(
@@ -80,8 +86,8 @@ pub fn compile_preview_success(
         None => (None, None),
         Some(ast) => {
             let template = load_template_for_ast(&ast)?;
-            let recompile_resources = cached_resource_document.is_none()
-                || !status.dirty_resource_ids.is_empty();
+            let recompile_resources =
+                cached_resource_document.is_none() || !status.dirty_resource_ids.is_empty();
 
             if recompile_resources {
                 let (resource_document, resources) =

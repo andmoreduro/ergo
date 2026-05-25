@@ -96,7 +96,6 @@ fn read_font_source(source: &Source) -> Result<Vec<u8>, String> {
 }
 
 fn read_font_file(path: &Path) -> Result<Vec<u8>, String> {
-    std::fs::read(path).map_err(|error| {
-        format!("failed to read font file {}: {error}", path.display())
-    })
+    std::fs::read(path)
+        .map_err(|error| format!("failed to read font file {}: {error}", path.display()))
 }
