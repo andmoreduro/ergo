@@ -1,3 +1,4 @@
+import type { ExportFormat } from "../bindings/ExportFormat";
 import type { Command } from "./types";
 import { m } from "../paraglide/messages.js";
 
@@ -7,7 +8,7 @@ export interface WorkspaceCommandDeps {
     saveProject: () => void;
     closeProject: () => Promise<void>;
     recentProjectsRef: { current: string[] };
-    exportDocument: () => Promise<void>;
+    exportDocument: (format: ExportFormat) => Promise<void>;
 }
 
 export const workspaceCommands = (deps: WorkspaceCommandDeps): Command[] => [
@@ -52,6 +53,6 @@ export const workspaceCommands = (deps: WorkspaceCommandDeps): Command[] => [
         label: m.menubar_export(),
         scope: "project",
         isEnabled: (context) => context.hasActiveProject,
-        run: deps.exportDocument,
+        run: () => deps.exportDocument("pdf"),
     },
 ];

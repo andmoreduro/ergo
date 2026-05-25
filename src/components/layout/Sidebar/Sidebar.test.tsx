@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocumentAST } from "../../../bindings/DocumentAST";
@@ -191,22 +191,21 @@ describe("Sidebar outline", () => {
             id: "bibliography::CreateEntry",
             payload: null,
         });
-        expect(
-            screen.getByRole("dialog", { name: "Add Bibliography Entry" }),
-        ).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText("Citation Key"), {
-            target: { value: "garcia2024" },
+        const createDialog = screen.getByRole("dialog", {
+            name: "Add Bibliography Entry",
         });
-        fireEvent.change(screen.getByLabelText("Title"), {
+        expect(createDialog).toBeInTheDocument();
+        const createForm = within(createDialog);
+        fireEvent.change(createForm.getByRole("textbox", { name: /^Title/ }), {
             target: { value: "Niñez y escritura" },
         });
-        fireEvent.change(screen.getByLabelText("Authors"), {
+        fireEvent.change(createForm.getByRole("textbox", { name: /^Authors/ }), {
             target: { value: "Ana García\nLuis Pérez" },
         });
-        fireEvent.change(screen.getByLabelText("Year"), {
+        fireEvent.change(createForm.getByRole("textbox", { name: /^Year/ }), {
             target: { value: "2024" },
         });
-        fireEvent.change(screen.getByLabelText("Journal"), {
+        fireEvent.change(createForm.getByRole("textbox", { name: /^Journal/ }), {
             target: { value: "Revista de Pruebas" },
         });
         fireEvent.click(screen.getByRole("button", { name: "Save Bibliography Entry" }));
@@ -230,23 +229,24 @@ describe("Sidebar outline", () => {
             id: "bibliography::OpenEntry",
             payload: { referenceId: expect.any(String) },
         });
-        expect(
-            screen.getByRole("dialog", { name: "Edit Bibliography Entry" }),
-        ).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText("Citation Key"), {
-            target: { value: "garcia2025" },
+        const editDialog = screen.getByRole("dialog", {
+            name: "Edit Bibliography Entry",
+        });
+        expect(editDialog).toBeInTheDocument();
+        fireEvent.change(within(editDialog).getByRole("textbox", { name: /^Year/ }), {
+            target: { value: "2025" },
         });
         fireEvent.click(screen.getByRole("button", { name: "Save Bibliography Entry" }));
 
         expect(
             await screen.findByRole("button", {
-                name: /García; Pérez \(2024\)\. Niñez y escritura\. Revista de Pruebas\./,
+                name: /García; Pérez \(2025\)\. Niñez y escritura\. Revista de Pruebas\./,
             }),
         ).toBeInTheDocument();
 
         fireEvent.click(
             screen.getByRole("button", {
-                name: /García; Pérez \(2024\)\. Niñez y escritura\. Revista de Pruebas\./,
+                name: /García; Pérez \(2025\)\. Niñez y escritura\. Revista de Pruebas\./,
             }),
         );
         fireEvent.click(screen.getByRole("button", { name: "Remove Bibliography Entry" }));
@@ -340,8 +340,8 @@ describe("Sidebar outline", () => {
         expect(dispatchActionMock).toHaveBeenLastCalledWith({
             id: "resources::InsertReference",
             payload: {
-                resourceId: "equation-1",
-                referenceToken: "@ergo-equation-1",
+                referenceId: "equation-1",
+                label: "Equation",
             },
         });
     });

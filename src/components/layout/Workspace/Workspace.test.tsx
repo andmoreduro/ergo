@@ -38,6 +38,7 @@ const defaultCompilerState = () => ({
 const defaultTemplateSpec = {
     template: { id: "versatile-apa", name: "APA 7th Edition", version: "1.0.0" },
     package: { name: "@preview/versatile-apa", version: "7.2.0" },
+    variants: [],
     inputs: [],
     groups: [],
     sections: [{ id: "body", kind: "content" }],
@@ -48,6 +49,14 @@ describe("Workspace component", () => {
     beforeEach(() => {
         useCompilerMock.mockReturnValue(defaultCompilerState());
         tauriApiMock.getTemplateSpec.mockResolvedValue(defaultTemplateSpec);
+
+        class ResizeObserverMock {
+            observe() {}
+            disconnect() {}
+            unobserve() {}
+        }
+
+        vi.stubGlobal("ResizeObserver", ResizeObserverMock);
     });
 
     it("renders the Sidebar, Editor, and Preview columns", () => {
@@ -57,6 +66,7 @@ describe("Workspace component", () => {
                     previewZoom={1}
                     onPreviewZoomChange={() => undefined}
                     previewZoomRenderDebounceMs={0}
+                    onExportDocument={() => undefined}
                 />
             </DocumentProvider>,
         );
@@ -82,6 +92,7 @@ describe("Workspace component", () => {
                     previewZoom={1}
                     onPreviewZoomChange={() => undefined}
                     previewZoomRenderDebounceMs={0}
+                    onExportDocument={() => undefined}
                 />
             </DocumentProvider>,
         );

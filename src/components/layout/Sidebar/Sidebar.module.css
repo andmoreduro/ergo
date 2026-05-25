@@ -1,20 +1,20 @@
 .sidebar {
-    width: 250px;
+    width: 100%;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
     background-color: var(--color-bg-secondary);
     border-right: 1px solid var(--color-border);
     height: 100%;
+    min-height: 0;
     overflow-y: auto;
-    padding: var(--space-2);
+    overscroll-behavior: auto;
+    padding: 0;
 }
 
 .navList {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
 }
 
 .navItem {
@@ -22,9 +22,10 @@
     flex-direction: column;
     gap: 2px;
     width: 100%;
-    padding: var(--space-2);
-    border: 1px solid transparent;
-    border-radius: var(--border-radius-sm);
+    min-height: 34px;
+    padding: 0 var(--space-3);
+    border: none;
+    border-radius: 0;
     color: var(--color-text-primary);
     background: transparent;
     font: inherit;
@@ -35,8 +36,7 @@
 .navItem:hover,
 .navItem:focus-visible {
     outline: none;
-    border-color: var(--color-border);
-    background: var(--color-bg-primary);
+    background: var(--color-bg-tertiary);
 }
 
 .navItem span {
@@ -57,6 +57,19 @@
     gap: var(--space-2);
 }
 
+.referenceHint {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    line-height: 1.4;
+}
+
+.referenceError {
+    margin: 0;
+    color: var(--color-danger);
+    font-size: var(--font-size-sm);
+}
+
 .referenceActions {
     display: flex;
     flex-wrap: wrap;
@@ -72,7 +85,7 @@
     margin: var(--space-2) 0 0;
     color: var(--color-text-secondary);
     font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
+    font-weight: var(--font-weight-medium);
     text-transform: uppercase;
 }
 
@@ -105,7 +118,7 @@
 
 .resourcePreviewPath,
 .resourcePreviewError {
-    padding: var(--space-1);
+    padding: var(--space-2);
     color: var(--color-text-tertiary);
     font-size: var(--font-size-xs);
     white-space: normal;
@@ -129,8 +142,9 @@
     width: min(34rem, 100%);
     max-height: min(42rem, calc(100vh - var(--space-8)));
     overflow: auto;
+    overscroll-behavior: auto;
     border: var(--border-width-sm) solid var(--color-border);
-    border-radius: var(--border-radius-lg);
+    border-radius: var(--border-radius-md);
     background: var(--color-bg-primary);
     color: var(--color-text-primary);
     box-shadow: var(--shadow-md);
@@ -153,7 +167,7 @@
 }
 
 .empty {
-    padding: var(--space-2);
+    padding: var(--space-2) var(--space-3);
     color: var(--color-text-tertiary);
     font-size: var(--font-size-sm);
     font-style: italic;
@@ -162,7 +176,6 @@
 .outlineList {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -175,9 +188,10 @@
     gap: var(--space-2);
     min-width: 0;
     width: 100%;
-    padding: var(--space-1) 0;
-    border: 1px solid transparent;
-    border-radius: var(--border-radius-sm);
+    min-height: 34px;
+    padding: 0 var(--space-3);
+    border: none;
+    border-radius: 0;
     color: var(--color-text-primary);
     background: transparent;
     font: inherit;
@@ -188,8 +202,7 @@
 .outlineItem:hover,
 .outlineItem:focus-visible {
     outline: none;
-    border-color: var(--color-border);
-    background: var(--color-bg-primary);
+    background: var(--color-bg-tertiary);
 }
 
 .outlineItem span {

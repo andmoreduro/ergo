@@ -15,7 +15,7 @@ const tauriApiMock = vi.hoisted(() => ({
     saveKeymapSettings: vi.fn(),
     saveProject: vi.fn(),
     openProject: vi.fn(),
-    exportDocument: vi.fn(),
+    writeBytesToPath: vi.fn(),
     syncDocumentSnapshot: vi.fn(),
     syncDocumentEvents: vi.fn(),
     getTemplateSpec: vi.fn(),
@@ -63,6 +63,8 @@ const compilerClientMock = vi.hoisted(() => ({
     syncEvents: vi.fn(),
     compile: vi.fn(),
     exportPdf: vi.fn().mockResolvedValue(new Uint8Array()),
+    exportPng: vi.fn().mockResolvedValue(new Uint8Array()),
+    exportSvg: vi.fn().mockResolvedValue("<svg></svg>"),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -172,18 +174,10 @@ describe("App project lifecycle", () => {
             files: [],
         });
         tauriApiMock.documentDir.mockResolvedValue("C:\\Users\\ada\\Documents");
-        tauriApiMock.exportDocument.mockResolvedValue({
-            source_revision: 0,
-            status: "succeeded",
-            preview_pages: null,
-            export_path: null,
-            diagnostics: [],
-            outline: null,
-            resources: null,
-        });
         tauriApiMock.getTemplateSpec.mockResolvedValue({
             template: { id: "versatile-apa", name: "APA 7th Edition", version: "1.0.0" },
             package: { name: "@preview/versatile-apa", version: "7.2.0" },
+            variants: [],
             inputs: [
                 { id: "title", input_type: "string", label: "Title", importance: "required" },
             ],

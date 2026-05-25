@@ -11,12 +11,16 @@ import {
     NewProjectDialog,
 } from "./components/organisms/NewProjectDialog/NewProjectDialog";
 import { DocumentProvider, useDocument } from "./state/DocumentContext";
+import type { TemplateVariantSpec } from "./bindings/TemplateVariantSpec";
 import { createId } from "./state/ast/defaults";
+import { defaultFieldIdForElement } from "./editor/fieldIds";
 import { m } from "./paraglide/messages.js";
 import { createCommandRegistry } from "./commands/registry";
 import type { Command, CommandContext } from "./commands/types";
 import { workspaceCommands } from "./commands/workspaceCommands";
 import { TauriApi } from "./api/tauri";
+import type { ExportFormat } from "./bindings/ExportFormat";
+import { saveExportDialog } from "./platform/export";
 import { CompilerClient, warmupCompiler } from "./workers/compilerClient";
 import { editorCommands } from "./commands/editorCommands";
 import { viewCommands } from "./commands/viewCommands";
@@ -90,11 +94,29 @@ const AppShellContent = () => {
         rememberProject,
     });
     const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
+    const [templateVariants, setTemplateVariants] = useState<TemplateVariantSpec[]>([]);
     const [previewZoom, setPreviewZoom] = useState(PREVIEW_ZOOM_DEFAULT);
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [commandQuery, setCommandQuery] = useState("");
     const dispatchAction = useActionDispatcher();
     const recentProjects = globalSettings.recent_projects;
+
+    useEffect(() => {
+        if (!hasActiveProject) {
+            setTemplateVariants([]);
+            return;
+        }
+
+        let cancelled = false;
+        void TauriApi.getTemplateSpec(state.metadata.template_id).then((spec) => {
+            if (!cancelled) {
+                setTemplateVariants(spec.variants);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [hasActiveProject, state.metadata.template_id]);
     const recentProjectsRef = useRef(recentProjects);
     recentProjectsRef.current = recentProjects;
 
@@ -133,11 +155,32 @@ const AppShellContent = () => {
         const sectionId = contentSection.id;
         const id = createId();
 
+        const focusInsertedElement = (
+            rustElementType:
+                | "Heading"
+                | "Paragraph"
+                | "Table"
+                | "Equation"
+                | "Figure",
+        ) => {
+            setDocumentFocus({
+                elementId: id,
+                fieldId: defaultFieldIdForElement({
+                    id,
+                    type: rustElementType,
+                }),
+                caretUtf16Offset: 0,
+                sourceRevision: null,
+                focusSource: "programmatic",
+            });
+        };
+
         if (elementType === "heading") {
             dispatch({
                 type: "ADD_HEADING",
                 payload: { sectionId, headingId: id },
             });
+            focusInsertedElement("Heading");
             return;
         }
 
@@ -146,6 +189,7 @@ const AppShellContent = () => {
                 type: "ADD_PARAGRAPH",
                 payload: { sectionId, paragraphId: id },
             });
+            focusInsertedElement("Paragraph");
             return;
         }
 
@@ -154,6 +198,7 @@ const AppShellContent = () => {
                 type: "ADD_TABLE",
                 payload: { sectionId, tableId: id },
             });
+            focusInsertedElement("Table");
             return;
         }
 
@@ -162,6 +207,7 @@ const AppShellContent = () => {
                 type: "ADD_EQUATION",
                 payload: { sectionId, equationId: id },
             });
+            focusInsertedElement("Equation");
             return;
         }
 
@@ -169,16 +215,39 @@ const AppShellContent = () => {
             type: "ADD_FIGURE",
             payload: { sectionId, figureId: id },
         });
-    }, [dispatch, ensureActiveProject, state.sections]);
+        focusInsertedElement("Figure");
+    }, [dispatch, ensureActiveProject, setDocumentFocus, state.sections]);
 
-    const exportDocument = useCallback(async () => {
-        try {
-            const pdfBytes = await CompilerClient.exportPdf(state);
-            await TauriApi.exportDocument("pdf", pdfBytes);
-        } catch (error) {
-            window.alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    }, [state]);
+    const exportDocument = useCallback(
+        async (format: ExportFormat, pageIndex = 0) => {
+            try {
+                const path = await saveExportDialog(format);
+                if (!path) {
+                    return;
+                }
+
+                let bytes: Uint8Array;
+                if (format === "pdf") {
+                    bytes = await CompilerClient.exportPdf(state);
+                } else if (format === "png") {
+                    bytes = await CompilerClient.exportPng(state, pageIndex, 2);
+                } else {
+                    const svg = await CompilerClient.exportSvg(state, pageIndex);
+                    bytes = new TextEncoder().encode(svg);
+                }
+
+                await TauriApi.writeBytesToPath(path, bytes);
+            } catch (error) {
+                window.alert(
+                    m.project_export_failed({
+                        message:
+                            error instanceof Error ? error.message : String(error),
+                    }),
+                );
+            }
+        },
+        [state],
+    );
 
     const commandContext = useMemo<CommandContext>(
         () => ({
@@ -290,6 +359,7 @@ const AppShellContent = () => {
                             previewZoomRenderDebounceMs={resolvePreviewZoomRenderDebounceMs(
                                 globalSettings.preview_zoom_render_debounce_ms,
                             )}
+                            onExportDocument={exportDocument}
                         />
                     </ActionContextProvider>
                 ) : (
@@ -369,6 +439,14 @@ const AppShellContent = () => {
                                 dispatch({
                                     type: "UPDATE_PROJECT_SETTINGS",
                                     payload: { settings },
+                                })
+                            }
+                            templateVariants={templateVariants}
+                            templateVariantId={state.metadata.template_variant_id}
+                            onTemplateVariantChange={(variantId) =>
+                                dispatch({
+                                    type: "UPDATE_TEMPLATE_VARIANT",
+                                    payload: { variantId },
                                 })
                             }
                             onClose={() => runCommand("settings::Close")}

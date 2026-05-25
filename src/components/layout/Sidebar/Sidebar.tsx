@@ -25,7 +25,7 @@ export const Sidebar = ({
     const { state } = useDocument();
 
     return (
-        <aside className={styles.sidebar}>
+        <aside className={styles.sidebar} data-scroll-region>
             <Accordion title={m.sidebar_compiled_outline()} defaultOpen>
                 <SidebarOutlinePanel
                     outline={outline}
