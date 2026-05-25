@@ -50,6 +50,46 @@ const findElementById = (
         return false;
     }) ?? null;
 
+const parseCssLengthPx = (value: string, element: HTMLElement): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === "none") {
+        return null;
+    }
+
+    if (trimmed.endsWith("px")) {
+        const px = Number.parseFloat(trimmed);
+        return Number.isFinite(px) ? px : null;
+    }
+
+    if (trimmed.endsWith("rem")) {
+        const rem = Number.parseFloat(trimmed);
+        if (!Number.isFinite(rem)) {
+            return null;
+        }
+        const rootSize = Number.parseFloat(
+            getComputedStyle(document.documentElement).fontSize,
+        );
+        return rem * (Number.isFinite(rootSize) ? rootSize : 16);
+    }
+
+    if (trimmed.endsWith("vh")) {
+        const vh = Number.parseFloat(trimmed);
+        return Number.isFinite(vh) ? (window.innerHeight * vh) / 100 : null;
+    }
+
+    if (trimmed.endsWith("dvh")) {
+        const dvh = Number.parseFloat(trimmed);
+        return Number.isFinite(dvh) ? (window.innerHeight * dvh) / 100 : null;
+    }
+
+    return null;
+};
+
+const resourcePreviewMaxHeightPx = (element: HTMLElement): number => {
+    const maxHeight = getComputedStyle(element).maxHeight;
+    return parseCssLengthPx(maxHeight, element) ?? 120;
+};
+
 const ResourcePreviewCanvas = ({
     pageNumber,
     revision,
@@ -59,8 +99,8 @@ const ResourcePreviewCanvas = ({
     revision: number;
     zoomRenderDebounceMs: number;
 }) => {
-    const containerRef = useRef<HTMLSpanElement>(null);
-    const [fitWidthPx, setFitWidthPx] = useState(0);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [fitSize, setFitSize] = useState({ width: 0, height: 0 });
 
     useEffect(() => {
         const container = containerRef.current;
@@ -68,17 +108,20 @@ const ResourcePreviewCanvas = ({
             return;
         }
 
-        const updateFitWidth = () => {
-            setFitWidthPx(container.clientWidth);
+        const updateFitSize = () => {
+            setFitSize({
+                width: container.clientWidth,
+                height: resourcePreviewMaxHeightPx(container),
+            });
         };
 
-        updateFitWidth();
+        updateFitSize();
 
         if (typeof ResizeObserver === "undefined") {
             return;
         }
 
-        const observer = new ResizeObserver(updateFitWidth);
+        const observer = new ResizeObserver(updateFitSize);
         observer.observe(container);
         return () => observer.disconnect();
     }, []);
@@ -95,13 +138,20 @@ const ResourcePreviewCanvas = ({
         true,
         pageNumber,
         revision,
-        { fitWidthPx },
+        {
+            fitWidthPx: fitSize.width,
+            fitHeightPx: fitSize.height,
+        },
     );
 
     return (
-        <span ref={containerRef} className={styles.resourcePreview}>
-            <canvas ref={canvasRef} aria-hidden="true" style={{ display: "block" }} />
-        </span>
+        <div ref={containerRef} className={styles.resourcePreview}>
+            {fitSize.width > 0 ? (
+                <canvas ref={canvasRef} aria-hidden="true" />
+            ) : (
+                <span className={styles.resourcePreviewLoading} aria-hidden="true" />
+            )}
+        </div>
     );
 };
 
@@ -205,16 +255,6 @@ export const SidebarResourcesPanel = memo(({
         setDraft(null);
     };
 
-    const insertReference = (entry: ResourceEntry) => {
-        void dispatchAction({
-            id: "resources::InsertReference",
-            payload: {
-                referenceId: entry.id,
-                label: entry.label,
-            },
-        });
-    };
-
     return (
         <div className={styles.referencePanel}>
             {resources && resources.groups.length > 0 ? (
@@ -249,16 +289,6 @@ export const SidebarResourcesPanel = memo(({
                                             <small>{entry.subtitle}</small>
                                         )}
                                     </button>
-                                    <Button
-                                        size="small"
-                                        type="button"
-                                        variant="ghost"
-                                        onClick={() => insertReference(entry)}
-                                    >
-                                        {m.resources_insert_reference({
-                                            label: entry.label,
-                                        })}
-                                    </Button>
                                 </div>
                             ))}
                         </div>

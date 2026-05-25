@@ -1,4 +1,5 @@
 import {
+    useCallback,
     useEffect,
     useLayoutEffect,
     useRef,
@@ -44,6 +45,7 @@ export interface PreviewProps {
     onZoomChange: Dispatch<SetStateAction<number>>;
     zoomRenderDebounceMs: number;
     onExport: (format: import("../../../bindings/ExportFormat").ExportFormat) => void | Promise<void>;
+    scrollRef?: RefObject<HTMLDivElement | null>;
 }
 
 export const Preview = ({
@@ -52,14 +54,31 @@ export const Preview = ({
     onZoomChange,
     zoomRenderDebounceMs,
     onExport,
+    scrollRef,
 }: PreviewProps) => {
     const { documentFocus } = useDocumentFocus();
     const dispatchAction = useActionDispatcher();
-    const { previewPages, error, sourceMap, previewRevision, latencyMs } = compiler;
+    const { previewPages, error, sourceMap, previewRevision, latencyStartRef } = compiler;
+    const [latencyMs, setLatencyMs] = useState<number | null>(null);
+    const latencyRevisionRef = useRef<number | null>(null);
+
+    const onFirstPagePainted = useCallback(() => {
+        const startedAt = latencyStartRef.current;
+        if (startedAt === null) {
+            return;
+        }
+        if (latencyRevisionRef.current === previewRevision) {
+            return;
+        }
+        latencyRevisionRef.current = previewRevision;
+        latencyStartRef.current = null;
+        setLatencyMs(Math.max(0, Math.round(Date.now() - startedAt)));
+    }, [latencyStartRef, previewRevision]);
     const zoomPercent = formatPreviewZoomPercent(zoom);
     const canZoomOut = zoom > PREVIEW_ZOOM_MIN;
     const canZoomIn = zoom < PREVIEW_ZOOM_MAX;
-    const previewScrollRef = useRef<HTMLDivElement>(null);
+    const fallbackScrollRef = useRef<HTMLDivElement>(null);
+    const previewScrollRef = scrollRef ?? fallbackScrollRef;
     const activeSource = sourceMap.find(
         (entry) => entry.elementId === documentFocus.elementId,
     );
@@ -76,7 +95,7 @@ export const Preview = ({
         dispatchAction,
     });
 
-    usePreviewZoomInput(previewScrollRef, zoom, onZoomChange);
+    const { setZoomAnchor } = usePreviewZoomInput(previewScrollRef, zoom, onZoomChange);
 
     useLayoutEffect(() => {
         syncCaretScrollToLayout(zoom);
@@ -99,9 +118,10 @@ export const Preview = ({
                     title={m.menubar_zoom_out()}
                     aria-label={m.menubar_zoom_out()}
                     disabled={!canZoomOut}
-                    onClick={() =>
-                        onZoomChange((current) => stepPreviewZoom(current, -1))
-                    }
+                    onClick={() => {
+                        setZoomAnchor();
+                        onZoomChange((current) => stepPreviewZoom(current, -1));
+                    }}
                 >
                     <ZoomOut24Regular />
                 </button>
@@ -114,9 +134,10 @@ export const Preview = ({
                     title={m.menubar_zoom_in()}
                     aria-label={m.menubar_zoom_in()}
                     disabled={!canZoomIn}
-                    onClick={() =>
-                        onZoomChange((current) => stepPreviewZoom(current, 1))
-                    }
+                    onClick={() => {
+                        setZoomAnchor();
+                        onZoomChange((current) => stepPreviewZoom(current, 1));
+                    }}
                 >
                     <ZoomIn24Regular />
                 </button>
@@ -146,6 +167,7 @@ export const Preview = ({
                                         }
                                         previewScrollRef={previewScrollRef}
                                         onPageRendered={scrollCaretAfterPageRender}
+                                        onPagePainted={onFirstPagePainted}
                                     />
                                 );
                             })
@@ -175,6 +197,7 @@ interface PreviewPageCanvasProps {
     previewScrollRef: RefObject<HTMLElement | null>;
     highlightedPosition: PreviewElementPosition | null;
     onPageRendered: (pageNumber: number) => void;
+    onPagePainted: () => void;
 }
 
 const PreviewPageCanvas = ({
@@ -186,6 +209,7 @@ const PreviewPageCanvas = ({
     previewScrollRef,
     highlightedPosition,
     onPageRendered,
+    onPagePainted,
 }: PreviewPageCanvasProps) => {
     const pageRef = useRef<HTMLDivElement>(null);
     const [pageMetrics, setPageMetrics] = useState<{
@@ -230,6 +254,7 @@ const PreviewPageCanvas = ({
                     });
                 }
                 onPageRendered(pageNumber);
+                onPagePainted();
             },
         },
     );

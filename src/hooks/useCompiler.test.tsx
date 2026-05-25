@@ -1,4 +1,4 @@
-import { act, render, renderHook, waitFor } from "@testing-library/react";
+import { render, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import { createDefaultDocumentAST } from "../state/ast/defaults";
@@ -21,7 +21,7 @@ const compilerClientMock = vi.hoisted(() => ({
     jumpFromClick: vi.fn(),
     positionsForFocus: vi.fn(),
     exportPdf: vi.fn(),
-    exportPng: vi.fn(),
+    exportPngPages: vi.fn(),
 }));
 
 vi.mock("../api/tauri", () => ({
@@ -177,11 +177,9 @@ describe("useCompiler source syncing", () => {
         unmount();
     });
 
-    it("reports end-to-end latency after compile finishes", async () => {
+    it("stores latency start timestamp after sync for downstream measurement", async () => {
         const ast = createDocumentWithTitle("Test");
         const editTimestamp = 1_700_000_000_000;
-
-        vi.spyOn(Date, "now").mockReturnValue(editTimestamp + 42);
 
         compilerClientMock.compile.mockResolvedValue(succeededCompile(2));
 
@@ -213,17 +211,10 @@ describe("useCompiler source syncing", () => {
             expect(compilerClientMock.syncEvents).toHaveBeenCalled();
         });
 
-        await act(async () => {
-            await new Promise<void>((resolve) => {
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => resolve());
-                });
-            });
+        await waitFor(() => {
+            expect(result.current.latencyStartRef.current).toBe(editTimestamp);
         });
 
-        expect(result.current.latencyMs).toBe(42);
-
-        vi.mocked(Date.now).mockRestore();
         unmount();
     });
 });

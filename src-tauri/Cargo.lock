@@ -1369,6 +1369,7 @@ dependencies = [
  "ergo-core",
  "js-sys",
  "parking_lot",
+ "rayon",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

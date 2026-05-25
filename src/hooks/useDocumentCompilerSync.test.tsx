@@ -98,10 +98,9 @@ const Harness = ({ ast, events, ackDocumentEvents }: HarnessProps) => {
             setPreviewRevision: vi.fn(),
             setOutline: vi.fn(),
             setResources: vi.fn(),
-            setLatencyMs: vi.fn(),
             previewRevisionRef: { current: null },
             latestRevisionRef: { current: null },
-            inputLatencyStartRef: { current: null },
+            latencyStartRef: { current: null },
         },
     });
 

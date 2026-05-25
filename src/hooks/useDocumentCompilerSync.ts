@@ -27,10 +27,9 @@ export interface CompilerPreviewSetters {
     setPreviewRevision: Dispatch<SetStateAction<SourceRevision | null>>;
     setOutline: Dispatch<SetStateAction<DocumentOutline | null>>;
     setResources: Dispatch<SetStateAction<DocumentResources | null>>;
-    setLatencyMs: Dispatch<SetStateAction<number | null>>;
     previewRevisionRef: MutableRefObject<SourceRevision | null>;
     latestRevisionRef: MutableRefObject<SourceRevision | null>;
-    inputLatencyStartRef: MutableRefObject<number | null>;
+    latencyStartRef: MutableRefObject<number | null>;
 }
 
 export interface UseDocumentCompilerSyncParams {
@@ -60,10 +59,9 @@ export function useDocumentCompilerSync({
         setPreviewRevision,
         setOutline,
         setResources,
-        setLatencyMs,
         previewRevisionRef,
         latestRevisionRef,
-        inputLatencyStartRef,
+        latencyStartRef,
     } = preview;
 
     const desiredAstRef = useRef<DocumentAST | null>(null);
@@ -80,23 +78,6 @@ export function useDocumentCompilerSync({
     const isNewerPreviewResult = (result: CompilationResult): boolean =>
         previewRevisionRef.current === null ||
         result.source_revision > previewRevisionRef.current;
-
-    const scheduleEndToEndLatency = () => {
-        const startedAt = inputLatencyStartRef.current;
-        if (startedAt === null) {
-            return;
-        }
-
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                if (!isMountedRef.current) {
-                    return;
-                }
-                setLatencyMs(Math.max(0, Math.round(Date.now() - startedAt)));
-                inputLatencyStartRef.current = null;
-            });
-        });
-    };
 
     const applyPreviewResult = (result: CompilationResult) => {
         if (!isNewerPreviewResult(result)) {
@@ -118,7 +99,6 @@ export function useDocumentCompilerSync({
             ) {
                 setIsCompiling(false);
             }
-            scheduleEndToEndLatency();
         } else if (result.status === "failed") {
             setError(result.diagnostics.join("\n") || "Compilation failed");
             if (
@@ -242,7 +222,7 @@ export function useDocumentCompilerSync({
                 }
 
                 const lastEvent = pendingEvents[pendingEvents.length - 1];
-                inputLatencyStartRef.current = lastEvent.timestamp;
+                latencyStartRef.current = lastEvent.timestamp;
 
                 latestRevisionRef.current = status.sourceRevision;
                 setSourceMap(status.sourceMap);
@@ -309,7 +289,7 @@ export function useDocumentCompilerSync({
             previewRevisionRef.current = null;
             setOutline(null);
             setResources(null);
-            setLatencyMs(null);
+            latencyStartRef.current = null;
             return;
         }
 
@@ -331,7 +311,7 @@ export function useDocumentCompilerSync({
                 latestRevisionRef.current = null;
                 setOutline(null);
                 setResources(null);
-                setLatencyMs(null);
+                latencyStartRef.current = null;
             }
         }
 

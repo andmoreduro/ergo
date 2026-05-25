@@ -1,12 +1,17 @@
 import {
+    useCallback,
     useEffect,
+    useLayoutEffect,
     useRef,
     type Dispatch,
     type RefObject,
     type SetStateAction,
 } from "react";
 import {
+    clientPointInsideElement,
     pointerDistance,
+    preservePreviewScrollAtClientPoint,
+    syncCaretAnchorInPreviewViewport,
     zoomFromPinchScale,
     zoomFromWheelDelta,
 } from "../preview/previewZoomInput";
@@ -20,14 +25,52 @@ function isZoomWheel(event: WheelEvent): boolean {
 /**
  * Ctrl/meta + wheel and pinch gestures on the preview scroll viewport.
  * Updates zoom every event for smooth CSS scaling; WASM rasterization stays debounced upstream.
+ *
+ * Returns `setZoomAnchor` — call before a programmatic zoom change (e.g. toolbar +/−)
+ * to anchor the scroll on the caret/cursor. The actual scroll correction runs in a
+ * `useLayoutEffect` after React commits the new zoom to the DOM.
  */
 export function usePreviewZoomInput(
     scrollRef: RefObject<HTMLElement | null>,
     zoom: number,
     onZoomChange: Dispatch<SetStateAction<number>>,
-): void {
+): { setZoomAnchor: () => void } {
     const zoomRef = useRef(zoom);
     zoomRef.current = zoom;
+
+    const prevZoomRef = useRef(zoom);
+    const pendingAnchorRef = useRef<{ x: number; y: number } | null>(null);
+
+    useLayoutEffect(() => {
+        const prev = prevZoomRef.current;
+        prevZoomRef.current = zoom;
+
+        const anchor = pendingAnchorRef.current;
+        const element = scrollRef.current;
+        if (!anchor || !element || prev === zoom) {
+            return;
+        }
+        pendingAnchorRef.current = null;
+
+        preservePreviewScrollAtClientPoint(element, prev, zoom, anchor.x, anchor.y);
+    }, [zoom, scrollRef]);
+
+    const setZoomAnchor = useCallback(() => {
+        const element = scrollRef.current;
+        if (!element) {
+            return;
+        }
+        const caretAnchor = syncCaretAnchorInPreviewViewport(element);
+        if (caretAnchor) {
+            pendingAnchorRef.current = caretAnchor;
+            return;
+        }
+        const rect = element.getBoundingClientRect();
+        pendingAnchorRef.current = {
+            x: rect.left + rect.width * 0.5,
+            y: rect.top + rect.height * 0.5,
+        };
+    }, [scrollRef]);
 
     useEffect(() => {
         const element = scrollRef.current;
@@ -35,12 +78,28 @@ export function usePreviewZoomInput(
             return;
         }
 
+        const resolveZoomAnchor = (
+            clientX: number,
+            clientY: number,
+        ): { x: number; y: number } => {
+            const caretAnchor = syncCaretAnchorInPreviewViewport(element);
+            if (caretAnchor) {
+                return caretAnchor;
+            }
+            if (clientPointInsideElement(element, clientX, clientY)) {
+                return { x: clientX, y: clientY };
+            }
+            const rect = element.getBoundingClientRect();
+            return { x: rect.left + rect.width * 0.5, y: rect.top + rect.height * 0.5 };
+        };
+
         const onWheel = (event: WheelEvent) => {
             if (!isZoomWheel(event)) {
                 return;
             }
 
             event.preventDefault();
+            pendingAnchorRef.current = resolveZoomAnchor(event.clientX, event.clientY);
             onZoomChange((current) =>
                 zoomFromWheelDelta(current, event.deltaY, event.deltaMode),
             );
@@ -57,9 +116,9 @@ export function usePreviewZoomInput(
         const onGestureChange = (event: Event) => {
             const gesture = event as GestureLikeEvent;
             gesture.preventDefault();
-            onZoomChange(() =>
-                zoomFromPinchScale(gestureBaseZoom, gesture.scale),
-            );
+            pendingAnchorRef.current =
+                syncCaretAnchorInPreviewViewport(element) ?? pendingAnchorRef.current;
+            onZoomChange(() => zoomFromPinchScale(gestureBaseZoom, gesture.scale));
         };
 
         const pointers = new Map<number, { x: number; y: number }>();
@@ -117,8 +176,18 @@ export function usePreviewZoomInput(
             }
 
             event.preventDefault();
-            const scale = distance / pinchStartDistance;
-            onZoomChange(() => zoomFromPinchScale(pinchBaseZoom, scale));
+            const midpoint = {
+                x: (first.x + second.x) * 0.5,
+                y: (first.y + second.y) * 0.5,
+            };
+            pendingAnchorRef.current = clientPointInsideElement(
+                element,
+                midpoint.x,
+                midpoint.y,
+            )
+                ? midpoint
+                : (syncCaretAnchorInPreviewViewport(element) ?? midpoint);
+            onZoomChange(() => zoomFromPinchScale(pinchBaseZoom, distance / pinchStartDistance));
         };
 
         const releasePointer = (event: PointerEvent) => {
@@ -161,4 +230,6 @@ export function usePreviewZoomInput(
             element.style.touchAction = "";
         };
     }, [onZoomChange, scrollRef]);
+
+    return { setZoomAnchor };
 }

@@ -179,27 +179,30 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                 reply({ type: "export_pdf_done", bytes, id });
                 break;
             }
-            case "export_png": {
+            case "export_png_pages": {
                 if (!compiler) return;
-                const bytes = compiler.export_png(
-                    message.payload.pageIndex,
-                    message.payload.pixelPerPt,
-                );
+                const rawPages = compiler.export_png_pages(message.payload.pixelPerPt);
+                const pages: Uint8Array[] = [];
+                for (let index = 0; index < rawPages.length; index += 1) {
+                    pages.push(rawPages[index] as Uint8Array);
+                }
                 reply({
-                    type: "export_png_done",
-                    bytes,
-                    pageIndex: message.payload.pageIndex,
+                    type: "export_png_pages_done",
+                    pages,
                     id,
                 });
                 break;
             }
-            case "export_svg": {
+            case "export_svg_pages": {
                 if (!compiler) return;
-                const svg = compiler.export_svg(message.payload.pageIndex);
+                const rawPages = compiler.export_svg_pages();
+                const pages: string[] = [];
+                for (let index = 0; index < rawPages.length; index += 1) {
+                    pages.push(String(rawPages[index]));
+                }
                 reply({
-                    type: "export_svg_done",
-                    svg,
-                    pageIndex: message.payload.pageIndex,
+                    type: "export_svg_pages_done",
+                    pages,
                     id,
                 });
                 break;

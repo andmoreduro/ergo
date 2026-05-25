@@ -1,3 +1,4 @@
+import { useRef, type RefObject } from "react";
 import type { DocumentOutline } from "../../../bindings/DocumentOutline";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import { useDocument } from "../../../state/DocumentContext";
@@ -14,6 +15,7 @@ export interface SidebarProps {
     outline?: DocumentOutline | null;
     resources?: DocumentResources | null;
     previewRevision?: number | null;
+    previewScrollRef?: RefObject<HTMLElement | null>;
 }
 
 export const Sidebar = ({
@@ -21,7 +23,11 @@ export const Sidebar = ({
     resources = null,
     previewRevision = null,
     previewZoomRenderDebounceMs = PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS,
+    previewScrollRef: previewScrollRefFromParent,
 }: SidebarProps) => {
+    const fallbackPreviewScrollRef = useRef<HTMLElement>(null);
+    const previewScrollRef =
+        previewScrollRefFromParent ?? fallbackPreviewScrollRef;
     const { state } = useDocument();
 
     return (
@@ -30,6 +36,7 @@ export const Sidebar = ({
                 <SidebarOutlinePanel
                     outline={outline}
                     previewRevision={previewRevision}
+                    previewScrollRef={previewScrollRef}
                 />
             </Accordion>
             <Accordion title={m.sidebar_bibliography()}>

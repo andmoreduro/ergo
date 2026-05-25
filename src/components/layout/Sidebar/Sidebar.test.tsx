@@ -99,7 +99,7 @@ describe("Sidebar outline", () => {
         expect(screen.getByText("Page 3")).toBeInTheDocument();
     });
 
-    it("drops compiled duplicate headings that would reuse the same editor target", () => {
+    it("keeps compiled outline entries that do not map to a second editor heading", () => {
         render(
             <DocumentProvider>
                 <LoadDocument ast={createDocumentWithHeadings()} />
@@ -117,9 +117,9 @@ describe("Sidebar outline", () => {
             </DocumentProvider>,
         );
 
-        expect(screen.getAllByText("Introduction")).toHaveLength(1);
-        expect(screen.getAllByText("Methods")).toHaveLength(1);
-        expect(screen.queryByText("Page 4")).not.toBeInTheDocument();
+        expect(screen.getAllByText("Introduction")).toHaveLength(2);
+        expect(screen.getAllByText("Methods")).toHaveLength(2);
+        expect(screen.getAllByText("Page 4")).toHaveLength(2);
     });
 
     it("focuses the editor field for a clicked outline heading", async () => {
@@ -143,7 +143,9 @@ describe("Sidebar outline", () => {
                 payload: {
                     elementId: "heading-2",
                     fieldId: "heading-2:text",
-                    caretUtf16Offset: null,
+                    caretUtf16Offset: 0,
+                    anchorPageNumber: 3,
+                    forcePreviewScroll: true,
                     sourceRevision: 9,
                 },
             });
@@ -171,7 +173,9 @@ describe("Sidebar outline", () => {
                 payload: {
                     elementId: "project",
                     fieldId: "project-input-/abstract_text",
-                    caretUtf16Offset: null,
+                    caretUtf16Offset: 0,
+                    anchorPageNumber: 1,
+                    forcePreviewScroll: true,
                     sourceRevision: 9,
                 },
             });
@@ -334,15 +338,6 @@ describe("Sidebar outline", () => {
         expect(dispatchActionMock).toHaveBeenCalledWith({
             id: "resources::Open",
             payload: { resourceId: "equation-1" },
-        });
-
-        fireEvent.click(screen.getByRole("button", { name: /Insert reference to Equation/ }));
-        expect(dispatchActionMock).toHaveBeenLastCalledWith({
-            id: "resources::InsertReference",
-            payload: {
-                referenceId: "equation-1",
-                label: "Equation",
-            },
         });
     });
 });

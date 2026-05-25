@@ -103,6 +103,23 @@ describe("ContextMenuProvider", () => {
         expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     });
 
+    it("shows workspace menu when right-clicking an input", () => {
+        render(
+            <ContextMenuProvider
+                commandRegistry={createCommandRegistry(commands)}
+                commandContext={commandContext}
+                runCommand={vi.fn()}
+            >
+                <input data-testid="editor-input" defaultValue="hello" />
+            </ContextMenuProvider>,
+        );
+
+        fireEvent.contextMenu(screen.getByTestId("editor-input"));
+
+        expect(screen.getByRole("menuitem", { name: "Undo" })).toBeInTheDocument();
+        expect(screen.getByRole("menu")).toBeInTheDocument();
+    });
+
     it("closes when clicking outside the menu", () => {
         render(
             <ContextMenuProvider

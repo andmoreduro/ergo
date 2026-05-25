@@ -42,6 +42,7 @@
   "menubar_insert_reference": "Citation or Reference",
   "insert_reference_dialog_title": "Insert reference",
   "insert_reference_dialog_close": "Close",
+  "insert_reference_dialog_empty": "No resources, bibliography entries, or outline targets are available.",
   "insert_reference_tab_resources": "Resources",
   "insert_reference_tab_bibliography": "Bibliography",
   "insert_reference_tab_outline": "Outline",

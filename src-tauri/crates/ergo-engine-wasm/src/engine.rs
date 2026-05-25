@@ -185,7 +185,7 @@ impl ErgoPreviewEngine {
         &mut self,
         events: Vec<DocumentEvent>,
     ) -> Result<DocumentSessionStatus, String> {
-        apply_document_events(&mut self.session, events)
+        apply_document_events(&self.session, events)
     }
 
     pub fn run_compile_preview(&mut self) -> (DocumentSessionStatus, CompilationResult) {
@@ -351,7 +351,7 @@ impl ErgoPreviewEngine {
             .map_err(|error| format!("PDF export failed: {error:?}"))
     }
 
-    pub fn export_png(&mut self, page_index: usize, pixel_per_pt: f32) -> Result<Vec<u8>, String> {
+    fn compiled_document(&mut self) -> Result<&PagedDocument, String> {
         let result = self.compile_preview();
         if result.status != CompilationStatus::Succeeded {
             let message = result
@@ -362,35 +362,27 @@ impl ErgoPreviewEngine {
             return Err(message);
         }
 
-        let page = self
-            .document
+        self.document
             .as_deref()
-            .and_then(|doc| doc.pages.get(page_index))
-            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
-
-        let pixmap = typst_render::render(page, pixel_per_pt);
-        pixmap
-            .encode_png()
-            .map_err(|error| format!("PNG export failed: {error:?}"))
+            .ok_or_else(|| "No compiled document available".to_string())
     }
 
-    pub fn export_svg(&mut self, page_index: usize) -> Result<String, String> {
-        let result = self.compile_preview();
-        if result.status != CompilationStatus::Succeeded {
-            let message = result
-                .diagnostics
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "Preview compile failed before export".to_string());
-            return Err(message);
-        }
+    pub fn export_all_png(&mut self, pixel_per_pt: f32) -> Result<Vec<Vec<u8>>, String> {
+        let document = self.compiled_document()?;
+        use rayon::prelude::*;
+        document
+            .pages
+            .par_iter()
+            .map(|page| {
+                typst_render::render(page, pixel_per_pt)
+                    .encode_png()
+                    .map_err(|error| format!("PNG export failed: {error:?}"))
+            })
+            .collect()
+    }
 
-        let page = self
-            .document
-            .as_deref()
-            .and_then(|doc| doc.pages.get(page_index))
-            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
-
-        Ok(typst_svg::svg(page))
+    pub fn export_all_svg(&mut self) -> Result<Vec<String>, String> {
+        let document = self.compiled_document()?;
+        Ok(ergo_core::compile_artifacts::render_svgs(document))
     }
 }

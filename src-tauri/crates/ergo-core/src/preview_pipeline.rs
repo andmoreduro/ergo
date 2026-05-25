@@ -113,12 +113,8 @@ pub fn compile_preview_success(
 }
 
 pub fn apply_document_events(
-    session: &mut DocumentSession,
+    session: &DocumentSession,
     events: Vec<DocumentEvent>,
 ) -> Result<crate::document_session_types::DocumentSessionStatus, String> {
-    let mut status = session.status();
-    for event in events {
-        status = session.apply_event(event)?;
-    }
-    Ok(status)
+    session.apply_events(events)
 }

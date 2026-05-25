@@ -15,7 +15,7 @@ const compilerClientMock = vi.hoisted(() => ({
     jumpFromClick: vi.fn(),
     positionsForFocus: vi.fn(),
     exportPdf: vi.fn(),
-    exportPng: vi.fn(),
+    exportPngPages: vi.fn(),
 }));
 
 const dispatchActionMock = vi.hoisted(() => vi.fn());
@@ -38,6 +38,8 @@ const FocusElement = ({ elementId }: { elementId: string }) => {
             fieldId: "heading-1:text",
             caretUtf16Offset: 0,
             sourceRevision: null,
+            anchorPageNumber: null,
+            forcePreviewScroll: false,
             focusSource: "native",
         });
     }, [elementId, setDocumentFocus]);
@@ -52,6 +54,8 @@ const FocusProjectInput = ({ fieldId }: { fieldId: string }) => {
             fieldId,
             caretUtf16Offset: 0,
             sourceRevision: 4,
+            anchorPageNumber: null,
+            forcePreviewScroll: false,
             focusSource: "preview",
         });
     }, [fieldId, setDocumentFocus]);
@@ -66,7 +70,7 @@ const createDefaultCompilerState = () => ({
     previewPages: [{ page_number: 1, path: "page-1", changed: true, content: null }],
     outline: null,
     resources: null,
-    latencyMs: null,
+    latencyStartRef: { current: null },
 });
 
 const renderPreviewAndGetCanvas = async (
@@ -269,10 +273,9 @@ describe("Preview sync", () => {
             '[data-preview-sync-caret="true"]',
         );
         expect(caret).toHaveStyle({
-            height: "20%",
-            left: "42%",
-            top: "28%",
+            transform: "translate(-50%, -50%)",
         });
+        expect(caret).toHaveClass(/syncCaret/);
         expect(
             container.querySelector('[data-preview-sync-marker="true"]'),
         ).not.toBeInTheDocument();

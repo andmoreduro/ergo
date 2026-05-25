@@ -36,7 +36,16 @@ pub(crate) fn format_typst_length_number(value: &serde_json::Number) -> Option<S
 
 pub(crate) fn generate_lib_typst(ast: &DocumentAST, template: &TemplateSpec) -> SourceBuilder {
     let mut builder = SourceBuilder::default();
+    push_package_imports(template, &mut builder);
+    builder.push_literal("#let apply(body) = [\n");
+    push_document_show_rule(ast, template, &mut builder);
+    push_project_text_settings(ast, &mut builder);
+    builder.push_literal("  #body\n");
+    builder.push_literal("]\n");
+    builder
+}
 
+fn push_package_imports(template: &TemplateSpec, builder: &mut SourceBuilder) {
     builder.push_literal(&template.package.to_typst_import_line());
     builder.push_literal("\n");
     for dep in &template.package.dependencies {
@@ -44,36 +53,39 @@ pub(crate) fn generate_lib_typst(ast: &DocumentAST, template: &TemplateSpec) -> 
         builder.push_literal("\n");
     }
     builder.push_literal("\n");
+}
 
-    builder.push_literal("#let apply(body) = [\n");
-
-    if let Some(show_rule) = &template.show_rule {
-        builder.push_literal(&format!("  #show: {}.with(\n", show_rule.function));
-        let mut pushed_any = false;
-        let cover_id = "inputs";
-        for param in &show_rule.params {
-            let mut val_builder = SourceBuilder::default();
-            let pushed = resolve_param_builder(param, ast, cover_id, &mut val_builder);
-            if pushed {
+fn push_document_show_rule(ast: &DocumentAST, template: &TemplateSpec, builder: &mut SourceBuilder) {
+    let Some(show_rule) = &template.show_rule else {
+        return;
+    };
+    builder.push_literal(&format!("  #show: {}.with(\n", show_rule.function));
+    let mut pushed_any = false;
+    let cover_id = "inputs";
+    for param in &show_rule.params {
+        let mut val_builder = SourceBuilder::default();
+        let pushed = resolve_param_builder(param, ast, cover_id, &mut val_builder);
+        if pushed {
+            if pushed_any {
+                builder.push_literal(",\n");
+            }
+            builder.push_literal(&format!("    {}: ", param.key));
+            builder.push_builder(val_builder);
+            pushed_any = true;
+        } else if let Some(default_val) = &param.default {
+            if let Some(formatted) = format_json_val(default_val, &param.param_type) {
                 if pushed_any {
                     builder.push_literal(",\n");
                 }
-                builder.push_literal(&format!("    {}: ", param.key));
-                builder.push_builder(val_builder);
+                builder.push_literal(&format!("    {}: {}", param.key, formatted));
                 pushed_any = true;
-            } else if let Some(default_val) = &param.default {
-                if let Some(formatted) = format_json_val(default_val, &param.param_type) {
-                    if pushed_any {
-                        builder.push_literal(",\n");
-                    }
-                    builder.push_literal(&format!("    {}: {}", param.key, formatted));
-                    pushed_any = true;
-                }
             }
         }
-        builder.push_literal("\n  )\n\n");
     }
+    builder.push_literal("\n  )\n\n");
+}
 
+fn push_project_text_settings(ast: &DocumentAST, builder: &mut SourceBuilder) {
     let settings = &ast.metadata.project_settings;
     if let Some(font) = &settings.text_font {
         let size_str = settings
@@ -94,11 +106,6 @@ pub(crate) fn generate_lib_typst(ast: &DocumentAST, template: &TemplateSpec) -> 
             escape_typst_string(lang)
         ));
     }
-
-    builder.push_literal("  #body\n");
-    builder.push_literal("]\n");
-
-    builder
 }
 
 pub(crate) fn resolve_param_builder(

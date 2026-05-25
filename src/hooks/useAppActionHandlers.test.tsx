@@ -42,6 +42,8 @@ describe("useAppActionHandlers", () => {
             caretUtf16Offset: 3,
             elementId: "project",
             fieldId: "project-input-/abstract_text",
+            anchorPageNumber: null,
+            forcePreviewScroll: false,
             focusSource: "preview",
             sourceRevision: 7,
         });

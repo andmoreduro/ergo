@@ -35,6 +35,8 @@ sequenceDiagram
 - Bootstrap (open/new project): `CompilerClient.bootstrap` and `sync_document_snapshot` both complete before the document sync barrier drains.
 - Queued document events are acknowledged after the backend mirror accepts the same batch.
 - Main preview and resource previews compile in WASM via `preview_pipeline`.
+- Resource preview VFS uses the same `lib.typ` and `#show: apply` as the main document; `resources.typ` adds preview page dimensions and `#set page` / `#show page` overrides for a white background without headers or numbering. Sidebar thumbnails cap height at 40vh.
+- Compiled outline comes from `document.introspector` on the paged document (headings with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries (e.g. bibliography title) scroll the preview to that page.
 - Canvas rasterizes only viewport pages; zoom debounces per `preview_zoom_render_debounce_ms`.
 - Preview does not shift layout with compile-status chrome while typing.
 - **Undo/redo:** apply the stored `inverseEvent` / `forwardEvent` locally, then sync and mirror that same event. Destructive inverses carry restore payloads (`RestoreElement`, `RestoreTableRow`, `RestoreTableColumn`).

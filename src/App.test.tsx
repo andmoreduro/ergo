@@ -63,8 +63,8 @@ const compilerClientMock = vi.hoisted(() => ({
     syncEvents: vi.fn(),
     compile: vi.fn(),
     exportPdf: vi.fn().mockResolvedValue(new Uint8Array()),
-    exportPng: vi.fn().mockResolvedValue(new Uint8Array()),
-    exportSvg: vi.fn().mockResolvedValue("<svg></svg>"),
+    exportPngPages: vi.fn().mockResolvedValue([new Uint8Array()]),
+    exportSvgPages: vi.fn().mockResolvedValue(["<svg></svg>"]),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({

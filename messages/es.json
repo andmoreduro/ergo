@@ -42,6 +42,7 @@
     "menubar_insert_reference": "Cita o referencia",
     "insert_reference_dialog_title": "Insertar referencia",
     "insert_reference_dialog_close": "Cerrar",
+    "insert_reference_dialog_empty": "No hay recursos, entradas bibliográficas ni destinos en el esquema disponibles.",
     "insert_reference_tab_resources": "Recursos",
     "insert_reference_tab_bibliography": "Bibliografía",
     "insert_reference_tab_outline": "Esquema",

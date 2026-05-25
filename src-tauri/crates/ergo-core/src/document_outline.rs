@@ -45,6 +45,10 @@ pub fn extract_outline(document: &PagedDocument) -> DocumentOutline {
                 typst::foundations::Smart::Custom(n) => n.get() as u8,
                 typst::foundations::Smart::Auto => 1u8,
             };
+            if !heading.outlined.get(styles) {
+                return None;
+            }
+
             let text = heading.body.plain_text().trim().to_string();
             let page = document.introspector.page(loc).get();
             Some(OutlineEntry { level, text, page })

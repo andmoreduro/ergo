@@ -117,6 +117,8 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
                 fieldId,
                 caretUtf16Offset: caretOffsetFromNode(node),
                 sourceRevision: null,
+                anchorPageNumber: null,
+                forcePreviewScroll: false,
                 focusSource: "native",
             });
         },

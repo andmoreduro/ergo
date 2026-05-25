@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { ReferenceEntry } from "../../../bindings/ReferenceEntry";
+import { formatReferenceCitation } from "../../../bibliography/biblatex";
 import type { TargetedOutlineEntry } from "../../layout/Sidebar/SidebarOutline";
 import { Button } from "../../atoms/Button/Button";
 import { m } from "../../../paraglide/messages.js";
@@ -18,9 +19,14 @@ export interface InsertReferenceDialogProps {
     outlineEntries: TargetedOutlineEntry[];
     onClose: () => void;
     onSelect: (pick: ReferencePick) => void;
-}
+};
 
-type TabId = "resources" | "bibliography" | "outline";
+type ReferenceListItem = {
+    key: string;
+    label: string;
+    subtitle?: string;
+    onPick: () => void;
+};
 
 export const InsertReferenceDialog = ({
     open,
@@ -30,20 +36,57 @@ export const InsertReferenceDialog = ({
     onClose,
     onSelect,
 }: InsertReferenceDialogProps) => {
-    const [tab, setTab] = useState<TabId>("resources");
-
     const resourceItems = useMemo(
         () =>
             (resources?.groups ?? []).flatMap((group) =>
                 group.entries.map((entry) => ({
-                    key: entry.id,
+                    key: `resource-${entry.id}`,
                     label: entry.label,
-                    subtitle: entry.subtitle ?? group.label,
-                    referenceId: entry.id,
+                    subtitle: group.label,
+                    onPick: () =>
+                        onSelect({
+                            referenceId: entry.id,
+                            label: entry.label,
+                        }),
                 })),
             ),
-        [resources],
+        [onSelect, resources],
     );
+
+    const bibliographyItems = useMemo(
+        () =>
+            (references ?? []).map((entry) => ({
+                key: `bib-${entry.id}`,
+                label: formatReferenceCitation(entry),
+                subtitle: entry.citation_key,
+                onPick: () =>
+                    onSelect({
+                        referenceId: entry.id,
+                        label: entry.citation_key,
+                    }),
+            })),
+        [onSelect, references],
+    );
+
+    const outlineItems = useMemo(
+        () =>
+            (outlineEntries ?? []).map((entry) => ({
+                key: `outline-${entry.key}`,
+                label: entry.text,
+                subtitle: m.sidebar_outline_page({ page: entry.page }),
+                onPick: () =>
+                    onSelect({
+                        referenceId: entry.target.elementId,
+                        label: entry.text,
+                    }),
+            })),
+        [onSelect, outlineEntries],
+    );
+
+    const hasAnyItems =
+        resourceItems.length > 0 ||
+        bibliographyItems.length > 0 ||
+        outlineItems.length > 0;
 
     if (!open) {
         return null;
@@ -71,120 +114,65 @@ export const InsertReferenceDialog = ({
                     </Button>
                 </header>
 
-                <div className={styles.tabs} role="tablist">
-                    <button
-                        type="button"
-                        role="tab"
-                        className={`${styles.tab} ${tab === "resources" ? styles.tabActive : ""}`}
-                        aria-selected={tab === "resources"}
-                        onClick={() => setTab("resources")}
-                    >
-                        {m.insert_reference_tab_resources()}
-                    </button>
-                    <button
-                        type="button"
-                        role="tab"
-                        className={`${styles.tab} ${tab === "bibliography" ? styles.tabActive : ""}`}
-                        aria-selected={tab === "bibliography"}
-                        onClick={() => setTab("bibliography")}
-                    >
-                        {m.insert_reference_tab_bibliography()}
-                    </button>
-                    <button
-                        type="button"
-                        role="tab"
-                        className={`${styles.tab} ${tab === "outline" ? styles.tabActive : ""}`}
-                        aria-selected={tab === "outline"}
-                        onClick={() => setTab("outline")}
-                    >
-                        {m.insert_reference_tab_outline()}
-                    </button>
+                <div className={styles.body}>
+                    {!hasAnyItems ? (
+                        <p className={styles.empty}>{m.insert_reference_dialog_empty()}</p>
+                    ) : (
+                        <>
+                            {resourceItems.length > 0 && (
+                                <ReferenceSection
+                                    title={m.insert_reference_tab_resources()}
+                                    items={resourceItems}
+                                />
+                            )}
+                            {bibliographyItems.length > 0 && (
+                                <ReferenceSection
+                                    title={m.insert_reference_tab_bibliography()}
+                                    items={bibliographyItems}
+                                />
+                            )}
+                            {outlineItems.length > 0 && (
+                                <ReferenceSection
+                                    title={m.insert_reference_tab_outline()}
+                                    items={outlineItems}
+                                />
+                            )}
+                        </>
+                    )}
                 </div>
-
-                {tab === "resources" && (
-                    <ReferenceList
-                        emptyMessage={m.sidebar_empty_resources()}
-                        items={resourceItems.map((item) => ({
-                            key: item.key,
-                            label: item.label,
-                            subtitle: item.subtitle,
-                            onPick: () =>
-                                onSelect({
-                                    referenceId: item.referenceId,
-                                    label: item.label,
-                                }),
-                        }))}
-                    />
-                )}
-
-                {tab === "bibliography" && (
-                    <ReferenceList
-                        emptyMessage={m.sidebar_empty_bibliography()}
-                        items={references.map((entry) => ({
-                            key: entry.id,
-                            label: entry.citation_key,
-                            subtitle: m.insert_reference_bibliography_subtitle(),
-                            onPick: () =>
-                                onSelect({
-                                    referenceId: entry.id,
-                                    label: entry.citation_key,
-                                }),
-                        }))}
-                    />
-                )}
-
-                {tab === "outline" && (
-                    <ReferenceList
-                        emptyMessage={m.sidebar_empty_outline()}
-                        items={outlineEntries.map((entry) => ({
-                            key: entry.key,
-                            label: entry.text,
-                            subtitle: m.sidebar_outline_page({ page: entry.page }),
-                            onPick: () =>
-                                onSelect({
-                                    referenceId: entry.target.elementId,
-                                    label: entry.text,
-                                }),
-                        }))}
-                    />
-                )}
             </div>
         </div>
     );
 };
 
-const ReferenceList = ({
+const ReferenceSection = ({
+    title,
     items,
-    emptyMessage,
 }: {
-    items: Array<{
-        key: string;
-        label: string;
-        subtitle?: string;
-        onPick: () => void;
-    }>;
-    emptyMessage: string;
-}) => {
-    if (items.length === 0) {
-        return <p className={styles.empty}>{emptyMessage}</p>;
-    }
+    title: string;
+    items: ReferenceListItem[];
+}) => (
+    <section className={styles.section}>
+        <h3 className={styles.groupLabel}>{title}</h3>
+        <ReferenceList items={items} />
+    </section>
+);
 
-    return (
-        <ul className={styles.list}>
-            {items.map((item) => (
-                <li key={item.key}>
-                    <button
-                        type="button"
-                        className={styles.itemButton}
-                        onClick={item.onPick}
-                    >
-                        <span>{item.label}</span>
-                        {item.subtitle && (
-                            <small className={styles.itemSubtitle}>{item.subtitle}</small>
-                        )}
-                    </button>
-                </li>
-            ))}
-        </ul>
-    );
-};
+const ReferenceList = ({ items }: { items: ReferenceListItem[] }) => (
+    <ul className={styles.list}>
+        {items.map((item) => (
+            <li key={item.key}>
+                <button
+                    type="button"
+                    className={styles.itemButton}
+                    onClick={item.onPick}
+                >
+                    <span>{item.label}</span>
+                    {item.subtitle && (
+                        <small className={styles.itemSubtitle}>{item.subtitle}</small>
+                    )}
+                </button>
+            </li>
+        ))}
+    </ul>
+);

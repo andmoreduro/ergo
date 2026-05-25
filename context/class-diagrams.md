@@ -281,8 +281,8 @@ classDiagram
             +jump_from_click(page, x_pt, y_pt, revision)
             +positions_for_focus(target, revision)
             +export_pdf()
-            +export_png(pageIndex, pixelPerPt)
-            +export_svg(pageIndex)
+            +export_all_png(pixelPerPt)
+            +export_all_svg()
         }
 
         class PreviewSyncState {
