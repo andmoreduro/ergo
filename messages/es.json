@@ -1,6 +1,7 @@
 {
     "$schema": "https://inlang.com/schema/inlang-message-format",
     "app_name": "Érgo",
+    "welcome_app_icon_label": "Icono de la aplicación",
     "welcome_title": "Bienvenido de nuevo a Érgo",
     "welcome_tagline": "El IDE Typst sin código para documentos académicos",
     "welcome_get_started": "Comenzar",
@@ -44,6 +45,7 @@
   "menubar_command_palette": "Paleta de comandos",
     "menubar_zoom_in": "Acercar",
     "menubar_zoom_out": "Alejar",
+    "preview_zoom_level": "{percent} %",
     "menubar_theme_system": "Usar tema del sistema",
     "menubar_theme_light": "Tema claro",
     "menubar_theme_dark": "Tema oscuro",
@@ -202,6 +204,7 @@
     "settings_autosave_on_window_blur": "Guardar cuando la app pierde el foco",
     "settings_autosave_on_app_close": "Guardar antes de cerrar la app",
     "settings_autosave_on_project_close": "Guardar antes de cerrar el proyecto",
+    "settings_preview_zoom_render_debounce_ms": "Retardo de render al zoom de la vista previa (ms)",
     "settings_default_font": "Fuente predeterminada",
     "settings_paper_size": "Tamaño de papel",
     "settings_project_language": "Idioma del proyecto",

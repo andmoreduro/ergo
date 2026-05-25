@@ -18,6 +18,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     autosave_on_window_blur: true,
     autosave_on_app_close: true,
     autosave_on_project_close: true,
+    preview_zoom_render_debounce_ms: 120,
 };
 
 export const DEFAULT_KEYMAP_SETTINGS: KeymapSettings = {

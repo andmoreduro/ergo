@@ -71,7 +71,7 @@ The context files describe the intended current design. They are not a changelog
 | `pnpm build` | `build:wasm` → paraglide compile → `tsc` → `vite build` |
 | `pnpm storybook` | Storybook dev server (port 6006) |
 | `pnpm tauri dev` | Full Tauri desktop app (runs `pnpm dev` internally) |
-| `cargo run --release --bin backend_profile -- --scenario typing-title --iterations 200` | Profile the backend preview pipeline without Tauri/WebView |
+| `cargo run --release -p ergo-engine-wasm --bin wasm_preview_profile -- --scenario typing-title --iterations 200` | Profile the WASM preview pipeline (sync → compile → canvas render) without Tauri/WebView |
 | `cargo nextest run` | Run all Rust tests via nextest (from `src-tauri/`) |
 
 ### Fast iteration
@@ -97,18 +97,18 @@ Install `cargo-nextest` once: `cargo binstall cargo-nextest` (or `cargo install 
 
 Before merging, run the full `pnpm test` + `cargo nextest run` suites.
 
-### Backend profiling
+### WASM preview profiling
 
-Use the backend profiling harness when isolating Rust source generation, Typst compilation, SVG rendering, and VFS preview writes from Tauri IPC, React, and WebView rendering:
+Use the WASM preview profiling harness when isolating document sync, Typst compilation, and canvas rasterization from Tauri IPC, the worker, and WebView:
 
 ```bash
 cd src-tauri
-cargo build --release --bin backend_profile
-cargo run --release --bin backend_profile -- --scenario typing-title --iterations 200
-cargo run --release --bin backend_profile -- --scenario large-document --iterations 100 --json
+cargo build --release -p ergo-engine-wasm --bin wasm_preview_profile
+cargo run --release -p ergo-engine-wasm --bin wasm_preview_profile -- --scenario typing-title --iterations 200
+cargo run --release -p ergo-engine-wasm --bin wasm_preview_profile -- --scenario large-document --iterations 100 --json
 ```
 
-Available scenarios are `small-document`, `typing-title`, and `large-document`. Release builds are required for meaningful profiler captures.
+Available scenarios are `small-document`, `typing-title`, and `large-document`. Release builds are required for meaningful profiler captures. Integration test: `cargo nextest run -p ergo-engine-wasm wasm_preview_profile`.
 
 ## Critical: paraglide compile must run first
 

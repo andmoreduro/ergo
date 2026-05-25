@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "app_name": "Érgo",
+  "welcome_app_icon_label": "App icon",
   "welcome_title": "Welcome back to Érgo",
   "welcome_tagline": "The no-code Typst IDE for academic documents",
   "welcome_get_started": "Get Started",
@@ -43,6 +44,7 @@
   "menubar_command_palette": "Command Palette",
   "menubar_zoom_in": "Zoom In",
   "menubar_zoom_out": "Zoom Out",
+  "preview_zoom_level": "{percent}%",
   "menubar_theme_system": "Use System Theme",
   "menubar_theme_light": "Light Theme",
   "menubar_theme_dark": "Dark Theme",
@@ -201,6 +203,7 @@
   "settings_autosave_on_window_blur": "Save when app loses focus",
   "settings_autosave_on_app_close": "Save before app closes",
   "settings_autosave_on_project_close": "Save before project closes",
+  "settings_preview_zoom_render_debounce_ms": "Preview zoom render delay (ms)",
   "settings_default_font": "Default Font",
   "settings_paper_size": "Paper Size",
   "settings_project_language": "Project Language",

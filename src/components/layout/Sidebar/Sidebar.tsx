@@ -1,5 +1,13 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { memo, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+    memo,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+    type ReactNode,
+} from "react";
 import type { AssetEntry } from "../../../bindings/AssetEntry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import type { DocumentOutline } from "../../../bindings/DocumentOutline";
@@ -10,6 +18,7 @@ import { useDocument } from "../../../state/DocumentContext";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { TauriApi } from "../../../api/tauri";
 import { useTypstCanvasPage } from "../../../hooks/useTypstCanvasPage";
+import { PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS } from "../../../preview/previewZoom";
 import { CompilerClient } from "../../../workers/compilerClient";
 import {
     emptyReferenceFormValue,
@@ -392,33 +401,56 @@ const findElementById = (
         return false;
     }) ?? null;
 
-const RESOURCE_PREVIEW_PIXEL_PER_PT = 0.75 * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
-
 const ResourcePreviewCanvas = ({
     pageNumber,
     revision,
+    zoomRenderDebounceMs,
 }: {
     pageNumber: number;
     revision: number;
+    zoomRenderDebounceMs: number;
 }) => {
+    const containerRef = useRef<HTMLSpanElement>(null);
+    const [fitWidthPx, setFitWidthPx] = useState(0);
+
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) {
+            return;
+        }
+
+        const updateFitWidth = () => {
+            setFitWidthPx(container.clientWidth);
+        };
+
+        updateFitWidth();
+
+        if (typeof ResizeObserver === "undefined") {
+            return;
+        }
+
+        const observer = new ResizeObserver(updateFitWidth);
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, []);
+
     const { canvasRef } = useTypstCanvasPage(
-        (requestId) =>
+        (requestId, pixelPerPt) =>
             CompilerClient.renderResourcePage(
                 pageNumber,
-                RESOURCE_PREVIEW_PIXEL_PER_PT,
+                pixelPerPt,
                 requestId,
             ),
-        RESOURCE_PREVIEW_PIXEL_PER_PT,
+        fitWidthPx,
+        1,
+        zoomRenderDebounceMs,
+        true,
         [pageNumber, revision],
     );
 
     return (
-        <span className={styles.resourcePreview}>
-            <canvas
-                ref={canvasRef}
-                aria-hidden="true"
-                style={{ width: "100%", height: "auto", display: "block" }}
-            />
+        <span ref={containerRef} className={styles.resourcePreview}>
+            <canvas ref={canvasRef} aria-hidden="true" style={{ display: "block" }} />
         </span>
     );
 };
@@ -426,9 +458,11 @@ const ResourcePreviewCanvas = ({
 const ResourcesPanel = memo(({
     resources,
     revision,
+    zoomRenderDebounceMs,
 }: {
     resources: DocumentResources | null;
     revision: number;
+    zoomRenderDebounceMs: number;
 }) => {
     const { state, dispatch } = useDocument();
     const dispatchAction = useActionDispatcher();
@@ -550,6 +584,7 @@ const ResourcesPanel = memo(({
                                             <ResourcePreviewCanvas
                                                 pageNumber={entry.preview.page_number}
                                                 revision={revision}
+                                                zoomRenderDebounceMs={zoomRenderDebounceMs}
                                             />
                                         ) : (
                                             <span className={styles.resourcePreviewError}>
@@ -658,6 +693,7 @@ const ResourcesPanel = memo(({
 });
 
 export interface SidebarProps {
+    previewZoomRenderDebounceMs?: number;
     outline?: DocumentOutline | null;
     resources?: DocumentResources | null;
     previewRevision?: number | null;
@@ -667,6 +703,7 @@ export const Sidebar = ({
     outline = null,
     resources = null,
     previewRevision = null,
+    previewZoomRenderDebounceMs = PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS,
 }: SidebarProps) => {
     const { state } = useDocument();
     const dispatchAction = useActionDispatcher();
@@ -769,7 +806,11 @@ export const Sidebar = ({
                 <BibliographyPanel references={state.references} />
             </Accordion>
             <Accordion title={m.sidebar_resources()}>
-                <ResourcesPanel resources={resources} revision={previewRevision ?? 0} />
+                <ResourcesPanel
+                    resources={resources}
+                    revision={previewRevision ?? 0}
+                    zoomRenderDebounceMs={previewZoomRenderDebounceMs}
+                />
             </Accordion>
         </aside>
     );

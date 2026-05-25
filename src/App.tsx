@@ -35,6 +35,11 @@ import { useAppActionHandlers } from "./hooks/useAppActionHandlers";
 import { useAutosave } from "./hooks/useAutosave";
 import { useSettingsLifecycle } from "./hooks/useSettingsLifecycle";
 import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
+import {
+    PREVIEW_ZOOM_DEFAULT,
+    resolvePreviewZoomRenderDebounceMs,
+    stepPreviewZoom,
+} from "./preview/previewZoom";
 import styles from "./App.module.css";
 
 const AppShellContent = () => {
@@ -85,6 +90,7 @@ const AppShellContent = () => {
         rememberProject,
     });
     const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
+    const [previewZoom, setPreviewZoom] = useState(PREVIEW_ZOOM_DEFAULT);
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [commandQuery, setCommandQuery] = useState("");
     const dispatchAction = useActionDispatcher();
@@ -99,6 +105,20 @@ const AppShellContent = () => {
         isDirty,
         saveActiveProject,
     });
+
+    useEffect(() => {
+        if (!hasActiveProject) {
+            setPreviewZoom(PREVIEW_ZOOM_DEFAULT);
+        }
+    }, [hasActiveProject]);
+
+    const zoomPreviewIn = useCallback(() => {
+        setPreviewZoom((current) => stepPreviewZoom(current, 1));
+    }, []);
+
+    const zoomPreviewOut = useCallback(() => {
+        setPreviewZoom((current) => stepPreviewZoom(current, -1));
+    }, []);
 
     const insertElement = useCallback((elementType: "heading" | "paragraph" | "table" | "equation" | "figure") => {
         const contentSection = state.sections.find(
@@ -183,6 +203,9 @@ const AppShellContent = () => {
             }),
             ...viewCommands({
                 setCommandPaletteOpen,
+                zoomPreviewIn,
+                zoomPreviewOut,
+                isPreviewZoomEnabled: () => hasActiveProject,
             }),
             ...themeCommands({
                 setThemeMode,
@@ -210,6 +233,9 @@ const AppShellContent = () => {
             showNewProjectDialog,
             undo,
             exportDocument,
+            hasActiveProject,
+            zoomPreviewIn,
+            zoomPreviewOut,
         ],
     );
     const commandRegistry = useMemo(
@@ -258,7 +284,13 @@ const AppShellContent = () => {
                 />
                 {hasActiveProject ? (
                     <ActionContextProvider id="workspace" contexts={["workspace"]}>
-                        <Workspace />
+                        <Workspace
+                            previewZoom={previewZoom}
+                            onPreviewZoomChange={setPreviewZoom}
+                            previewZoomRenderDebounceMs={resolvePreviewZoomRenderDebounceMs(
+                                globalSettings.preview_zoom_render_debounce_ms,
+                            )}
+                        />
                     </ActionContextProvider>
                 ) : (
                     <ActionContextProvider id="welcome" contexts={["welcome"]}>

@@ -5,6 +5,10 @@ import { WelcomeScreen } from "./WelcomeScreen";
 
 import "@testing-library/jest-dom";
 
+vi.mock("../../../contextMenu/ContextMenuProvider", () => ({
+    useContextMenuTrigger: () => ({}),
+}));
+
 describe("WelcomeScreen component", () => {
     it("renders startup actions and recent projects", () => {
         const handleNewProject = vi.fn();
@@ -21,6 +25,7 @@ describe("WelcomeScreen component", () => {
             />,
         );
 
+        expect(screen.getByRole("img", { name: "App icon" })).toBeInTheDocument();
         expect(screen.getByText("Welcome back to Érgo")).toBeInTheDocument();
         expect(screen.getByText("Get Started")).toBeInTheDocument();
         expect(screen.getByText("Recent Projects")).toBeInTheDocument();

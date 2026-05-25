@@ -1,19 +1,35 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RenderPagePayload } from "../workers/compilerProtocol";
+import {
+    applyCanvasDisplaySize,
+    fallbackPixelPerPt,
+    pixelPerPtForScreenLayout,
+    readCanvasPageMetrics,
+    setCanvasPageMetrics,
+    type CanvasPageMetrics,
+} from "../preview/canvasMetrics";
+import { useDebouncedValue } from "./useDebouncedValue";
 
-type RenderPage = (requestId: number) => Promise<RenderPagePayload>;
+type RenderPage = (requestId: number, pixelPerPt: number) => Promise<RenderPagePayload>;
 
 export function putTypstPageOnCanvas(
     canvas: HTMLCanvasElement,
     result: RenderPagePayload,
+    metrics: CanvasPageMetrics,
 ): void {
     const ctx = canvas.getContext("2d");
     if (!ctx) {
         return;
     }
 
+    ctx.imageSmoothingEnabled = false;
+
     canvas.width = result.width;
     canvas.height = result.height;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.style.width = `${result.width / dpr}px`;
+    canvas.style.height = `${result.height / dpr}px`;
 
     const imgData = new ImageData(
         new Uint8ClampedArray(
@@ -25,23 +41,50 @@ export function putTypstPageOnCanvas(
         result.height,
     );
     ctx.putImageData(imgData, 0, 0);
+    setCanvasPageMetrics(canvas, metrics);
 }
 
 export function useTypstCanvasPage(
     renderPage: RenderPage,
-    pixelPerPt: number,
+    fitWidthPx: number,
+    zoom: number,
+    renderDebounceMs: number,
+    isVisible: boolean,
     deps: readonly unknown[],
     options?: {
         onError?: (error: unknown) => void;
+        onRendered?: () => void;
     },
 ) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const renderRequestIdRef = useRef(0);
-    const [aspectRatio, setAspectRatio] = useState(595.27 / 841.89);
+    const [pageWidthPt, setPageWidthPt] = useState<number | null>(null);
+
+    const renderZoom = useDebouncedValue(zoom, renderDebounceMs);
+    const renderFitWidthPx = useDebouncedValue(fitWidthPx, renderDebounceMs);
+
+    const pixelPerPt =
+        pageWidthPt && renderFitWidthPx > 0
+            ? pixelPerPtForScreenLayout(renderFitWidthPx, pageWidthPt, renderZoom)
+            : fallbackPixelPerPt() * renderZoom;
+
+    useLayoutEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || fitWidthPx <= 0 || zoom <= 0) {
+            return;
+        }
+
+        const metrics = readCanvasPageMetrics(canvas);
+        if (!metrics) {
+            return;
+        }
+
+        applyCanvasDisplaySize(canvas, fitWidthPx, zoom, metrics);
+    }, [fitWidthPx, zoom]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
-        if (!canvas) {
+        if (!canvas || !isVisible) {
             return;
         }
 
@@ -50,19 +93,26 @@ export function useTypstCanvasPage(
 
         let cancelled = false;
 
-        void renderPage(requestId)
+        void renderPage(requestId, pixelPerPt)
             .then((result) => {
                 if (cancelled || result.requestId !== renderRequestIdRef.current) {
                     return;
                 }
 
-                putTypstPageOnCanvas(canvas, result);
-
                 const widthPt = result.width / pixelPerPt;
                 const heightPt = result.height / pixelPerPt;
-                if (heightPt > 0) {
-                    setAspectRatio(widthPt / heightPt);
-                }
+                setPageWidthPt(widthPt);
+                putTypstPageOnCanvas(canvas, result, {
+                    widthPt,
+                    heightPt,
+                    pixelPerPt,
+                });
+                applyCanvasDisplaySize(canvas, fitWidthPx, zoom, {
+                    widthPt,
+                    heightPt,
+                    pixelPerPt,
+                });
+                options?.onRendered?.();
             })
             .catch((error) => {
                 options?.onError?.(error);
@@ -72,7 +122,7 @@ export function useTypstCanvasPage(
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- caller supplies compile/render deps
-    }, deps);
+    }, [isVisible, pixelPerPt, renderFitWidthPx, renderZoom, ...deps]);
 
-    return { canvasRef, aspectRatio };
+    return { canvasRef };
 }

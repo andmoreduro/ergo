@@ -6,6 +6,10 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "wasm_preview_profile"
+path = "src/bin/wasm_preview_profile.rs"
+
 [dependencies]
 wasm-bindgen = "0.2"
 serde-wasm-bindgen = "0.6"

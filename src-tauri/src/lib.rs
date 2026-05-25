@@ -80,7 +80,6 @@ pub mod app_state;
 #[cfg(test)]
 mod architecture_tests;
 pub mod archive;
-pub mod backend_profile;
 pub mod compile_events;
 pub mod compiler;
 pub mod document_session_commands;

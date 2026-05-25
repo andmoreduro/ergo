@@ -51,7 +51,7 @@ sequenceDiagram
 - `sync_document_snapshot(ast)` is a cold-path bootstrap for new/opened documents. Normal edits, undo, and redo use `sync_document_event(event)`.
 - `patch_source` remains a lower-level VFS command for focused source edits, but normal document editing syncs typed events to `DocumentSession`.
 - Main preview compiles in the WASM worker. Backend `TypstWatch` compiles resource-preview SVGs only.
-- Preview page pixels are rendered on demand in the frontend Canvas; backend main-preview SVG artifacts are not used.
+- Preview page pixels are rendered on demand in the frontend Canvas; backend main-preview SVG artifacts are not used. Canvas rasterization runs only for pages that intersect the preview scrollport (with margin). Off-screen pages reserve scroll space with letter-sized placeholders until they enter view. Zoom-driven rasterization debounces for `preview_zoom_render_debounce_ms` from global settings while CSS resizing keeps zoom feedback immediate.
 - Frontend Typst generation utilities must not be used in the compile path. Backend `DocumentSession` is the only canonical source generator.
 - The Tauri API client uses generated `ts-rs` bindings for all IPC DTOs. Hand-written frontend DTO shadows are not part of the flow.
 - The retained preview document is runtime state only. It contains the compiled `PagedDocument`, source-map snapshot, Typst source snapshot, and page metrics. It is kept for sync and discarded/replaced when a newer non-stale preview compile succeeds.
@@ -372,7 +372,7 @@ sequenceDiagram
     TypstIDE-->>Sync: Preview page positions or fallback field positions
     Sync-->>API: PreviewElementPosition[]
     API-->>Preview: positions
-    Preview->>Preview: Scroll page and draw non-layout-shifting caret cue
+    Preview->>Preview: Scroll preview to the sync caret (clamped) and draw non-layout-shifting caret cue
 ```
 
 ### Sync Notes
