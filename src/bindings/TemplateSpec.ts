@@ -9,5 +9,6 @@ import type { ResourcePolicySpec } from "./ResourcePolicySpec";
 import type { SectionSpec } from "./SectionSpec";
 import type { ShowRuleSpec } from "./ShowRuleSpec";
 import type { TemplateIdentity } from "./TemplateIdentity";
+import type { TemplateVariantSpec } from "./TemplateVariantSpec";
 
-export type TemplateSpec = { template: TemplateIdentity, package: PackageSpec, show_rule: ShowRuleSpec | null, inputs: Array<InputSchema>, groups: Array<InputGroupSpec>, custom_elements: Array<CustomElementSpec>, sections: Array<SectionSpec>, element_overrides: ElementOverrides | null, resource_policy: ResourcePolicySpec | null, defaults: DefaultsSpec | null, };
+export type TemplateSpec = { template: TemplateIdentity, package: PackageSpec, variants: Array<TemplateVariantSpec>, show_rule: ShowRuleSpec | null, inputs: Array<InputSchema>, groups: Array<InputGroupSpec>, custom_elements: Array<CustomElementSpec>, sections: Array<SectionSpec>, element_overrides: ElementOverrides | null, resource_policy: ResourcePolicySpec | null, defaults: DefaultsSpec | null, };

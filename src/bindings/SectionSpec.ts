@@ -2,20 +2,4 @@
 import type { ParamSpec } from "./ParamSpec";
 import type { SectionKind } from "./SectionKind";
 
-export type SectionSpec = { id: string, kind: SectionKind, label: string | null, function: string | null, params: Array<ParamSpec>, 
-/**
- * Literal Typst source (for `literal` kind).
- */
-source: string | null, 
-/**
- * Bibliography file path (for `bibliography` kind).
- */
-file: string | null, 
-/**
- * Section title in Typst (e.g. "References").
- */
-title: string | null, 
-/**
- * Show rule function (for `appendix` kind).
- */
-show_rule: string | null, editable: boolean | null, pagebreak_before: boolean, };
+export type SectionSpec = { id: string, kind: SectionKind, label: string | null, function: string | null, params: Array<ParamSpec>, variants: Array<string> | null, source: string | null, file: string | null, title: string | null, show_rule: string | null, editable: boolean | null, pagebreak_before: boolean, };
