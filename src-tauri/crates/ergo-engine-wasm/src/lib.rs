@@ -103,8 +103,7 @@ impl ErgoWasmCompiler {
             .engine
             .sync_snapshot(ast)
             .map_err(|error| JsValue::from_str(&error))?;
-        serde_wasm_bindgen::to_value(&status)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+        serde_wasm_bindgen::to_value(&status).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -115,8 +114,7 @@ impl ErgoWasmCompiler {
             .engine
             .apply_event(event)
             .map_err(|error| JsValue::from_str(&error))?;
-        serde_wasm_bindgen::to_value(&status)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+        serde_wasm_bindgen::to_value(&status).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -127,15 +125,13 @@ impl ErgoWasmCompiler {
             .engine
             .sync_events(events)
             .map_err(|error| JsValue::from_str(&error))?;
-        serde_wasm_bindgen::to_value(&status)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+        serde_wasm_bindgen::to_value(&status).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
     pub fn compile_preview(&mut self) -> Result<JsValue, JsValue> {
         let result = self.engine.compile_preview();
-        serde_wasm_bindgen::to_value(&result)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+        serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -153,12 +149,15 @@ impl ErgoWasmCompiler {
             .engine
             .bootstrap_preview(input.ast, input.files)
             .map_err(|error| JsValue::from_str(&error))?;
-        serde_wasm_bindgen::to_value(&output)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+        serde_wasm_bindgen::to_value(&output).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
-    pub fn render_page(&self, page_index: usize, pixel_per_pt: f32) -> Result<WasmPageImage, JsValue> {
+    pub fn render_page(
+        &self,
+        page_index: usize,
+        pixel_per_pt: f32,
+    ) -> Result<WasmPageImage, JsValue> {
         self.engine
             .render_page(page_index, pixel_per_pt)
             .map(WasmPageImage::from)
@@ -188,8 +187,7 @@ impl ErgoWasmCompiler {
         let result = self
             .engine
             .jump_from_click(page_number, x_pt, y_pt, source_revision);
-        serde_wasm_bindgen::to_value(&result)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+        serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -201,8 +199,7 @@ impl ErgoWasmCompiler {
         let target: PreviewFocusTarget = serde_wasm_bindgen::from_value(target)
             .map_err(|error| JsValue::from_str(&error.to_string()))?;
         let result = self.engine.positions_for_focus(&target, source_revision);
-        serde_wasm_bindgen::to_value(&result)
-            .map_err(|error| JsValue::from_str(&error.to_string()))
+        serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -216,6 +213,13 @@ impl ErgoWasmCompiler {
     pub fn export_png(&mut self, page_index: usize, pixel_per_pt: f32) -> Result<Vec<u8>, JsValue> {
         self.engine
             .export_png(page_index, pixel_per_pt)
+            .map_err(|error| JsValue::from_str(&error))
+    }
+
+    #[wasm_bindgen]
+    pub fn export_svg(&mut self, page_index: usize) -> Result<String, JsValue> {
+        self.engine
+            .export_svg(page_index)
             .map_err(|error| JsValue::from_str(&error))
     }
 }

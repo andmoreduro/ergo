@@ -28,6 +28,7 @@ pub fn bundled_fonts_vec() -> Vec<Font> {
         .collect()
 }
 
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 pub fn store_fonts(fonts: Vec<Font>) {
     let mut book = FontBook::new();
     for font in &fonts {
@@ -162,7 +163,13 @@ impl ErgoPreviewEngine {
         self.vfs.write_source(path, text.to_string());
     }
 
-    pub fn apply_patch(&self, path: &str, start: usize, end: usize, text: &str) -> Result<(), String> {
+    pub fn apply_patch(
+        &self,
+        path: &str,
+        start: usize,
+        end: usize,
+        text: &str,
+    ) -> Result<(), String> {
         self.vfs.apply_patch(path, start, end, text)
     }
 
@@ -174,7 +181,10 @@ impl ErgoPreviewEngine {
         self.session.apply_event(event)
     }
 
-    pub fn sync_events(&mut self, events: Vec<DocumentEvent>) -> Result<DocumentSessionStatus, String> {
+    pub fn sync_events(
+        &mut self,
+        events: Vec<DocumentEvent>,
+    ) -> Result<DocumentSessionStatus, String> {
         apply_document_events(&mut self.session, events)
     }
 
@@ -277,9 +287,7 @@ impl ErgoPreviewEngine {
         pages
             .iter()
             .filter(|page| page.changed)
-            .map(|page| {
-                self.render_page(page.page_number.saturating_sub(1), pixel_per_pt)
-            })
+            .map(|page| self.render_page(page.page_number.saturating_sub(1), pixel_per_pt))
             .collect()
     }
 
@@ -288,8 +296,7 @@ impl ErgoPreviewEngine {
         page_index: usize,
         pixel_per_pt: f32,
     ) -> Result<PageImage, String> {
-        let doc =
-            document.ok_or_else(|| "No compiled document available".to_string())?;
+        let doc = document.ok_or_else(|| "No compiled document available".to_string())?;
 
         let page = doc
             .pages
@@ -365,5 +372,25 @@ impl ErgoPreviewEngine {
         pixmap
             .encode_png()
             .map_err(|error| format!("PNG export failed: {error:?}"))
+    }
+
+    pub fn export_svg(&mut self, page_index: usize) -> Result<String, String> {
+        let result = self.compile_preview();
+        if result.status != CompilationStatus::Succeeded {
+            let message = result
+                .diagnostics
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "Preview compile failed before export".to_string());
+            return Err(message);
+        }
+
+        let page = self
+            .document
+            .as_deref()
+            .and_then(|doc| doc.pages.get(page_index))
+            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
+
+        Ok(typst_svg::svg(page))
     }
 }

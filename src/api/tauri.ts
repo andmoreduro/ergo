@@ -13,7 +13,6 @@ import type { LogicalKeyEvent } from "../bindings/LogicalKeyEvent";
 import type { ProjectFile } from "../bindings/ProjectFile";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
-import type { ExportFormat } from "../bindings/ExportFormat";
 import type { TemplateSpec } from "../bindings/TemplateSpec";
 
 export type { DocumentOutline } from "../bindings/DocumentOutline";
@@ -23,12 +22,8 @@ export const TauriApi = {
         return invoke("open_devtools");
     },
 
-    async exportDocument(
-        format: ExportFormat,
-        bytes: Uint8Array,
-        pageNumber?: number,
-    ): Promise<void> {
-        return invoke("export_document", { format, bytes, pageNumber });
+    async writeBytesToPath(path: string, bytes: Uint8Array): Promise<void> {
+        return invoke("write_bytes_to_path", { path, bytes: Array.from(bytes) });
     },
 
     async loadFontsForDocument(ast: DocumentAST): Promise<Uint8Array[]> {
@@ -98,8 +93,14 @@ export const TauriApi = {
         return invoke("validate_keymap_settings", { settings });
     },
 
-    async getTemplateSpec(templateId: string): Promise<TemplateSpec> {
-        return invoke("get_template_spec", { templateId });
+    async getTemplateSpec(
+        templateId: string,
+        variantId?: string | null,
+    ): Promise<TemplateSpec> {
+        return invoke("get_template_spec", {
+            templateId,
+            variantId: variantId ?? null,
+        });
     },
 
     async loadTemplatePackageFiles(templateId: string): Promise<ProjectFile[]> {

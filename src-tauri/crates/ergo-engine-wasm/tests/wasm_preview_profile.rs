@@ -1,6 +1,4 @@
-use ergo_engine_wasm::{
-    run_wasm_preview_profile, WasmPreviewProfileOptions, WasmPreviewScenario,
-};
+use ergo_engine_wasm::{run_wasm_preview_profile, WasmPreviewProfileOptions, WasmPreviewScenario};
 
 #[test]
 fn wasm_preview_profile_runs_sync_compile_and_canvas_render() {

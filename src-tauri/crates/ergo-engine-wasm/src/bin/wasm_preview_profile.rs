@@ -1,6 +1,4 @@
-use ergo_engine_wasm::{
-    run_wasm_preview_profile, WasmPreviewProfileOptions, WasmPreviewScenario,
-};
+use ergo_engine_wasm::{run_wasm_preview_profile, WasmPreviewProfileOptions, WasmPreviewScenario};
 use std::env;
 use std::str::FromStr;
 
@@ -9,7 +7,10 @@ fn main() -> Result<(), String> {
     let report = run_wasm_preview_profile(options)?;
 
     if json {
-        println!("{}", serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+        );
         return Ok(());
     }
 

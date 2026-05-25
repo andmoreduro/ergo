@@ -2,9 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 
-use ergo_core::ast::{
-    DocumentAST, DocumentElement, DocumentSection, Heading, Paragraph, RichText,
-};
+use ergo_core::ast::{DocumentAST, DocumentElement, DocumentSection, Heading, Paragraph, RichText};
 use ergo_core::compilation_types::CompilationStatus;
 use ergo_core::document_session_types::DocumentEvent;
 use ergo_core::test_fixtures::basic_document_ast;
@@ -158,9 +156,8 @@ fn run_iteration(
         WasmPreviewScenario::TypingTitle if iteration == 0 => basic_document_ast("Érgo", ""),
         WasmPreviewScenario::TypingTitle => {
             let title = typing_title(iteration);
-            let (_, sync_ms) = measure(|| {
-                engine.sync_events(vec![DocumentEvent::SetProjectTitle { title }])
-            })?;
+            let (_, sync_ms) =
+                measure(|| engine.sync_events(vec![DocumentEvent::SetProjectTitle { title }]))?;
             let (result, compile_ms) = measure(|| Ok(engine.compile_preview()))?;
             let (rendered, render_ms) =
                 measure(|| render_changed_pages(engine, &result, pixel_per_pt))?;
@@ -208,13 +205,11 @@ fn render_changed_pages(
     pixel_per_pt: f32,
 ) -> Result<usize, String> {
     if result.status != CompilationStatus::Succeeded {
-        return Err(
-            result
-                .diagnostics
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "Preview compile failed".to_string()),
-        );
+        return Err(result
+            .diagnostics
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "Preview compile failed".to_string()));
     }
 
     let images = engine.render_changed_pages(result, pixel_per_pt)?;

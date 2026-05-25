@@ -34,9 +34,7 @@ mod tests {
     fn document_session_commands_do_not_compile_on_sync_path() {
         let source_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let source = fs::read_to_string(source_dir.join("document_session_commands.rs"))
-            .unwrap_or_else(|error| {
-                panic!("failed to read document_session_commands.rs: {error}")
-            });
+            .unwrap_or_else(|error| panic!("failed to read document_session_commands.rs: {error}"));
 
         assert!(
             !source.contains("compile_document"),
