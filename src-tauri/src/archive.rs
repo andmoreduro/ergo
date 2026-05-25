@@ -121,96 +121,20 @@ fn should_pack_file(path: &str) -> bool {
 
 #[tauri::command]
 pub fn load_template_package_files(template_id: String) -> Result<Vec<ProjectFile>, String> {
+    use ergo_core::package_resolver::{collect_package_files, PackageRef};
     use ergo_core::template_spec::load_bundled_template;
-    
-    // 1. Get the template specification to find the package name and version
-    let spec = load_bundled_template(&template_id)?;
-    let pkg_name = spec.package.name.strip_prefix("@preview/").unwrap_or(&spec.package.name);
-    let pkg_version = &spec.package.version;
-    
-    // 2. Find the local package directory
-    let mut pkg_dir = None;
-    
-    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-        let path = std::path::PathBuf::from(local_app_data)
-            .join("typst")
-            .join("packages")
-            .join("preview")
-            .join(pkg_name)
-            .join(pkg_version);
-        if path.exists() {
-            pkg_dir = Some(path);
-        }
-    }
-    
-    if pkg_dir.is_none() {
-        if let Ok(app_data) = std::env::var("APPDATA") {
-            let path = std::path::PathBuf::from(app_data)
-                .join("typst")
-                .join("packages")
-                .join("preview")
-                .join(pkg_name)
-                .join(pkg_version);
-            if path.exists() {
-                pkg_dir = Some(path);
-            }
-        }
-    }
-    
-    if pkg_dir.is_none() {
-        if let Ok(home) = std::env::var("USERPROFILE") {
-            let path = std::path::PathBuf::from(&home)
-                .join("AppData")
-                .join("Local")
-                .join("typst")
-                .join("packages")
-                .join("preview")
-                .join(pkg_name)
-                .join(pkg_version);
-            if path.exists() {
-                pkg_dir = Some(path);
-            }
-        }
-    }
-    
-    let base_dir = pkg_dir.ok_or_else(|| format!("Template package directory not found for: {} (version {})", pkg_name, pkg_version))?;
-    
-    // 3. Read all files recursively in base_dir
-    let mut files = Vec::new();
-    read_dir_recursive(&base_dir, &base_dir, pkg_name, pkg_version, &mut files)?;
-    
-    Ok(files)
-}
 
-fn read_dir_recursive(
-    base: &Path,
-    current: &Path,
-    pkg_name: &str,
-    pkg_version: &str,
-    files: &mut Vec<ProjectFile>,
-) -> Result<(), String> {
-    if current.is_dir() {
-        for entry in std::fs::read_dir(current).map_err(|e| e.to_string())?.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                read_dir_recursive(base, &path, pkg_name, pkg_version, files)?;
-            } else if path.is_file() {
-                let relative = path.strip_prefix(base).map_err(|e| e.to_string())?;
-                let vfs_path = format!(
-                    "packages/preview/{}/{}/{}",
-                    pkg_name,
-                    pkg_version,
-                    relative.to_string_lossy().replace('\\', "/")
-                );
-                let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-                files.push(ProjectFile {
-                    path: vfs_path,
-                    bytes,
-                });
-            }
-        }
-    }
-    Ok(())
+    let spec = load_bundled_template(&template_id)?;
+    let package = PackageRef::from_import(&spec.package.name, &spec.package.version)?;
+    collect_package_files(&package).map(|files| {
+        files
+            .into_iter()
+            .map(|file| ProjectFile {
+                path: file.path,
+                bytes: file.bytes,
+            })
+            .collect()
+    })
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 use crate::ast::{GlobalSettings, KeymapSettings};
-use crate::template_spec::{load_bundled_template, TemplateSpec};
+use crate::template_spec::{load_bundled_template, resolve_template_variant, TemplateSpec};
 
 const GLOBAL_SETTINGS_FILE_NAME: &str = "settings.json";
 const KEYMAP_SETTINGS_FILE_NAME: &str = "keymap.json";
@@ -158,8 +158,12 @@ pub fn save_keymap_settings(app: AppHandle, settings: KeymapSettings) -> Result<
 }
 
 #[tauri::command]
-pub fn get_template_spec(template_id: String) -> Result<TemplateSpec, String> {
-    load_bundled_template(&template_id)
+pub fn get_template_spec(
+    template_id: String,
+    variant_id: Option<String>,
+) -> Result<TemplateSpec, String> {
+    let spec = load_bundled_template(&template_id)?;
+    Ok(resolve_template_variant(&spec, variant_id.as_deref()))
 }
 
 #[cfg(test)]
