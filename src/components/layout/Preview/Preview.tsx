@@ -21,9 +21,20 @@ import { useDocumentFocus } from "../../../state/DocumentContext";
 import type { useCompiler } from "../../../hooks/useCompiler";
 import type { PreviewElementPosition } from "../../../bindings/PreviewElementPosition";
 import { useActionDispatcher } from "../../../actions/runtime";
+import { ExportMenu } from "./ExportMenu";
 import { m } from "../../../paraglide/messages.js";
-import { formatPreviewZoomPercent } from "../../../preview/previewZoom";
+import {
+    formatPreviewZoomPercent,
+    PREVIEW_ZOOM_MAX,
+    PREVIEW_ZOOM_MIN,
+    stepPreviewZoom,
+} from "../../../preview/previewZoom";
+import toolbarStyles from "../PanelToolbar.module.css";
 import styles from "./Preview.module.css";
+import {
+    ZoomIn24Regular,
+    ZoomOut24Regular,
+} from "@fluentui/react-icons";
 
 export type PreviewCompilerState = ReturnType<typeof useCompiler>;
 
@@ -32,6 +43,7 @@ export interface PreviewProps {
     zoom: number;
     onZoomChange: Dispatch<SetStateAction<number>>;
     zoomRenderDebounceMs: number;
+    onExport: (format: import("../../../bindings/ExportFormat").ExportFormat) => void | Promise<void>;
 }
 
 export const Preview = ({
@@ -39,12 +51,15 @@ export const Preview = ({
     zoom,
     onZoomChange,
     zoomRenderDebounceMs,
+    onExport,
 }: PreviewProps) => {
     const { documentFocus } = useDocumentFocus();
     const dispatchAction = useActionDispatcher();
     const { previewPages, error, sourceMap, previewRevision, latencyMs } = compiler;
+    const zoomPercent = formatPreviewZoomPercent(zoom);
+    const canZoomOut = zoom > PREVIEW_ZOOM_MIN;
+    const canZoomIn = zoom < PREVIEW_ZOOM_MAX;
     const previewScrollRef = useRef<HTMLDivElement>(null);
-    const [previewFitWidth, setPreviewFitWidth] = useState(0);
     const activeSource = sourceMap.find(
         (entry) => entry.elementId === documentFocus.elementId,
     );
@@ -61,32 +76,11 @@ export const Preview = ({
         dispatchAction,
     });
 
-    useEffect(() => {
-        const scrollArea = previewScrollRef.current;
-        if (!scrollArea) {
-            return;
-        }
-
-        const updateFitWidth = () => {
-            setPreviewFitWidth(scrollArea.clientWidth);
-        };
-
-        updateFitWidth();
-
-        let observer: ResizeObserver | undefined;
-        if (typeof ResizeObserver !== "undefined") {
-            observer = new ResizeObserver(updateFitWidth);
-            observer.observe(scrollArea);
-        }
-
-        return () => observer?.disconnect();
-    }, []);
-
     usePreviewZoomInput(previewScrollRef, zoom, onZoomChange);
 
     useLayoutEffect(() => {
-        syncCaretScrollToLayout(zoom, previewFitWidth);
-    }, [syncCaretScrollToLayout, zoom, previewFitWidth]);
+        syncCaretScrollToLayout(zoom);
+    }, [syncCaretScrollToLayout, zoom]);
 
     return (
         <aside
@@ -95,8 +89,46 @@ export const Preview = ({
             onClick={handlePreviewClick}
         >
             {error && <div className={styles.error}>{error}</div>}
+            <header
+                className={toolbarStyles.toolbar}
+                onClick={(event) => event.stopPropagation()}
+            >
+                <button
+                    type="button"
+                    className={toolbarStyles.toolbarButton}
+                    title={m.menubar_zoom_out()}
+                    aria-label={m.menubar_zoom_out()}
+                    disabled={!canZoomOut}
+                    onClick={() =>
+                        onZoomChange((current) => stepPreviewZoom(current, -1))
+                    }
+                >
+                    <ZoomOut24Regular />
+                </button>
+                <span className={toolbarStyles.zoomLabel} aria-live="polite">
+                    {m.preview_zoom_level({ percent: zoomPercent })}
+                </span>
+                <button
+                    type="button"
+                    className={toolbarStyles.toolbarButton}
+                    title={m.menubar_zoom_in()}
+                    aria-label={m.menubar_zoom_in()}
+                    disabled={!canZoomIn}
+                    onClick={() =>
+                        onZoomChange((current) => stepPreviewZoom(current, 1))
+                    }
+                >
+                    <ZoomIn24Regular />
+                </button>
+                <span className={toolbarStyles.toolbarSpacer} />
+                <ExportMenu onExport={onExport} />
+            </header>
             <div className={styles.viewport}>
-                <div className={styles.scrollArea} ref={previewScrollRef}>
+                <div
+                    className={styles.scrollArea}
+                    data-scroll-region
+                    ref={previewScrollRef}
+                >
                     <div className={styles.svgContainer}>
                         {previewPages.length > 0 && previewRevision !== null ? (
                             previewPages.map((page, index) => {
@@ -108,7 +140,6 @@ export const Preview = ({
                                         pageNumber={pageNumber}
                                         previewRevision={previewRevision}
                                         highlightedPosition={highlightedPosition}
-                                        fitWidthPx={previewFitWidth}
                                         zoom={zoom}
                                         zoomRenderDebounceMs={
                                             zoomRenderDebounceMs
@@ -125,16 +156,11 @@ export const Preview = ({
                         )}
                     </div>
                 </div>
-                <div className={styles.telemetryOverlay}>
-                    {m.preview_zoom_level({
-                        percent: formatPreviewZoomPercent(zoom),
-                    })}
-                    {latencyMs !== null && (
-                        <span className={styles.telemetryLatency}>
-                            {m.preview_telemetry({ latency: latencyMs })}
-                        </span>
-                    )}
-                </div>
+                {latencyMs !== null && (
+                    <div className={styles.telemetryOverlay}>
+                        {m.preview_telemetry({ latency: latencyMs })}
+                    </div>
+                )}
             </div>
         </aside>
     );
@@ -144,7 +170,6 @@ interface PreviewPageCanvasProps {
     pageIndex: number;
     pageNumber: number;
     previewRevision: number;
-    fitWidthPx: number;
     zoom: number;
     zoomRenderDebounceMs: number;
     previewScrollRef: RefObject<HTMLElement | null>;
@@ -156,7 +181,6 @@ const PreviewPageCanvas = ({
     pageIndex,
     pageNumber,
     previewRevision,
-    fitWidthPx,
     zoom,
     zoomRenderDebounceMs,
     previewScrollRef,
@@ -185,7 +209,6 @@ const PreviewPageCanvas = ({
     const { canvasRef } = useTypstCanvasPage(
         (requestId, pixelPerPt) =>
             CompilerClient.renderPage(pageIndex, pixelPerPt, requestId),
-        fitWidthPx,
         zoom,
         zoomRenderDebounceMs,
         isInViewport,
@@ -227,11 +250,7 @@ const PreviewPageCanvas = ({
                   metricsForCaret,
               )
             : null;
-    const surfaceLayout = pageSurfaceLayoutStyle(
-        fitWidthPx,
-        zoom,
-        pageMetrics,
-    );
+    const surfaceLayout = pageSurfaceLayoutStyle(zoom, pageMetrics);
 
     return (
         <div

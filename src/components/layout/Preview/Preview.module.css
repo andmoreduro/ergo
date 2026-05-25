@@ -1,14 +1,14 @@
-
 .preview {
     position: relative;
-    flex: 1;
+    width: 100%;
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    min-height: 0;
     background-color: var(--color-bg-secondary);
     height: 100%;
-    min-height: 0;
     overflow: hidden;
-    padding: var(--space-4);
+    padding: 0;
 }
 
 .viewport {
@@ -23,10 +23,13 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: auto;
     touch-action: pan-x pan-y;
+    padding: var(--space-2) 0;
 }
 
 .placeholder {
+    padding: var(--space-2);
     color: var(--color-text-tertiary);
     font-style: italic;
 }
@@ -35,9 +38,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-4);
+    gap: var(--space-3);
     width: max-content;
     min-width: 100%;
+    padding: 0 var(--space-3);
 }
 
 .page {
@@ -49,13 +53,11 @@
 .pageSurface {
     position: relative;
     background-color: white;
-    box-shadow: var(--shadow-md);
+    outline: 1px solid var(--color-border);
 }
 
 .pageSurface[data-active-preview-page="true"] {
-    box-shadow:
-        0 0 0 2px var(--color-primary),
-        var(--shadow-md);
+    outline: 2px solid var(--color-primary);
 }
 
 .syncCaret {
@@ -71,38 +73,24 @@
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 35%, transparent);
 }
 
-.status {
-    margin-bottom: var(--space-3);
-    color: var(--color-text-secondary);
-}
-
 .error {
-    margin-bottom: var(--space-3);
+    flex-shrink: 0;
+    padding: var(--space-1) var(--space-2);
     color: var(--color-danger);
+    font-size: var(--font-size-sm);
+    border-bottom: 1px solid var(--color-border);
 }
 
 .telemetryOverlay {
     position: absolute;
     right: var(--space-2);
     bottom: var(--space-2);
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: var(--space-1);
-    background-color: var(--color-telemetry-bg);
-    backdrop-filter: blur(8px);
-    color: var(--color-telemetry-text);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--border-radius-md);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--color-border);
+    background-color: color-mix(in srgb, var(--color-bg-primary) 92%, transparent);
+    color: var(--color-text-secondary);
     font-size: var(--font-size-xs);
     font-family: var(--font-family-mono);
     pointer-events: none;
     z-index: 10;
-    box-shadow: var(--shadow-md);
-    border: 1px solid var(--color-telemetry-border);
-    transition: opacity 0.2s ease-in-out;
-}
-
-.telemetryLatency {
-    opacity: 0.85;
 }

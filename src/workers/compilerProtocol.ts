@@ -112,7 +112,9 @@ export type WorkerRequest =
 
     | { type: "export_pdf" }
 
-    | { type: "export_png"; payload: { pageIndex: number; pixelPerPt: number } };
+    | { type: "export_png"; payload: { pageIndex: number; pixelPerPt: number } }
+
+    | { type: "export_svg"; payload: { pageIndex: number } };
 
 
 
@@ -161,6 +163,8 @@ export type WorkerResponse =
     | { type: "export_pdf_done"; bytes: Uint8Array }
 
     | { type: "export_png_done"; bytes: Uint8Array; pageIndex: number }
+
+    | { type: "export_svg_done"; svg: string; pageIndex: number }
 
     | { type: "error"; error: string };
 

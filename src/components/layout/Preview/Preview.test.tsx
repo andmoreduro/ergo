@@ -85,6 +85,7 @@ const renderPreviewAndGetCanvas = async (
                 zoom={1}
                 onZoomChange={() => undefined}
                 zoomRenderDebounceMs={0}
+                onExport={() => undefined}
             />
         </DocumentProvider>,
     );
@@ -216,6 +217,7 @@ describe("Preview sync", () => {
         await waitFor(() => {
             expect(compilerClientMock.positionsForFocus).toHaveBeenCalledWith(
                 {
+                    anchorPageNumber: null,
                     caretUtf16Offset: 0,
                     elementId: "heading-1",
                     fieldId: "heading-1:text",
@@ -401,6 +403,7 @@ describe("Preview sync", () => {
                     zoom={1}
                     onZoomChange={() => undefined}
                     zoomRenderDebounceMs={0}
+                    onExport={() => undefined}
                 />
             </DocumentProvider>,
         );
@@ -416,6 +419,7 @@ describe("Preview sync", () => {
         await waitFor(() => {
             expect(compilerClientMock.positionsForFocus).toHaveBeenCalledWith(
                 {
+                    anchorPageNumber: null,
                     caretUtf16Offset: 0,
                     elementId: "inputs",
                     fieldId: "/abstract_text",

@@ -4,11 +4,16 @@ import type { WorkerMessage, WorkerReply } from "./compilerProtocol";
 let compiler: ErgoWasmCompiler | null = null;
 let initialized = false;
 
+const workerScope = self as unknown as {
+    postMessage: (message: WorkerReply, transfer?: Transferable[]) => void;
+    onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null;
+};
+
 const reply = (message: WorkerReply, transfer?: Transferable[]) => {
     if (transfer && transfer.length > 0) {
-        self.postMessage(message, transfer);
+        workerScope.postMessage(message, transfer);
     } else {
-        self.postMessage(message);
+        workerScope.postMessage(message);
     }
 };
 
@@ -17,14 +22,15 @@ const replyError = (id: number | undefined, error: unknown) => {
     reply({ type: "error", error: message, id });
 };
 
-self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
-    const { type, payload, id } = event.data;
+workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
+    const message = event.data;
+    const id = message.id;
 
     try {
-        switch (type) {
+        switch (message.type) {
             case "init": {
                 if (!initialized) {
-                    const { wasmUrl } = payload;
+                    const { wasmUrl } = message.payload;
                     await init({ module_or_path: wasmUrl });
                     compiler = new ErgoWasmCompiler();
                     initialized = true;
@@ -34,19 +40,19 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             }
             case "load_fonts": {
                 if (!compiler) return;
-                append_font_buffers(payload);
+                append_font_buffers(message.payload);
                 reply({ type: "load_fonts_done", id });
                 break;
             }
             case "sync_snapshot": {
                 if (!compiler) return;
-                const status = compiler.sync_document_snapshot(payload);
+                const status = compiler.sync_document_snapshot(message.payload);
                 reply({ type: "sync_done", status, id });
                 break;
             }
             case "sync_events": {
                 if (!compiler) return;
-                const status = compiler.sync_document_events(payload);
+                const status = compiler.sync_document_events(message.payload);
                 reply({ type: "sync_done", status, id });
                 break;
             }
@@ -59,8 +65,8 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             case "bootstrap": {
                 if (!compiler) return;
                 const bootstrapResult = compiler.bootstrap_preview({
-                    ast: payload.ast,
-                    files: payload.files.map((file) => ({
+                    ast: message.payload.ast,
+                    files: message.payload.files.map((file) => ({
                         path: file.path,
                         bytes: Array.from(file.bytes),
                     })),
@@ -70,7 +76,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             }
             case "render_page": {
                 if (!compiler) return;
-                const { pageIndex, pixelPerPt, requestId } = payload;
+                const { pageIndex, pixelPerPt, requestId } = message.payload;
                 const pageImage = compiler.render_page(pageIndex, pixelPerPt);
                 const pixels = pageImage.pixels;
                 reply(
@@ -91,7 +97,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             }
             case "render_resource_page": {
                 if (!compiler) return;
-                const { pageNumber, pixelPerPt, requestId } = payload;
+                const { pageNumber, pixelPerPt, requestId } = message.payload;
                 const pageImage = compiler.render_resource_page(pageNumber, pixelPerPt);
                 const pixels = pageImage.pixels;
                 reply(
@@ -112,14 +118,17 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             }
             case "write_file": {
                 if (!compiler) return;
-                compiler.write_file(payload.path, new Uint8Array(payload.bytes));
+                compiler.write_file(
+                    message.payload.path,
+                    new Uint8Array(message.payload.bytes),
+                );
                 reply({ type: "write_file_done", id });
                 break;
             }
             case "write_files": {
                 if (!compiler) return;
                 compiler.write_files(
-                    payload.map((file) => ({
+                    message.payload.map((file) => ({
                         path: file.path,
                         bytes: Array.from(file.bytes),
                     })),
@@ -129,17 +138,17 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             }
             case "write_source": {
                 if (!compiler) return;
-                compiler.write_source(payload.path, payload.text);
+                compiler.write_source(message.payload.path, message.payload.text);
                 reply({ type: "write_source_done", id });
                 break;
             }
             case "apply_patch": {
                 if (!compiler) return;
                 compiler.apply_patch(
-                    payload.path,
-                    payload.start,
-                    payload.end,
-                    payload.text,
+                    message.payload.path,
+                    message.payload.start,
+                    message.payload.end,
+                    message.payload.text,
                 );
                 reply({ type: "apply_patch_done", id });
                 break;
@@ -147,10 +156,10 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             case "jump_from_click": {
                 if (!compiler) return;
                 const result = compiler.jump_from_click(
-                    payload.pageNumber,
-                    payload.xPt,
-                    payload.yPt,
-                    BigInt(payload.sourceRevision),
+                    message.payload.pageNumber,
+                    message.payload.xPt,
+                    message.payload.yPt,
+                    BigInt(message.payload.sourceRevision),
                 );
                 reply({ type: "jump_done", result, id });
                 break;
@@ -158,8 +167,8 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             case "positions_for_focus": {
                 if (!compiler) return;
                 const result = compiler.positions_for_focus(
-                    payload.target,
-                    BigInt(payload.sourceRevision),
+                    message.payload.target,
+                    BigInt(message.payload.sourceRevision),
                 );
                 reply({ type: "positions_done", result, id });
                 break;
@@ -173,10 +182,26 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             case "export_png": {
                 if (!compiler) return;
                 const bytes = compiler.export_png(
-                    payload.pageIndex,
-                    payload.pixelPerPt,
+                    message.payload.pageIndex,
+                    message.payload.pixelPerPt,
                 );
-                reply({ type: "export_png_done", bytes, pageIndex: payload.pageIndex, id });
+                reply({
+                    type: "export_png_done",
+                    bytes,
+                    pageIndex: message.payload.pageIndex,
+                    id,
+                });
+                break;
+            }
+            case "export_svg": {
+                if (!compiler) return;
+                const svg = compiler.export_svg(message.payload.pageIndex);
+                reply({
+                    type: "export_svg_done",
+                    svg,
+                    pageIndex: message.payload.pageIndex,
+                    id,
+                });
                 break;
             }
             default:
