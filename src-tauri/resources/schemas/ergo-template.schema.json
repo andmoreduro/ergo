@@ -51,13 +51,19 @@
       "additionalProperties": false,
       "properties": {
         "function": { "type": "string", "description": "Function name for #show: fn.with(...)." },
-        "params":   { "type": "array", "items": { "$ref": "#/$defs/param" } }
+        "params":   { "type": "array", "items": { "$ref": "#/$defs/param" } },
+        "variants": { "type": "array", "items": { "type": "string" } }
       }
     },
     "inputs": {
       "type": "array",
       "description": "Document input variables schema definitions.",
       "items": { "$ref": "#/$defs/input_schema" }
+    },
+    "variants": {
+      "type": "array",
+      "description": "Paper variants supported by this template (e.g. APA student vs professional).",
+      "items": { "$ref": "#/$defs/template_variant" }
     },
     "groups": {
       "type": "array",
@@ -92,6 +98,22 @@
     }
   },
   "$defs": {
+    "template_variant": {
+      "type": "object",
+      "required": ["id", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id":          { "type": "string" },
+        "label":       { "type": "string" },
+        "description": { "type": "string" },
+        "default":     { "type": "boolean", "default": false }
+      }
+    },
+    "variant_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "When set, the item applies only to these variant ids. Omit for all variants."
+    },
     "import_symbol": {
       "oneOf": [
         { "type": "string" },
@@ -117,6 +139,7 @@
         "description": { "type": "string" },
         "default":     { "description": "Default input value." },
         "importance":  { "type": "string", "enum": ["required", "recommended", "optional"], "default": "optional" },
+        "variants":    { "$ref": "#/$defs/variant_ids" },
         "properties":  {
           "type": "array",
           "items": { "$ref": "#/$defs/input_schema" }
@@ -135,7 +158,8 @@
         "inputs": {
           "type": "array",
           "items": { "type": "string" }
-        }
+        },
+        "variants": { "$ref": "#/$defs/variant_ids" }
       }
     },
     "custom_element": {
@@ -186,7 +210,8 @@
         "source":     { "type": "string", "description": "Dot-path into the AST inputs/settings (e.g. 'inputs.title')." },
         "label":      { "type": "string" },
         "default":    { "description": "Default value if the AST field is empty." },
-        "required":   { "type": "boolean", "default": false }
+        "required":   { "type": "boolean", "default": false },
+        "variants":   { "$ref": "#/$defs/variant_ids" }
       }
     },
     "section": {
@@ -204,7 +229,8 @@
         "title":            { "type": "string" },
         "show_rule":        { "type": "string" },
         "editable":         { "type": "boolean", "default": true },
-        "pagebreak_before": { "type": "boolean", "default": false }
+        "pagebreak_before": { "type": "boolean", "default": false },
+        "variants":         { "$ref": "#/$defs/variant_ids" }
       }
     }
   }
