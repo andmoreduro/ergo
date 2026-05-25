@@ -49,7 +49,11 @@ describe("Workspace component", () => {
     it("renders the Sidebar, Editor, and Preview columns", () => {
         render(
             <DocumentProvider>
-                <Workspace />
+                <Workspace
+                    previewZoom={1}
+                    onPreviewZoomChange={() => undefined}
+                    previewZoomRenderDebounceMs={0}
+                />
             </DocumentProvider>,
         );
 
@@ -70,7 +74,11 @@ describe("Workspace component", () => {
 
         render(
             <DocumentProvider>
-                <Workspace />
+                <Workspace
+                    previewZoom={1}
+                    onPreviewZoomChange={() => undefined}
+                    previewZoomRenderDebounceMs={0}
+                />
             </DocumentProvider>,
         );
 

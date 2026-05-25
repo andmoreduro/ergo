@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from "react";
 import { Sidebar } from "../Sidebar/Sidebar";
 import { Editor } from "../Editor/Editor";
 import { Preview } from "../Preview/Preview";
@@ -8,7 +9,17 @@ import { useCompiler } from "../../../hooks/useCompiler";
 import { useContextMenuTrigger } from "../../../contextMenu/ContextMenuProvider";
 import styles from "./Workspace.module.css";
 
-export const Workspace = () => {
+export interface WorkspaceProps {
+    previewZoom: number;
+    onPreviewZoomChange: Dispatch<SetStateAction<number>>;
+    previewZoomRenderDebounceMs: number;
+}
+
+export const Workspace = ({
+    previewZoom,
+    onPreviewZoomChange,
+    previewZoomRenderDebounceMs,
+}: WorkspaceProps) => {
     const { state } = useDocumentAst();
     const { events, sessionId, ackDocumentEvents, eventsVersion, bootstrapFiles } =
         useDocumentSync();
@@ -30,9 +41,15 @@ export const Workspace = () => {
                         outline={compiler.outline}
                         resources={compiler.resources}
                         previewRevision={compiler.previewRevision}
+                        previewZoomRenderDebounceMs={previewZoomRenderDebounceMs}
                     />
                     <Editor />
-                    <Preview compiler={compiler} />
+                    <Preview
+                        compiler={compiler}
+                        zoom={previewZoom}
+                        onZoomChange={onPreviewZoomChange}
+                        zoomRenderDebounceMs={previewZoomRenderDebounceMs}
+                    />
                 </div>
             </EditorFieldRegistryProvider>
         </TemplateSpecProvider>

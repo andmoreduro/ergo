@@ -3,9 +3,7 @@
     flex: 1;
     place-items: center;
     min-height: 0;
-    background:
-        radial-gradient(circle at 50% 18%, var(--color-welcome-halo), transparent 28rem),
-        var(--color-bg-primary);
+    background: var(--color-bg-primary);
     color: var(--color-text-primary);
 }
 
@@ -35,42 +33,13 @@
     font-style: italic;
 }
 
-.logo {
-    position: relative;
+.appIconPlaceholder {
+    flex-shrink: 0;
     width: 44px;
     height: 44px;
-    border: 2px solid var(--color-text-secondary);
+    border: 1px dashed var(--color-border);
     border-radius: var(--border-radius-sm);
-}
-
-.logo::before,
-.logo::after,
-.logo span {
-    position: absolute;
-    content: "";
-    border: 2px solid var(--color-text-secondary);
-}
-
-.logo::before {
-    inset: 6px 6px 6px 14px;
-}
-
-.logo::after {
-    top: 8px;
-    right: -7px;
-    width: 30px;
-    height: 2px;
-    border-width: 2px 0 0;
-    transform: rotate(-45deg);
-    transform-origin: right center;
-}
-
-.logo span {
-    right: 8px;
-    bottom: 8px;
-    width: 22px;
-    height: 2px;
-    border-width: 2px 0 0;
+    background: var(--color-bg-secondary);
 }
 
 .group + .group {

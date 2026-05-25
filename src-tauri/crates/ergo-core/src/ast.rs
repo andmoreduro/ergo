@@ -60,6 +60,8 @@ pub struct GlobalSettings {
     pub autosave_on_app_close: Option<bool>,
     #[serde(default)]
     pub autosave_on_project_close: Option<bool>,
+    #[serde(default)]
+    pub preview_zoom_render_debounce_ms: Option<usize>,
 }
 
 impl Default for GlobalSettings {
@@ -78,6 +80,7 @@ impl Default for GlobalSettings {
             autosave_on_window_blur: Some(true),
             autosave_on_app_close: Some(true),
             autosave_on_project_close: Some(true),
+            preview_zoom_render_debounce_ms: Some(120),
         }
     }
 }

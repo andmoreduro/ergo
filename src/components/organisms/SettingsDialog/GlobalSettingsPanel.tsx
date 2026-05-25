@@ -131,6 +131,27 @@ export const GlobalSettingsPanel = ({
             />
         </div>
         <label className={styles.field}>
+            <span>{m.settings_preview_zoom_render_debounce_ms()}</span>
+            <input
+                min="0"
+                max="500"
+                step="10"
+                type="number"
+                aria-label={m.settings_preview_zoom_render_debounce_ms()}
+                value={
+                    settings.preview_zoom_render_debounce_ms ?? 120
+                }
+                onChange={(event) =>
+                    onChange({
+                        ...settings,
+                        preview_zoom_render_debounce_ms: toOptionalNumber(
+                            event.target.value,
+                        ),
+                    })
+                }
+            />
+        </label>
+        <label className={styles.field}>
             <span>{m.settings_default_font()}</span>
             <input
                 value={settings.default_font ?? ""}

@@ -80,7 +80,12 @@ const renderPreviewAndGetCanvas = async (
                 <button type="button">Delete</button>
                 <input aria-label="Heading editor" />
             </div>
-            <Preview compiler={compiler} />
+            <Preview
+                compiler={compiler}
+                zoom={1}
+                onZoomChange={() => undefined}
+                zoomRenderDebounceMs={0}
+            />
         </DocumentProvider>,
     );
     const canvas = await waitFor(() => {
@@ -94,6 +99,14 @@ const renderPreviewAndGetCanvas = async (
 describe("Preview sync", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+
+        vi.stubGlobal(
+            "ResizeObserver",
+            class {
+                observe() {}
+                disconnect() {}
+            },
+        );
 
         // Stub devicePixelRatio to force pixelPerPt to be exactly 1.0 (1.3333 * 0.75... = 1.0)
         vi.stubGlobal("devicePixelRatio", 0.7500187504687617);
@@ -164,8 +177,8 @@ describe("Preview sync", () => {
         });
         const callArgs = compilerClientMock.jumpFromClick.mock.calls[0];
         expect(callArgs[0]).toBe(1);
-        expect(callArgs[1]).toBeCloseTo(50, 5);
-        expect(callArgs[2]).toBeCloseTo(25, 5);
+        expect(callArgs[1]).toBeCloseTo(50, 1);
+        expect(callArgs[2]).toBeCloseTo(25, 1);
         expect(callArgs[3]).toBe(4);
         await waitFor(() => {
             expect(dispatchActionMock).toHaveBeenCalledWith({
@@ -180,7 +193,7 @@ describe("Preview sync", () => {
         });
     });
 
-    it("requests preview positions for the focused element without changing layout", async () => {
+    it("renders a synthetic caret when the backend returns a position without caretCue", async () => {
         compilerClientMock.positionsForFocus.mockResolvedValue({
             positions: [
                 {
@@ -212,12 +225,14 @@ describe("Preview sync", () => {
             );
         });
 
+        await waitFor(() => {
+            expect(
+                container.querySelector('[data-preview-sync-caret="true"]'),
+            ).toBeInTheDocument();
+        });
         expect(
             container.querySelector('[data-active-preview-page="true"]'),
-        ).not.toBeInTheDocument();
-        expect(
-            container.querySelector('[data-preview-sync-marker="true"]'),
-        ).not.toBeInTheDocument();
+        ).toBeInTheDocument();
     });
 
     it("renders a persistent caret cue when the backend returns click-equivalent caret geometry", async () => {

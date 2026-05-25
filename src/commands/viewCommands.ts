@@ -3,6 +3,9 @@ import { m } from "../paraglide/messages.js";
 
 export interface ViewCommandDeps {
     setCommandPaletteOpen: (open: boolean) => void;
+    zoomPreviewIn: () => void;
+    zoomPreviewOut: () => void;
+    isPreviewZoomEnabled: () => boolean;
 }
 
 export const viewCommands = (deps: ViewCommandDeps): Command[] => [
@@ -16,14 +19,14 @@ export const viewCommands = (deps: ViewCommandDeps): Command[] => [
         id: "view::ZoomIn",
         label: m.menubar_zoom_in(),
         scope: "global",
-        isEnabled: () => false,
-        run: () => undefined,
+        isEnabled: () => deps.isPreviewZoomEnabled(),
+        run: () => deps.zoomPreviewIn(),
     },
     {
         id: "view::ZoomOut",
         label: m.menubar_zoom_out(),
         scope: "global",
-        isEnabled: () => false,
-        run: () => undefined,
+        isEnabled: () => deps.isPreviewZoomEnabled(),
+        run: () => deps.zoomPreviewOut(),
     },
 ];

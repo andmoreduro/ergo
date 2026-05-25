@@ -25,9 +25,11 @@ export const WelcomeScreen = ({
         <main className={styles.screen} {...contextMenu}>
             <section className={styles.panel} aria-labelledby="welcome-title">
                 <header className={styles.header}>
-                    <div className={styles.logo} aria-hidden="true">
-                        <span />
-                    </div>
+                    <div
+                        className={styles.appIconPlaceholder}
+                        role="img"
+                        aria-label={m.welcome_app_icon_label()}
+                    />
                     <div>
                         <h1 id="welcome-title">{m.welcome_title()}</h1>
                         <p>{m.welcome_tagline()}</p>
