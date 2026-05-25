@@ -146,16 +146,16 @@ export function useDocumentCompilerSync({
         mirrorAst: DocumentAST,
         pendingEvents: QueuedDocumentEvent[],
         isBootstrap: boolean,
-    ) => {
+    ): Promise<unknown> => {
         if (isBootstrap) {
-            void TauriApi.syncDocumentSnapshot(mirrorAst);
-            return;
+            return TauriApi.syncDocumentSnapshot(mirrorAst);
         }
         if (pendingEvents.length > 0) {
-            void TauriApi.syncDocumentEvents(
+            return TauriApi.syncDocumentEvents(
                 pendingEvents.map((event) => event.event),
             );
         }
+        return Promise.resolve();
     };
 
     const syncLatestDocumentState = async () => {
@@ -213,7 +213,7 @@ export function useDocumentCompilerSync({
                     setSourceMap(status.sourceMap);
                     applyPreviewResult(result);
 
-                    mirrorToBackend(currentAst, [], true);
+                    await mirrorToBackend(currentAst, [], true);
                     continue;
                 }
 
@@ -244,17 +244,24 @@ export function useDocumentCompilerSync({
                 const lastEvent = pendingEvents[pendingEvents.length - 1];
                 inputLatencyStartRef.current = lastEvent.timestamp;
 
-                syncedEventIdRef.current = lastEvent.id;
                 latestRevisionRef.current = status.sourceRevision;
                 setSourceMap(status.sourceMap);
-                ackDocumentEvents?.(lastEvent.id);
+
+                const mirrorPromise = mirrorToBackend(
+                    currentAst,
+                    pendingEvents,
+                    false,
+                );
 
                 const compileStarted = timingNow();
                 const result = await CompilerClient.compile(currentAst);
                 recordTiming("compile", compileStarted);
                 applyPreviewResult(result);
 
-                mirrorToBackend(currentAst, pendingEvents, false);
+                await mirrorPromise;
+
+                syncedEventIdRef.current = lastEvent.id;
+                ackDocumentEvents?.(lastEvent.id);
             }
         } catch (syncError: unknown) {
             if (isMountedRef.current) {

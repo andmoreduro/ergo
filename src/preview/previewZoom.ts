@@ -1,7 +1,9 @@
 export const PREVIEW_ZOOM_MIN = 0.5;
 export const PREVIEW_ZOOM_MAX = 3;
 export const PREVIEW_ZOOM_STEP = 0.1;
-export const PREVIEW_ZOOM_DEFAULT = 1;
+/** Internal zoom factor shown as 100% in the preview toolbar. */
+export const PREVIEW_ZOOM_UI_BASE = 0.9;
+export const PREVIEW_ZOOM_DEFAULT = PREVIEW_ZOOM_UI_BASE;
 
 export const PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS = 120;
 export const PREVIEW_ZOOM_RENDER_DEBOUNCE_MIN_MS = 0;
@@ -32,5 +34,5 @@ export function stepPreviewZoom(current: number, direction: 1 | -1): number {
 }
 
 export function formatPreviewZoomPercent(zoom: number): number {
-    return Math.round(zoom * 100);
+    return Math.round((zoom / PREVIEW_ZOOM_UI_BASE) * 100);
 }

@@ -4,12 +4,10 @@ import { PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS } from "../preview/previewZoom"
 import { useTypstCanvasPage } from "./useTypstCanvasPage";
 
 function CanvasProbe({
-    fitWidthPx,
     zoom,
     renderPage,
     isVisible = true,
 }: {
-    fitWidthPx: number;
     zoom: number;
     renderPage: (requestId: number, pixelPerPt: number) => Promise<{
         requestId: number;
@@ -21,7 +19,6 @@ function CanvasProbe({
 }) {
     const { canvasRef } = useTypstCanvasPage(
         renderPage,
-        fitWidthPx,
         zoom,
         PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS,
         isVisible,
@@ -74,7 +71,7 @@ describe("useTypstCanvasPage zoom performance", () => {
         );
 
         const { rerender } = render(
-            <CanvasProbe fitWidthPx={400} zoom={1} renderPage={renderPage} />,
+            <CanvasProbe zoom={1} renderPage={renderPage} />,
         );
 
         await act(async () => {
@@ -86,14 +83,16 @@ describe("useTypstCanvasPage zoom performance", () => {
         const callsAfterMount = renderPage.mock.calls.length;
         expect(callsAfterMount).toBeGreaterThan(0);
 
-        rerender(<CanvasProbe fitWidthPx={400} zoom={0.9} renderPage={renderPage} />);
-        rerender(<CanvasProbe fitWidthPx={400} zoom={0.8} renderPage={renderPage} />);
-        rerender(<CanvasProbe fitWidthPx={400} zoom={0.7} renderPage={renderPage} />);
+        rerender(<CanvasProbe zoom={0.9} renderPage={renderPage} />);
+        rerender(<CanvasProbe zoom={0.8} renderPage={renderPage} />);
+        rerender(<CanvasProbe zoom={0.7} renderPage={renderPage} />);
 
         expect(renderPage.mock.calls.length).toBe(callsAfterMount);
 
         const canvas = document.querySelector("canvas");
-        expect(canvas?.style.width).toBe("280px");
+        const cssWidth = Number.parseFloat(canvas?.style.width ?? "0");
+        expect(cssWidth).toBeGreaterThan(90);
+        expect(cssWidth).toBeLessThan(95);
 
         await act(async () => {
             await vi.advanceTimersByTimeAsync(PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS);
@@ -116,12 +115,7 @@ describe("useTypstCanvasPage zoom performance", () => {
         );
 
         render(
-            <CanvasProbe
-                fitWidthPx={400}
-                zoom={1}
-                isVisible={false}
-                renderPage={renderPage}
-            />,
+            <CanvasProbe zoom={1} isVisible={false} renderPage={renderPage} />,
         );
 
         await act(async () => {

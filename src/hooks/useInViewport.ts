@@ -3,7 +3,7 @@ import { useEffect, useState, type RefObject } from "react";
 export interface UseInViewportOptions {
     /** IntersectionObserver root (scroll container). */
     rootRef: RefObject<Element | null>;
-    /** Expand the observed region so pages rasterize slightly before they enter view. */
+    /** IntersectionObserver root margin (default: flush with the scrollport). */
     rootMargin?: string;
     /** When true, the target is always treated as visible (e.g. sync caret page). */
     forceVisible?: boolean;
@@ -14,7 +14,7 @@ export interface UseInViewportOptions {
  */
 export function useInViewport(
     targetRef: RefObject<Element | null>,
-    { rootRef, rootMargin = "240px 0px", forceVisible = false }: UseInViewportOptions,
+    { rootRef, rootMargin = "0px", forceVisible = false }: UseInViewportOptions,
 ): boolean {
     const [isVisible, setIsVisible] = useState(forceVisible);
 

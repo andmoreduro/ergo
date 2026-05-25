@@ -145,6 +145,38 @@ export function focusScrollIdentity(
     return [sourceRevision, elementId ?? "", fieldId ?? ""].join("|");
 }
 
+/**
+ * Page number whose content occupies the largest share of the preview viewport.
+ * Used to break ties when a field appears on multiple pages.
+ */
+export function previewAnchorPageFromScroll(scrollRoot: HTMLElement): number | null {
+    const rootRect = scrollRoot.getBoundingClientRect();
+    const viewportTop = rootRect.top;
+    const viewportBottom = rootRect.bottom;
+    let bestPage: number | null = null;
+    let bestVisible = 0;
+
+    for (const page of scrollRoot.querySelectorAll<HTMLElement>(
+        "[data-preview-page-number]",
+    )) {
+        const pageNumber = Number(page.dataset.previewPageNumber);
+        if (!Number.isFinite(pageNumber)) {
+            continue;
+        }
+
+        const rect = page.getBoundingClientRect();
+        const visibleTop = Math.max(rect.top, viewportTop);
+        const visibleBottom = Math.min(rect.bottom, viewportBottom);
+        const visible = Math.max(0, visibleBottom - visibleTop);
+        if (visible > bestVisible) {
+            bestVisible = visible;
+            bestPage = pageNumber;
+        }
+    }
+
+    return bestPage;
+}
+
 export function caretScrollKey(position: {
     pageNumber: number;
     elementId: string | null;

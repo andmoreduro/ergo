@@ -7,10 +7,11 @@ import {
 } from "./canvasMetrics";
 
 describe("previewPageDisplayWidthPx", () => {
-    it("scales only from the stable fit width and zoom factor", () => {
-        expect(previewPageDisplayWidthPx(400, 1)).toBe(400);
-        expect(previewPageDisplayWidthPx(400, 1.1)).toBeCloseTo(440);
-        expect(previewPageDisplayWidthPx(400, 0.9)).toBe(360);
+    it("scales from Typst page width and zoom, not the preview pane width", () => {
+        const pageWidthPt = 612;
+        expect(previewPageDisplayWidthPx(pageWidthPt, 1)).toBe(816);
+        expect(previewPageDisplayWidthPx(pageWidthPt, 1.1)).toBeCloseTo(816 * 1.1);
+        expect(previewPageDisplayWidthPx(pageWidthPt, 0.9)).toBeCloseTo(816 * 0.9);
     });
 });
 
