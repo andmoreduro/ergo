@@ -5,7 +5,9 @@ import {
     PREVIEW_ZOOM_MAX,
     PREVIEW_ZOOM_MIN,
     PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS,
+    PREVIEW_ZOOM_UI_BASE,
     clampPreviewZoom,
+    formatPreviewZoomPercent,
     resolvePreviewZoomRenderDebounceMs,
     stepPreviewZoom,
 } from "./previewZoom";
@@ -18,8 +20,13 @@ describe("previewZoom", () => {
     });
 
     it("steps zoom in and out", () => {
-        expect(stepPreviewZoom(PREVIEW_ZOOM_DEFAULT, 1)).toBe(1.1);
-        expect(stepPreviewZoom(1.1, -1)).toBe(PREVIEW_ZOOM_DEFAULT);
+        expect(stepPreviewZoom(PREVIEW_ZOOM_DEFAULT, 1)).toBe(1);
+        expect(stepPreviewZoom(1, -1)).toBe(PREVIEW_ZOOM_DEFAULT);
+    });
+
+    it("shows the UI baseline as 100%", () => {
+        expect(formatPreviewZoomPercent(PREVIEW_ZOOM_UI_BASE)).toBe(100);
+        expect(formatPreviewZoomPercent(PREVIEW_ZOOM_UI_BASE * 1.1)).toBe(110);
     });
 
     it("resolves preview zoom render debounce from settings", () => {
@@ -33,9 +40,8 @@ describe("previewZoom", () => {
 
     it("scales raster density with zoom", () => {
         const pageWidthPt = 595;
-        const fitWidthPx = 800;
-        const full = pixelPerPtForScreenLayout(fitWidthPx, pageWidthPt, 1);
-        const half = pixelPerPtForScreenLayout(fitWidthPx, pageWidthPt, 0.5);
+        const full = pixelPerPtForScreenLayout(pageWidthPt, 1);
+        const half = pixelPerPtForScreenLayout(pageWidthPt, 0.5);
         expect(half).toBeCloseTo(full * 0.5, 5);
     });
 });

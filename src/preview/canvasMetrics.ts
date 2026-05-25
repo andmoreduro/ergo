@@ -14,24 +14,28 @@ export function pixelPerPtForDisplayWidth(displayWidthPx: number, pageWidthPt: n
     return (displayWidthPx * dpr) / pageWidthPt;
 }
 
-/** CSS width of a preview page at the given fit width and zoom (fit width is at 100%). */
+/** CSS width of a page from its Typst width and zoom (independent of the preview pane). */
 export function previewPageDisplayWidthPx(
-    fitWidthPx: number,
-    zoom: number,
-): number {
-    return fitWidthPx * zoom;
-}
-
-/** Raster density for a page shown at `fitWidthPx * zoom` CSS pixels wide. */
-export function pixelPerPtForScreenLayout(
-    fitWidthPx: number,
     pageWidthPt: number,
     zoom: number,
 ): number {
-    return pixelPerPtForDisplayWidth(
-        previewPageDisplayWidthPx(fitWidthPx, zoom),
-        pageWidthPt,
-    );
+    return pageWidthPt * CSS_PX_PER_PT * zoom;
+}
+
+/**
+ * Raster density for a page at the target display size.
+ * When `fitWidthPx` is set (resource thumbnails), scale to that container width.
+ */
+export function pixelPerPtForScreenLayout(
+    pageWidthPt: number,
+    zoom: number,
+    fitWidthPx?: number,
+): number {
+    const displayWidthPx =
+        fitWidthPx && fitWidthPx > 0
+            ? fitWidthPx * zoom
+            : previewPageDisplayWidthPx(pageWidthPt, zoom);
+    return pixelPerPtForDisplayWidth(displayWidthPx, pageWidthPt);
 }
 
 export type CanvasPageMetrics = {
@@ -43,11 +47,14 @@ export type CanvasPageMetrics = {
 /** Resize canvas CSS from the last raster without re-invoking the compiler. */
 export function applyCanvasDisplaySize(
     canvas: HTMLCanvasElement,
-    fitWidthPx: number,
     zoom: number,
     metrics: CanvasPageMetrics,
+    fitWidthPx?: number,
 ): void {
-    const cssWidth = fitWidthPx * zoom;
+    const cssWidth =
+        fitWidthPx && fitWidthPx > 0
+            ? fitWidthPx * zoom
+            : previewPageDisplayWidthPx(metrics.widthPt, zoom);
     const cssHeight = cssWidth * (metrics.heightPt / metrics.widthPt);
     canvas.style.width = `${cssWidth}px`;
     canvas.style.height = `${cssHeight}px`;
@@ -109,17 +116,20 @@ export function previewPointFromCanvasMouseEvent(
 }
 
 export function pageSurfaceLayoutStyle(
-    fitWidthPx: number,
     zoom: number,
     metrics?: Pick<CanvasPageMetrics, "widthPt" | "heightPt"> | null,
+    fitWidthPx?: number,
 ): { width: string; minHeight: string } | undefined {
-    if (fitWidthPx <= 0 || zoom <= 0) {
+    if (zoom <= 0) {
         return undefined;
     }
 
-    const cssWidth = previewPageDisplayWidthPx(fitWidthPx, zoom);
     const widthPt = metrics?.widthPt ?? DEFAULT_PAGE_WIDTH_PT;
     const heightPt = metrics?.heightPt ?? DEFAULT_PAGE_HEIGHT_PT;
+    const cssWidth =
+        fitWidthPx && fitWidthPx > 0
+            ? fitWidthPx * zoom
+            : previewPageDisplayWidthPx(widthPt, zoom);
     const cssHeight = cssWidth * (heightPt / widthPt);
 
     return {

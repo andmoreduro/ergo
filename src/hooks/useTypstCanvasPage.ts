@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RenderPagePayload } from "../workers/compilerProtocol";
 import {
     applyCanvasDisplaySize,
-    fallbackPixelPerPt,
+    DEFAULT_PAGE_WIDTH_PT,
     pixelPerPtForScreenLayout,
     readCanvasPageMetrics,
     setCanvasPageMetrics,
@@ -46,7 +46,6 @@ export function putTypstPageOnCanvas(
 
 export function useTypstCanvasPage(
     renderPage: RenderPage,
-    fitWidthPx: number,
     zoom: number,
     renderDebounceMs: number,
     isVisible: boolean,
@@ -55,6 +54,8 @@ export function useTypstCanvasPage(
     options?: {
         onError?: (error: unknown) => void;
         onRendered?: () => void;
+        /** When set, scale pages to this container width (resource thumbnails). */
+        fitWidthPx?: number;
     },
 ) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -67,17 +68,23 @@ export function useTypstCanvasPage(
     onErrorRef.current = options?.onError;
     const [pageWidthPt, setPageWidthPt] = useState<number | null>(null);
 
+    const fitWidthPx = options?.fitWidthPx;
     const renderZoom = useDebouncedValue(zoom, renderDebounceMs);
-    const renderFitWidthPx = useDebouncedValue(fitWidthPx, renderDebounceMs);
+    const renderFitWidthPx = useDebouncedValue(fitWidthPx ?? 0, renderDebounceMs);
+    const layoutPageWidthPt = pageWidthPt ?? DEFAULT_PAGE_WIDTH_PT;
+    const usesContainerFit = (renderFitWidthPx ?? 0) > 0;
 
-    const pixelPerPt =
-        pageWidthPt && renderFitWidthPx > 0
-            ? pixelPerPtForScreenLayout(renderFitWidthPx, pageWidthPt, renderZoom)
-            : fallbackPixelPerPt() * renderZoom;
+    const pixelPerPt = usesContainerFit
+        ? pixelPerPtForScreenLayout(
+              layoutPageWidthPt,
+              renderZoom,
+              renderFitWidthPx,
+          )
+        : pixelPerPtForScreenLayout(layoutPageWidthPt, renderZoom);
 
     useLayoutEffect(() => {
         const canvas = canvasRef.current;
-        if (!canvas || fitWidthPx <= 0 || zoom <= 0) {
+        if (!canvas || zoom <= 0) {
             return;
         }
 
@@ -86,7 +93,7 @@ export function useTypstCanvasPage(
             return;
         }
 
-        applyCanvasDisplaySize(canvas, fitWidthPx, zoom, metrics);
+        applyCanvasDisplaySize(canvas, zoom, metrics, fitWidthPx);
     }, [fitWidthPx, zoom]);
 
     useEffect(() => {
@@ -114,11 +121,16 @@ export function useTypstCanvasPage(
                     heightPt,
                     pixelPerPt,
                 });
-                applyCanvasDisplaySize(canvas, fitWidthPx, zoom, {
-                    widthPt,
-                    heightPt,
-                    pixelPerPt,
-                });
+                applyCanvasDisplaySize(
+                    canvas,
+                    zoom,
+                    {
+                        widthPt,
+                        heightPt,
+                        pixelPerPt,
+                    },
+                    fitWidthPx,
+                );
                 onRenderedRef.current?.();
             })
             .catch((error) => {

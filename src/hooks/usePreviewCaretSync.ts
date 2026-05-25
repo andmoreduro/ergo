@@ -17,6 +17,7 @@ import {
 import {
     caretScrollKey,
     focusScrollIdentity,
+    previewAnchorPageFromScroll,
     schedulePreviewCaretScroll,
 } from "../preview/previewScroll";
 import { CompilerClient } from "../workers/compilerClient";
@@ -39,11 +40,10 @@ export function usePreviewCaretSync({
     const syncCueRequestIdRef = useRef(0);
     const lastCaretScrollKeyRef = useRef<string | null>(null);
     const focusScrollIdentityRef = useRef<string | null>(null);
+    const anchorPageRef = useRef<number | null>(null);
     const userOverrodeScrollRef = useRef(false);
     const programmaticScrollRef = useRef(false);
-    const layoutScrollRef = useRef<{ zoom: number; fitWidth: number } | null>(
-        null,
-    );
+    const layoutScrollRef = useRef<{ zoom: number } | null>(null);
     const [highlightedPosition, setHighlightedPosition] =
         useState<PreviewElementPosition | null>(null);
 
@@ -53,13 +53,22 @@ export function usePreviewCaretSync({
             return;
         }
 
+        const updateAnchorFromScroll = () => {
+            const page = previewAnchorPageFromScroll(scrollRoot);
+            if (page !== null) {
+                anchorPageRef.current = page;
+            }
+        };
+
         const onUserScroll = () => {
+            updateAnchorFromScroll();
             if (programmaticScrollRef.current) {
                 return;
             }
             userOverrodeScrollRef.current = true;
         };
 
+        updateAnchorFromScroll();
         scrollRoot.addEventListener("scroll", onUserScroll, { passive: true });
         return () => scrollRoot.removeEventListener("scroll", onUserScroll);
     }, [scrollRef]);
@@ -84,7 +93,7 @@ export function usePreviewCaretSync({
             position: PreviewElementPosition,
             options?: {
                 force?: boolean;
-                layout?: { zoom: number; fitWidth: number };
+                layout?: { zoom: number };
             },
         ) => {
             if (userOverrodeScrollRef.current && !options?.force) {
@@ -145,8 +154,7 @@ export function usePreviewCaretSync({
 
                 const raw =
                     result.status === "matched" && result.positions.length > 0
-                        ? (result.positions.find((entry) => entry.caretCue) ??
-                          result.positions[0])
+                        ? result.positions[0]
                         : null;
                 if (!raw) {
                     lastCaretScrollKeyRef.current = null;
@@ -155,6 +163,7 @@ export function usePreviewCaretSync({
                 }
 
                 const position = normalizeCaretPosition(raw);
+                anchorPageRef.current = position.pageNumber;
                 setHighlightedPosition(position);
                 if (shouldScroll) {
                     scheduleScrollToHighlightedCaret(position);
@@ -180,10 +189,17 @@ export function usePreviewCaretSync({
             documentFocus.elementId,
             documentFocus.fieldId,
         );
+        const scrollRoot = scrollRef.current;
+        const anchorFromViewport = scrollRoot
+            ? previewAnchorPageFromScroll(scrollRoot)
+            : null;
+        const anchorPageNumber = anchorPageRef.current ?? anchorFromViewport ?? null;
+
         const target = {
             elementId: previewTarget.elementId,
             fieldId: previewTarget.fieldId,
             caretUtf16Offset: documentFocus.caretUtf16Offset,
+            anchorPageNumber,
             sourceRevision: previewRevision,
         };
 
@@ -229,22 +245,21 @@ export function usePreviewCaretSync({
     );
 
     const syncCaretScrollToLayout = useCallback(
-        (zoom: number, previewFitWidth: number) => {
+        (zoom: number) => {
             if (userOverrodeScrollRef.current || !highlightedPosition) {
                 return;
             }
 
             const prev = layoutScrollRef.current;
-            const layoutChanged =
-                prev !== null &&
-                (prev.zoom !== zoom || prev.fitWidth !== previewFitWidth);
+            const layoutChanged = prev !== null && prev.zoom !== zoom;
             if (!layoutChanged) {
                 return;
             }
 
+            layoutScrollRef.current = { zoom };
             scheduleScrollToHighlightedCaret(highlightedPosition, {
                 force: true,
-                layout: { zoom, fitWidth: previewFitWidth },
+                layout: { zoom },
             });
         },
         [highlightedPosition, scheduleScrollToHighlightedCaret],
