@@ -5,4 +5,70 @@
     min-height: 0;
     width: 100%;
     background-color: var(--color-bg-primary);
+    padding: 0 3px;
+    box-sizing: border-box;
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    height: 100%;
+}
+
+.resizeHandle {
+    flex-shrink: 0;
+    width: 5px;
+    align-self: stretch;
+    cursor: col-resize;
+    touch-action: none;
+    background-color: transparent;
+    transition: background-color 0.15s ease;
+}
+
+.resizeHandle:hover,
+.resizeHandleActive {
+    background-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
+/* Overlay-style scrollbars on scroll regions only (not on every nested control) */
+.workspace [data-scroll-region] {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    overscroll-behavior: auto;
+}
+
+.workspace [data-scroll-region]:hover,
+.workspace [data-scroll-region].scrollbarReveal {
+    scrollbar-color: color-mix(in srgb, var(--color-text-tertiary) 45%, transparent)
+        transparent;
+}
+
+.workspace [data-scroll-region]::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+.workspace [data-scroll-region]::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.workspace [data-scroll-region]::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background-color: transparent;
+    transition: background-color 0.2s ease;
+}
+
+.workspace [data-scroll-region]:hover::-webkit-scrollbar-thumb,
+.workspace [data-scroll-region].scrollbarReveal::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--color-text-tertiary) 45%, transparent);
+}
+
+.workspace [data-scroll-region]::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--color-text-secondary) 65%, transparent);
+}
+
+.workspace [data-scroll-region]::-webkit-scrollbar-corner {
+    background: transparent;
 }
