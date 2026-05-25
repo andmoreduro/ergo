@@ -14,7 +14,6 @@ import type {
 import {
     callWorker,
     loadDocumentFontsLazy,
-    warmupCompiler,
 } from "./compilerWorker";
 
 export { getWorker, loadDocumentFontsLazy, warmupCompiler } from "./compilerWorker";
@@ -159,5 +158,14 @@ export const CompilerClient = {
             "export_png_done",
         );
         return reply.bytes;
+    },
+
+    async exportSvg(ast: DocumentAST, pageIndex: number): Promise<string> {
+        await loadDocumentFontsLazy(ast);
+        const reply = await callWorker(
+            { type: "export_svg", payload: { pageIndex } },
+            "export_svg_done",
+        );
+        return reply.svg;
     },
 };
