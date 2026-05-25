@@ -75,7 +75,7 @@ impl ErgoWasmCompiler {
     pub fn write_files(&self, files: JsValue) -> Result<(), JsValue> {
         let files: Vec<engine::VfsFileEntry> = serde_wasm_bindgen::from_value(files)
             .map_err(|error| JsValue::from_str(&error.to_string()))?;
-        self.engine.write_vfs_files(&files);
+        self.engine.write_vfs_files(files);
         Ok(())
     }
 
@@ -151,7 +151,7 @@ impl ErgoWasmCompiler {
             .map_err(|error| JsValue::from_str(&error.to_string()))?;
         let output = self
             .engine
-            .bootstrap_preview(input.ast, &input.files)
+            .bootstrap_preview(input.ast, input.files)
             .map_err(|error| JsValue::from_str(&error))?;
         serde_wasm_bindgen::to_value(&output)
             .map_err(|error| JsValue::from_str(&error.to_string()))

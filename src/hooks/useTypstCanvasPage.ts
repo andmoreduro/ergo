@@ -50,7 +50,8 @@ export function useTypstCanvasPage(
     zoom: number,
     renderDebounceMs: number,
     isVisible: boolean,
-    deps: readonly unknown[],
+    pageIndex: number,
+    previewRevision: number,
     options?: {
         onError?: (error: unknown) => void;
         onRendered?: () => void;
@@ -58,6 +59,12 @@ export function useTypstCanvasPage(
 ) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const renderRequestIdRef = useRef(0);
+    const renderPageRef = useRef(renderPage);
+    renderPageRef.current = renderPage;
+    const onRenderedRef = useRef(options?.onRendered);
+    const onErrorRef = useRef(options?.onError);
+    onRenderedRef.current = options?.onRendered;
+    onErrorRef.current = options?.onError;
     const [pageWidthPt, setPageWidthPt] = useState<number | null>(null);
 
     const renderZoom = useDebouncedValue(zoom, renderDebounceMs);
@@ -93,7 +100,7 @@ export function useTypstCanvasPage(
 
         let cancelled = false;
 
-        void renderPage(requestId, pixelPerPt)
+        void renderPageRef.current(requestId, pixelPerPt)
             .then((result) => {
                 if (cancelled || result.requestId !== renderRequestIdRef.current) {
                     return;
@@ -112,17 +119,16 @@ export function useTypstCanvasPage(
                     heightPt,
                     pixelPerPt,
                 });
-                options?.onRendered?.();
+                onRenderedRef.current?.();
             })
             .catch((error) => {
-                options?.onError?.(error);
+                onErrorRef.current?.(error);
             });
 
         return () => {
             cancelled = true;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- caller supplies compile/render deps
-    }, [isVisible, pixelPerPt, renderFitWidthPx, renderZoom, ...deps]);
+    }, [isVisible, pageIndex, pixelPerPt, previewRevision]);
 
     return { canvasRef };
 }

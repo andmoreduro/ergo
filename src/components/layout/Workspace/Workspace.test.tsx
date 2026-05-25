@@ -18,6 +18,10 @@ vi.mock("../../../api/tauri", () => ({
     TauriApi: tauriApiMock,
 }));
 
+vi.mock("../../../contextMenu/ContextMenuProvider", () => ({
+    useContextMenuTrigger: () => ({}),
+}));
+
 import { Workspace } from "./Workspace";
 
 const defaultCompilerState = () => ({

@@ -130,6 +130,41 @@ export function pageSurfaceLayoutStyle(
 
 export type PagePtMetrics = Pick<CanvasPageMetrics, "widthPt" | "heightPt">;
 
+/**
+ * Resolve Typst page dimensions from canvas dataset, a page container, or fallbacks.
+ */
+export function resolvePreviewPageMetrics(
+    pageElement?: HTMLElement | null,
+    canvas?: HTMLCanvasElement | null,
+    fallback?: PagePtMetrics | null,
+): PagePtMetrics | null {
+    if (canvas) {
+        const fromCanvas = readCanvasPageMetrics(canvas);
+        if (fromCanvas) {
+            return fromCanvas;
+        }
+    }
+
+    if (pageElement) {
+        const nested = pageElement.querySelector("canvas");
+        if (nested instanceof HTMLCanvasElement) {
+            const fromNested = readCanvasPageMetrics(nested);
+            if (fromNested) {
+                return fromNested;
+            }
+        }
+    }
+
+    if (fallback) {
+        return fallback;
+    }
+
+    return {
+        widthPt: DEFAULT_PAGE_WIDTH_PT,
+        heightPt: DEFAULT_PAGE_HEIGHT_PT,
+    };
+}
+
 const DEFAULT_CARET_HEIGHT_PT = 12;
 
 export function syntheticCaretCue(position: {
