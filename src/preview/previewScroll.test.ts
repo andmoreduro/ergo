@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { scrollPreviewToCaretPosition } from "./previewScroll";
+import {
+    focusScrollIdentity,
+    scrollPreviewToCaretPosition,
+} from "./previewScroll";
+
+describe("focusScrollIdentity", () => {
+    it("ignores caret offset so typing does not retrigger auto-scroll", () => {
+        const base = focusScrollIdentity(4, "heading-1", "heading-1:text");
+        expect(base).toBe(focusScrollIdentity(4, "heading-1", "heading-1:text"));
+        expect(base).not.toBe(
+            focusScrollIdentity(4, "heading-1", "heading-1:other"),
+        );
+    });
+});
 
 describe("scrollPreviewToCaretPosition", () => {
     it("scrolls vertically and horizontally to center the caret", () => {

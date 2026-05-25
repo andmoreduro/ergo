@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
     caretStyleForPageMetrics,
     previewPageDisplayWidthPx,
+    resolvePreviewPageMetrics,
     syntheticCaretCue,
 } from "./canvasMetrics";
 
@@ -24,6 +25,28 @@ describe("syntheticCaretCue", () => {
     it("preserves an existing caretCue", () => {
         const cue = { topYPt: 10, heightPt: 14 };
         expect(syntheticCaretCue({ yPt: 40, caretCue: cue })).toBe(cue);
+    });
+});
+
+describe("resolvePreviewPageMetrics", () => {
+    it("reads metrics from canvas dataset", () => {
+        const canvas = document.createElement("canvas");
+        canvas.dataset.pageWidthPt = "400";
+        canvas.dataset.pageHeightPt = "500";
+        canvas.dataset.pixelPerPt = "2";
+
+        expect(resolvePreviewPageMetrics(null, canvas)).toEqual({
+            widthPt: 400,
+            heightPt: 500,
+            pixelPerPt: 2,
+        });
+    });
+
+    it("falls back to letter size when no canvas metrics exist", () => {
+        expect(resolvePreviewPageMetrics(null, null)).toEqual({
+            widthPt: 612,
+            heightPt: 792,
+        });
     });
 });
 

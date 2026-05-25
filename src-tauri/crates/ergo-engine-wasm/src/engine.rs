@@ -148,9 +148,9 @@ impl ErgoPreviewEngine {
         self.world_font_stamp = stamp;
     }
 
-    pub fn write_vfs_files(&self, files: &[VfsFileEntry]) {
+    pub fn write_vfs_files(&self, files: Vec<VfsFileEntry>) {
         for file in files {
-            self.vfs.write_file(&file.path, file.bytes.clone());
+            self.vfs.write_file(&file.path, file.bytes);
         }
     }
 
@@ -240,7 +240,7 @@ impl ErgoPreviewEngine {
     pub fn bootstrap_preview(
         &mut self,
         ast: DocumentAST,
-        files: &[VfsFileEntry],
+        files: Vec<VfsFileEntry>,
     ) -> Result<BootstrapPreviewOutput, String> {
         self.write_vfs_files(files);
         let status = self.sync_snapshot(ast)?;

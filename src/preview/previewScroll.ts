@@ -1,7 +1,5 @@
 import {
-    DEFAULT_PAGE_HEIGHT_PT,
-    DEFAULT_PAGE_WIDTH_PT,
-    readCanvasPageMetrics,
+    resolvePreviewPageMetrics,
     type PagePtMetrics,
 } from "./canvasMetrics";
 
@@ -11,26 +9,7 @@ export type CaretScrollPosition = {
     caretCue: { topYPt: number; heightPt: number };
 };
 
-function resolvePageMetrics(
-    pageElement: HTMLElement,
-    fallback?: PagePtMetrics | null,
-): PagePtMetrics | null {
-    const canvas = pageElement.querySelector("canvas");
-    const fromCanvas =
-        canvas instanceof HTMLCanvasElement
-            ? readCanvasPageMetrics(canvas)
-            : null;
-    if (fromCanvas) {
-        return fromCanvas;
-    }
-    if (fallback) {
-        return fallback;
-    }
-    return {
-        widthPt: DEFAULT_PAGE_WIDTH_PT,
-        heightPt: DEFAULT_PAGE_HEIGHT_PT,
-    };
-}
+const CARET_SCROLL_RETRY_FRAMES = 8;
 
 function pageContentRect(pageElement: HTMLElement): DOMRect | null {
     const surface = pageElement.querySelector<HTMLElement>(
@@ -71,7 +50,7 @@ export function scrollPreviewToCaretPosition(
         return false;
     }
 
-    const metrics = resolvePageMetrics(page, options?.fallbackMetrics);
+    const metrics = resolvePreviewPageMetrics(page, null, options?.fallbackMetrics);
     if (!metrics) {
         return false;
     }
@@ -112,6 +91,58 @@ export function scrollPreviewToCaretPosition(
     scrollRoot.scrollTop = targetTop;
     scrollRoot.scrollLeft = targetLeft;
     return true;
+}
+
+/**
+ * Scroll to the caret, retrying across animation frames until layout is ready.
+ */
+export function schedulePreviewCaretScroll(
+    scrollRoot: HTMLElement,
+    position: CaretScrollPosition,
+    options: {
+        force?: boolean;
+        lastScrollKeyRef: { current: string | null };
+        scrollKey: string;
+        fallbackMetrics?: PagePtMetrics | null;
+        maxAttempts?: number;
+        /** When true, abort pending scroll retries (e.g. user scrolled manually). */
+        isCancelled?: () => boolean;
+    },
+): void {
+    const maxAttempts = options.maxAttempts ?? CARET_SCROLL_RETRY_FRAMES;
+    const { force = false, lastScrollKeyRef, scrollKey } = options;
+
+    const attempt = (remaining: number) => {
+        if (options.isCancelled?.()) {
+            return;
+        }
+        if (!force && lastScrollKeyRef.current === scrollKey) {
+            return;
+        }
+
+        const scrolled = scrollPreviewToCaretPosition(scrollRoot, position, {
+            fallbackMetrics: options.fallbackMetrics,
+        });
+        if (scrolled) {
+            lastScrollKeyRef.current = scrollKey;
+            return;
+        }
+        if (remaining <= 0) {
+            return;
+        }
+        requestAnimationFrame(() => attempt(remaining - 1));
+    };
+
+    attempt(maxAttempts);
+}
+
+/** Stable focus target for deciding when to auto-scroll (excludes caret offset). */
+export function focusScrollIdentity(
+    sourceRevision: number,
+    elementId: string | null,
+    fieldId: string | null,
+): string {
+    return [sourceRevision, elementId ?? "", fieldId ?? ""].join("|");
 }
 
 export function caretScrollKey(position: {

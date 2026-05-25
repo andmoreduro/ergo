@@ -322,8 +322,9 @@ sequenceDiagram
     autonumber
 
     actor User
-    participant Preview as React SVG Preview
-    participant API as Tauri API Client
+    participant Preview as React Canvas Preview
+    participant Hook as usePreviewCaretSync
+    participant Worker as WASM Compiler Worker
     participant Sync as PreviewSyncState
     participant World as SnapshotWorld / IdeWorld
     participant TypstIDE as typst-ide jump APIs
@@ -331,18 +332,19 @@ sequenceDiagram
     participant Runtime as Action Runtime
     participant Editor as Form Editor
 
-    User->>Preview: Clicks visible SVG page
-    Preview->>Preview: Convert DOM click through SVG viewBox to x/y points
-    Preview->>API: jump_from_preview_click(page, x_pt, y_pt, displayed_revision)
-    API->>Sync: Resolve click if displayed revision matches retained preview
+    User->>Preview: Clicks visible canvas page
+    Preview->>Hook: handlePreviewClick
+    Hook->>Preview: Map click to Typst points on canvas surface
+    Hook->>Worker: jump_from_click(page, x_pt, y_pt, displayed_revision)
+    Worker->>Sync: Resolve click if displayed revision matches retained preview
     Sync->>TypstIDE: jump_from_click(IdeWorld, PagedDocument, page.frame, point)
     TypstIDE->>World: Resolve source spans
     World-->>TypstIDE: Retained preview Source
     TypstIDE-->>Sync: Jump::File(file_id, offset)
     Sync->>Sync: Map file offset to FieldSourceMapEntry, fallback SourceMapEntry
-    Sync-->>API: PreviewFocusTarget or element fallback / no match
-    API-->>Preview: PreviewJumpResult
-    Preview->>Runtime: dispatch editor::FocusField(target)
+    Sync-->>Worker: PreviewFocusTarget or element fallback / no match
+    Worker-->>Hook: PreviewJumpResult
+    Hook->>Runtime: dispatch editor::FocusField(target)
     Runtime->>Editor: update DocumentFocusState
     Editor->>Editor: registered field applies focus and caret in layout effect
 ```
@@ -354,15 +356,16 @@ sequenceDiagram
     autonumber
 
     participant Editor as Form Editor
-    participant Preview as React SVG Preview
-    participant API as Tauri API Client
+    participant Preview as React Canvas Preview
+    participant Hook as usePreviewCaretSync
+    participant Worker as WASM Compiler Worker
     participant Sync as PreviewSyncState
     participant VFS as VirtualFileSystem
     participant TypstIDE as typst-ide jump APIs
 
-    Editor->>Preview: DocumentFocusState changes
-    Preview->>API: get_preview_positions_for_focus(target, displayed_revision)
-    API->>Sync: Resolve field or element if displayed revision matches retained preview
+    Editor->>Hook: DocumentFocusState changes
+    Hook->>Worker: positions_for_focus(target, displayed_revision)
+    Worker->>Sync: Resolve field or element if displayed revision matches retained preview
     Sync->>Sync: Read retained section Source from preview snapshot
     Sync->>Sync: Build candidate text hit points from field source-map caret ranges
     Sync->>TypstIDE: jump_from_click(IdeWorld, PagedDocument, page.frame, candidate)
@@ -370,9 +373,9 @@ sequenceDiagram
     Sync->>Sync: Keep candidates whose backward sync target matches the focused caret
     Sync->>TypstIDE: jump_from_cursor(PagedDocument, Source, source-map offset) when no caret candidate matches
     TypstIDE-->>Sync: Preview page positions or fallback field positions
-    Sync-->>API: PreviewElementPosition[]
-    API-->>Preview: positions
-    Preview->>Preview: Scroll preview to the sync caret (clamped) and draw non-layout-shifting caret cue
+    Sync-->>Worker: PreviewElementPosition[]
+    Worker-->>Hook: positions
+    Hook->>Preview: schedulePreviewCaretScroll and caret overlay on canvas page
 ```
 
 ### Sync Notes
@@ -389,4 +392,5 @@ sequenceDiagram
 - Project-level template inputs use editor field IDs prefixed with `project-input-` followed by the template input JSON pointer. Backend source-map ranges for those fields are owned by the `inputs` pseudo-element and use the JSON pointer as `field_id`, such as `/title`, `/running_head`, `/authors/0/name`, or `/affiliations/0`. Forward sync converts registered editor IDs to backend source-map IDs before calling preview sync, and backward sync converts backend input focus targets back to registered project input fields before updating `DocumentFocusState`.
 - Template input collection and reference fields may map through related rendered fields when the raw stored value is not itself visible in the compiled document. For example, an author affiliation reference can resolve through the author's rendered name or the referenced affiliation label while keeping the focused field ID tied to the original template input path.
 - Plain text fields can receive UTF-16 caret placement. Generated wrappers, references, inline equations, and rich segments that do not map to raw field text fall back to field-level focus with a safe caret offset.
-- Typst labels remain stable source identifiers, but SVG output is not expected to contain Érgo-specific HTML data attributes.
+- Typst labels remain stable source identifiers. Canvas preview does not embed Érgo-specific attributes in raster output; caret geometry uses Typst points on the page surface.
+- `usePreviewCaretSync` owns editor↔preview focus orchestration (WASM position queries, scroll scheduling, click-to-jump). `Preview` renders pages and delegates sync to that hook.

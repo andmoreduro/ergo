@@ -25,7 +25,8 @@ function CanvasProbe({
         zoom,
         PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS,
         isVisible,
-        [],
+        0,
+        1,
     );
     return <canvas ref={canvasRef} />;
 }

@@ -390,6 +390,26 @@ describe("Preview sync", () => {
         });
     });
 
+    it("does not rasterize pages when previewRevision is null", async () => {
+        render(
+            <DocumentProvider>
+                <Preview
+                    compiler={{
+                        ...createDefaultCompilerState(),
+                        previewRevision: null,
+                    }}
+                    zoom={1}
+                    onZoomChange={() => undefined}
+                    zoomRenderDebounceMs={0}
+                />
+            </DocumentProvider>,
+        );
+
+        await waitFor(() => {
+            expect(compilerClientMock.renderPage).not.toHaveBeenCalled();
+        });
+    });
+
     it("maps project input field ids to backend input source map targets", async () => {
         await renderPreviewAndGetCanvas(<FocusProjectInput fieldId="project-input-/abstract_text" />);
 
