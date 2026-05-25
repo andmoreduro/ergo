@@ -12,12 +12,14 @@ import {
     type RefCallback,
     type SyntheticEvent,
 } from "react";
+import { caretPlainOffsetFromSelection } from "../richText/richText";
 import { useDocument } from "./DocumentContext";
 
 type EditorFieldElement =
     | HTMLInputElement
     | HTMLTextAreaElement
-    | HTMLSelectElement;
+    | HTMLSelectElement
+    | HTMLDivElement;
 
 interface RegisteredEditorField {
     elementId: string;
@@ -162,15 +164,16 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
             node.scrollIntoView?.({ block: "center", behavior: "smooth" });
             node.focus();
 
-            if (
-                typeof documentFocus.caretUtf16Offset === "number" &&
-                isTextSelectionField(node)
-            ) {
-                const caret = Math.max(
-                    0,
-                    Math.min(documentFocus.caretUtf16Offset, node.value.length),
-                );
-                node.setSelectionRange(caret, caret);
+            if (typeof documentFocus.caretUtf16Offset === "number") {
+                if (isTextSelectionField(node)) {
+                    const caret = Math.max(
+                        0,
+                        Math.min(documentFocus.caretUtf16Offset, node.value.length),
+                    );
+                    node.setSelectionRange(caret, caret);
+                } else if (node instanceof HTMLDivElement) {
+                    restoreRichTextCaret(node, documentFocus.caretUtf16Offset);
+                }
             }
         } finally {
             programmaticFocusTimeoutRef.current = window.setTimeout(() => {
@@ -196,7 +199,45 @@ const caretOffsetFromNode = (node: EditorFieldElement): number | null => {
         return node.selectionStart;
     }
 
+    if (node instanceof HTMLDivElement) {
+        const selection = document.getSelection();
+        if (!selection) {
+            return null;
+        }
+        return caretPlainOffsetFromSelection(node, selection);
+    }
+
     return null;
+};
+
+const restoreRichTextCaret = (root: HTMLDivElement, offset: number) => {
+    const selection = document.getSelection();
+    if (!selection) {
+        return;
+    }
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let remaining = offset;
+    let textNode: Text | null = null;
+
+    while ((textNode = walker.nextNode() as Text | null)) {
+        const length = textNode.textContent?.length ?? 0;
+        if (remaining <= length) {
+            const range = document.createRange();
+            range.setStart(textNode, remaining);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            return;
+        }
+        remaining -= length;
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
 };
 
 const isTextSelectionField = (

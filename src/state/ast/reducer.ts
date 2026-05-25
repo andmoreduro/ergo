@@ -129,6 +129,15 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                 },
             };
 
+        case "UPDATE_TEMPLATE_VARIANT":
+            return {
+                ...state,
+                metadata: {
+                    ...state.metadata,
+                    template_variant_id: action.payload.variantId,
+                },
+            };
+
         case "UPDATE_INPUT": {
             const { path, value } = action.payload;
             const pathParts = path.split("/").filter(Boolean);
@@ -299,6 +308,21 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
             });
         }
 
+        case "UPDATE_PARAGRAPH_CONTENT": {
+            const { paragraphId, content } = action.payload;
+
+            return mapContentElements(state, (element) => {
+                if (element.type !== "Paragraph" || element.id !== paragraphId) {
+                    return element;
+                }
+
+                return {
+                    ...element,
+                    content,
+                };
+            });
+        }
+
         case "UPDATE_HEADING": {
             const { headingId, text, level } = action.payload;
 
@@ -311,6 +335,22 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                     ...element,
                     level: level ?? element.level,
                     content: text === undefined ? element.content : text ? [createRichText(text)] : [],
+                };
+            });
+        }
+
+        case "UPDATE_HEADING_CONTENT": {
+            const { headingId, content, level } = action.payload;
+
+            return mapContentElements(state, (element) => {
+                if (element.type !== "Heading" || element.id !== headingId) {
+                    return element;
+                }
+
+                return {
+                    ...element,
+                    level: level ?? element.level,
+                    content,
                 };
             });
         }

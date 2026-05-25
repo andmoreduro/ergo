@@ -6,9 +6,9 @@ import type { DocumentElement } from "../../../bindings/DocumentElement";
 vi.mock("../../../api/tauri", () => ({
     TauriApi: {
         getTemplateSpec: vi.fn().mockResolvedValue({
-            id: "versatile-apa",
-            name: "Versatile APA",
-            version: "0.1.0",
+            template: { id: "versatile-apa", name: "Versatile APA", version: "0.1.0" },
+            package: { name: "@preview/versatile-apa", version: "7.2.0" },
+            variants: [],
             inputs: [],
             groups: [],
             sections: [],

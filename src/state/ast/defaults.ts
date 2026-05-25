@@ -96,6 +96,7 @@ export const createDefaultDocumentAST = (): DocumentAST => ({
     version: "1.0",
     metadata: {
         template_id: "versatile-apa",
+        template_variant_id: "student",
         title: "Untitled Document",
         running_head: null,
         keywords: [],
@@ -123,6 +124,7 @@ export const createDefaultDocumentAST = (): DocumentAST => ({
             autosave_on_window_blur: true,
             autosave_on_app_close: true,
             autosave_on_project_close: true,
+            preview_zoom_render_debounce_ms: 120,
         },
     },
     dependencies: {
@@ -145,7 +147,7 @@ export const createDefaultDocumentAST = (): DocumentAST => ({
         due_date: "",
         instructor: "",
         author_note: "",
-        keywords: []
+        keywords: [],
     },
     sections: [
         {

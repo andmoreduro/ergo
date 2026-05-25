@@ -11,6 +11,7 @@ import type { TemplateSpec } from "../bindings/TemplateSpec";
 
 type TemplateSpecContextValue = {
     templateId: string;
+    variantId: string | null;
     spec: TemplateSpec | null;
 };
 
@@ -20,9 +21,11 @@ const TemplateSpecContext = createContext<TemplateSpecContextValue | undefined>(
 
 export const TemplateSpecProvider = ({
     templateId,
+    variantId,
     children,
 }: {
     templateId: string;
+    variantId?: string | null;
     children: ReactNode;
 }) => {
     const [spec, setSpec] = useState<TemplateSpec | null>(null);
@@ -30,7 +33,7 @@ export const TemplateSpecProvider = ({
     useEffect(() => {
         let cancelled = false;
         setSpec(null);
-        void TauriApi.getTemplateSpec(templateId).then((loaded) => {
+        void TauriApi.getTemplateSpec(templateId, variantId).then((loaded) => {
             if (!cancelled) {
                 setSpec(loaded);
             }
@@ -38,14 +41,15 @@ export const TemplateSpecProvider = ({
         return () => {
             cancelled = true;
         };
-    }, [templateId]);
+    }, [templateId, variantId]);
 
     const value = useMemo(
         () => ({
             templateId,
+            variantId: variantId ?? null,
             spec,
         }),
-        [templateId, spec],
+        [templateId, variantId, spec],
     );
 
     return (

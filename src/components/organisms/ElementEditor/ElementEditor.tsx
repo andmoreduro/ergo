@@ -24,6 +24,7 @@ import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { Button } from "../../atoms/Button/Button";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { Select } from "../../atoms/Select/Select";
+import { RichTextField } from "../../molecules/RichTextField/RichTextField";
 import { Textarea } from "../../atoms/Textarea/Textarea";
 import { TextInput } from "../../atoms/TextInput/TextInput";
 import { m } from "../../../paraglide/messages.js";
@@ -39,10 +40,6 @@ type EquationElement = Extract<DocumentElement, { type: "Equation" }>;
 type TableElement = Extract<DocumentElement, { type: "Table" }>;
 type FigureElement = Extract<DocumentElement, { type: "Figure" }>;
 type CustomElementUnion = Extract<DocumentElement, { type: "Custom" }>;
-type RichTextElement = HeadingElement | ParagraphElement;
-
-const richTextToString = (element: RichTextElement) =>
-    element.content.map((richText) => richText.text).join("");
 
 const headingLevels = Array.from({ length: 5 }, (_, index) => {
     const level = String(index + 1);
@@ -269,7 +266,7 @@ const CustomElementEditor = ({ element }: { element: CustomElementUnion }) => {
 
 const HeadingEditor = ({ element }: { element: HeadingElement }) => {
     const { dispatch } = useDocumentAst();
-    const textField = useEditorFieldBinding<HTMLTextAreaElement>({
+    const textField = useEditorFieldBinding<HTMLDivElement>({
         elementId: element.id,
         fieldId: richTextFieldId(element.id),
     });
@@ -291,16 +288,15 @@ const HeadingEditor = ({ element }: { element: HeadingElement }) => {
                     })
                 }
             />
-            <Textarea
-                {...textField}
-                fullWidth
-                value={richTextToString(element)}
-                onChange={(event) =>
+            <RichTextField
+                content={element.content}
+                fieldBinding={textField}
+                onChange={(content) =>
                     dispatch({
-                        type: "UPDATE_HEADING",
+                        type: "UPDATE_HEADING_CONTENT",
                         payload: {
                             headingId: element.id,
-                            text: event.target.value,
+                            content,
                         },
                     })
                 }
@@ -311,22 +307,21 @@ const HeadingEditor = ({ element }: { element: HeadingElement }) => {
 
 const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
     const { dispatch } = useDocumentAst();
-    const textField = useEditorFieldBinding<HTMLTextAreaElement>({
+    const textField = useEditorFieldBinding<HTMLDivElement>({
         elementId: element.id,
         fieldId: richTextFieldId(element.id),
     });
 
     return (
-        <Textarea
-            {...textField}
-            fullWidth
-            value={richTextToString(element)}
-            onChange={(event) =>
+        <RichTextField
+            content={element.content}
+            fieldBinding={textField}
+            onChange={(content) =>
                 dispatch({
-                    type: "UPDATE_PARAGRAPH_TEXT",
+                    type: "UPDATE_PARAGRAPH_CONTENT",
                     payload: {
                         paragraphId: element.id,
-                        text: event.target.value,
+                        content,
                     },
                 })
             }
@@ -601,9 +596,9 @@ const FigureEditor = ({ element }: { element: FigureElement }) => {
         });
     };
 
-    const bodyText =
-        element.content.type === "Paragraph" ? richTextToString(element.content) : "";
-    const bodyField = useEditorFieldBinding<HTMLTextAreaElement>({
+    const bodyContent =
+        element.content.type === "Paragraph" ? element.content.content : [];
+    const bodyField = useEditorFieldBinding<HTMLDivElement>({
         elementId: element.id,
         fieldId: figureBodyFieldId(element.id),
     });
@@ -633,21 +628,22 @@ const FigureEditor = ({ element }: { element: FigureElement }) => {
                     <span className={styles.figureAssetPath}>{linkedAsset.path}</span>
                 )}
             </div>
-            <Textarea
-                {...bodyField}
-                fullWidth
-                label={m.editor_figure_body()}
-                value={bodyText}
-                onChange={(event) =>
-                    dispatch({
-                        type: "UPDATE_FIGURE",
-                        payload: {
-                            figureId: element.id,
-                            bodyText: event.target.value,
-                        },
-                    })
-                }
-            />
+            {element.content.type === "Paragraph" && (
+                <RichTextField
+                    label={m.editor_figure_body()}
+                    content={bodyContent}
+                    fieldBinding={bodyField}
+                    onChange={(content) =>
+                        dispatch({
+                            type: "UPDATE_PARAGRAPH_CONTENT",
+                            payload: {
+                                paragraphId: element.content.id,
+                                content,
+                            },
+                        })
+                    }
+                />
+            )}
             <TextInput
                 {...captionField}
                 fullWidth

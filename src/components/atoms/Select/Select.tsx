@@ -1,4 +1,5 @@
 import { SelectHTMLAttributes, forwardRef, useId, memo } from 'react';
+import { FieldLabel, type FieldImportance } from '../FieldLabel/FieldLabel';
 import styles from './Select.module.css';
 
 export interface SelectOption {
@@ -11,6 +12,7 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
    * Optional label for the select
    */
   label?: string;
+  importance?: FieldImportance;
   /**
    * Optional error message to display below the select
    */
@@ -30,6 +32,7 @@ export const Select = memo(forwardRef<HTMLSelectElement, SelectProps>(
   (
     {
       label,
+      importance,
       error,
       fullWidth = false,
       options,
@@ -62,9 +65,9 @@ export const Select = memo(forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className={containerClassNames}>
         {label && (
-          <label htmlFor={selectId} className={styles.label}>
+          <FieldLabel htmlFor={selectId} importance={importance}>
             {label}
-          </label>
+          </FieldLabel>
         )}
         <div className={styles.selectWrapper}>
           <select

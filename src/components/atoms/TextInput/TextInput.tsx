@@ -1,4 +1,5 @@
 import { InputHTMLAttributes, forwardRef, useId, memo } from 'react';
+import { FieldLabel, type FieldImportance } from '../FieldLabel/FieldLabel';
 import styles from './TextInput.module.css';
 
 export interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -6,6 +7,10 @@ export interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
    * Optional label for the input
    */
   label?: string;
+  /**
+   * Required, recommended, or optional — shown as a colored asterisk with tooltip.
+   */
+  importance?: FieldImportance;
   /**
    * Optional error message to display below the input
    */
@@ -21,6 +26,7 @@ export const TextInput = memo(forwardRef<HTMLInputElement, TextInputProps>(
   (
     {
       label,
+      importance,
       error,
       fullWidth = false,
       className = '',
@@ -52,9 +58,9 @@ export const TextInput = memo(forwardRef<HTMLInputElement, TextInputProps>(
     return (
       <div className={containerClassNames}>
         {label && (
-          <label htmlFor={inputId} className={styles.label}>
+          <FieldLabel htmlFor={inputId} importance={importance}>
             {label}
-          </label>
+          </FieldLabel>
         )}
         <input
           ref={ref}

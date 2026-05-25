@@ -1,0 +1,19 @@
+.label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-primary);
+    cursor: default;
+}
+
+.requiredMarker {
+    color: var(--color-danger);
+    font-weight: var(--font-weight-bold);
+}
+
+.recommendedMarker {
+    color: var(--color-warning);
+    font-weight: var(--font-weight-bold);
+}

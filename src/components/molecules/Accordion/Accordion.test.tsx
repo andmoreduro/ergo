@@ -65,7 +65,8 @@ describe('Accordion Component', () => {
     );
 
     expect(css).not.toMatch(/\.container\s*\{[^}]*overflow:\s*hidden/s);
-    expect(css).toMatch(/\.header\s*\{[^}]*border-radius:/s);
-    expect(css).toMatch(/\.content\s*\{[^}]*border-radius:/s);
+    expect(css).not.toMatch(/\.container\s*\{[^}]*border-radius:/s);
+    expect(css).toMatch(/\.header\s*\{[^}]*min-height:\s*34px/s);
+    expect(css).toMatch(/\.header\s*\{[^}]*padding:\s*0 var\(--space-3\)/s);
   });
 });

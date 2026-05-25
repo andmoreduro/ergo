@@ -80,6 +80,30 @@ describe("DocumentProvider session state", () => {
         });
     });
 
+    it("keeps document title metadata and input title in sync across undo and redo", () => {
+        const { result } = renderDocument();
+
+        act(() => {
+            result.current.dispatch({
+                type: "UPDATE_INPUT",
+                payload: { path: "/title", value: "Input Title" },
+            });
+        });
+
+        expect(result.current.state.inputs.title).toBe("Input Title");
+        expect(result.current.state.metadata.title).toBe("Input Title");
+
+        act(() => result.current.undo());
+
+        expect(result.current.state.inputs.title).toBe("Untitled Document");
+        expect(result.current.state.metadata.title).toBe("Untitled Document");
+
+        act(() => result.current.redo());
+
+        expect(result.current.state.inputs.title).toBe("Input Title");
+        expect(result.current.state.metadata.title).toBe("Input Title");
+    });
+
     it("respects the configured history limit", () => {
         const { result } = renderDocument(1);
 

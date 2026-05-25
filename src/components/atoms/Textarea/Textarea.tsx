@@ -1,4 +1,5 @@
 import { TextareaHTMLAttributes, forwardRef, useId, memo, useEffect, useRef } from 'react';
+import { FieldLabel, type FieldImportance } from '../FieldLabel/FieldLabel';
 import styles from './Textarea.module.css';
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -6,6 +7,7 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
    * Optional label for the textarea
    */
   label?: string;
+  importance?: FieldImportance;
   /**
    * Optional error message to display below the textarea
    */
@@ -21,6 +23,7 @@ export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
   (
     {
       label,
+      importance,
       error,
       fullWidth = false,
       className = '',
@@ -75,9 +78,9 @@ export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <div className={containerClassNames}>
         {label && (
-          <label htmlFor={textareaId} className={styles.label}>
+          <FieldLabel htmlFor={textareaId} importance={importance}>
             {label}
-          </label>
+          </FieldLabel>
         )}
         <textarea
           ref={setRef}
