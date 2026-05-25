@@ -1,14 +1,35 @@
 import type { DocumentAST } from "../bindings/DocumentAST";
-import type { DocumentElement } from "../bindings/DocumentElement";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
-import type { AssetEntry } from "../bindings/AssetEntry";
-import type { ReferenceEntry } from "../bindings/ReferenceEntry";
-import type { Table } from "../bindings/Table";
-import type { TableCell } from "../bindings/TableCell";
 import type { ASTAction } from "./ast/actions";
-import { createRichText } from "./ast/defaults";
-
-type TableElement = Extract<DocumentElement, { type: "Table" }>;
+import {
+    assertNever,
+    assetById,
+    assetLocation,
+    cloneValue,
+    columnSize,
+    elementById,
+    elementIdOf,
+    elementLocation,
+    equationElement,
+    figureElement,
+    getValueAtPath,
+    headingElement,
+    insertAt,
+    insertElementEvent,
+    mapContentElements,
+    mapSections,
+    mapTable,
+    paragraphElement,
+    referenceById,
+    referenceLocation,
+    richTextFromString,
+    richTextPlainText,
+    setValueAtPath,
+    tableCell,
+    tableColumn,
+    tableElement,
+    tableRow,
+} from "./documentEvents/helpers";
 
 export interface DocumentEventHistoryEntry {
     forwardEvent: DocumentEvent;
@@ -49,11 +70,36 @@ export const applyDocumentEventToAst = (
                 },
             };
 
-        case "updateInput": {
-            const pathParts = event.path.split("/").filter(Boolean);
+        case "setTemplateVariant":
             return {
                 ...ast,
-                inputs: setValueAtPath(ast.inputs, pathParts, event.value),
+                metadata: {
+                    ...ast.metadata,
+                    template_variant_id: event.variant_id,
+                },
+            };
+
+        case "updateInput": {
+            const pathParts = event.path.split("/").filter(Boolean);
+            const nextInputs = setValueAtPath<DocumentAST["inputs"]>(
+                ast.inputs,
+                pathParts,
+                event.value,
+            );
+            const nextMetadata =
+                event.path === "/title" || event.path === "title"
+                    ? {
+                          ...ast.metadata,
+                          title:
+                              typeof event.value === "string"
+                                  ? event.value
+                                  : ast.metadata.title,
+                      }
+                    : ast.metadata;
+            return {
+                ...ast,
+                inputs: nextInputs,
+                metadata: nextMetadata,
             };
         }
 
@@ -132,6 +178,13 @@ export const applyDocumentEventToAst = (
                     : element,
             );
 
+        case "updateParagraphContent":
+            return mapContentElements(ast, event.element_id, (element) =>
+                element.type === "Paragraph"
+                    ? { ...element, content: cloneValue(event.content) }
+                    : element,
+            );
+
         case "updateHeading":
             return mapContentElements(ast, event.element_id, (element) =>
                 element.type === "Heading"
@@ -142,6 +195,17 @@ export const applyDocumentEventToAst = (
                               event.text === null
                                   ? element.content
                                   : richTextFromString(event.text),
+                      }
+                    : element,
+            );
+
+        case "updateHeadingContent":
+            return mapContentElements(ast, event.element_id, (element) =>
+                element.type === "Heading"
+                    ? {
+                          ...element,
+                          level: event.level ?? element.level,
+                          content: cloneValue(event.content),
                       }
                     : element,
             );
@@ -317,7 +381,6 @@ export const applyDocumentEventToAst = (
             return assertNever(event);
     }
 };
-
 const documentEventFromAction = (
     previousAst: DocumentAST,
     action: ASTAction,
@@ -334,6 +397,12 @@ const documentEventFromAction = (
             return {
                 type: "setProjectSettings",
                 settings: action.payload.settings,
+            };
+
+        case "UPDATE_TEMPLATE_VARIANT":
+            return {
+                type: "setTemplateVariant",
+                variant_id: action.payload.variantId,
             };
 
         case "UPDATE_INPUT":
@@ -388,11 +457,26 @@ const documentEventFromAction = (
                 text: action.payload.text,
             };
 
+        case "UPDATE_PARAGRAPH_CONTENT":
+            return {
+                type: "updateParagraphContent",
+                element_id: action.payload.paragraphId,
+                content: action.payload.content,
+            };
+
         case "UPDATE_HEADING":
             return {
                 type: "updateHeading",
                 element_id: action.payload.headingId,
                 text: action.payload.text ?? null,
+                level: action.payload.level ?? null,
+            };
+
+        case "UPDATE_HEADING_CONTENT":
+            return {
+                type: "updateHeadingContent",
+                element_id: action.payload.headingId,
+                content: action.payload.content,
                 level: action.payload.level ?? null,
             };
 
@@ -549,6 +633,12 @@ const inverseDocumentEventFromAction = (
                 settings: previousAst.metadata.project_settings,
             };
 
+        case "UPDATE_TEMPLATE_VARIANT":
+            return {
+                type: "setTemplateVariant",
+                variant_id: previousAst.metadata.template_variant_id ?? "student",
+            };
+
         case "UPDATE_INPUT": {
             const pathParts = action.payload.path.split("/").filter(Boolean);
             const prevValue = getValueAtPath(previousAst.inputs, pathParts) ?? null;
@@ -616,12 +706,31 @@ const inverseDocumentEventFromAction = (
             };
         }
 
+        case "UPDATE_PARAGRAPH_CONTENT": {
+            const paragraph = paragraphElement(previousAst, action.payload.paragraphId);
+            return {
+                type: "updateParagraphContent",
+                element_id: action.payload.paragraphId,
+                content: cloneValue(paragraph.content),
+            };
+        }
+
         case "UPDATE_HEADING": {
             const heading = headingElement(previousAst, action.payload.headingId);
             return {
                 type: "updateHeading",
                 element_id: action.payload.headingId,
                 text: action.payload.text === undefined ? null : richTextPlainText(heading.content),
+                level: action.payload.level === undefined ? null : heading.level,
+            };
+        }
+
+        case "UPDATE_HEADING_CONTENT": {
+            const heading = headingElement(previousAst, action.payload.headingId);
+            return {
+                type: "updateHeadingContent",
+                element_id: action.payload.headingId,
+                content: cloneValue(heading.content),
                 level: action.payload.level === undefined ? null : heading.level,
             };
         }
@@ -784,295 +893,4 @@ const inverseDocumentEventFromAction = (
         default:
             return assertNever(action);
     }
-};
-
-const insertElementEvent = (
-    ast: DocumentAST,
-    sectionId: string,
-    elementId: string,
-): DocumentEvent => {
-    const section = contentSection(ast, sectionId);
-    const index = section.elements.findIndex(
-        (element) => elementIdOf(element) === elementId,
-    );
-    if (index === -1) {
-        throw new Error(`Element ${elementId} was not found in section ${sectionId}`);
-    }
-
-    return {
-        type: "insertElement",
-        section_id: sectionId,
-        index,
-        element: section.elements[index],
-    };
-};
-
-const mapSections = (
-    ast: DocumentAST,
-    mapper: (section: DocumentAST["sections"][number]) => DocumentAST["sections"][number],
-): DocumentAST => ({
-    ...ast,
-    sections: ast.sections.map(mapper),
-});
-
-const mapContentElements = (
-    ast: DocumentAST,
-    elementId: string,
-    mapper: (element: DocumentElement) => DocumentElement,
-): DocumentAST =>
-    mapSections(ast, (section) => {
-        if (section.type !== "Content") {
-            return section;
-        }
-
-        return {
-            ...section,
-            elements: section.elements.map((element) =>
-                elementIdOf(element) === elementId ? mapper(element) : element,
-            ),
-        };
-    });
-
-const mapTable = (
-    ast: DocumentAST,
-    tableId: string,
-    mapper: (table: TableElement) => TableElement,
-): DocumentAST =>
-    mapContentElements(ast, tableId, (element) =>
-        element.type === "Table" ? mapper(element) : element,
-    );
-
-const richTextFromString = (text: string) => (text ? [createRichText(text)] : []);
-
-const insertAt = <T,>(values: T[], index: number, value: T): T[] => [
-    ...values.slice(0, index),
-    value,
-    ...values.slice(index),
-];
-
-const cloneValue = <T,>(value: T): T => structuredClone(value);
-
-const setValueAtPath = (obj: any, pathParts: string[], value: any): any => {
-    if (pathParts.length === 0) {
-        return value;
-    }
-
-    const [current, ...rest] = pathParts;
-
-    if (Array.isArray(obj)) {
-        const index = parseInt(current, 10);
-        if (isNaN(index)) {
-            throw new Error(`Invalid array index in path: ${current}`);
-        }
-        const nextArray = [...obj];
-        while (nextArray.length <= index) {
-            nextArray.push(null);
-        }
-        nextArray[index] = setValueAtPath(nextArray[index], rest, value);
-        return nextArray;
-    } else {
-        const nextObj = { ...obj };
-        nextObj[current] = setValueAtPath(nextObj[current], rest, value);
-        return nextObj;
-    }
-};
-
-const getValueAtPath = (obj: any, pathParts: string[]): any => {
-    let current = obj;
-    for (const part of pathParts) {
-        if (current === undefined || current === null) {
-            return undefined;
-        }
-        if (Array.isArray(current)) {
-            const index = parseInt(part, 10);
-            current = current[index];
-        } else {
-            current = current[part];
-        }
-    }
-    return current;
-};
-
-const contentSection = (ast: DocumentAST, sectionId: string) => {
-    const section = ast.sections.find(
-        (entry) => entry.type === "Content" && entry.id === sectionId,
-    );
-    if (!section || section.type !== "Content") {
-        throw new Error(`Content section ${sectionId} was not found`);
-    }
-
-    return section;
-};
-
-const elementLocation = (ast: DocumentAST, elementId: string) => {
-    for (const section of ast.sections) {
-        if (section.type !== "Content") {
-            continue;
-        }
-
-        const index = section.elements.findIndex(
-            (element) => elementIdOf(element) === elementId,
-        );
-        if (index !== -1) {
-            return {
-                section,
-                index,
-                element: section.elements[index],
-            };
-        }
-    }
-
-    throw new Error(`Element ${elementId} was not found`);
-};
-
-const elementById = (ast: DocumentAST, elementId: string): DocumentElement =>
-    elementLocation(ast, elementId).element;
-
-const paragraphElement = (ast: DocumentAST, elementId: string) => {
-    const element = elementById(ast, elementId);
-    if (element.type !== "Paragraph") {
-        throw new Error(`Element ${elementId} is not a paragraph`);
-    }
-
-    return element;
-};
-
-const headingElement = (ast: DocumentAST, elementId: string) => {
-    const element = elementById(ast, elementId);
-    if (element.type !== "Heading") {
-        throw new Error(`Element ${elementId} is not a heading`);
-    }
-
-    return element;
-};
-
-const equationElement = (ast: DocumentAST, elementId: string) => {
-    const element = elementById(ast, elementId);
-    if (element.type !== "Equation") {
-        throw new Error(`Element ${elementId} is not an equation`);
-    }
-
-    return element;
-};
-
-const tableElement = (ast: DocumentAST, elementId: string): Table => {
-    const element = elementById(ast, elementId);
-    if (element.type !== "Table") {
-        throw new Error(`Element ${elementId} is not a table`);
-    }
-
-    return element;
-};
-
-const figureElement = (ast: DocumentAST, elementId: string) => {
-    const element = elementById(ast, elementId);
-    if (element.type !== "Figure") {
-        throw new Error(`Element ${elementId} is not a figure`);
-    }
-
-    return element;
-};
-
-const referenceLocation = (ast: DocumentAST, referenceId: string): {
-    index: number;
-    reference: ReferenceEntry;
-} => {
-    const index = ast.references.findIndex((reference) => reference.id === referenceId);
-    if (index === -1) {
-        throw new Error(`Reference ${referenceId} was not found`);
-    }
-
-    return {
-        index,
-        reference: ast.references[index],
-    };
-};
-
-const referenceById = (ast: DocumentAST, referenceId: string): ReferenceEntry =>
-    referenceLocation(ast, referenceId).reference;
-
-const assetLocation = (ast: DocumentAST, assetId: string): {
-    index: number;
-    asset: AssetEntry;
-} => {
-    const index = ast.assets.findIndex((asset) => asset.id === assetId);
-    if (index === -1) {
-        throw new Error(`Asset ${assetId} was not found`);
-    }
-
-    return {
-        index,
-        asset: ast.assets[index],
-    };
-};
-
-const assetById = (ast: DocumentAST, assetId: string): AssetEntry =>
-    assetLocation(ast, assetId).asset;
-
-
-
-const tableRow = (table: Table, rowIndex: number): TableCell[] => {
-    const row = table.cells[rowIndex];
-    if (!row) {
-        throw new Error(`Table row ${rowIndex} was not found in ${table.id}`);
-    }
-
-    return row;
-};
-
-const tableColumn = (table: Table, colIndex: number): TableCell[] => {
-    if (colIndex < 0 || colIndex >= table.column_sizes.length) {
-        throw new Error(`Table column ${colIndex} was not found in ${table.id}`);
-    }
-
-    return table.cells.map((row) => {
-        const cell = row[colIndex];
-        if (!cell) {
-            throw new Error(`Table column ${colIndex} was not found in ${table.id}`);
-        }
-
-        return cell;
-    });
-};
-
-const tableCell = (table: Table, rowIndex: number, colIndex: number): TableCell => {
-    const cell = table.cells[rowIndex]?.[colIndex];
-    if (!cell) {
-        throw new Error(
-            `Table cell ${rowIndex},${colIndex} was not found in ${table.id}`,
-        );
-    }
-
-    return cell;
-};
-
-const columnSize = (table: Table, colIndex: number): string => {
-    const size = table.column_sizes[colIndex];
-    if (size === undefined) {
-        throw new Error(`Table column ${colIndex} was not found in ${table.id}`);
-    }
-
-    return size;
-};
-
-const richTextPlainText = (
-    content: Array<{ text: string }>,
-): string => content.map((entry) => entry.text).join("");
-
-const elementIdOf = (element: DocumentElement): string => {
-    switch (element.type) {
-        case "Heading":
-        case "Paragraph":
-        case "Table":
-        case "Equation":
-        case "Figure":
-        case "Custom":
-            return element.id;
-        default:
-            return assertNever(element);
-    }
-};
-
-const assertNever = (value: never): never => {
-    throw new Error(`Unhandled document action: ${JSON.stringify(value)}`);
 };

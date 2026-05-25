@@ -26,6 +26,13 @@ export type UpdateProjectSettingsAction = {
   };
 };
 
+export type UpdateTemplateVariantAction = {
+  type: 'UPDATE_TEMPLATE_VARIANT';
+  payload: {
+    variantId: string;
+  };
+};
+
 export type UpdateInputAction = {
   type: 'UPDATE_INPUT';
   payload: {
@@ -114,11 +121,28 @@ export type UpdateParagraphTextAction = {
   };
 };
 
+export type UpdateParagraphContentAction = {
+  type: 'UPDATE_PARAGRAPH_CONTENT';
+  payload: {
+    paragraphId: string;
+    content: import('../../bindings/RichText').RichText[];
+  };
+};
+
 export type UpdateHeadingAction = {
   type: 'UPDATE_HEADING';
   payload: {
     headingId: string;
     text?: string;
+    level?: number;
+  };
+};
+
+export type UpdateHeadingContentAction = {
+  type: 'UPDATE_HEADING_CONTENT';
+  payload: {
+    headingId: string;
+    content: import('../../bindings/RichText').RichText[];
     level?: number;
   };
 };
@@ -254,6 +278,7 @@ export type ASTAction =
   | LoadDocumentAction
   | UpdateProjectTitleAction
   | UpdateProjectSettingsAction
+  | UpdateTemplateVariantAction
   | UpdateInputAction
   | InsertInputArrayItemAction
   | RemoveInputArrayItemAction
@@ -264,7 +289,9 @@ export type ASTAction =
   | AddEquationAction
   | AddFigureAction
   | UpdateParagraphTextAction
+  | UpdateParagraphContentAction
   | UpdateHeadingAction
+  | UpdateHeadingContentAction
   | UpdateEquationAction
   | UpdateTableCellAction
   | AddTableRowAction

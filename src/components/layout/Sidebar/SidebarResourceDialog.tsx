@@ -13,6 +13,7 @@ export const SidebarResourceDialog = ({
             aria-labelledby="resource-dialog-title"
             aria-modal="true"
             className={styles.resourceDialog}
+            data-scroll-region
             role="dialog"
         >
             <header className={styles.dialogHeader}>

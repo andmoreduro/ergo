@@ -222,10 +222,14 @@ const createSessionReducer =
             action.action,
             nextAST,
         );
+        const eventAppliedAst = applyDocumentEventToAst(
+            state.ast,
+            historyEntry.forwardEvent,
+        );
 
         return {
             ...state,
-            ast: nextAST,
+            ast: eventAppliedAst,
             past: [...state.past, historyEntry].slice(-historyLimit),
             future: [],
             events: [

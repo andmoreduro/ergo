@@ -21,6 +21,7 @@ vi.mock("../../../api/tauri", () => ({
 tauriApiMock.getTemplateSpec.mockResolvedValue({
     template: { id: "versatile-apa", name: "APA 7th Edition", version: "1.0.0" },
     package: { name: "@preview/versatile-apa", version: "7.2.0" },
+    variants: [],
     inputs: [
         { id: "title", type: "string", label: "Title", importance: "required" },
         {
@@ -37,7 +38,7 @@ tauriApiMock.getTemplateSpec.mockResolvedValue({
                         type: "array",
                         label: "Affiliations",
                         importance: "optional",
-                        items: { type: "string" },
+                        items: { type: "reference", target: "affiliations" },
                     },
                 ],
             },
@@ -105,6 +106,88 @@ describe("Editor template input fields", () => {
         })).toHaveAttribute(
             "data-editor-field-id",
             "project-input-/authors/0/affiliations/0",
+        );
+    });
+
+    it("renders reference arrays from schema target metadata without template-specific paths", async () => {
+        tauriApiMock.getTemplateSpec.mockResolvedValueOnce({
+            template: { id: "generic", name: "Generic", version: "1.0.0" },
+            package: { name: "@preview/generic", version: "1.0.0" },
+            variants: [],
+            inputs: [
+                {
+                    id: "institutions",
+                    type: "array",
+                    label: "Institutions",
+                    importance: "recommended",
+                    items: { type: "string", label: "Institution Name" },
+                },
+                {
+                    id: "reviewers",
+                    type: "array",
+                    label: "Reviewers",
+                    importance: "required",
+                    items: {
+                        type: "object",
+                        properties: [
+                            {
+                                id: "name",
+                                type: "string",
+                                label: "Name",
+                                importance: "required",
+                            },
+                            {
+                                id: "institutions",
+                                type: "array",
+                                label: "Institutions",
+                                importance: "optional",
+                                items: {
+                                    type: "reference",
+                                    target: "institutions",
+                                },
+                            },
+                        ],
+                    },
+                },
+            ],
+            groups: [
+                {
+                    id: "review",
+                    label: "Review",
+                    inputs: ["reviewers", "institutions"],
+                },
+            ],
+            sections: [{ id: "body", kind: "content" }],
+            custom_elements: [],
+        });
+        const ast = createDefaultDocumentAST();
+        ast.inputs = {
+            ...ast.inputs,
+            institutions: ["Lab One"],
+            reviewers: [
+                {
+                    name: "Grace Hopper",
+                    institutions: ["1"],
+                },
+            ],
+        };
+
+        render(
+            <DocumentProvider>
+                <TemplateSpecProvider templateId="generic">
+                    <EditorFieldRegistryProvider>
+                        <LoadDocument ast={ast} />
+                        <Editor />
+                    </EditorFieldRegistryProvider>
+                </TemplateSpecProvider>
+            </DocumentProvider>,
+        );
+
+        expect(await screen.findByRole("checkbox", {
+            name: "Lab One",
+        })).toHaveAttribute(
+            "data-editor-field-id",
+            "project-input-/reviewers/0/institutions/0",
         );
     });
 });

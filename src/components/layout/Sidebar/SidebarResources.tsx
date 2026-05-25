@@ -90,12 +90,12 @@ const ResourcePreviewCanvas = ({
                 pixelPerPt,
                 requestId,
             ),
-        fitWidthPx,
         1,
         zoomRenderDebounceMs,
         true,
         pageNumber,
         revision,
+        { fitWidthPx },
     );
 
     return (
@@ -209,8 +209,8 @@ export const SidebarResourcesPanel = memo(({
         void dispatchAction({
             id: "resources::InsertReference",
             payload: {
-                resourceId: entry.id,
-                referenceToken: entry.reference_token,
+                referenceId: entry.id,
+                label: entry.label,
             },
         });
     };

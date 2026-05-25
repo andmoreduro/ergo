@@ -49,7 +49,6 @@ export const editorCommands = (deps: EditorCommandDeps): Command[] => [
         id: "editor::InsertReference",
         label: m.menubar_insert_reference(),
         scope: "editor",
-        isEnabled: () => false,
         run: () => undefined,
     },
 ];

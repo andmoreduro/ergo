@@ -237,6 +237,14 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         });
     });
 
+    it("handles UPDATE_INPUT title metadata round-trip", () => {
+        const ast = createDefaultDocumentAST();
+        verifyRoundTrip(ast, {
+            type: "UPDATE_INPUT",
+            payload: { path: "/title", value: "Title from input" },
+        });
+    });
+
     it("handles INSERT_INPUT_ARRAY_ITEM round-trip", () => {
         const ast = createDefaultDocumentAST();
         verifyRoundTrip(ast, {

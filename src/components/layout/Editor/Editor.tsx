@@ -1,26 +1,37 @@
-import { useMemo } from "react";
-import { useDocumentAst } from "../../../state/DocumentContext";
+import { useCallback, useMemo, useState } from "react";
+import type { DocumentResources } from "../../../bindings/DocumentResources";
+import { useDocument, useDocumentAst } from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import type { DocumentSection } from "../../../bindings/DocumentSection";
 import {
     ActionContextProvider,
     useActionDispatcher,
+    type ActionHandlerMap,
 } from "../../../actions/runtime";
+import {
+    buildReferenceInsertAction,
+    parseReferenceInsertPayload,
+} from "../../../editor/insertReference";
+import { InsertReferenceDialog } from "../../organisms/InsertReferenceDialog/InsertReferenceDialog";
+import type { TargetedOutlineEntry } from "../Sidebar/SidebarOutline";
 import { ElementEditor } from "../../organisms/ElementEditor/ElementEditor";
 import { Button } from "../../atoms/Button/Button";
+import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
 import { Textarea } from "../../atoms/Textarea/Textarea";
 import { m } from "../../../paraglide/messages.js";
+import toolbarStyles from "../PanelToolbar.module.css";
 import styles from "./Editor.module.css";
 import type { InputSchema } from "../../../bindings/InputSchema";
 import { projectInputFieldId } from "../../../editor/fieldIds";
 import {
     TextHeader124Regular,
-    TextParagraph24Regular,
     Table24Regular,
     MathFormula24Regular,
     Image24Regular,
+    Link24Regular,
 } from "@fluentui/react-icons";
+import { TextParagraph24Regular } from "../../icons/TextParagraph24Regular";
 import { Accordion } from "../../molecules/Accordion/Accordion";
 
 type ContentSection = Extract<DocumentSection, { type: "Content" }>;
@@ -42,11 +53,76 @@ const getValueAtPath = (obj: any, path: string): any => {
     return current;
 };
 
-export const Editor = () => {
-    const { state } = useDocumentAst();
-    const dispatchAction = useActionDispatcher();
+export interface EditorProps {
+    resources: DocumentResources | null;
+    outlineEntries: TargetedOutlineEntry[];
+}
 
-    const { spec: templateSpec } = useTemplateSpecContext();
+export const Editor = ({ resources, outlineEntries }: EditorProps) => {
+    const { state, dispatch: dispatchAst } = useDocumentAst();
+    const { documentFocus, dispatch } = useDocument();
+    const dispatchAction = useActionDispatcher();
+    const [referenceDialogOpen, setReferenceDialogOpen] = useState(false);
+
+    const applyReferenceInsert = useCallback(
+        (pick: { referenceId: string; label: string }) => {
+            const selection =
+                documentFocus.elementId && documentFocus.fieldId
+                    ? {
+                          elementId: documentFocus.elementId,
+                          fieldId: documentFocus.fieldId,
+                      }
+                    : null;
+            if (!selection) {
+                return;
+            }
+
+            const action = buildReferenceInsertAction(
+                state,
+                selection,
+                pick,
+                documentFocus.caretUtf16Offset,
+            );
+            if (action) {
+                dispatch(action);
+            }
+            setReferenceDialogOpen(false);
+        },
+        [
+            dispatch,
+            documentFocus.caretUtf16Offset,
+            documentFocus.elementId,
+            documentFocus.fieldId,
+            state,
+        ],
+    );
+
+    const editorHandlers = useMemo<ActionHandlerMap>(
+        () => ({
+            "editor::InsertReference": () => {
+                setReferenceDialogOpen(true);
+                return true;
+            },
+            "resources::InsertReference": (invocation) => {
+                const target = parseReferenceInsertPayload(invocation.payload);
+                if (!target) {
+                    return false;
+                }
+                applyReferenceInsert(target);
+                return true;
+            },
+        }),
+        [applyReferenceInsert],
+    );
+
+    const { spec: templateSpec, variantId: activeVariantId } = useTemplateSpecContext();
+    const templateVariants = templateSpec?.variants ?? [];
+    const resolvedVariantId =
+        state.metadata.template_variant_id ??
+        activeVariantId ??
+        templateVariants.find((variant) => variant.default)?.id ??
+        templateVariants[0]?.id ??
+        "student";
     const groups = templateSpec?.groups || [];
     const inputsMap = useMemo(() => {
         return new Map<string, InputSchema>(
@@ -55,12 +131,15 @@ export const Editor = () => {
     }, [templateSpec?.inputs]);
 
     return (
-        <ActionContextProvider id="editor" contexts={["editor"]}>
+        <ActionContextProvider
+            id="editor"
+            contexts={["editor"]}
+            handlers={editorHandlers}
+        >
             <main className={styles.editor}>
-                {/* Insert Toolbar at the top with Fluent Icons */}
-                <div className={styles.toolbar}>
+                <header className={toolbarStyles.toolbar}>
                     <button
-                        className={styles.toolbarButton}
+                        className={toolbarStyles.toolbarButton}
                         type="button"
                         title={m.menubar_insert_heading()}
                         onClick={() =>
@@ -73,9 +152,10 @@ export const Editor = () => {
                         <TextHeader124Regular />
                     </button>
                     <button
-                        className={styles.toolbarButton}
+                        className={toolbarStyles.toolbarButton}
                         type="button"
                         title={m.menubar_insert_paragraph()}
+                        aria-label={m.menubar_insert_paragraph()}
                         onClick={() =>
                             void dispatchAction({
                                 id: "editor::InsertParagraph",
@@ -83,10 +163,10 @@ export const Editor = () => {
                             })
                         }
                     >
-                        <TextParagraph24Regular />
+                        <TextParagraph24Regular aria-hidden />
                     </button>
                     <button
-                        className={styles.toolbarButton}
+                        className={toolbarStyles.toolbarButton}
                         type="button"
                         title={m.menubar_insert_table()}
                         onClick={() =>
@@ -99,7 +179,7 @@ export const Editor = () => {
                         <Table24Regular />
                     </button>
                     <button
-                        className={styles.toolbarButton}
+                        className={toolbarStyles.toolbarButton}
                         type="button"
                         title={m.menubar_insert_equation()}
                         onClick={() =>
@@ -112,7 +192,7 @@ export const Editor = () => {
                         <MathFormula24Regular />
                     </button>
                     <button
-                        className={styles.toolbarButton}
+                        className={toolbarStyles.toolbarButton}
                         type="button"
                         title={m.menubar_insert_figure()}
                         onClick={() =>
@@ -124,9 +204,59 @@ export const Editor = () => {
                     >
                         <Image24Regular />
                     </button>
-                </div>
+                    <button
+                        className={toolbarStyles.toolbarButton}
+                        type="button"
+                        title={m.menubar_insert_reference()}
+                        onClick={() =>
+                            void dispatchAction({
+                                id: "editor::InsertReference",
+                                payload: null,
+                            })
+                        }
+                    >
+                        <Link24Regular />
+                    </button>
+                    {templateVariants.length > 1 && (
+                        <>
+                            <span className={toolbarStyles.toolbarSpacer} />
+                            <label
+                                className={styles.variantToolbarLabel}
+                                htmlFor="template-variant"
+                            >
+                                {m.settings_template_variant()}
+                            </label>
+                            <select
+                                id="template-variant"
+                                className={styles.variantToolbarSelect}
+                                value={resolvedVariantId}
+                                title={m.settings_template_variant()}
+                                onChange={(event) =>
+                                    dispatchAst({
+                                        type: "UPDATE_TEMPLATE_VARIANT",
+                                        payload: { variantId: event.target.value },
+                                    })
+                                }
+                            >
+                                {templateVariants.map((variant) => (
+                                    <option key={variant.id} value={variant.id}>
+                                        {variant.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </>
+                    )}
+                </header>
+                <InsertReferenceDialog
+                    open={referenceDialogOpen}
+                    resources={resources}
+                    references={state.references}
+                    outlineEntries={outlineEntries}
+                    onClose={() => setReferenceDialogOpen(false)}
+                    onSelect={applyReferenceInsert}
+                />
 
-                {/* Render input groups dynamically */}
+                <div className={styles.editorScroll} data-scroll-region>
                 {groups.map((group) => (
                     <Accordion key={group.id} title={group.label} defaultOpen>
                         <div className={styles.groupContent}>
@@ -152,6 +282,7 @@ export const Editor = () => {
                         <ContentSectionEditor key={section.id} section={section} />
                     ) : null,
                 )}
+                </div>
             </main>
         </ActionContextProvider>
     );
@@ -163,11 +294,8 @@ interface DynamicFieldProps {
     label?: string;
 }
 
-const getFieldLabel = (schema: InputSchema, label?: string) => {
-    const baseLabel = label || schema.label || schema.id || "";
-    if (!schema.importance) return baseLabel;
-    return `${baseLabel} (${schema.importance})`;
-};
+const getFieldLabel = (schema: InputSchema, label?: string) =>
+    label || schema.label || schema.id || "";
 
 const DynamicField = ({ schema, path, label }: DynamicFieldProps) => {
     if (schema.type === "array") {
@@ -190,6 +318,7 @@ const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
             {...fieldBinding}
             fullWidth
             label={getFieldLabel(schema, label)}
+            importance={schema.importance ?? undefined}
             placeholder={schema.description ?? undefined}
             value={value}
             onChange={(event) =>
@@ -203,60 +332,98 @@ const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
 };
 
 
-const AuthorAffiliationsSelector = ({
-    authorPath,
-    authorAffiliations = [],
+const normalizeReferenceTargetPath = (target: string) =>
+    target.startsWith("/") ? target : `/${target}`;
+
+const referenceValueForTargetItem = (item: unknown, index: number): string => {
+    if (
+        item !== null &&
+        typeof item === "object" &&
+        "id" in item &&
+        typeof item.id === "string"
+    ) {
+        return item.id;
+    }
+    return String(index + 1);
+};
+
+const referenceLabelForTargetItem = (item: unknown, index: number): string => {
+    if (typeof item === "string" && item.trim()) {
+        return item;
+    }
+    if (item !== null && typeof item === "object") {
+        const record = item as Record<string, unknown>;
+        for (const key of ["name", "institution", "title", "label", "id"]) {
+            const value = record[key];
+            if (typeof value === "string" && value.trim()) {
+                return value;
+            }
+        }
+    }
+    return m.editor_reference_fallback({ index: index + 1 });
+};
+
+const ReferenceArrayField = ({
+    schema,
+    path,
+    selectedReferences = [],
 }: {
-    authorPath: string;
-    authorAffiliations: string[];
+    schema: InputSchema;
+    path: string;
+    selectedReferences: string[];
 }) => {
     const { state, dispatch } = useDocumentAst();
-    const allAffiliations = state.inputs.affiliations || [];
+    const targetPath = schema.items?.target
+        ? normalizeReferenceTargetPath(schema.items.target)
+        : null;
+    const targetItems = targetPath ? getValueAtPath(state.inputs, targetPath) : [];
+    const fieldLabel = getFieldLabel(schema);
 
-    const handleToggleAffiliation = (affRef: string, checked: boolean) => {
-        const nextAffiliations = checked
-            ? [...authorAffiliations, affRef]
-            : authorAffiliations.filter((ref) => ref !== affRef);
+    const handleToggleReference = (referenceValue: string, checked: boolean) => {
+        const nextReferences = checked
+            ? [...selectedReferences, referenceValue]
+            : selectedReferences.filter((ref) => ref !== referenceValue);
 
         dispatch({
             type: "UPDATE_INPUT",
             payload: {
-                path: `${authorPath}/affiliations`,
-                value: nextAffiliations,
+                path,
+                value: nextReferences,
             },
         });
     };
 
-    if (!Array.isArray(allAffiliations) || allAffiliations.length === 0) {
+    if (!Array.isArray(targetItems) || targetItems.length === 0) {
         return (
-            <div className={styles.affiliationsSelector}>
-                <span className={styles.label}>Affiliations</span>
-                <p className={styles.empty}>No affiliations defined yet. Add some in the Affiliations section below.</p>
+            <div className={styles.referenceSelector}>
+                <span className={styles.label}>{fieldLabel}</span>
+                <p className={styles.empty}>
+                    {m.editor_reference_empty({ label: fieldLabel })}
+                </p>
             </div>
         );
     }
 
     return (
-        <div className={styles.affiliationsSelector}>
-            <span className={styles.label}>Affiliations</span>
+        <div className={styles.referenceSelector}>
+            <span className={styles.label}>{fieldLabel}</span>
             <div className={styles.checkboxGroup}>
-                {allAffiliations.map((aff: any, index: number) => {
-                    const affRef = String(index + 1);
-                    const displayName = typeof aff === "string" ? aff : (aff.name || aff.institution || `Affiliation #${affRef}`);
-                    const isChecked = authorAffiliations.includes(affRef);
-                    const selectedIndex = authorAffiliations.indexOf(affRef);
-                    const selectedPath = selectedIndex >= 0
-                        ? `${authorPath}/affiliations/${selectedIndex}`
-                        : `${authorPath}/affiliations`;
+                {targetItems.map((item: unknown, index: number) => {
+                    const referenceValue = referenceValueForTargetItem(item, index);
+                    const displayName = referenceLabelForTargetItem(item, index);
+                    const isChecked = selectedReferences.includes(referenceValue);
+                    const selectedIndex = selectedReferences.indexOf(referenceValue);
+                    const selectedPath =
+                        selectedIndex >= 0 ? `${path}/${selectedIndex}` : path;
 
                     return (
-                        <AuthorAffiliationCheckbox
-                            key={affRef}
+                        <ReferenceCheckbox
+                            key={referenceValue}
                             checked={isChecked}
                             fieldPath={selectedPath}
                             label={displayName}
                             onChange={(checked) =>
-                                handleToggleAffiliation(affRef, checked)
+                                handleToggleReference(referenceValue, checked)
                             }
                         />
                     );
@@ -266,7 +433,7 @@ const AuthorAffiliationsSelector = ({
     );
 };
 
-const AuthorAffiliationCheckbox = ({
+const ReferenceCheckbox = ({
     checked,
     fieldPath,
     label,
@@ -298,6 +465,16 @@ const AuthorAffiliationCheckbox = ({
 const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
     const { state, dispatch } = useDocumentAst();
     const items = getValueAtPath(state.inputs, path) ?? [];
+
+    if (schema.items?.type === "reference" && schema.items.target) {
+        return (
+            <ReferenceArrayField
+                schema={schema}
+                path={path}
+                selectedReferences={Array.isArray(items) ? items.map(String) : []}
+            />
+        );
+    }
 
     const handleAddItem = () => {
         let insertedValue: any;
@@ -337,7 +514,9 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
     return (
         <div className={styles.arrayContainer}>
             <div className={styles.arrayHeader}>
-                <h4>{getFieldLabel(schema, label)}</h4>
+                <FieldLabel importance={schema.importance ?? undefined}>
+                    {getFieldLabel(schema, label)}
+                </FieldLabel>
             </div>
             <div className={styles.arrayList}>
                 {items.map((item: any, index: number) => {
@@ -348,16 +527,6 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
                                 {schema.items?.type === "object" && schema.items.properties ? (
                                     schema.items.properties.map((prop) => {
                                         const propPath = `${itemPath}/${prop.id}`;
-                                        if (path.endsWith("authors") && prop.id === "affiliations") {
-                                            return (
-                                                <AuthorAffiliationsSelector
-                                                    key={prop.id}
-                                                    authorPath={itemPath}
-                                                    authorAffiliations={item.affiliations || []}
-                                                />
-                                            );
-                                        }
-
                                         if (prop.id === "id" && prop.type === "integer") {
                                             return (
                                                 <div key={prop.id} className={styles.badge}>
@@ -388,7 +557,7 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
                                 size="small"
                                 onClick={() => handleRemoveItem(index)}
                             >
-                                Remove
+                                {m.editor_remove_item()}
                             </Button>
                         </div>
                     );
@@ -400,7 +569,9 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
                 size="small"
                 onClick={handleAddItem}
             >
-                Add {label || schema.label || "Item"}
+                {m.editor_add_item({
+                    label: label || schema.label || m.editor_array_item(),
+                })}
             </Button>
         </div>
     );

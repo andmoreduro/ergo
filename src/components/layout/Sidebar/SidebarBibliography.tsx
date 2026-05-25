@@ -1,11 +1,17 @@
 import { memo, useState } from "react";
 import type { ReferenceEntry } from "../../../bindings/ReferenceEntry";
 import {
+    bibliographyEntryTypeOptions,
+    bibliographyFieldImportance,
+    bibliographySecondaryField,
+    bibliographySecondaryFieldLabel,
     emptyReferenceFormValue,
     formValueFromReference,
     formatReferenceCitation,
     referenceFromFormValue,
+    validateReferenceForm,
     type BibliographyEntryType,
+    type BibliographyValidationCode,
     type ReferenceFormValue,
 } from "../../../bibliography/biblatex";
 import { useDocument } from "../../../state/DocumentContext";
@@ -25,17 +31,31 @@ type ReferenceDraft = {
     form: ReferenceFormValue;
 };
 
-const entryTypeOptions = () => [
-    { value: "article", label: m.references_type_article() },
-    { value: "book", label: m.references_type_book() },
-    { value: "misc", label: m.references_type_misc() },
-];
-
 export const SidebarBibliographyPanel = memo(
     ({ references }: { references: ReferenceEntry[] }) => {
         const { dispatch } = useDocument();
         const dispatchAction = useActionDispatcher();
         const [draft, setDraft] = useState<ReferenceDraft | null>(null);
+        const [validationError, setValidationError] = useState<string | null>(
+            null,
+        );
+
+        const validationMessage = (code: BibliographyValidationCode): string => {
+            switch (code) {
+                case "title":
+                    return m.bibliography_required_title();
+                case "authors":
+                    return m.bibliography_required_authors();
+                case "year":
+                    return m.bibliography_required_year();
+                case "journal":
+                    return m.bibliography_required_journal();
+                case "booktitle":
+                    return m.bibliography_required_booktitle();
+                case "publisher":
+                    return m.bibliography_required_publisher();
+            }
+        };
 
         const updateDraftField = <K extends keyof ReferenceFormValue>(
             field: K,
@@ -56,6 +76,7 @@ export const SidebarBibliographyPanel = memo(
 
         const startCreate = () => {
             void dispatchAction({ id: "bibliography::CreateEntry", payload: null });
+            setValidationError(null);
             setDraft({
                 id: createId(),
                 mode: "create",
@@ -68,6 +89,7 @@ export const SidebarBibliographyPanel = memo(
                 id: "bibliography::OpenEntry",
                 payload: { referenceId: reference.id },
             });
+            setValidationError(null);
             setDraft({
                 id: reference.id,
                 mode: "edit",
@@ -80,6 +102,13 @@ export const SidebarBibliographyPanel = memo(
                 return;
             }
 
+            const validationCode = validateReferenceForm(draft.form);
+            if (validationCode) {
+                setValidationError(validationMessage(validationCode));
+                return;
+            }
+
+            setValidationError(null);
             const reference = referenceFromFormValue(draft.id, draft.form);
             void dispatchAction({
                 id: "bibliography::SaveEntry",
@@ -108,6 +137,13 @@ export const SidebarBibliographyPanel = memo(
             setDraft(null);
         };
 
+        const secondaryField = draft
+            ? bibliographySecondaryField(draft.form.entryType)
+            : "none";
+        const secondaryLabel = draft
+            ? bibliographySecondaryFieldLabel(draft.form.entryType)
+            : null;
+
         return (
             <div className={styles.referencePanel}>
                 {references.length > 0 ? (
@@ -120,7 +156,6 @@ export const SidebarBibliographyPanel = memo(
                                 onClick={() => startEdit(reference)}
                             >
                                 <span>{formatReferenceCitation(reference)}</span>
-                                <small>{reference.citation_key}</small>
                             </button>
                         ))}
                     </div>
@@ -147,7 +182,8 @@ export const SidebarBibliographyPanel = memo(
                         <Select
                             fullWidth
                             label={m.references_type()}
-                            options={entryTypeOptions()}
+                            importance={bibliographyFieldImportance(draft.form, "entryType")}
+                            options={bibliographyEntryTypeOptions()}
                             value={draft.form.entryType}
                             onChange={(event) =>
                                 updateDraftField(
@@ -158,15 +194,8 @@ export const SidebarBibliographyPanel = memo(
                         />
                         <TextInput
                             fullWidth
-                            label={m.references_citation_key()}
-                            value={draft.form.citationKey}
-                            onChange={(event) =>
-                                updateDraftField("citationKey", event.target.value)
-                            }
-                        />
-                        <TextInput
-                            fullWidth
                             label={m.references_title()}
+                            importance={bibliographyFieldImportance(draft.form, "title")}
                             value={draft.form.title}
                             onChange={(event) =>
                                 updateDraftField("title", event.target.value)
@@ -175,6 +204,7 @@ export const SidebarBibliographyPanel = memo(
                         <Textarea
                             fullWidth
                             label={m.references_authors()}
+                            importance={bibliographyFieldImportance(draft.form, "authors")}
                             value={draft.form.authors}
                             onChange={(event) =>
                                 updateDraftField("authors", event.target.value)
@@ -183,24 +213,34 @@ export const SidebarBibliographyPanel = memo(
                         <TextInput
                             fullWidth
                             label={m.references_year()}
+                            importance={bibliographyFieldImportance(draft.form, "year")}
                             value={draft.form.year}
                             onChange={(event) =>
                                 updateDraftField("year", event.target.value)
                             }
                         />
-                        {draft.form.entryType === "article" ? (
+                        {secondaryField === "containerTitle" && secondaryLabel && (
                             <TextInput
                                 fullWidth
-                                label={m.references_journal()}
+                                label={secondaryLabel}
+                                importance={bibliographyFieldImportance(
+                                    draft.form,
+                                    "containerTitle",
+                                )}
                                 value={draft.form.containerTitle}
                                 onChange={(event) =>
                                     updateDraftField("containerTitle", event.target.value)
                                 }
                             />
-                        ) : (
+                        )}
+                        {secondaryField === "publisher" && (
                             <TextInput
                                 fullWidth
-                                label={m.references_publisher()}
+                                label={secondaryLabel ?? m.references_publisher()}
+                                importance={bibliographyFieldImportance(
+                                    draft.form,
+                                    "publisher",
+                                )}
                                 value={draft.form.publisher}
                                 onChange={(event) =>
                                     updateDraftField("publisher", event.target.value)
@@ -210,6 +250,7 @@ export const SidebarBibliographyPanel = memo(
                         <TextInput
                             fullWidth
                             label={m.references_doi()}
+                            importance={bibliographyFieldImportance(draft.form, "doi")}
                             value={draft.form.doi}
                             onChange={(event) =>
                                 updateDraftField("doi", event.target.value)
@@ -218,11 +259,17 @@ export const SidebarBibliographyPanel = memo(
                         <TextInput
                             fullWidth
                             label={m.references_url()}
+                            importance={bibliographyFieldImportance(draft.form, "url")}
                             value={draft.form.url}
                             onChange={(event) =>
                                 updateDraftField("url", event.target.value)
                             }
                         />
+                        {validationError && (
+                            <p className={styles.referenceError} role="alert">
+                                {validationError}
+                            </p>
+                        )}
                         <div className={styles.referenceActions}>
                             <Button
                                 size="small"
