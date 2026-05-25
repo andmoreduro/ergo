@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import { useDocument, useDocumentAst } from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
@@ -577,7 +577,7 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
     );
 };
 
-const ContentSectionEditor = ({ section }: { section: ContentSection }) => {
+const ContentSectionEditor = memo(function ContentSectionEditor({ section }: { section: ContentSection }) {
     return (
         <div className={styles.section}>
             {section.elements.map((element) => (
@@ -585,4 +585,4 @@ const ContentSectionEditor = ({ section }: { section: ContentSection }) => {
             ))}
         </div>
     );
-};
+});

@@ -42,6 +42,8 @@ const PreviewFocusTrigger = ({ caret }: { caret: number }) => {
             fieldId: "heading-1:text",
             caretUtf16Offset: caret,
             sourceRevision: 7,
+            anchorPageNumber: null,
+            forcePreviewScroll: false,
             focusSource: "preview",
         });
     }, [caret, setDocumentFocus]);
@@ -61,6 +63,8 @@ const PreviewFocusButton = ({ caret }: { caret: number }) => {
                     fieldId: "heading-1:text",
                     caretUtf16Offset: caret,
                     sourceRevision: 7,
+                    anchorPageNumber: null,
+                    forcePreviewScroll: false,
                     focusSource: "preview",
                 })
             }

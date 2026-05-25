@@ -38,17 +38,9 @@ interface ContextMenuContextValue {
 
 const ContextMenuContext = createContext<ContextMenuContextValue | null>(null);
 
-const isEditableTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof HTMLElement)) {
-        return false;
-    }
-
-    return Boolean(
-        target.closest(
-            "input, textarea, select, [contenteditable='true'], [contenteditable='']",
-        ),
-    );
-};
+const resolveContextMenuSurface = (
+    hasActiveProject: boolean,
+): ContextMenuSurface => (hasActiveProject ? "workspace" : "app");
 
 const filterEntries = (
     entries: ContextMenuEntry[],
@@ -98,11 +90,13 @@ export const ContextMenuProvider = ({
     }, []);
 
     const openContextMenu = useCallback(
-        (event: ReactMouseEvent, surface: ContextMenuSurface) => {
-            if (isEditableTarget(event.target)) {
-                return;
-            }
-
+        (
+            event: Pick<
+                ReactMouseEvent | MouseEvent,
+                "preventDefault" | "stopPropagation" | "clientX" | "clientY"
+            >,
+            surface: ContextMenuSurface,
+        ) => {
             event.preventDefault();
             event.stopPropagation();
             setOpenMenu({
@@ -113,6 +107,24 @@ export const ContextMenuProvider = ({
         },
         [],
     );
+
+    useEffect(() => {
+        const handleContextMenu = (event: MouseEvent) => {
+            openContextMenu(
+                event,
+                resolveContextMenuSurface(commandContext.hasActiveProject),
+            );
+        };
+
+        document.addEventListener("contextmenu", handleContextMenu, {
+            capture: true,
+        });
+        return () => {
+            document.removeEventListener("contextmenu", handleContextMenu, {
+                capture: true,
+            });
+        };
+    }, [commandContext.hasActiveProject, openContextMenu]);
 
     const contextValue = useMemo(
         () => ({

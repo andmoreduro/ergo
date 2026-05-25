@@ -38,6 +38,64 @@ export function pixelPerPtForScreenLayout(
     return pixelPerPtForDisplayWidth(displayWidthPx, pageWidthPt);
 }
 
+export type ContainerFitPx = {
+    widthPx: number;
+    heightPx?: number;
+};
+
+/**
+ * Raster density to fit content inside a box while preserving aspect ratio.
+ * Used for resource thumbnails with both width and max-height limits.
+ */
+export function pixelPerPtForContainerFit(
+    pageWidthPt: number,
+    pageHeightPt: number,
+    fit: ContainerFitPx,
+    zoom: number,
+): number {
+    if (pageWidthPt <= 0 || pageHeightPt <= 0 || fit.widthPx <= 0) {
+        return pixelPerPtForScreenLayout(pageWidthPt, zoom, fit.widthPx);
+    }
+
+    const fromWidth = pixelPerPtForScreenLayout(pageWidthPt, zoom, fit.widthPx);
+    if (!fit.heightPx || fit.heightPx <= 0) {
+        return fromWidth;
+    }
+
+    const fromHeight = pixelPerPtForDisplayWidth(fit.heightPx * zoom, pageHeightPt);
+    return Math.min(fromWidth, fromHeight);
+}
+
+function displaySizeForContainerFit(
+    widthPt: number,
+    heightPt: number,
+    zoom: number,
+    fit?: number | ContainerFitPx,
+): { cssWidth: number; cssHeight: number } {
+    let cssWidth = previewPageDisplayWidthPx(widthPt, zoom);
+    let cssHeight = cssWidth * (heightPt / widthPt);
+
+    const fitBox: ContainerFitPx | undefined =
+        typeof fit === "number"
+            ? fit > 0
+                ? { widthPx: fit }
+                : undefined
+            : fit && fit.widthPx > 0
+              ? fit
+              : undefined;
+
+    if (fitBox) {
+        cssWidth = fitBox.widthPx * zoom;
+        cssHeight = cssWidth * (heightPt / widthPt);
+        if (fitBox.heightPx && fitBox.heightPx > 0 && cssHeight > fitBox.heightPx * zoom) {
+            cssHeight = fitBox.heightPx * zoom;
+            cssWidth = cssHeight * (widthPt / heightPt);
+        }
+    }
+
+    return { cssWidth, cssHeight };
+}
+
 export type CanvasPageMetrics = {
     widthPt: number;
     heightPt: number;
@@ -49,13 +107,14 @@ export function applyCanvasDisplaySize(
     canvas: HTMLCanvasElement,
     zoom: number,
     metrics: CanvasPageMetrics,
-    fitWidthPx?: number,
+    fit?: number | ContainerFitPx,
 ): void {
-    const cssWidth =
-        fitWidthPx && fitWidthPx > 0
-            ? fitWidthPx * zoom
-            : previewPageDisplayWidthPx(metrics.widthPt, zoom);
-    const cssHeight = cssWidth * (metrics.heightPt / metrics.widthPt);
+    const { cssWidth, cssHeight } = displaySizeForContainerFit(
+        metrics.widthPt,
+        metrics.heightPt,
+        zoom,
+        fit,
+    );
     canvas.style.width = `${cssWidth}px`;
     canvas.style.height = `${cssHeight}px`;
 }
@@ -198,15 +257,16 @@ export function caretStyleForPageMetrics(
         caretCue: { topYPt: number; heightPt: number };
     },
     metrics: PagePtMetrics,
-): { left: string; top: string; height: string; transform?: string } {
+): { left: string; top: string; transform: string } {
     const toPercent = (ratio: number) => `${Number((ratio * 100).toFixed(2))}%`;
     const leftRatio = Math.min(1, Math.max(0, position.xPt / metrics.widthPt));
+    const centerYPt =
+        position.caretCue.topYPt + position.caretCue.heightPt * 0.5;
 
     return {
-        left: leftRatio < 0.02 ? "0" : toPercent(leftRatio),
-        top: toPercent(position.caretCue.topYPt / metrics.heightPt),
-        height: toPercent(position.caretCue.heightPt / metrics.heightPt),
-        transform: leftRatio < 0.02 ? undefined : "translateX(-50%)",
+        left: toPercent(leftRatio),
+        top: toPercent(centerYPt / metrics.heightPt),
+        transform: "translate(-50%, -50%)",
     };
 }
 

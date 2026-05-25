@@ -32,7 +32,7 @@ const defaultCompilerState = () => ({
     previewRevision: null,
     outline: null,
     resources: null,
-    latencyMs: null,
+    latencyStartRef: { current: null },
 });
 
 const defaultTemplateSpec = {

@@ -15,6 +15,8 @@ interface FocusFieldPayload {
     fieldId: string | null;
     caretUtf16Offset: number | null;
     sourceRevision: number | null;
+    anchorPageNumber: number | null;
+    forcePreviewScroll: boolean;
 }
 
 interface UseAppActionHandlersOptions {
@@ -55,6 +57,8 @@ const parseFocusFieldPayload = (payload: unknown): FocusFieldPayload | null => {
         fieldId: readString(record.fieldId),
         caretUtf16Offset: readNumber(record.caretUtf16Offset),
         sourceRevision: readNumber(record.sourceRevision),
+        anchorPageNumber: readNumber(record.anchorPageNumber),
+        forcePreviewScroll: record.forcePreviewScroll === true,
     };
 };
 
@@ -105,6 +109,8 @@ export const useAppActionHandlers = ({
                 fieldId: editorTarget.fieldId,
                 caretUtf16Offset: target.caretUtf16Offset,
                 sourceRevision: target.sourceRevision,
+                anchorPageNumber: target.anchorPageNumber,
+                forcePreviewScroll: target.forcePreviewScroll,
                 focusSource: "preview",
             });
             return true;

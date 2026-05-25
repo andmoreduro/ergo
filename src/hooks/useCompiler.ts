@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type MutableRefObject } from "react";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { ProjectFile } from "../bindings/ProjectFile";
 import type { SourceMapEntry } from "../bindings/SourceMapEntry";
@@ -18,7 +18,7 @@ export interface UseCompilerResult {
     previewRevision: SourceRevision | null;
     outline: DocumentOutline | null;
     resources: DocumentResources | null;
-    latencyMs: number | null;
+    latencyStartRef: MutableRefObject<number | null>;
 }
 
 export function useCompiler(
@@ -36,11 +36,10 @@ export function useCompiler(
     const [previewRevision, setPreviewRevision] = useState<SourceRevision | null>(null);
     const [outline, setOutline] = useState<DocumentOutline | null>(null);
     const [resources, setResources] = useState<DocumentResources | null>(null);
-    const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
     const previewRevisionRef = useRef<SourceRevision | null>(null);
     const latestRevisionRef = useRef<SourceRevision | null>(null);
-    const inputLatencyStartRef = useRef<number | null>(null);
+    const latencyStartRef = useRef<number | null>(null);
 
     useDocumentCompilerSync({
         ast,
@@ -57,10 +56,9 @@ export function useCompiler(
             setPreviewRevision,
             setOutline,
             setResources,
-            setLatencyMs,
             previewRevisionRef,
             latestRevisionRef,
-            inputLatencyStartRef,
+            latencyStartRef,
         },
     });
 
@@ -72,6 +70,6 @@ export function useCompiler(
         previewRevision,
         outline,
         resources,
-        latencyMs,
+        latencyStartRef,
     };
 }

@@ -33,33 +33,19 @@
     font-weight: 600;
 }
 
-.tabs {
-    display: flex;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-3) 0;
+.body {
+    flex: 1;
+    overflow: auto;
+    padding: var(--space-2) var(--space-3) var(--space-3);
 }
 
-.tab {
-    padding: var(--space-2) var(--space-3);
-    border: none;
-    border-bottom: 2px solid transparent;
-    background: transparent;
-    color: var(--color-text-secondary);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    cursor: pointer;
-}
-
-.tabActive {
-    color: var(--color-text-primary);
-    border-bottom-color: var(--color-accent);
+.section + .section {
+    margin-top: var(--space-3);
 }
 
 .list {
-    flex: 1;
-    overflow: auto;
     margin: 0;
-    padding: var(--space-2) var(--space-3) var(--space-3);
+    padding: 0;
     list-style: none;
 }
 

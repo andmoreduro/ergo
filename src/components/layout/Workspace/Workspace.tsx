@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { Sidebar } from "../Sidebar/Sidebar";
 import { Editor } from "../Editor/Editor";
 import { Preview } from "../Preview/Preview";
@@ -38,9 +38,11 @@ export const Workspace = ({
         eventsVersion,
         bootstrapFiles,
     );
+    const previewScrollRef = useRef<HTMLDivElement>(null);
     const { outlineEntries } = useSidebarOutline(
         compiler.outline,
         compiler.previewRevision,
+        previewScrollRef,
     );
     const contextMenu = useContextMenuTrigger("workspace");
     const {
@@ -105,6 +107,7 @@ export const Workspace = ({
                             previewZoomRenderDebounceMs={
                                 previewZoomRenderDebounceMs
                             }
+                            previewScrollRef={previewScrollRef}
                         />
                     </div>
                     <ColumnResizeHandle {...handle1} />
@@ -122,6 +125,7 @@ export const Workspace = ({
                             onZoomChange={onPreviewZoomChange}
                             zoomRenderDebounceMs={previewZoomRenderDebounceMs}
                             onExport={onExportDocument}
+                            scrollRef={previewScrollRef}
                         />
                     </div>
                 </div>

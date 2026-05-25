@@ -3,10 +3,12 @@ import type { RenderPagePayload } from "../workers/compilerProtocol";
 import {
     applyCanvasDisplaySize,
     DEFAULT_PAGE_WIDTH_PT,
+    pixelPerPtForContainerFit,
     pixelPerPtForScreenLayout,
     readCanvasPageMetrics,
     setCanvasPageMetrics,
     type CanvasPageMetrics,
+    type ContainerFitPx,
 } from "../preview/canvasMetrics";
 import { useDebouncedValue } from "./useDebouncedValue";
 
@@ -54,8 +56,9 @@ export function useTypstCanvasPage(
     options?: {
         onError?: (error: unknown) => void;
         onRendered?: () => void;
-        /** When set, scale pages to this container width (resource thumbnails). */
+        /** When set, scale pages to this container (resource thumbnails). */
         fitWidthPx?: number;
+        fitHeightPx?: number;
     },
 ) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -67,18 +70,34 @@ export function useTypstCanvasPage(
     onRenderedRef.current = options?.onRendered;
     onErrorRef.current = options?.onError;
     const [pageWidthPt, setPageWidthPt] = useState<number | null>(null);
+    const [pageHeightPt, setPageHeightPt] = useState<number | null>(null);
 
     const fitWidthPx = options?.fitWidthPx;
+    const fitHeightPx = options?.fitHeightPx;
+    const hasContainerFit = fitWidthPx !== undefined;
     const renderZoom = useDebouncedValue(zoom, renderDebounceMs);
     const renderFitWidthPx = useDebouncedValue(fitWidthPx ?? 0, renderDebounceMs);
     const layoutPageWidthPt = pageWidthPt ?? DEFAULT_PAGE_WIDTH_PT;
-    const usesContainerFit = (renderFitWidthPx ?? 0) > 0;
+    const layoutPageHeightPt = pageHeightPt ?? layoutPageWidthPt;
+    // Thumbnails must use the live container width; debouncing fit width would
+    // rasterize once at full page size before the sidebar width is known.
+    const layoutFitWidthPx = hasContainerFit ? (fitWidthPx ?? 0) : renderFitWidthPx;
+    const layoutFitHeightPx = fitHeightPx ?? 0;
+    const usesContainerFit = layoutFitWidthPx > 0;
+
+    const containerFit: ContainerFitPx | undefined = usesContainerFit
+        ? {
+              widthPx: layoutFitWidthPx,
+              heightPx: layoutFitHeightPx > 0 ? layoutFitHeightPx : undefined,
+          }
+        : undefined;
 
     const pixelPerPt = usesContainerFit
-        ? pixelPerPtForScreenLayout(
+        ? pixelPerPtForContainerFit(
               layoutPageWidthPt,
+              layoutPageHeightPt,
+              containerFit,
               renderZoom,
-              renderFitWidthPx,
           )
         : pixelPerPtForScreenLayout(layoutPageWidthPt, renderZoom);
 
@@ -93,12 +112,16 @@ export function useTypstCanvasPage(
             return;
         }
 
-        applyCanvasDisplaySize(canvas, zoom, metrics, fitWidthPx);
-    }, [fitWidthPx, zoom]);
+        applyCanvasDisplaySize(canvas, zoom, metrics, containerFit);
+    }, [containerFit, usesContainerFit, zoom]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas || !isVisible) {
+            return;
+        }
+
+        if (hasContainerFit && layoutFitWidthPx <= 0) {
             return;
         }
 
@@ -116,6 +139,7 @@ export function useTypstCanvasPage(
                 const widthPt = result.width / pixelPerPt;
                 const heightPt = result.height / pixelPerPt;
                 setPageWidthPt(widthPt);
+                setPageHeightPt(heightPt);
                 putTypstPageOnCanvas(canvas, result, {
                     widthPt,
                     heightPt,
@@ -129,7 +153,7 @@ export function useTypstCanvasPage(
                         heightPt,
                         pixelPerPt,
                     },
-                    fitWidthPx,
+                    containerFit,
                 );
                 onRenderedRef.current?.();
             })
@@ -140,7 +164,21 @@ export function useTypstCanvasPage(
         return () => {
             cancelled = true;
         };
-    }, [isVisible, pageIndex, pixelPerPt, previewRevision]);
+    }, [
+        containerFit,
+        hasContainerFit,
+        isVisible,
+        layoutFitWidthPx,
+        pageIndex,
+        pixelPerPt,
+        previewRevision,
+        usesContainerFit,
+    ]);
+
+    useEffect(() => {
+        setPageWidthPt(null);
+        setPageHeightPt(null);
+    }, [pageIndex, previewRevision]);
 
     return { canvasRef };
 }

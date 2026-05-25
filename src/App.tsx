@@ -20,7 +20,7 @@ import type { Command, CommandContext } from "./commands/types";
 import { workspaceCommands } from "./commands/workspaceCommands";
 import { TauriApi } from "./api/tauri";
 import type { ExportFormat } from "./bindings/ExportFormat";
-import { saveExportDialog } from "./platform/export";
+import { pageExportFileName, saveExportDialog } from "./platform/export";
 import { CompilerClient, warmupCompiler } from "./workers/compilerClient";
 import { editorCommands } from "./commands/editorCommands";
 import { viewCommands } from "./commands/viewCommands";
@@ -171,6 +171,8 @@ const AppShellContent = () => {
                 }),
                 caretUtf16Offset: 0,
                 sourceRevision: null,
+                anchorPageNumber: null,
+                forcePreviewScroll: false,
                 focusSource: "programmatic",
             });
         };
@@ -219,24 +221,47 @@ const AppShellContent = () => {
     }, [dispatch, ensureActiveProject, setDocumentFocus, state.sections]);
 
     const exportDocument = useCallback(
-        async (format: ExportFormat, pageIndex = 0) => {
+        async (format: ExportFormat) => {
             try {
-                const path = await saveExportDialog(format);
+                if (format === "pdf") {
+                    const path = await saveExportDialog("pdf");
+                    if (!path) {
+                        return;
+                    }
+                    const bytes = await CompilerClient.exportPdf(state);
+                    await TauriApi.writeBytesToPath(path, bytes);
+                    return;
+                }
+
+                const pixelPerPt = 2;
+                const pages =
+                    format === "png"
+                        ? await CompilerClient.exportPngPages(state, pixelPerPt)
+                        : (await CompilerClient.exportSvgPages(state)).map((svg) =>
+                              new TextEncoder().encode(svg),
+                          );
+
+                if (pages.length === 0) {
+                    throw new Error("Document has no pages to export.");
+                }
+
+                const path = await saveExportDialog(format, pages.length);
                 if (!path) {
                     return;
                 }
 
-                let bytes: Uint8Array;
-                if (format === "pdf") {
-                    bytes = await CompilerClient.exportPdf(state);
-                } else if (format === "png") {
-                    bytes = await CompilerClient.exportPng(state, pageIndex, 2);
-                } else {
-                    const svg = await CompilerClient.exportSvg(state, pageIndex);
-                    bytes = new TextEncoder().encode(svg);
+                if (pages.length === 1) {
+                    await TauriApi.writeBytesToPath(path, pages[0] ?? new Uint8Array());
+                    return;
                 }
 
-                await TauriApi.writeBytesToPath(path, bytes);
+                await TauriApi.writeZipExport(
+                    path,
+                    pages.map((bytes, index) => ({
+                        name: pageExportFileName(format, index + 1),
+                        bytes,
+                    })),
+                );
             } catch (error) {
                 window.alert(
                     m.project_export_failed({

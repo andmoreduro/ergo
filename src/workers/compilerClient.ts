@@ -147,25 +147,24 @@ export const CompilerClient = {
         return reply.bytes;
     },
 
-    async exportPng(
+    async exportPngPages(
         ast: DocumentAST,
-        pageIndex: number,
         pixelPerPt: number,
-    ): Promise<Uint8Array> {
+    ): Promise<Uint8Array[]> {
         await loadDocumentFontsLazy(ast);
         const reply = await callWorker(
-            { type: "export_png", payload: { pageIndex, pixelPerPt } },
-            "export_png_done",
+            { type: "export_png_pages", payload: { pixelPerPt } },
+            "export_png_pages_done",
         );
-        return reply.bytes;
+        return reply.pages;
     },
 
-    async exportSvg(ast: DocumentAST, pageIndex: number): Promise<string> {
+    async exportSvgPages(ast: DocumentAST): Promise<string[]> {
         await loadDocumentFontsLazy(ast);
         const reply = await callWorker(
-            { type: "export_svg", payload: { pageIndex } },
-            "export_svg_done",
+            { type: "export_svg_pages" },
+            "export_svg_pages_done",
         );
-        return reply.svg;
+        return reply.pages;
     },
 };

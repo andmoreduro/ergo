@@ -193,7 +193,11 @@ export function usePreviewCaretSync({
         const anchorFromViewport = scrollRoot
             ? previewAnchorPageFromScroll(scrollRoot)
             : null;
-        const anchorPageNumber = anchorPageRef.current ?? anchorFromViewport ?? null;
+        const anchorPageNumber =
+            documentFocus.anchorPageNumber ??
+            anchorPageRef.current ??
+            anchorFromViewport ??
+            null;
 
         const target = {
             elementId: previewTarget.elementId,
@@ -209,22 +213,24 @@ export function usePreviewCaretSync({
             target.fieldId,
         );
         const identityChanged = focusScrollIdentityRef.current !== identity;
+        const shouldScroll =
+            documentFocus.forcePreviewScroll || identityChanged;
         if (identityChanged) {
             focusScrollIdentityRef.current = identity;
-            userOverrodeScrollRef.current = false;
             lastCaretScrollKeyRef.current = null;
         }
+        if (shouldScroll) {
+            userOverrodeScrollRef.current = false;
+        }
 
-        void requestHighlightedPosition(
-            target,
-            previewRevision,
-            identityChanged,
-        );
+        void requestHighlightedPosition(target, previewRevision, shouldScroll);
     }, [
         clearHighlightedPosition,
+        documentFocus.anchorPageNumber,
         documentFocus.caretUtf16Offset,
         documentFocus.elementId,
         documentFocus.fieldId,
+        documentFocus.forcePreviewScroll,
         previewRevision,
         requestHighlightedPosition,
     ]);

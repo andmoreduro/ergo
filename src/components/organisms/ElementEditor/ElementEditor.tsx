@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { TauriApi } from "../../../api/tauri";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { useDocumentAst } from "../../../state/DocumentContext";
@@ -72,7 +72,7 @@ const elementLabel = (element: DocumentElement): string => {
     return m.sidebar_figure();
 };
 
-export const ElementEditor = ({ element }: ElementEditorProps) => {
+export const ElementEditor = memo(function ElementEditor({ element }: ElementEditorProps) {
     const { dispatch } = useDocumentAst();
     const dispatchAction = useActionDispatcher();
     const tableRows = element.type === "Table" ? element.rows : 0;
@@ -197,7 +197,7 @@ export const ElementEditor = ({ element }: ElementEditorProps) => {
             </div>
         </ActionContextProvider>
     );
-};
+});
 
 const ElementContent = ({ element }: { element: DocumentElement }) => {
     if (element.type === "Heading") {

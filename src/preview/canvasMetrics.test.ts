@@ -1,10 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
     caretStyleForPageMetrics,
+    pixelPerPtForContainerFit,
     previewPageDisplayWidthPx,
     resolvePreviewPageMetrics,
     syntheticCaretCue,
 } from "./canvasMetrics";
+
+describe("pixelPerPtForContainerFit", () => {
+    it("scales down when content is taller than the preview max height", () => {
+        const widthOnly = pixelPerPtForContainerFit(200, 400, { widthPx: 100 }, 1);
+        const contained = pixelPerPtForContainerFit(
+            200,
+            400,
+            { widthPx: 100, heightPx: 120 },
+            1,
+        );
+
+        expect(contained).toBeLessThan(widthOnly);
+    });
+});
 
 describe("previewPageDisplayWidthPx", () => {
     it("scales from Typst page width and zoom, not the preview pane width", () => {
@@ -54,21 +69,22 @@ describe("resolvePreviewPageMetrics", () => {
 describe("caretStyleForPageMetrics", () => {
     const metrics = { widthPt: 612, heightPt: 792 };
 
-    it("avoids centering transform near the left edge", () => {
+    it("centers the dot on the caret cue midpoint", () => {
         const style = caretStyleForPageMetrics(
             { xPt: 6, caretCue: { topYPt: 20, heightPt: 12 } },
             metrics,
         );
-        expect(style.left).toBe("0");
-        expect(style.transform).toBeUndefined();
+        expect(style.left).toBe("0.98%");
+        expect(style.top).toBe("3.28%");
+        expect(style.transform).toBe("translate(-50%, -50%)");
     });
 
-    it("centers the caret horizontally away from the edge", () => {
+    it("centers the dot away from the left edge", () => {
         const style = caretStyleForPageMetrics(
             { xPt: 200, caretCue: { topYPt: 20, heightPt: 12 } },
             metrics,
         );
-        expect(style.transform).toBe("translateX(-50%)");
-        expect(style.left).not.toBe("0");
+        expect(style.transform).toBe("translate(-50%, -50%)");
+        expect(style.left).toBe("32.68%");
     });
 });

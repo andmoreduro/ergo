@@ -145,6 +145,29 @@ export function focusScrollIdentity(
     return [sourceRevision, elementId ?? "", fieldId ?? ""].join("|");
 }
 
+/** Scroll the preview so the given page is near the top of the viewport. */
+export function scrollPreviewToPage(
+    scrollRoot: HTMLElement,
+    pageNumber: number,
+): boolean {
+    const page = scrollRoot.querySelector<HTMLElement>(
+        `[data-preview-page-number="${pageNumber}"]`,
+    );
+    if (!page) {
+        return false;
+    }
+
+    const pageRect = page.getBoundingClientRect();
+    const rootRect = scrollRoot.getBoundingClientRect();
+    const targetTop =
+        scrollRoot.scrollTop + (pageRect.top - rootRect.top) - 16;
+    scrollRoot.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: "smooth",
+    });
+    return true;
+}
+
 /**
  * Page number whose content occupies the largest share of the preview viewport.
  * Used to break ties when a field appears on multiple pages.

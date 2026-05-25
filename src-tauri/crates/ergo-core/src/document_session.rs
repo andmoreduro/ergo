@@ -7,6 +7,7 @@ use crate::ast::{DocumentAST, DocumentElement, DocumentSection};
 use crate::core_errors::DocumentSessionError;
 use crate::document_session_events::apply_document_event;
 use crate::document_session_generation::{default_layout, generate_project_sources_incremental};
+use crate::template_spec::TemplateSpec;
 pub use crate::document_session_types::{
     DocumentEvent, DocumentSessionStatus, FieldSourceMapEntry, FieldTextSegment, GeneratedFragment,
     ProjectSourceLayout, SourceMapEntry,
@@ -31,6 +32,7 @@ struct DocumentSessionInner {
     source_map: Vec<SourceMapEntry>,
     field_source_map: Vec<FieldSourceMapEntry>,
     last_status: Option<DocumentSessionStatus>,
+    cached_template_spec: Option<(String, Option<String>, TemplateSpec)>,
 }
 
 pub struct DocumentSession {
@@ -93,10 +95,33 @@ impl DocumentSession {
         let mut inner = self.inner.lock();
         let mut ast = inner
             .ast
-            .clone()
+            .take()
             .ok_or_else(|| "Document session has not been initialized".to_string())?;
         let dirty_resource_ids = dirty_resource_ids_for_event(&ast, &event);
-        apply_document_event(&mut ast, event)?;
+        if let Err(e) = apply_document_event(&mut ast, event) {
+            inner.ast = Some(ast);
+            return Err(e);
+        }
+        self.sync_ast_locked(&mut inner, ast, dirty_resource_ids)
+    }
+
+    pub fn apply_events(&self, events: Vec<DocumentEvent>) -> Result<DocumentSessionStatus, String> {
+        if events.is_empty() {
+            return Ok(self.status());
+        }
+        let mut inner = self.inner.lock();
+        let mut ast = inner
+            .ast
+            .take()
+            .ok_or_else(|| "Document session has not been initialized".to_string())?;
+        let mut dirty_resource_ids = HashSet::new();
+        for event in events {
+            dirty_resource_ids.extend(dirty_resource_ids_for_event(&ast, &event));
+            if let Err(e) = apply_document_event(&mut ast, event) {
+                inner.ast = Some(ast);
+                return Err(e);
+            }
+        }
         self.sync_ast_locked(&mut inner, ast, dirty_resource_ids)
     }
 
@@ -106,14 +131,31 @@ impl DocumentSession {
         ast: DocumentAST,
         dirty_resource_ids: HashSet<String>,
     ) -> Result<DocumentSessionStatus, String> {
-        let template_spec = crate::template_spec::load_bundled_template(&ast.metadata.template_id)?;
-        let template_spec = crate::template_spec::resolve_template_variant(
-            &template_spec,
-            ast.metadata
-                .template_variant_id
-                .as_deref()
-                .map(crate::template_spec::typst_template_variant_id),
-        );
+        let template_spec = match &inner.cached_template_spec {
+            Some((tid, vid, spec))
+                if *tid == ast.metadata.template_id
+                    && *vid == ast.metadata.template_variant_id =>
+            {
+                spec.clone()
+            }
+            _ => {
+                let spec =
+                    crate::template_spec::load_bundled_template(&ast.metadata.template_id)?;
+                let resolved = crate::template_spec::resolve_template_variant(
+                    &spec,
+                    ast.metadata
+                        .template_variant_id
+                        .as_deref()
+                        .map(crate::template_spec::typst_template_variant_id),
+                );
+                inner.cached_template_spec = Some((
+                    ast.metadata.template_id.clone(),
+                    ast.metadata.template_variant_id.clone(),
+                    resolved.clone(),
+                ));
+                resolved
+            }
+        };
         let generated = generate_project_sources_incremental(
             &ast,
             &template_spec,

@@ -63,11 +63,12 @@
 .syncCaret {
     position: absolute;
     width: 2px;
+    height: 2px;
     min-width: 2px;
-    min-height: 8px;
+    min-height: 2px;
     background-color: var(--color-primary);
-    border-radius: 999px;
-    opacity: 0.9;
+    border-radius: 50%;
+    opacity: 0.95;
     pointer-events: none;
     z-index: 2;
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 35%, transparent);

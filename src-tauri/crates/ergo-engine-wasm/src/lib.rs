@@ -210,17 +210,29 @@ impl ErgoWasmCompiler {
     }
 
     #[wasm_bindgen]
-    pub fn export_png(&mut self, page_index: usize, pixel_per_pt: f32) -> Result<Vec<u8>, JsValue> {
-        self.engine
-            .export_png(page_index, pixel_per_pt)
-            .map_err(|error| JsValue::from_str(&error))
+    pub fn export_png_pages(&mut self, pixel_per_pt: f32) -> Result<js_sys::Array, JsValue> {
+        let pages = self
+            .engine
+            .export_all_png(pixel_per_pt)
+            .map_err(|error| JsValue::from_str(&error))?;
+        let array = js_sys::Array::new();
+        for bytes in pages {
+            array.push(&js_sys::Uint8Array::from(bytes.as_slice()));
+        }
+        Ok(array)
     }
 
     #[wasm_bindgen]
-    pub fn export_svg(&mut self, page_index: usize) -> Result<String, JsValue> {
-        self.engine
-            .export_svg(page_index)
-            .map_err(|error| JsValue::from_str(&error))
+    pub fn export_svg_pages(&mut self) -> Result<js_sys::Array, JsValue> {
+        let pages = self
+            .engine
+            .export_all_svg()
+            .map_err(|error| JsValue::from_str(&error))?;
+        let array = js_sys::Array::new();
+        for svg in pages {
+            array.push(&JsValue::from_str(&svg));
+        }
+        Ok(array)
     }
 }
 

@@ -33,12 +33,28 @@ pub fn write_resource_files(
         .and_then(|p| p.margin_pt)
         .unwrap_or(8.0);
 
-    resource_source.push_str(&format!(
+    resource_source.push_str(
         "#import \"/lib.typ\": *\n\
-         #show: apply\n\
-         #set page(width: {}pt, height: auto, margin: {}pt)\n\n",
+         #show: apply\n",
+    );
+    resource_source.push_str(&format!(
+        "#set page(\n\
+           width: {}pt,\n\
+           height: auto,\n\
+           margin: {}pt,\n\
+           fill: white,\n\
+           header: none,\n\
+           footer: none,\n\
+           numbering: none,\n\
+         )\n\
+         #show page: set page(\n\
+           fill: white,\n\
+           header: none,\n\
+           footer: none,\n\
+           numbering: none,\n\
+         )\n\n",
         format_pt(width_pt),
-        format_pt(margin_pt)
+        format_pt(margin_pt),
     ));
 
     let mut preview_page_index = 0usize;
@@ -386,6 +402,28 @@ mod tests {
     use super::*;
     use crate::ast::{AssetEntry, DocumentElement, DocumentSection, Equation, Figure, Paragraph};
     use crate::test_fixtures::{basic_document_ast, rich_text};
+
+    #[test]
+    fn resource_preview_typst_uses_same_lib_and_strips_page_chrome() {
+        use crate::template_spec::load_bundled_template;
+
+        let ast = basic_document_ast("Title", "");
+        let template = load_bundled_template("versatile-apa").unwrap();
+        let vfs = VirtualFileSystem::new();
+        let lib = crate::document_resources::resource_preview_lib_source(&ast, &template);
+
+        write_resource_files(&vfs, &ast, &template, &lib);
+
+        let lib_source = vfs.read_source(RESOURCE_LIB).unwrap();
+        assert!(lib_source.contains("#show: apa-style"));
+
+        let resources = vfs.read_source(RESOURCE_WATCH_MAIN).unwrap();
+        assert!(resources.contains("#show: apply"));
+        assert!(resources.contains("fill: white"));
+        assert!(resources.contains("#show page: set page"));
+        assert!(resources.contains("header: none"));
+        assert!(resources.contains("numbering: none"));
+    }
 
     #[test]
     fn preview_pages_skip_seeds_without_preview_source() {

@@ -26,6 +26,19 @@ export const TauriApi = {
         return invoke("write_bytes_to_path", { path, bytes: Array.from(bytes) });
     },
 
+    async writeZipExport(
+        path: string,
+        entries: Array<{ name: string; bytes: Uint8Array }>,
+    ): Promise<void> {
+        return invoke("write_zip_export", {
+            path,
+            entries: entries.map((entry) => ({
+                name: entry.name,
+                bytes: Array.from(entry.bytes),
+            })),
+        });
+    },
+
     async loadFontsForDocument(ast: DocumentAST): Promise<Uint8Array[]> {
         const buffers = await invoke<number[][]>("load_fonts_for_document", { ast });
         return buffers.map((buf) => new Uint8Array(buf));

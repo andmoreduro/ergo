@@ -35,6 +35,8 @@ export interface DocumentFocusState {
     fieldId: string | null;
     caretUtf16Offset: number | null;
     sourceRevision: number | null;
+    anchorPageNumber: number | null;
+    forcePreviewScroll: boolean;
     focusSource: DocumentFocusSource;
     requestId: number;
 }
@@ -118,6 +120,8 @@ const createInitialSessionState = (
         fieldId: null,
         caretUtf16Offset: null,
         sourceRevision: null,
+        anchorPageNumber: null,
+        forcePreviewScroll: false,
         focusSource: "programmatic",
         requestId: 0,
     },
