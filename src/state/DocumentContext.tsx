@@ -128,6 +128,17 @@ const createInitialSessionState = (
     },
 });
 
+const queueDocumentEvents = (
+    events: BackendDocumentEvent[],
+    nextEventId: number,
+    timestamp: number,
+): QueuedDocumentEvent[] =>
+    events.map((event, index) => ({
+        id: nextEventId + index,
+        event,
+        timestamp,
+    }));
+
 const createSessionReducer =
     (historyLimit: number) =>
     (
@@ -147,13 +158,13 @@ const createSessionReducer =
                 future: [previous, ...state.future],
                 events: [
                     ...state.events,
-                    {
-                        id: state.nextEventId,
-                        event: previous.inverseEvents[previous.inverseEvents.length - 1]!,
-                        timestamp: Date.now(),
-                    },
+                    ...queueDocumentEvents(
+                        previous.inverseEvents,
+                        state.nextEventId,
+                        Date.now(),
+                    ),
                 ],
-                nextEventId: state.nextEventId + 1,
+                nextEventId: state.nextEventId + previous.inverseEvents.length,
                 isDirty: true,
             };
         }
@@ -171,13 +182,13 @@ const createSessionReducer =
                 future: state.future.slice(1),
                 events: [
                     ...state.events,
-                    {
-                        id: state.nextEventId,
-                        event: next.forwardEvents[next.forwardEvents.length - 1]!,
-                        timestamp: Date.now(),
-                    },
+                    ...queueDocumentEvents(
+                        next.forwardEvents,
+                        state.nextEventId,
+                        Date.now(),
+                    ),
                 ],
-                nextEventId: state.nextEventId + 1,
+                nextEventId: state.nextEventId + next.forwardEvents.length,
                 isDirty: true,
             };
         }
@@ -247,11 +258,11 @@ const createSessionReducer =
             future: [],
             events: [
                 ...state.events,
-                ...historyEntry.forwardEvents.map((event, index) => ({
-                    id: state.nextEventId + index,
-                    event,
-                    timestamp: historyEntry.timestamp,
-                })),
+                ...queueDocumentEvents(
+                    historyEntry.forwardEvents,
+                    state.nextEventId,
+                    historyEntry.timestamp,
+                ),
             ],
             nextEventId:
                 state.nextEventId + historyEntry.forwardEvents.length,

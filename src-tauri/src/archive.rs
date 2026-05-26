@@ -43,7 +43,7 @@ pub fn save_project_to_path(state: &TauriAppState, path: impl AsRef<Path>) -> Re
 }
 
 #[derive(serde::Serialize, ts_rs::TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectFile {
     pub path: String,
@@ -51,7 +51,7 @@ pub struct ProjectFile {
 }
 
 #[derive(serde::Serialize, ts_rs::TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenProjectResult {
     pub ast: DocumentAST,

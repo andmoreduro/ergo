@@ -7,11 +7,11 @@ use crate::ast::{DocumentAST, DocumentElement, DocumentSection};
 use crate::core_errors::DocumentSessionError;
 use crate::document_session_events::apply_document_event;
 use crate::document_session_generation::{default_layout, generate_project_sources_incremental};
-use crate::template_spec::TemplateSpec;
 pub use crate::document_session_types::{
     DocumentEvent, DocumentSessionStatus, FieldSourceMapEntry, FieldTextSegment, GeneratedFragment,
     ProjectSourceLayout, SourceMapEntry,
 };
+use crate::template_spec::TemplateSpec;
 use crate::vfs::VirtualFileSystem;
 
 pub(crate) const MAIN_PATH: &str = "main.typ";
@@ -105,7 +105,10 @@ impl DocumentSession {
         self.sync_ast_locked(&mut inner, ast, dirty_resource_ids)
     }
 
-    pub fn apply_events(&self, events: Vec<DocumentEvent>) -> Result<DocumentSessionStatus, String> {
+    pub fn apply_events(
+        &self,
+        events: Vec<DocumentEvent>,
+    ) -> Result<DocumentSessionStatus, String> {
         if events.is_empty() {
             return Ok(self.status());
         }
@@ -133,14 +136,12 @@ impl DocumentSession {
     ) -> Result<DocumentSessionStatus, String> {
         let template_spec = match &inner.cached_template_spec {
             Some((tid, vid, spec))
-                if *tid == ast.metadata.template_id
-                    && *vid == ast.metadata.template_variant_id =>
+                if *tid == ast.metadata.template_id && *vid == ast.metadata.template_variant_id =>
             {
                 spec.clone()
             }
             _ => {
-                let spec =
-                    crate::template_spec::load_bundled_template(&ast.metadata.template_id)?;
+                let spec = crate::template_spec::load_bundled_template(&ast.metadata.template_id)?;
                 let resolved = crate::template_spec::resolve_template_variant(
                     &spec,
                     ast.metadata

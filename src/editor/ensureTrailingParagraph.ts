@@ -1,6 +1,6 @@
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { ASTAction } from "../state/ast/actions";
-import { createId, createParagraph } from "../state/ast/defaults";
+import { createId } from "../state/ast/defaults";
 import { contentSection, elementHasText, paragraphHasText } from "./fieldNavigation";
 
 export const trailingParagraphAction = (
@@ -11,7 +11,7 @@ export const trailingParagraphAction = (
         return null;
     }
 
-    const last = section.elements.at(-1);
+    const last = section.elements[section.elements.length - 1];
     if (!last) {
         return {
             type: "ADD_PARAGRAPH",

@@ -75,7 +75,8 @@ pub fn write_zip_export(path: String, entries: Vec<ZipExportEntry>) -> Result<()
         }
     }
 
-    let file = File::create(&path).map_err(|error| format!("failed to create zip file: {error}"))?;
+    let file =
+        File::create(&path).map_err(|error| format!("failed to create zip file: {error}"))?;
     let mut zip = zip::ZipWriter::new(file);
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);

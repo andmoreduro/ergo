@@ -77,7 +77,8 @@ export const useFieldNavigation = (
                 payload: {
                     sectionId: section.id,
                     paragraphId,
-                    afterElementId: section.elements.at(-1)?.id,
+                    afterElementId:
+                        section.elements[section.elements.length - 1]?.id,
                 },
             });
             focusField(paragraphId, `${paragraphId}:text`);

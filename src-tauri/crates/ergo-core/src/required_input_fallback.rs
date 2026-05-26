@@ -17,10 +17,7 @@ impl<'a> RequiredInputFallbacks<'a> {
     }
 
     pub(crate) fn from_ast(template: &'a TemplateSpec, ast: &'a DocumentAST) -> Self {
-        Self::new(
-            template,
-            ast.metadata.template_variant_id.as_deref(),
-        )
+        Self::new(template, ast.metadata.template_variant_id.as_deref())
     }
 
     pub(crate) fn effective_title<'s>(&self, raw: &'s str) -> String {
@@ -162,7 +159,13 @@ impl<'a> RequiredInputFallbacks<'a> {
             .as_deref()
             .map(str::trim)
             .filter(|label| !label.is_empty())
-            .or_else(|| schema.id.as_deref().map(str::trim).filter(|id| !id.is_empty()))
+            .or_else(|| {
+                schema
+                    .id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|id| !id.is_empty())
+            })
             .unwrap_or("Field")
             .to_string()
     }

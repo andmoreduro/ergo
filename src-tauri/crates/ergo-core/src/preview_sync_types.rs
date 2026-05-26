@@ -4,7 +4,7 @@ use ts_rs::TS;
 use crate::compilation_types::SourceRevision;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewPageMetrics {
     pub page_number: usize,
@@ -13,7 +13,7 @@ pub struct PreviewPageMetrics {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewCaretCue {
     pub top_y_pt: f64,
@@ -21,7 +21,7 @@ pub struct PreviewCaretCue {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewElementPosition {
     pub element_id: Option<String>,
@@ -39,7 +39,7 @@ pub struct PreviewElementPosition {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewFocusTarget {
     pub element_id: String,
@@ -55,7 +55,7 @@ pub struct PreviewFocusTarget {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewSyncStatus {
     #[ts(type = "number | null")]
@@ -64,7 +64,7 @@ pub struct PreviewSyncStatus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(
     tag = "status",
     rename_all = "camelCase",
@@ -99,7 +99,7 @@ pub enum PreviewJumpResult {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(
     tag = "status",
     rename_all = "camelCase",

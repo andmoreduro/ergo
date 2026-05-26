@@ -17,7 +17,7 @@ stateDiagram-v2
     Error --> Welcome
 
     ActiveProject --> Editing : user edit
-    Editing --> SyncPending : enqueue DocumentEvent
+    Editing --> SyncPending : enqueue DocumentEvent(s)
     SyncPending --> Syncing : WASM sync + compile
     Syncing --> ActiveProject : preview applied
     Syncing --> Error : sync failed
@@ -27,7 +27,7 @@ stateDiagram-v2
     ActiveProject --> Welcome : close project
 ```
 
-React updates immediately during `Editing`. WASM sync runs asynchronously without blocking further input.
+React updates immediately during `Editing`. WASM sync runs asynchronously without blocking further input. Undo and redo replay the history entry's ordered event list through the same sync transition used by normal edits.
 
 ## 2. Backend DocumentSession Lifecycle
 

@@ -3,8 +3,8 @@ use crate::ast::{
     AssetEntry, ContentSection, CustomElement, DependencyManifest, DocumentElement,
     DocumentSection, GlobalSettings, ProjectMetadata, ProjectSettings, RichText,
 };
-use crate::document_source_builder::SourceBuilder;
 use crate::ast::{Figure, Paragraph, Table, TableCell};
+use crate::document_source_builder::SourceBuilder;
 use crate::template_spec::{
     CustomElementSpec, ElementOverrideSpec, ElementOverrides, ExtraFieldSpec, InputGroupSpec,
     PackageSpec, ParamSpec, SectionSpec, ShowRuleSpec, TemplateIdentity,
@@ -380,7 +380,9 @@ fn figure_image_path_is_relative_to_element_file_location() {
         "element file should be in elements/ directory: {element_file_path}"
     );
     assert!(
-        figure_fragment.source.contains("image(\"../assets/photo.webp\")"),
+        figure_fragment
+            .source
+            .contains("image(\"../assets/photo.webp\")"),
         "image() path must climb out of elements/ to reach assets/; got:\n{}",
         figure_fragment.source
     );
@@ -433,16 +435,14 @@ fn wrapper_extra_fields_emit_in_typst_output() {
         for element in &mut section.elements {
             match element {
                 DocumentElement::Figure(figure) => {
-                    figure.extra_fields.insert(
-                        "note".to_string(),
-                        json!("See appendix for raw data."),
-                    );
+                    figure
+                        .extra_fields
+                        .insert("note".to_string(), json!("See appendix for raw data."));
                 }
                 DocumentElement::Table(table) => {
-                    table.extra_fields.insert(
-                        "caption".to_string(),
-                        json!("Participant counts by group."),
-                    );
+                    table
+                        .extra_fields
+                        .insert("caption".to_string(), json!("Participant counts by group."));
                 }
                 _ => {}
             }
@@ -470,10 +470,9 @@ fn apa_figure_note_without_caption_avoids_double_comma() {
             if let DocumentElement::Figure(figure) = element {
                 figure.asset_id = Some("asset-1".to_string());
                 figure.caption = String::new();
-                figure.extra_fields.insert(
-                    "note".to_string(),
-                    json!("Figure note text."),
-                );
+                figure
+                    .extra_fields
+                    .insert("note".to_string(), json!("Figure note text."));
             }
         }
     }

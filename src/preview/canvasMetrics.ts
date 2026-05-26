@@ -257,7 +257,7 @@ export function caretStyleForPageMetrics(
         caretCue: { topYPt: number; heightPt: number };
     },
     metrics: PagePtMetrics,
-): { left: string; top: string; transform: string } {
+): { left: string; top: string; height: string; transform: string } {
     const toPercent = (ratio: number) => `${Number((ratio * 100).toFixed(2))}%`;
     const leftRatio = Math.min(1, Math.max(0, position.xPt / metrics.widthPt));
     const centerYPt =
@@ -266,6 +266,7 @@ export function caretStyleForPageMetrics(
     return {
         left: toPercent(leftRatio),
         top: toPercent(centerYPt / metrics.heightPt),
+        height: toPercent(position.caretCue.heightPt / metrics.heightPt),
         transform: "translate(-50%, -50%)",
     };
 }

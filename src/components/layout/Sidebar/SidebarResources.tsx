@@ -48,7 +48,7 @@ const findElementById = (
         return false;
     }) ?? null;
 
-const parseCssLengthPx = (value: string, element: HTMLElement): number | null => {
+const parseCssLengthPx = (value: string): number | null => {
     const trimmed = value.trim();
     if (!trimmed || trimmed === "none") {
         return null;
@@ -85,7 +85,7 @@ const parseCssLengthPx = (value: string, element: HTMLElement): number | null =>
 
 const resourcePreviewMaxHeightPx = (element: HTMLElement): number => {
     const maxHeight = getComputedStyle(element).maxHeight;
-    return parseCssLengthPx(maxHeight, element) ?? 120;
+    return parseCssLengthPx(maxHeight) ?? 120;
 };
 
 const ResourcePreviewCanvas = ({

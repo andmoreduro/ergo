@@ -181,6 +181,80 @@ describe("DocumentProvider session state", () => {
         });
     });
 
+    it("queues every backend event when undoing and redoing a multi-event conversion", () => {
+        const { result } = renderDocument();
+        const section = result.current.state.sections.find(
+            (entry) => entry.type === "Content",
+        );
+        if (!section || section.type !== "Content") {
+            throw new Error("content section missing");
+        }
+
+        act(() => {
+            result.current.dispatch({
+                type: "ADD_PARAGRAPH",
+                payload: {
+                    sectionId: section.id,
+                    paragraphId: "convert-me",
+                },
+            });
+            result.current.dispatch({
+                type: "UPDATE_PARAGRAPH_TEXT",
+                payload: {
+                    paragraphId: "convert-me",
+                    text: "Convertible paragraph",
+                },
+            });
+            result.current.dispatch({
+                type: "CONVERT_ELEMENT",
+                payload: {
+                    elementId: "convert-me",
+                    targetKind: "Heading",
+                },
+            });
+        });
+
+        expect(result.current.events.slice(-2).map(({ event }) => event.type)).toEqual([
+            "removeElement",
+            "insertElement",
+        ]);
+        expect(
+            result.current.state.sections
+                .flatMap((entry) =>
+                    entry.type === "Content" ? entry.elements : [],
+                )
+                .find((element) => element.id === "convert-me")?.type,
+        ).toBe("Heading");
+
+        act(() => result.current.undo());
+
+        expect(result.current.events.slice(-2).map(({ event }) => event.type)).toEqual([
+            "removeElement",
+            "restoreElement",
+        ]);
+        expect(
+            result.current.state.sections
+                .flatMap((entry) =>
+                    entry.type === "Content" ? entry.elements : [],
+                )
+                .find((element) => element.id === "convert-me")?.type,
+        ).toBe("Paragraph");
+
+        act(() => result.current.redo());
+
+        expect(result.current.events.slice(-2).map(({ event }) => event.type)).toEqual([
+            "removeElement",
+            "insertElement",
+        ]);
+        expect(
+            result.current.state.sections
+                .flatMap((entry) =>
+                    entry.type === "Content" ? entry.elements : [],
+                )
+                .find((element) => element.id === "convert-me")?.type,
+        ).toBe("Heading");
+    });
+
     it("prunes synced document events by acknowledged id", () => {
         const { result } = renderDocument();
 

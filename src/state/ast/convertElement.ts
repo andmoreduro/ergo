@@ -1,10 +1,9 @@
-import type { DocumentAST } from "../bindings/DocumentAST";
-import type { DocumentElement } from "../bindings/DocumentElement";
-import type { RichText } from "../bindings/RichText";
+import type { DocumentAST } from "../../bindings/DocumentAST";
+import type { DocumentElement } from "../../bindings/DocumentElement";
+import type { RichText } from "../../bindings/RichText";
 import {
     createEquation,
     createFigure,
-    createHeading,
     createParagraph,
     createTable,
 } from "./defaults";
@@ -48,25 +47,22 @@ export const convertElement = (
 
     switch (targetKind) {
         case "Paragraph":
-            return {
-                ...createParagraph("", id),
-                content,
-            };
+            return { type: "Paragraph", id, content };
         case "Heading":
-            return {
-                ...createHeading(2, plain, id),
-                content,
-            };
+            return { type: "Heading", id, level: 2, content };
         case "Equation":
             return createEquation(id, plain);
         case "Table":
             return createTable(2, 2, id);
         case "Figure": {
             const figure = createFigure(id);
-            if (content.length > 0) {
+            if (figure.type === "Figure" && content.length > 0) {
                 return {
                     ...figure,
-                    content: createParagraph("", figure.content.type === "Paragraph" ? figure.content.id : id),
+                    content:
+                        figure.content.type === "Paragraph"
+                            ? { ...figure.content, content }
+                            : createParagraph(""),
                 };
             }
             return figure;

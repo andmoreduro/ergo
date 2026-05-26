@@ -5,7 +5,7 @@ use crate::ast::DocumentAST;
 use crate::template_spec::TemplateSpec;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum ResourceKind {
     File,
@@ -16,7 +16,7 @@ pub enum ResourceKind {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum ResourcePreviewStatus {
     Ready,
@@ -25,7 +25,7 @@ pub enum ResourcePreviewStatus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 pub struct ResourcePreview {
     pub status: ResourcePreviewStatus,
     pub path: Option<String>,
@@ -38,7 +38,7 @@ pub struct ResourcePreview {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 pub struct ResourceEntry {
     pub id: String,
     pub kind: ResourceKind,
@@ -51,7 +51,7 @@ pub struct ResourceEntry {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 pub struct ResourceGroup {
     pub kind: ResourceKind,
     pub label: String,
@@ -59,12 +59,12 @@ pub struct ResourceGroup {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 pub struct DocumentResources {
     pub groups: Vec<ResourceGroup>,
     pub revision: u64,
 }
 
 pub fn resource_preview_lib_source(ast: &DocumentAST, template: &TemplateSpec) -> String {
-    crate::document_generation_lib::generate_lib_typst(ast, template).source
+    crate::typst_source::generate_lib_typst(ast, template).source
 }

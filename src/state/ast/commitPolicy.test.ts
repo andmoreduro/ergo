@@ -73,6 +73,49 @@ describe("commitPolicy", () => {
         expect(shouldCommitAstAction(ast, action, nextAst)).toBe(false);
     });
 
+    it("keeps unrelated project input edits live while a figure is missing its image", () => {
+        const ast = astWithFigure(null);
+        ast.inputs = { title: "Draft" };
+        const action: ASTAction = {
+            type: "UPDATE_INPUT",
+            payload: { path: "/title", value: "Live Draft" },
+        };
+
+        const nextAst = applyAction(ast, action);
+
+        expect(shouldCommitAstAction(ast, action, nextAst)).toBe(true);
+    });
+
+    it("blocks figure body and extra-field edits until an image is linked", () => {
+        const ast = astWithFigure(null);
+        const bodyAction: ASTAction = {
+            type: "UPDATE_FIGURE",
+            payload: {
+                figureId: "figure-1",
+                bodyText: "Body",
+            },
+        };
+        const extraFieldAction: ASTAction = {
+            type: "UPDATE_ELEMENT_EXTRA_FIELD",
+            payload: {
+                elementId: "figure-1",
+                fieldKey: "width",
+                fieldValue: "80%",
+            },
+        };
+
+        expect(
+            shouldCommitAstAction(ast, bodyAction, applyAction(ast, bodyAction)),
+        ).toBe(false);
+        expect(
+            shouldCommitAstAction(
+                ast,
+                extraFieldAction,
+                applyAction(ast, extraFieldAction),
+            ),
+        ).toBe(false);
+    });
+
     it("allows figure caption edits after an image is linked", () => {
         const ast = astWithFigure("asset-1");
         const action: ASTAction = {
