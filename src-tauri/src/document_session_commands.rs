@@ -41,7 +41,7 @@ pub fn get_document_session_status(
 }
 
 #[derive(serde::Serialize, ts_rs::TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportResourceResult {
     pub asset: AssetEntry,

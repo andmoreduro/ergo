@@ -1,5 +1,6 @@
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { DocumentElement } from "../bindings/DocumentElement";
+import type { DocumentSection } from "../bindings/DocumentSection";
 import type { ASTAction } from "../state/ast/actions";
 import { astReducer } from "../state/ast/reducer";
 import {
@@ -9,6 +10,8 @@ import { defaultFieldIdForElement, projectInputElementId } from "./fieldIds";
 import { contentSection } from "./fieldNavigation";
 
 export { ensureMinimumContentParagraphAction } from "../state/ast/contentInvariant";
+
+type ContentSection = Extract<DocumentSection, { type: "Content" }>;
 
 export type ContentFocusTarget = {
     elementId: string;
@@ -87,7 +90,9 @@ export const planContentElementRemoval = (
 
     if (!focusElement) {
         focusElement =
-            lastParagraphInSection(nextSection) ?? nextSection.elements.at(-1) ?? null;
+            lastParagraphInSection(nextSection) ??
+            nextSection.elements[nextSection.elements.length - 1] ??
+            null;
     }
 
     if (!focusElement) {

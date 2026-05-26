@@ -6,7 +6,7 @@ use ts_rs::TS;
 use crate::ast::{ActionId, KeyModifier, KeyStroke};
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 pub struct ActionInvocation {
     pub id: ActionId,
     #[serde(default)]
@@ -15,7 +15,7 @@ pub struct ActionInvocation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 pub struct ActionDescriptor {
     pub id: ActionId,
     pub label_key: String,
@@ -26,7 +26,7 @@ pub struct ActionDescriptor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 pub struct ActionContextNode {
     pub id: String,
     #[serde(default)]
@@ -38,7 +38,7 @@ pub struct ActionContextNode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 pub struct ActionContextSnapshot {
     pub window_id: String,
     #[serde(default)]
@@ -48,7 +48,7 @@ pub struct ActionContextSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 pub struct LogicalKeyEvent {
     pub window_id: String,
     pub key: String,
@@ -57,7 +57,7 @@ pub struct LogicalKeyEvent {
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum ActionResolution {
     NoMatch,
@@ -73,7 +73,7 @@ pub enum ActionResolution {
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 pub struct KeymapConflict {
     pub action_id: ActionId,
     pub conflicting_action_id: ActionId,
@@ -82,7 +82,7 @@ pub struct KeymapConflict {
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
-#[ts(export, export_to = "../../src/bindings/")]
+#[ts(export)]
 pub struct KeymapValidationResult {
     pub conflicts: Vec<KeymapConflict>,
     pub errors: Vec<String>,

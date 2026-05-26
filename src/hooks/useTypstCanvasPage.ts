@@ -92,7 +92,7 @@ export function useTypstCanvasPage(
           }
         : undefined;
 
-    const pixelPerPt = usesContainerFit
+    const pixelPerPt = containerFit
         ? pixelPerPtForContainerFit(
               layoutPageWidthPt,
               layoutPageHeightPt,
@@ -172,7 +172,6 @@ export function useTypstCanvasPage(
         pageIndex,
         pixelPerPt,
         previewRevision,
-        usesContainerFit,
     ]);
 
     useEffect(() => {

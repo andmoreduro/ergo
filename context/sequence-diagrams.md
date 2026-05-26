@@ -17,7 +17,7 @@ sequenceDiagram
     participant Session as Backend DocumentSession
 
     User->>UI: Edit field or shortcut
-    UI->>State: Apply AST change + queue DocumentEvent
+    UI->>State: Apply AST change + queue DocumentEvent(s)
     State-->>UI: Immediate UI update
 
     State->>Worker: sync_events(batch)
@@ -39,7 +39,7 @@ sequenceDiagram
 - Compiled outline comes from `document.introspector` on the paged document (headings with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries (e.g. bibliography title) scroll the preview to that page.
 - Canvas rasterizes only viewport pages; zoom debounces per `preview_zoom_render_debounce_ms`.
 - Preview does not shift layout with compile-status chrome while typing.
-- **Undo/redo:** apply the stored `inverseEvent` / `forwardEvent` locally, then sync and mirror that same event. Destructive inverses carry restore payloads (`RestoreElement`, `RestoreTableRow`, `RestoreTableColumn`).
+- **Undo/redo:** apply the stored `inverseEvents` / `forwardEvents` locally, then sync and mirror the full ordered event list with sequential event IDs. Destructive inverses carry restore payloads (`RestoreElement`, `RestoreTableRow`, `RestoreTableColumn`).
 
 ## 2. Archive Save And Autosave
 

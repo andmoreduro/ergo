@@ -1,10 +1,10 @@
 use crate::ast::{AssetEntry, DocumentAST, DocumentElement, DocumentSection, ReferenceEntry};
-use crate::document_session_generation::resource_preview_typst_for_element;
 use crate::document_resources::{
     DocumentResources, ResourceEntry, ResourceGroup, ResourceKind, ResourcePreview,
     ResourcePreviewStatus,
 };
 use crate::template_spec::TemplateSpec;
+use crate::typst_source::resource_preview_typst_for_element;
 use crate::vfs::VirtualFileSystem;
 
 pub const RESOURCE_WATCH_MAIN: &str = "resources.typ";
@@ -220,13 +220,7 @@ fn resource_seeds(ast: &DocumentAST, template: &TemplateSpec) -> Vec<ResourceSee
     for section in &ast.sections {
         let DocumentSection::Content(content) = section;
         for element in &content.elements {
-            collect_element_seeds(
-                element,
-                &mut seeds,
-                &ast.assets,
-                template,
-                &ast.references,
-            );
+            collect_element_seeds(element, &mut seeds, &ast.assets, template, &ast.references);
         }
     }
     seeds
@@ -261,8 +255,9 @@ fn collect_element_seeds(
             });
         }
         DocumentElement::Table(table) => {
-            let preview_body = resource_preview_typst_for_element(element, template, assets, references)
-                .unwrap_or_else(|| legacy_table_preview_body(table));
+            let preview_body =
+                resource_preview_typst_for_element(element, template, assets, references)
+                    .unwrap_or_else(|| legacy_table_preview_body(table));
             seeds.push(ResourceSeed {
                 id: table.id.clone(),
                 kind: ResourceKind::Table,
@@ -287,8 +282,9 @@ fn collect_element_seeds(
             } else {
                 caption.to_string()
             };
-            let preview_body = resource_preview_typst_for_element(element, template, assets, references)
-                .unwrap_or_else(|| legacy_figure_preview_body(asset_ref));
+            let preview_body =
+                resource_preview_typst_for_element(element, template, assets, references)
+                    .unwrap_or_else(|| legacy_figure_preview_body(asset_ref));
             seeds.push(ResourceSeed {
                 id: figure.id.clone(),
                 kind: ResourceKind::Figure,

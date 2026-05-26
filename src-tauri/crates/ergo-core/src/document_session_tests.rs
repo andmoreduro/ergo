@@ -809,8 +809,8 @@ fn test_incremental_dirty_resource_tracking() {
 fn compiles_apa_document_with_table_and_paragraph_edit() {
     use crate::compile_artifacts::compile_document;
     use crate::package_resolver::{collect_package_files, PackageRef};
-    use crate::world::ErgoWorld;
     use crate::path_utils::file_id_for_virtual_path;
+    use crate::world::ErgoWorld;
 
     let package = PackageRef::from_import("@preview/versatile-apa", "7.2.0").unwrap();
     let package_files = match collect_package_files(&package) {
@@ -908,8 +908,8 @@ fn compiles_apa_document_with_table_and_paragraph_edit() {
 fn compiles_apa_figure_with_linked_image_asset() {
     use crate::compile_artifacts::compile_document;
     use crate::package_resolver::{collect_package_files, PackageRef};
-    use crate::world::ErgoWorld;
     use crate::path_utils::file_id_for_virtual_path;
+    use crate::world::ErgoWorld;
 
     let package = PackageRef::from_import("@preview/versatile-apa", "7.2.0").unwrap();
     let package_files = match collect_package_files(&package) {
@@ -976,17 +976,19 @@ fn compiles_apa_figure_with_linked_image_asset() {
         caption: None,
     });
     if let DocumentSection::Content(content) = &mut ast.sections[0] {
-        content.elements.push(DocumentElement::Figure(Box::new(Figure {
-            id: "figure-1".to_string(),
-            asset_id: Some("asset-1".to_string()),
-            content: DocumentElement::Paragraph(Paragraph {
-                id: "figure-1-body".to_string(),
-                content: vec![],
-            }),
-            caption: "Test image".to_string(),
-            placement: "auto".to_string(),
-            extra_fields: std::collections::HashMap::new(),
-        })));
+        content
+            .elements
+            .push(DocumentElement::Figure(Box::new(Figure {
+                id: "figure-1".to_string(),
+                asset_id: Some("asset-1".to_string()),
+                content: DocumentElement::Paragraph(Paragraph {
+                    id: "figure-1-body".to_string(),
+                    content: vec![],
+                }),
+                caption: "Test image".to_string(),
+                placement: "auto".to_string(),
+                extra_fields: std::collections::HashMap::new(),
+            })));
     }
 
     for file in package_files {

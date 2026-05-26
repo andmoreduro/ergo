@@ -434,7 +434,9 @@ fn apa_title_caret_position_roundtrips_through_preview_click() {
     );
 
     match jump {
-        PreviewJumpResult::Field { target: ref actual, .. } => {
+        PreviewJumpResult::Field {
+            target: ref actual, ..
+        } => {
             assert_eq!(actual.element_id, target.element_id);
             assert_eq!(actual.field_id, target.field_id);
             assert_eq!(

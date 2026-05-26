@@ -415,7 +415,7 @@ const DynamicFieldAffiliations = ({ schema, path, label }: DynamicFieldProps) =>
 
 const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
     const { state, dispatch } = useDocumentAst();
-    const { handleFieldAdvance, handleAdvanceKeyDown } = useEditorNavigation();
+    const { handleFieldAdvance } = useEditorNavigation();
     const items = (getValueAtPath(state.inputs, path) ?? []) as string[];
     const itemKind =
         schema.items?.type === "content" ? "content" : "string";

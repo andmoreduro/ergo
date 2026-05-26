@@ -158,7 +158,7 @@ export const Preview = ({
                 <div
                     className={styles.scrollArea}
                     data-scroll-region
-                    ref={previewScrollRef}
+                    ref={previewScrollRef as RefObject<HTMLDivElement>}
                 >
                     <div className={styles.svgContainer}>
                         {previewPages.length > 0 && previewRevision !== null ? (

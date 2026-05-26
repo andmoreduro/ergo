@@ -3,6 +3,26 @@ use crate::document_source_builder::SourceBuilder;
 use crate::required_input_fallback::RequiredInputFallbacks;
 use crate::template_spec::{ParamSpec, ParamType, TemplateSpec};
 
+mod custom_fields;
+mod figures;
+mod fragments;
+mod hashing;
+mod paths;
+mod references;
+mod rich_text;
+mod tables;
+
+pub(crate) use fragments::{element_fragment, resource_preview_typst_for_element};
+pub(crate) use hashing::{element_content_hash, hash_source};
+pub(crate) use paths::{element_id, element_path, label_for_id};
+pub(crate) use references::generate_references_bib;
+
+#[cfg(test)]
+pub(crate) use references::{bibliography_citation_keys, typst_reference_marker};
+
+#[cfg(test)]
+pub(crate) use rich_text::push_rich_text_field;
+
 pub(crate) fn escape_typst_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }

@@ -70,16 +70,25 @@ export const InsertReferenceDialog = ({
 
     const outlineItems = useMemo(
         () =>
-            (outlineEntries ?? []).map((entry) => ({
-                key: `outline-${entry.key}`,
-                label: entry.text,
-                subtitle: m.sidebar_outline_page({ page: entry.page }),
-                onPick: () =>
-                    onSelect({
-                        referenceId: entry.target.elementId,
+            (outlineEntries ?? []).flatMap((entry) => {
+                const target = entry.target;
+                if (!target) {
+                    return [];
+                }
+
+                return [
+                    {
+                        key: `outline-${entry.key}`,
                         label: entry.text,
-                    }),
-            })),
+                        subtitle: m.sidebar_outline_page({ page: entry.page }),
+                        onPick: () =>
+                            onSelect({
+                                referenceId: target.elementId,
+                                label: entry.text,
+                            }),
+                    },
+                ];
+            }),
         [onSelect, outlineEntries],
     );
 

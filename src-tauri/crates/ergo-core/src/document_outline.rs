@@ -6,7 +6,7 @@ use typst_library::model::HeadingElem;
 
 /// A single heading entry in the compiled document outline.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct OutlineEntry {
     /// Heading level (1 = `=`, 2 = `==`, etc.)
@@ -19,7 +19,7 @@ pub struct OutlineEntry {
 
 /// Ordered list of headings extracted from a compiled `PagedDocument`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../../../src/bindings/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentOutline {
     pub entries: Vec<OutlineEntry>,
