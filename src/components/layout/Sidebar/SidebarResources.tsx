@@ -3,6 +3,7 @@ import type { AssetEntry } from "../../../bindings/AssetEntry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { ResourceEntry } from "../../../bindings/ResourceEntry";
+import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
 import { useDocument } from "../../../state/DocumentContext";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { useTypstCanvasPage } from "../../../hooks/useTypstCanvasPage";
@@ -91,10 +92,12 @@ const resourcePreviewMaxHeightPx = (element: HTMLElement): number => {
 const ResourcePreviewCanvas = ({
     pageNumber,
     revision,
+    canRender,
     zoomRenderDebounceMs,
 }: {
     pageNumber: number;
     revision: number;
+    canRender: boolean;
     zoomRenderDebounceMs: number;
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -133,7 +136,7 @@ const ResourcePreviewCanvas = ({
             ),
         1,
         zoomRenderDebounceMs,
-        true,
+        canRender,
         pageNumber,
         revision,
         {
@@ -155,11 +158,13 @@ const ResourcePreviewCanvas = ({
 
 export const SidebarResourcesPanel = memo(({
     resources,
-    revision,
+    resourcePreviewRevisions,
+    mainPreviewPaintedRevision,
     zoomRenderDebounceMs,
 }: {
     resources: DocumentResources | null;
-    revision: number;
+    resourcePreviewRevisions: ResourcePreviewRevisions;
+    mainPreviewPaintedRevision: number | null;
     zoomRenderDebounceMs: number;
 }) => {
     const { state, dispatch } = useDocument();
@@ -243,35 +248,51 @@ export const SidebarResourcesPanel = memo(({
                     <section className={styles.resourceGroup} key={group.kind}>
                         <h3>{group.label}</h3>
                         <div className={styles.navList}>
-                            {group.entries.map((entry) => (
-                                <div className={styles.resourceRow} key={entry.id}>
-                                    <button
-                                        className={styles.navItem}
-                                        type="button"
-                                        onClick={() => openResource(entry)}
-                                    >
-                                        {entry.preview.status === "ready" &&
-                                        entry.preview.page_number ? (
-                                            <ResourcePreviewCanvas
-                                                pageNumber={entry.preview.page_number}
-                                                revision={revision}
-                                                zoomRenderDebounceMs={
-                                                    zoomRenderDebounceMs
-                                                }
-                                            />
-                                        ) : (
-                                            <span className={styles.resourcePreviewError}>
-                                                {entry.preview.diagnostic ??
-                                                    m.resources_preview_unavailable()}
-                                            </span>
-                                        )}
-                                        <span>{entry.label}</span>
-                                        {entry.subtitle && (
-                                            <small>{entry.subtitle}</small>
-                                        )}
-                                    </button>
-                                </div>
-                            ))}
+                            {group.entries.map((entry) => {
+                                const resourceRevision =
+                                    resourcePreviewRevisions[entry.id] ?? 0;
+                                const canRender =
+                                    mainPreviewPaintedRevision === null
+                                        ? resourceRevision === 0
+                                        : resourceRevision <= mainPreviewPaintedRevision;
+
+                                return (
+                                    <div className={styles.resourceRow} key={entry.id}>
+                                        <button
+                                            className={styles.navItem}
+                                            type="button"
+                                            onClick={() => openResource(entry)}
+                                        >
+                                            {entry.preview.status === "ready" &&
+                                            entry.preview.page_number ? (
+                                                <ResourcePreviewCanvas
+                                                    pageNumber={
+                                                        entry.preview.page_number
+                                                    }
+                                                    revision={resourceRevision}
+                                                    canRender={canRender}
+                                                    zoomRenderDebounceMs={
+                                                        zoomRenderDebounceMs
+                                                    }
+                                                />
+                                            ) : (
+                                                <span
+                                                    className={
+                                                        styles.resourcePreviewError
+                                                    }
+                                                >
+                                                    {entry.preview.diagnostic ??
+                                                        m.resources_preview_unavailable()}
+                                                </span>
+                                            )}
+                                            <span>{entry.label}</span>
+                                            {entry.subtitle && (
+                                                <small>{entry.subtitle}</small>
+                                            )}
+                                        </button>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </section>
                 ))

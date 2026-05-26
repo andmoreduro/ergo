@@ -73,7 +73,7 @@
   "titlebar_close": "Close",
   "workspace_form_editor": "Form Editor",
   "workspace_live_preview": "Live Preview",
-  "preview_telemetry": "Latency: {latency}ms",
+  "preview_telemetry": "Latency: {latency}ms · Queue: {queue}ms · Sync: {sync}ms · Compile: {compile}ms · Paint: {paint}ms",
   "workspace_preview_placeholder": "Live Preview content placeholder...",
   "preview_required_fields_intro": "Fill in all required fields to see a live preview:",
   "workspace_compiling": "Compiling...",

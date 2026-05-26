@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { RenderPagePayload } from "../workers/compilerProtocol";
 import {
     applyCanvasDisplaySize,
@@ -85,12 +85,16 @@ export function useTypstCanvasPage(
     const layoutFitHeightPx = fitHeightPx ?? 0;
     const usesContainerFit = layoutFitWidthPx > 0;
 
-    const containerFit: ContainerFitPx | undefined = usesContainerFit
-        ? {
-              widthPx: layoutFitWidthPx,
-              heightPx: layoutFitHeightPx > 0 ? layoutFitHeightPx : undefined,
-          }
-        : undefined;
+    const containerFit = useMemo<ContainerFitPx | undefined>(
+        () =>
+            usesContainerFit
+                ? {
+                      widthPx: layoutFitWidthPx,
+                      heightPx: layoutFitHeightPx > 0 ? layoutFitHeightPx : undefined,
+                  }
+                : undefined,
+        [layoutFitHeightPx, layoutFitWidthPx, usesContainerFit],
+    );
 
     const pixelPerPt = containerFit
         ? pixelPerPtForContainerFit(

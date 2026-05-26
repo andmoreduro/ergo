@@ -48,7 +48,7 @@ const createDocumentWithTitle = (title: string): DocumentAST => {
 
 const createStatus = (sourceRevision: number) => ({
     dirtyElementIds: [],
-    dirtySectionIds: [],
+    dirtyResourceIds: [],
     fragmentCount: 0,
     layout: {
         documentStatePath: ".ergproj/document_state.json",
@@ -64,6 +64,14 @@ const createStatus = (sourceRevision: number) => ({
     sourceMap: [],
     fieldSourceMap: [],
     sourceRevision,
+});
+
+const createStatusWithDirtyResources = (
+    sourceRevision: number,
+    dirtyResourceIds: string[],
+) => ({
+    ...createStatus(sourceRevision),
+    dirtyResourceIds,
 });
 
 const queuedEvent = (
@@ -213,6 +221,59 @@ describe("useCompiler source syncing", () => {
 
         await waitFor(() => {
             expect(result.current.latencyStartRef.current).toBe(editTimestamp);
+        });
+
+        unmount();
+    });
+
+    it("updates resource preview revisions only for dirty resources", async () => {
+        const ast = createDocumentWithTitle("Test");
+
+        compilerClientMock.bootstrap.mockResolvedValue({
+            status: createStatusWithDirtyResources(4, ["equation-1", "table-1"]),
+            result: succeededCompile(4),
+        });
+        compilerClientMock.syncEvents.mockResolvedValue(
+            createStatusWithDirtyResources(5, ["equation-1"]),
+        );
+        compilerClientMock.compile.mockResolvedValue(succeededCompile(5));
+
+        const { result, rerender, unmount } = renderHook(
+            ({ ast, events, sessionId }) =>
+                useCompiler(ast, events, sessionId, undefined, events.length),
+            {
+                initialProps: { ast, events: [] as QueuedDocumentEvent[], sessionId: 1 },
+            },
+        );
+
+        await waitFor(() => {
+            expect(result.current.resourcePreviewRevisions).toEqual({
+                "equation-1": 4,
+                "table-1": 4,
+            });
+        });
+
+        rerender({
+            ast,
+            events: [
+                {
+                    id: 1,
+                    timestamp: 1_700_000_000_000,
+                    event: {
+                        type: "updateEquation",
+                        elementId: "equation-1",
+                        body: "x = y",
+                    },
+                },
+            ],
+            sessionId: 1,
+        });
+
+        await waitFor(() => {
+            expect(result.current.resourcePreviewRevisions).toEqual({
+                "equation-1": 5,
+                "table-1": 4,
+            });
         });
 
         unmount();

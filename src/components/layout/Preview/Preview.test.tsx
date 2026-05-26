@@ -19,6 +19,9 @@ const compilerClientMock = vi.hoisted(() => ({
 }));
 
 const dispatchActionMock = vi.hoisted(() => vi.fn());
+const debugMock = vi.hoisted(() => ({
+    enabled: false,
+}));
 
 vi.mock("../../../workers/compilerClient", () => ({
     CompilerClient: compilerClientMock,
@@ -26,6 +29,10 @@ vi.mock("../../../workers/compilerClient", () => ({
 
 vi.mock("../../../actions/runtime", () => ({
     useActionDispatcher: () => dispatchActionMock,
+}));
+
+vi.mock("../../../config/debug", () => ({
+    isDebugMenuEnabled: () => debugMock.enabled,
 }));
 
 import { Preview } from "./Preview";
@@ -79,6 +86,10 @@ const createDefaultCompilerState = () => ({
     outline: null,
     resources: null,
     latencyStartRef: { current: null },
+    previewTelemetry: null,
+    mainPreviewPaintedRevision: null,
+    resourcePreviewRevisions: {},
+    markMainPreviewPainted: vi.fn(),
 });
 
 const renderPreviewAndGetCanvas = async (
@@ -112,6 +123,7 @@ const renderPreviewAndGetCanvas = async (
 describe("Preview sync", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        debugMock.enabled = false;
 
         vi.stubGlobal(
             "ResizeObserver",
@@ -402,6 +414,7 @@ describe("Preview sync", () => {
                 .toHaveStyle({ left: "60%" });
         });
     });
+
     it("keeps the previous exact caret when the same displayed field returns no match", async () => {
         compilerClientMock.positionsForFocus
             .mockResolvedValueOnce({
@@ -585,6 +598,7 @@ describe("Preview sync", () => {
             4,
         );
     });
+
     it("does not rasterize pages when previewRevision is null", async () => {
         render(
             <DocumentProvider>
@@ -621,5 +635,39 @@ describe("Preview sync", () => {
                 4,
             );
         });
+    });
+
+    it("hides end-to-end latency telemetry when debug UI is disabled", async () => {
+        await renderPreviewAndGetCanvas(null, {
+            ...createDefaultCompilerState(),
+            previewTelemetry: {
+                totalLatencyMs: 42,
+                queuedToSyncMs: 3,
+                workerSyncMs: 5,
+                compileMs: 11,
+                paintMs: 23,
+            },
+        });
+
+        expect(document.body).not.toHaveTextContent("Latency: 42ms");
+    });
+
+    it("shows end-to-end latency and stage timings when debug UI is enabled", async () => {
+        debugMock.enabled = true;
+
+        await renderPreviewAndGetCanvas(null, {
+            ...createDefaultCompilerState(),
+            previewTelemetry: {
+                totalLatencyMs: 42,
+                queuedToSyncMs: 3,
+                workerSyncMs: 5,
+                compileMs: 11,
+                paintMs: 23,
+            },
+        });
+
+        expect(document.body).toHaveTextContent(
+            "Latency: 42ms · Queue: 3ms · Sync: 5ms · Compile: 11ms · Paint: 23ms",
+        );
     });
 });

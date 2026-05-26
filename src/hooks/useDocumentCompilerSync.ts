@@ -6,16 +6,17 @@ import type { DocumentResources } from "../bindings/DocumentResources";
 import type { PreviewPageFile } from "../bindings/PreviewPageFile";
 import type { ProjectFile } from "../bindings/ProjectFile";
 import type { SourceMapEntry } from "../bindings/SourceMapEntry";
+import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import { TauriApi } from "../api/tauri";
 import { CompilerClient } from "../workers/compilerClient";
 import { projectFilesToVfsEntries } from "../workers/compilerProtocol";
 import type { QueuedDocumentEvent } from "../state/DocumentContext";
 import { setActiveDocumentSync } from "./documentSyncBarrier";
 import {
-    recordDurationFromTimestamp,
-    recordTiming,
-    timingNow,
-} from "./compilerTimings";
+    elapsedMs,
+    nowMs,
+    type PendingPreviewTelemetry,
+} from "./previewTelemetry";
 
 type SourceRevision = number;
 
@@ -27,6 +28,11 @@ export interface CompilerPreviewSetters {
     setPreviewRevision: Dispatch<SetStateAction<SourceRevision | null>>;
     setOutline: Dispatch<SetStateAction<DocumentOutline | null>>;
     setResources: Dispatch<SetStateAction<DocumentResources | null>>;
+    setPendingPreviewTelemetry: (
+        telemetry: PendingPreviewTelemetry | null,
+    ) => void;
+    updateResourcePreviewRevisions: (status: DocumentSessionStatus) => void;
+    resetPreviewRuntimeState: () => void;
     previewRevisionRef: MutableRefObject<SourceRevision | null>;
     latestRevisionRef: MutableRefObject<SourceRevision | null>;
     latencyStartRef: MutableRefObject<number | null>;
@@ -59,6 +65,9 @@ export function useDocumentCompilerSync({
         setPreviewRevision,
         setOutline,
         setResources,
+        setPendingPreviewTelemetry,
+        updateResourcePreviewRevisions,
+        resetPreviewRuntimeState,
         previewRevisionRef,
         latestRevisionRef,
         latencyStartRef,
@@ -173,12 +182,10 @@ export function useDocumentCompilerSync({
                         console.error("Failed to load template package files:", loadError);
                     }
 
-                    const bootstrapStarted = timingNow();
                     const { status, result } = await CompilerClient.bootstrap({
                         ast: currentAst,
                         files: vfsFiles,
                     });
-                    recordTiming("bootstrap", bootstrapStarted);
 
                     if (
                         !isMountedRef.current ||
@@ -190,6 +197,7 @@ export function useDocumentCompilerSync({
                     bootstrappedSessionIdRef.current = currentSessionId;
                     syncedEventIdRef.current = 0;
                     latestRevisionRef.current = status.sourceRevision;
+                    updateResourcePreviewRevisions(status);
                     setSourceMap(status.sourceMap);
                     applyPreviewResult(result);
 
@@ -204,16 +212,15 @@ export function useDocumentCompilerSync({
                     break;
                 }
 
-                const firstTimestamp = pendingEvents[0]?.timestamp ?? 0;
-                recordDurationFromTimestamp("event-dispatch", firstTimestamp);
-                const syncStarted = timingNow();
+                const lastEvent = pendingEvents[pendingEvents.length - 1];
+                const syncStarted = nowMs();
 
                 const status = await CompilerClient.syncEvents(
                     currentAst,
                     pendingEvents.map((event) => event.event),
                 );
 
-                recordTiming("sync-events", syncStarted);
+                const syncFinished = nowMs();
                 if (
                     !isMountedRef.current ||
                     desiredSessionIdRef.current !== currentSessionId
@@ -221,10 +228,10 @@ export function useDocumentCompilerSync({
                     continue;
                 }
 
-                const lastEvent = pendingEvents[pendingEvents.length - 1];
                 latencyStartRef.current = lastEvent.timestamp;
 
                 latestRevisionRef.current = status.sourceRevision;
+                updateResourcePreviewRevisions(status);
                 setSourceMap(status.sourceMap);
 
                 const mirrorPromise = mirrorToBackend(
@@ -233,9 +240,17 @@ export function useDocumentCompilerSync({
                     false,
                 );
 
-                const compileStarted = timingNow();
+                const compileStarted = nowMs();
                 const result = await CompilerClient.compile(currentAst);
-                recordTiming("compile", compileStarted);
+                const compileFinished = nowMs();
+                setPendingPreviewTelemetry({
+                    revision: result.source_revision,
+                    startedAt: lastEvent.timestamp,
+                    compileResultAt: compileFinished,
+                    queuedToSyncMs: elapsedMs(lastEvent.timestamp, syncStarted),
+                    workerSyncMs: elapsedMs(syncStarted, syncFinished),
+                    compileMs: elapsedMs(compileStarted, compileFinished),
+                });
                 applyPreviewResult(result);
 
                 await mirrorPromise;
@@ -290,6 +305,7 @@ export function useDocumentCompilerSync({
             setOutline(null);
             setResources(null);
             latencyStartRef.current = null;
+            resetPreviewRuntimeState();
             return;
         }
 
@@ -312,6 +328,7 @@ export function useDocumentCompilerSync({
                 setOutline(null);
                 setResources(null);
                 latencyStartRef.current = null;
+                resetPreviewRuntimeState();
             }
         }
 
