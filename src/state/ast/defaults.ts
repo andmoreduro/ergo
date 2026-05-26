@@ -63,7 +63,7 @@ export const createTable = (
         Array.from({ length: cols }, createEmptyCell),
     ),
     column_sizes: Array.from({ length: cols }, () => "1fr"),
-    extra_fields: {},
+    extra_fields: { placement: "here" },
 });
 
 export const createEquation = (
@@ -82,7 +82,7 @@ export const createFigure = (id = createId()): DocumentElement => ({
     asset_id: null,
     content: createParagraph(""),
     caption: "",
-    placement: "auto",
+    placement: "here",
     extra_fields: {},
 });
 

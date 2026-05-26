@@ -61,7 +61,6 @@ import { m } from "../../../paraglide/messages.js";
 import styles from "./ElementEditor.module.css";
 import type { ExtraFieldSpec } from "../../../bindings/ExtraFieldSpec";
 import type { ConvertibleElementKind } from "../../../state/ast/convertElement";
-import { trailingParagraphAction } from "../../../editor/ensureTrailingParagraph";
 import { insertParagraphAfterElement } from "../../../editor/insertParagraphAfterElement";
 import { useElementEnterInsertsParagraph } from "../../../editor/useInsertParagraphAfterElement";
 import {
@@ -69,6 +68,9 @@ import {
     paragraphHasText,
 } from "../../../editor/fieldNavigation";
 import { EditorAddButton } from "../../atoms/EditorAddButton/EditorAddButton";
+import { getPlacementOptions, tablePlacementValue } from "../../../editor/placementOptions";
+import { useEditorNavigation } from "../../../editor/EditorNavigationContext";
+import { useDeferredTextCommit } from "../../../editor/useDeferredTextCommit";
 
 export interface ElementEditorProps {
     element: DocumentElement;
@@ -81,16 +83,10 @@ type TableElement = Extract<DocumentElement, { type: "Table" }>;
 type FigureElement = Extract<DocumentElement, { type: "Figure" }>;
 type CustomElementUnion = Extract<DocumentElement, { type: "Custom" }>;
 
-const headingLevels = Array.from({ length: 5 }, (_, index) => {
+const headingLevels = Array.from({ length: 6 }, (_, index) => {
     const level = String(index + 1);
-    return { value: level, label: level };
+    return { value: level, label: `H${level}` };
 });
-
-const getPlacementOptions = () => [
-    { value: "auto", label: m.placement_auto() },
-    { value: "top", label: m.placement_top() },
-    { value: "bottom", label: m.placement_bottom() },
-];
 
 const FIGURE_SETTINGS_KEYS = new Set(["width"]);
 
@@ -307,23 +303,32 @@ const CustomElementFieldInput = ({
     committed: string;
     dispatch: ReturnType<typeof useDocumentAst>["dispatch"];
 }) => {
-    const [draft, setDraft] = useState(committed);
+    const { draft, setDraft, shouldCommit } = useDeferredTextCommit(committed);
     const handleEnterKey = useElementEnterInsertsParagraph(elementId);
-
-    useEffect(() => {
-        setDraft(committed);
-    }, [elementId, fieldKey, committed]);
+    const fieldId = elementExtraFieldFieldId(elementId, fieldKey);
+    const { handleAdvanceKeyDown } = useEditorNavigation();
+    const binding = useEditorFieldBinding<HTMLTextAreaElement>({
+        elementId,
+        fieldId,
+    });
 
     return (
         <Textarea
+            {...binding}
             fullWidth
             label={label}
+            placeholder={label}
             value={draft}
-            onKeyDown={handleEnterKey}
+            onKeyDown={(event) => {
+                if (handleAdvanceKeyDown(event, fieldId)) {
+                    return;
+                }
+                handleEnterKey(event);
+            }}
             onChange={(event) => {
                 const next = normalizeEditableText(event.target.value);
                 setDraft(next);
-                if (!textSignificantlyEqual(next, committed)) {
+                if (shouldCommit(next)) {
                     dispatch({
                         type: "UPDATE_CUSTOM_ELEMENT_FIELD",
                         payload: {
@@ -341,6 +346,8 @@ const CustomElementFieldInput = ({
 const HeadingEditor = ({ element }: { element: HeadingElement }) => {
     const { dispatch } = useDocumentAst();
     const handleEnterKey = useElementEnterInsertsParagraph(element.id);
+    const { handleAdvanceKeyDown } = useEditorNavigation();
+    const fieldId = richTextFieldId(element.id);
     const { content, setDraft, shouldCommit } = useDeferredRichTextCommit(
         element.id,
         element.content,
@@ -351,50 +358,57 @@ const HeadingEditor = ({ element }: { element: HeadingElement }) => {
     });
 
     return (
-        <>
-            <div className={styles.headingLevelRow}>
-                <Select
-                    fullWidth
-                    label={m.editor_heading_level()}
-                    value={String(element.level)}
-                    options={headingLevels}
-                    onChange={(event) =>
-                        dispatch({
-                            type: "UPDATE_HEADING",
-                            payload: {
-                                headingId: element.id,
-                                level: Number(event.target.value),
-                            },
-                        })
-                    }
+        <div className={styles.headingRow}>
+            <Select
+                variant="inline"
+                aria-label={m.editor_heading_level()}
+                value={String(element.level)}
+                options={headingLevels}
+                onChange={(event) =>
+                    dispatch({
+                        type: "UPDATE_HEADING",
+                        payload: {
+                            headingId: element.id,
+                            level: Number(event.target.value),
+                        },
+                    })
+                }
+            />
+            <div className={styles.headingText}>
+                <RichTextField
+                    variant="document"
+                    content={content}
+                    fieldBinding={textField}
+                    onChange={(next) => {
+                        const normalized = normalizeRichTextContent(next);
+                        setDraft(normalized);
+                        if (shouldCommit(normalized)) {
+                            dispatch({
+                                type: "UPDATE_HEADING_CONTENT",
+                                payload: {
+                                    headingId: element.id,
+                                    content: next,
+                                },
+                            });
+                        }
+                    }}
+                    onKeyDown={(event) => {
+                        if (handleAdvanceKeyDown(event, fieldId)) {
+                            return;
+                        }
+                        handleEnterKey(event);
+                    }}
                 />
             </div>
-            <RichTextField
-                variant="document"
-                content={content}
-                fieldBinding={textField}
-                onChange={(next) => {
-                    const normalized = normalizeRichTextContent(next);
-                    setDraft(normalized);
-                    if (shouldCommit(normalized)) {
-                        dispatch({
-                            type: "UPDATE_HEADING_CONTENT",
-                            payload: {
-                                headingId: element.id,
-                                content: next,
-                            },
-                        });
-                    }
-                }}
-                onKeyDown={handleEnterKey}
-            />
-        </>
+        </div>
     );
 };
 
 const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
     const { state, dispatch } = useDocumentAst();
     const { setDocumentFocus } = useDocument();
+    const { removeContentElement, handleAdvanceKeyDown } = useEditorNavigation();
+    const fieldId = richTextFieldId(element.id);
     const { content, setDraft, shouldCommit } = useDeferredRichTextCommit(
         element.id,
         element.content,
@@ -434,32 +448,7 @@ const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
         }
 
         event.preventDefault();
-
-        const section = contentSection(state);
-        if (!section) {
-            return;
-        }
-
-        dispatch({
-            type: "REMOVE_ELEMENT",
-            payload: { elementId: element.id },
-        });
-
-        const remaining = section.elements.filter(
-            (candidate) => candidate.id !== element.id,
-        );
-        const provisionalAst = {
-            ...state,
-            sections: state.sections.map((candidate) =>
-                candidate.type === "Content" && candidate.id === section.id
-                    ? { ...candidate, elements: remaining }
-                    : candidate,
-            ),
-        };
-        const trailing = trailingParagraphAction(provisionalAst);
-        if (trailing) {
-            dispatch(trailing);
-        }
+        removeContentElement(state, element.id);
     };
 
     return (
@@ -481,6 +470,9 @@ const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
                 }
             }}
             onKeyDown={(event) => {
+                if (handleAdvanceKeyDown(event, fieldId)) {
+                    return;
+                }
                 if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey) {
                     event.preventDefault();
                     handleEnter();
@@ -494,16 +486,16 @@ const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
 
 const EquationEditor = ({ element }: { element: EquationElement }) => {
     const { dispatch } = useDocumentAst();
-    const [draftLatex, setDraftLatex] = useState(element.latex_source);
+    const { draft, setDraft, shouldCommit } = useDeferredTextCommit(
+        element.latex_source,
+    );
     const handleEnterKey = useElementEnterInsertsParagraph(element.id);
+    const fieldId = equationSourceFieldId(element.id);
+    const { handleAdvanceKeyDown } = useEditorNavigation();
     const sourceField = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: element.id,
-        fieldId: equationSourceFieldId(element.id),
+        fieldId,
     });
-
-    useEffect(() => {
-        setDraftLatex(element.latex_source);
-    }, [element.id, element.latex_source]);
 
     return (
         <>
@@ -511,11 +503,12 @@ const EquationEditor = ({ element }: { element: EquationElement }) => {
                 {...sourceField}
                 fullWidth
                 label={m.editor_equation_source()}
-                value={draftLatex}
+                placeholder={m.editor_equation_source()}
+                value={draft}
                 onChange={(event) => {
                     const next = normalizeEditableText(event.target.value);
-                    setDraftLatex(next);
-                    if (!textSignificantlyEqual(next, element.latex_source)) {
+                    setDraft(next);
+                    if (shouldCommit(next)) {
                         dispatch({
                             type: "UPDATE_EQUATION",
                             payload: {
@@ -525,7 +518,12 @@ const EquationEditor = ({ element }: { element: EquationElement }) => {
                         });
                     }
                 }}
-                onKeyDown={handleEnterKey}
+                onKeyDown={(event) => {
+                    if (handleAdvanceKeyDown(event, fieldId)) {
+                        return;
+                    }
+                    handleEnterKey(event);
+                }}
             />
             <Checkbox
                 label={m.editor_equation_block()}
@@ -548,7 +546,18 @@ const TableEditor = ({ element }: { element: TableElement }) => {
     const { dispatch } = useDocumentAst();
     const { spec: templateSpec } = useTemplateSpecContext();
     const tableOverride = templateSpec?.element_overrides?.table ?? null;
+    const showPlacement = usesStandardTypstFigureWrapper(tableOverride);
     const annotationFields = tableOverride?.extra_fields ?? [];
+    const committedPlacement = tablePlacementValue(element.extra_fields);
+    const [draftPlacement, setDraftPlacement] = useState(committedPlacement);
+    const placementField = useEditorFieldBinding<HTMLSelectElement>({
+        elementId: element.id,
+        fieldId: elementExtraFieldFieldId(element.id, "placement"),
+    });
+
+    useEffect(() => {
+        setDraftPlacement(committedPlacement);
+    }, [committedPlacement, element.id]);
 
     const insertRow = (rowIndex: number) => {
         dispatch({
@@ -567,6 +576,27 @@ const TableEditor = ({ element }: { element: TableElement }) => {
     return (
         <>
             <ElementSettingsButton>
+                {showPlacement ? (
+                    <Select
+                        {...placementField}
+                        fullWidth
+                        label={m.editor_table_placement()}
+                        value={draftPlacement}
+                        options={getPlacementOptions()}
+                        onChange={(event) => {
+                            const next = event.target.value;
+                            setDraftPlacement(next);
+                            dispatch({
+                                type: "UPDATE_ELEMENT_EXTRA_FIELD",
+                                payload: {
+                                    elementId: element.id,
+                                    fieldKey: "placement",
+                                    fieldValue: next,
+                                },
+                            });
+                        }}
+                    />
+                ) : null}
                 <div className={styles.columnSizes}>
                     {element.column_sizes.map((size, colIndex) => (
                         <TableColumnSizeEditor
@@ -685,16 +715,13 @@ const TableCellEditor = ({
 }) => {
     const { dispatch } = useDocumentAst();
     const handleEnterKey = useElementEnterInsertsParagraph(element.id);
-    const cellKey = `${element.id}:${rowIndex}:${colIndex}`;
-    const [draft, setDraft] = useState(cellContent);
+    const { handleAdvanceKeyDown } = useEditorNavigation();
+    const { draft, setDraft, shouldCommit } = useDeferredTextCommit(cellContent);
+    const fieldId = tableCellFieldId(element.id, rowIndex, colIndex);
     const cellField = useEditorFieldBinding<HTMLInputElement>({
         elementId: element.id,
-        fieldId: tableCellFieldId(element.id, rowIndex, colIndex),
+        fieldId,
     });
-
-    useEffect(() => {
-        setDraft(cellContent);
-    }, [cellKey, cellContent]);
 
     return (
         <TextInput
@@ -705,11 +732,16 @@ const TableCellEditor = ({
                 row: rowIndex + 1,
                 column: colIndex + 1,
             })}
-            onKeyDown={handleEnterKey}
+            onKeyDown={(event) => {
+                if (handleAdvanceKeyDown(event, fieldId)) {
+                    return;
+                }
+                handleEnterKey(event);
+            }}
             onChange={(event) => {
                 const next = normalizeEditableText(event.target.value);
                 setDraft(next);
-                if (!textSignificantlyEqual(next, cellContent)) {
+                if (shouldCommit(next)) {
                     dispatch({
                         type: "UPDATE_TABLE_CELL",
                         payload: {
@@ -934,26 +966,11 @@ const FigureEditor = ({ element }: { element: FigureElement }) => {
             {hasSettings ? (
                 <ElementSettingsButton>
                     {settingsFields.map((field) => (
-                        <ExtraFieldInput
+                        <AnnotationFieldInput
+                            draftRef={wrapperDraftRef}
                             element={element}
                             field={field}
                             key={field.key}
-                            value={wrapperFieldValue(element, field.key)}
-                            onChange={(value) => {
-                                const next = normalizeEditableText(value);
-                                wrapperDraftRef.current[field.key] = next;
-                                const previous = wrapperFieldValue(element, field.key);
-                                if (!textSignificantlyEqual(next, previous)) {
-                                    dispatch({
-                                        type: "UPDATE_ELEMENT_EXTRA_FIELD",
-                                        payload: {
-                                            elementId: element.id,
-                                            fieldKey: field.key,
-                                            fieldValue: next,
-                                        },
-                                    });
-                                }
-                            }}
                         />
                     ))}
                     {showPlacement ? (
@@ -1050,80 +1067,114 @@ const ElementAnnotationFields = ({
     element: WrapperHostElement;
     fields: ExtraFieldSpec[];
     draftRef?: MutableRefObject<Record<string, string>>;
+}) => (
+    <div className={styles.annotationFields}>
+        {fields.map((field) => (
+            <AnnotationFieldInput
+                draftRef={draftRef}
+                element={element}
+                field={field}
+                key={field.key}
+            />
+        ))}
+    </div>
+);
+
+const AnnotationFieldInput = ({
+    element,
+    field,
+    draftRef,
+}: {
+    element: WrapperHostElement;
+    field: ExtraFieldSpec;
+    draftRef?: MutableRefObject<Record<string, string>>;
 }) => {
     const { dispatch } = useDocumentAst();
-    const [draft, setDraft] = useState(() => wrapperFieldDraftValues(element, fields));
+    const committed = wrapperFieldValue(element, field.key);
+    const { draft, setDraft, shouldCommit } = useDeferredTextCommit(committed);
 
     useEffect(() => {
-        const next = wrapperFieldDraftValues(element, fields);
-        setDraft(next);
         if (draftRef) {
-            draftRef.current = next;
+            draftRef.current[field.key] = draft;
         }
-    }, [draftRef, element, fields]);
+    }, [draft, draftRef, field.key]);
 
-    const commitField = (key: string, next: string) => {
-        const previous = wrapperFieldValue(element, key);
-        if (!textSignificantlyEqual(next, previous)) {
-            if (element.type === "Figure" && key === "caption") {
-                dispatch({
-                    type: "UPDATE_FIGURE",
-                    payload: {
-                        figureId: element.id,
-                        caption: next,
-                    },
-                });
-            } else {
-                dispatch({
-                    type: "UPDATE_ELEMENT_EXTRA_FIELD",
-                    payload: {
-                        elementId: element.id,
-                        fieldKey: key,
-                        fieldValue: next,
-                    },
-                });
-            }
+    const commit = (next: string) => {
+        if (!shouldCommit(next)) {
+            return;
         }
+
+        if (element.type === "Figure" && field.key === "caption") {
+            dispatch({
+                type: "UPDATE_FIGURE",
+                payload: {
+                    figureId: element.id,
+                    caption: next,
+                },
+            });
+            return;
+        }
+
+        dispatch({
+            type: "UPDATE_ELEMENT_EXTRA_FIELD",
+            payload: {
+                elementId: element.id,
+                fieldKey: field.key,
+                fieldValue: next,
+            },
+        });
     };
 
     return (
-        <div className={styles.annotationFields}>
-            {fields.map((field) => (
-                <ExtraFieldInput
-                    element={element}
-                    field={field}
-                    key={field.key}
-                    value={draft[field.key] ?? ""}
-                    onChange={(value) => {
-                        const next = normalizeEditableText(value);
-                        setDraft((current) => {
-                            const updated = { ...current, [field.key]: next };
-                            if (draftRef) {
-                                draftRef.current = updated;
-                            }
-                            return updated;
-                        });
-                        commitField(field.key, next);
-                    }}
-                />
-            ))}
-        </div>
+        <ExtraFieldInput
+            committed={draft}
+            element={element}
+            field={field}
+            onCommit={commit}
+            onDraftChange={(next) => {
+                setDraft(next);
+                commit(next);
+            }}
+        />
     );
 };
 
 interface ExtraFieldInputProps {
     element: WrapperHostElement;
     field: ExtraFieldSpec;
-    value: string;
-    onChange: (value: string) => void;
+    committed: string;
+    onDraftChange: (value: string) => void;
+    onCommit: (value: string) => void;
 }
 
-const ExtraFieldInput = ({ element, field, value, onChange }: ExtraFieldInputProps) => {
+const ExtraFieldInput = ({
+    element,
+    field,
+    committed,
+    onDraftChange,
+    onCommit,
+}: ExtraFieldInputProps) => {
     const elementId = element.id;
     const handleEnterKey = useElementEnterInsertsParagraph(elementId);
+    const fieldId = elementExtraFieldFieldId(elementId, field.key);
+    const { handleAdvanceKeyDown } = useEditorNavigation();
+
+    const handleChange = (raw: string) => {
+        const next = normalizeEditableText(raw);
+        onDraftChange(next);
+        onCommit(next);
+    };
+
+    const handleKeyDown: KeyboardEventHandler<
+        HTMLInputElement | HTMLTextAreaElement
+    > = (event) => {
+        if (handleAdvanceKeyDown(event, fieldId)) {
+            return;
+        }
+        handleEnterKey(event);
+    };
 
     if (field.type === "content") {
-        const fieldId = elementExtraFieldFieldId(elementId, field.key);
         const binding = useEditorFieldBinding<HTMLTextAreaElement>({
             elementId,
             fieldId,
@@ -1134,14 +1185,14 @@ const ExtraFieldInput = ({ element, field, value, onChange }: ExtraFieldInputPro
                 {...binding}
                 fullWidth
                 label={field.label}
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                onKeyDown={handleEnterKey}
+                placeholder={field.label}
+                value={committed}
+                onChange={(event) => handleChange(event.target.value)}
+                onKeyDown={handleKeyDown}
             />
         );
     }
 
-    const fieldId = elementExtraFieldFieldId(elementId, field.key);
     const binding = useEditorFieldBinding<HTMLInputElement>({
         elementId,
         fieldId,
@@ -1152,9 +1203,10 @@ const ExtraFieldInput = ({ element, field, value, onChange }: ExtraFieldInputPro
             {...binding}
             fullWidth
             label={field.label}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            onKeyDown={handleEnterKey}
+            placeholder={field.label}
+            value={committed}
+            onChange={(event) => handleChange(event.target.value)}
+            onKeyDown={handleKeyDown}
         />
     );
 };

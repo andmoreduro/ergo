@@ -316,7 +316,7 @@ fn tables_and_figures_use_template_wrapper() {
     assert!(figure_source.contains("#import \"@preview/test:1.0.0\": apa-figure"));
     assert!(figure_source.contains("#apa-figure("));
     assert!(!figure_source.contains("#figure("));
-    assert!(!figure_source.contains("placement: bottom"));
+    assert!(figure_source.contains("placement: bottom"));
 }
 
 #[test]

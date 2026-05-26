@@ -4,6 +4,7 @@ import type { InputSchema } from "../bindings/InputSchema";
 import type { TemplateSpec } from "../bindings/TemplateSpec";
 import {
     defaultFieldIdForElement,
+    elementExtraFieldFieldId,
     projectInputElementId,
     projectInputFieldId,
     simpleListComposerFieldId,
@@ -166,6 +167,10 @@ export const collectContentFieldTargets = (
             });
 
             if (element.type === "Table") {
+                targets.push({
+                    elementId: element.id,
+                    fieldId: elementExtraFieldFieldId(element.id, "placement"),
+                });
                 for (let row = 0; row < element.rows; row += 1) {
                     for (let col = 0; col < element.cols; col += 1) {
                         if (row === 0 && col === 0) {
@@ -211,6 +216,26 @@ export const findNextEditorField = (
     }
 
     return order[index + 1] ?? null;
+};
+
+export const findPreviousEditorField = (
+    order: EditorFieldTarget[],
+    currentFieldId: string | null,
+): EditorFieldTarget | null => {
+    if (order.length === 0) {
+        return null;
+    }
+
+    if (!currentFieldId) {
+        return order[order.length - 1] ?? null;
+    }
+
+    const index = order.findIndex((entry) => entry.fieldId === currentFieldId);
+    if (index === -1) {
+        return order[order.length - 1] ?? null;
+    }
+
+    return order[index - 1] ?? null;
 };
 
 export const contentSection = (ast: DocumentAST): ContentSection | null => {
