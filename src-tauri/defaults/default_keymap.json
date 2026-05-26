@@ -71,6 +71,31 @@
       "action_id": "editor::InsertFigure",
       "context": "editor && !input",
       "sequence": [{ "key": "f", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::ConvertToParagraph",
+      "context": "element && !input",
+      "sequence": [{ "key": "1", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::ConvertToHeading",
+      "context": "element && !input",
+      "sequence": [{ "key": "2", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::ConvertToTable",
+      "context": "element && !input",
+      "sequence": [{ "key": "3", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::ConvertToEquation",
+      "context": "element && !input",
+      "sequence": [{ "key": "4", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::ConvertToFigure",
+      "context": "element && !input",
+      "sequence": [{ "key": "5", "modifiers": ["Control", "Alt"] }]
     }
   ],
   "keymap_overrides": []

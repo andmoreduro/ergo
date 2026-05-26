@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createDocumentEventHistoryEntry, applyDocumentEventToAst } from "./documentEvents";
+import {
+    applyDocumentEventToAst,
+    applyDocumentEvents,
+    createDocumentEventHistoryEntry,
+} from "./documentEvents";
 import { createDefaultDocumentAST } from "./ast/defaults";
 import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
@@ -16,7 +20,7 @@ describe("document event conversion", () => {
 
         const entry = createDocumentEventHistoryEntry(previousAst, action, nextAst);
 
-        expect(entry.forwardEvent).toEqual({
+        expect(entry.forwardEvents[0]).toEqual({
             type: "setProjectTitle",
             title: "Borrador con ñ",
         });
@@ -32,7 +36,7 @@ describe("document event conversion", () => {
 
         const entry = createDocumentEventHistoryEntry(previousAst, action, nextAst);
 
-        expect(entry.inverseEvent).toEqual({
+        expect(entry.inverseEvents[0]).toEqual({
             type: "setProjectTitle",
             title: "Untitled Document",
         });
@@ -75,7 +79,7 @@ describe("document event conversion", () => {
 
         const entry = createDocumentEventHistoryEntry(previousAst, action, nextAst);
 
-        expect(entry.forwardEvent).toEqual({
+        expect(entry.forwardEvents[0]).toEqual({
             type: "removeElement",
             element_id: "paragraph-1",
         });
@@ -111,7 +115,7 @@ describe("document event conversion", () => {
 
         const entry = createDocumentEventHistoryEntry(previousAst, action, nextAst);
 
-        expect(entry.inverseEvent).toEqual({
+        expect(entry.inverseEvents[0]).toEqual({
             type: "restoreElement",
             section_id: contentSection.id,
             index: 0,
@@ -136,14 +140,16 @@ describe("document event conversion", () => {
 describe("applyDocumentEventToAst round-trip parity", () => {
     function verifyRoundTrip(initialAst: DocumentAST, action: ASTAction) {
         const nextAst = astReducer(initialAst, action);
-        const { forwardEvent, inverseEvent } = createDocumentEventHistoryEntry(initialAst, action, nextAst);
+        const { forwardEvents, inverseEvents } = createDocumentEventHistoryEntry(
+            initialAst,
+            action,
+            nextAst,
+        );
 
-        // 1. Forward event parity: applying forwardEvent to initialAst yields nextAst
-        const intermediateAst = applyDocumentEventToAst(initialAst, forwardEvent);
+        const intermediateAst = applyDocumentEvents(initialAst, forwardEvents);
         expect(intermediateAst).toEqual(nextAst);
 
-        // 2. Invertibility parity: applying inverseEvent to intermediateAst yields initialAst
-        const restoredAst = applyDocumentEventToAst(intermediateAst, inverseEvent);
+        const restoredAst = applyDocumentEvents(intermediateAst, inverseEvents);
         expect(restoredAst).toEqual(initialAst);
     }
 

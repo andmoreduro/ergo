@@ -3,6 +3,7 @@ pub mod compilation_types;
 pub mod compile_artifacts;
 pub mod core_errors;
 mod document_generation_lib;
+mod required_input_fallback;
 pub mod document_outline;
 pub mod document_resources;
 pub mod document_session;

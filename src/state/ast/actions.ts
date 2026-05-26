@@ -170,6 +170,7 @@ export type AddTableRowAction = {
   type: 'ADD_TABLE_ROW';
   payload: {
     tableId: string;
+    rowIndex?: number;
   };
 };
 
@@ -185,6 +186,7 @@ export type AddTableColumnAction = {
   type: 'ADD_TABLE_COLUMN';
   payload: {
     tableId: string;
+    colIndex?: number;
   };
 };
 
@@ -274,6 +276,14 @@ export type RemoveElementAction = {
   };
 };
 
+export type ConvertElementAction = {
+  type: 'CONVERT_ELEMENT';
+  payload: {
+    elementId: string;
+    targetKind: 'Paragraph' | 'Heading' | 'Table' | 'Equation' | 'Figure';
+  };
+};
+
 export type ASTAction =
   | LoadDocumentAction
   | UpdateProjectTitleAction
@@ -307,4 +317,5 @@ export type ASTAction =
   | AddAssetAction
   | UpdateAssetAction
   | RemoveAssetAction
-  | RemoveElementAction;
+  | RemoveElementAction
+  | ConvertElementAction;

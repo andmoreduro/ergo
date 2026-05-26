@@ -49,6 +49,11 @@ pub struct ImportResourceResult {
 }
 
 #[tauri::command]
+pub fn read_vfs_file(state: State<'_, TauriAppState>, path: String) -> Result<Vec<u8>, String> {
+    state.vfs.read_file(&path)
+}
+
+#[tauri::command]
 pub fn import_resource_file(
     state: State<'_, TauriAppState>,
     source_path: String,

@@ -26,6 +26,7 @@ import { ExportMenu } from "./ExportMenu";
 import { m } from "../../../paraglide/messages.js";
 import {
     formatPreviewZoomPercent,
+    PREVIEW_ZOOM_DEFAULT,
     PREVIEW_ZOOM_MAX,
     PREVIEW_ZOOM_MIN,
     stepPreviewZoom,
@@ -125,9 +126,15 @@ export const Preview = ({
                 >
                     <ZoomOut24Regular />
                 </button>
-                <span className={toolbarStyles.zoomLabel} aria-live="polite">
+                <button
+                    type="button"
+                    className={toolbarStyles.zoomLabel}
+                    title={m.preview_zoom_reset()}
+                    aria-label={m.preview_zoom_reset()}
+                    onClick={() => onZoomChange(PREVIEW_ZOOM_DEFAULT)}
+                >
                     {m.preview_zoom_level({ percent: zoomPercent })}
-                </span>
+                </button>
                 <button
                     type="button"
                     className={toolbarStyles.toolbarButton}

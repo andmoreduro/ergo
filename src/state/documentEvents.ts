@@ -32,18 +32,34 @@ import {
 } from "./documentEvents/helpers";
 
 export interface DocumentEventHistoryEntry {
-    forwardEvent: DocumentEvent;
-    inverseEvent: DocumentEvent;
+    forwardEvents: DocumentEvent[];
+    inverseEvents: DocumentEvent[];
     timestamp: number;
 }
+
+const asEventList = (event: DocumentEvent | DocumentEvent[]): DocumentEvent[] =>
+    Array.isArray(event) ? event : [event];
+
+export const applyDocumentEvents = (
+    ast: DocumentAST,
+    events: DocumentEvent[],
+): DocumentAST =>
+    events.reduce(
+        (currentAst, event) => applyDocumentEventToAst(currentAst, event),
+        ast,
+    );
 
 export const createDocumentEventHistoryEntry = (
     previousAst: DocumentAST,
     action: ASTAction,
     nextAst: DocumentAST,
 ): DocumentEventHistoryEntry => ({
-    forwardEvent: documentEventFromAction(previousAst, action, nextAst),
-    inverseEvent: inverseDocumentEventFromAction(previousAst, action, nextAst),
+    forwardEvents: asEventList(
+        documentEventFromAction(previousAst, action, nextAst),
+    ),
+    inverseEvents: asEventList(
+        inverseDocumentEventFromAction(previousAst, action, nextAst),
+    ),
     timestamp: Date.now(),
 });
 
@@ -385,7 +401,7 @@ const documentEventFromAction = (
     previousAst: DocumentAST,
     action: ASTAction,
     nextAst: DocumentAST,
-): DocumentEvent => {
+): DocumentEvent | DocumentEvent[] => {
     switch (action.type) {
         case "LOAD_DOCUMENT":
             throw new Error("LOAD_DOCUMENT is a bootstrap action, not a sync event");
@@ -500,7 +516,8 @@ const documentEventFromAction = (
         case "ADD_TABLE_ROW": {
             const previousTable = tableElement(previousAst, action.payload.tableId);
             const nextTable = tableElement(nextAst, action.payload.tableId);
-            const rowIndex = previousTable.cells.length;
+            const rowIndex =
+                action.payload.rowIndex ?? previousTable.cells.length;
             return {
                 type: "insertTableRow",
                 table_id: action.payload.tableId,
@@ -519,7 +536,8 @@ const documentEventFromAction = (
         case "ADD_TABLE_COLUMN": {
             const previousTable = tableElement(previousAst, action.payload.tableId);
             const nextTable = tableElement(nextAst, action.payload.tableId);
-            const colIndex = previousTable.column_sizes.length;
+            const colIndex =
+                action.payload.colIndex ?? previousTable.column_sizes.length;
             return {
                 type: "insertTableColumn",
                 table_id: action.payload.tableId,
@@ -604,6 +622,22 @@ const documentEventFromAction = (
                 asset_id: action.payload.assetId,
             };
 
+        case "CONVERT_ELEMENT": {
+            const location = elementLocation(nextAst, action.payload.elementId);
+            return [
+                {
+                    type: "removeElement",
+                    element_id: action.payload.elementId,
+                },
+                {
+                    type: "insertElement",
+                    section_id: location.section.id,
+                    index: location.index,
+                    element: cloneValue(location.element),
+                },
+            ];
+        }
+
         case "REMOVE_ELEMENT":
             return {
                 type: "removeElement",
@@ -619,7 +653,7 @@ const inverseDocumentEventFromAction = (
     previousAst: DocumentAST,
     action: ASTAction,
     _nextAst: DocumentAST,
-): DocumentEvent => {
+): DocumentEvent | DocumentEvent[] => {
     switch (action.type) {
         case "LOAD_DOCUMENT":
             throw new Error("LOAD_DOCUMENT is a bootstrap action, not a sync event");
@@ -758,7 +792,9 @@ const inverseDocumentEventFromAction = (
         }
 
         case "ADD_TABLE_ROW": {
-            const rowIndex = tableElement(previousAst, action.payload.tableId).cells.length;
+            const previousTable = tableElement(previousAst, action.payload.tableId);
+            const rowIndex =
+                action.payload.rowIndex ?? previousTable.cells.length;
             return {
                 type: "removeTableRow",
                 table_id: action.payload.tableId,
@@ -777,7 +813,9 @@ const inverseDocumentEventFromAction = (
         }
 
         case "ADD_TABLE_COLUMN": {
-            const colIndex = tableElement(previousAst, action.payload.tableId).column_sizes.length;
+            const previousTable = tableElement(previousAst, action.payload.tableId);
+            const colIndex =
+                action.payload.colIndex ?? previousTable.column_sizes.length;
             return {
                 type: "removeTableColumn",
                 table_id: action.payload.tableId,
@@ -878,6 +916,22 @@ const inverseDocumentEventFromAction = (
                 index: location.index,
                 asset: location.asset,
             };
+        }
+
+        case "CONVERT_ELEMENT": {
+            const location = elementLocation(previousAst, action.payload.elementId);
+            return [
+                {
+                    type: "removeElement",
+                    element_id: action.payload.elementId,
+                },
+                {
+                    type: "restoreElement",
+                    section_id: location.section.id,
+                    index: location.index,
+                    element: cloneValue(location.element),
+                },
+            ];
         }
 
         case "REMOVE_ELEMENT": {

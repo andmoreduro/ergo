@@ -28,6 +28,22 @@
     outline-offset: 1px;
 }
 
+.documentField {
+    gap: 0;
+}
+
+.documentEditor {
+    min-height: 1.5rem;
+    padding: var(--space-1) 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+.documentEditor:focus-visible {
+    outline: none;
+}
+
 :global(.ergo-ref-chip) {
     display: inline-flex;
     align-items: center;

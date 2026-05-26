@@ -39,10 +39,10 @@ export const Sidebar = ({
                     previewScrollRef={previewScrollRef}
                 />
             </Accordion>
-            <Accordion title={m.sidebar_bibliography()}>
+            <Accordion title={m.sidebar_bibliography()} defaultOpen>
                 <SidebarBibliographyPanel references={state.references} />
             </Accordion>
-            <Accordion title={m.sidebar_resources()}>
+            <Accordion title={m.sidebar_resources()} defaultOpen>
                 <SidebarResourcesPanel
                     resources={resources}
                     revision={previewRevision ?? 0}

@@ -175,6 +175,16 @@ pub enum ActionId {
     EditorRemoveTableRow,
     #[serde(rename = "editor::RemoveTableColumn")]
     EditorRemoveTableColumn,
+    #[serde(rename = "editor::ConvertToParagraph")]
+    EditorConvertToParagraph,
+    #[serde(rename = "editor::ConvertToHeading")]
+    EditorConvertToHeading,
+    #[serde(rename = "editor::ConvertToTable")]
+    EditorConvertToTable,
+    #[serde(rename = "editor::ConvertToEquation")]
+    EditorConvertToEquation,
+    #[serde(rename = "editor::ConvertToFigure")]
+    EditorConvertToFigure,
     #[serde(rename = "editor::FocusField")]
     EditorFocusField,
     #[serde(rename = "bibliography::CreateEntry")]
@@ -249,6 +259,11 @@ impl ActionId {
             ActionId::EditorAddTableColumn => "editor::AddTableColumn",
             ActionId::EditorRemoveTableRow => "editor::RemoveTableRow",
             ActionId::EditorRemoveTableColumn => "editor::RemoveTableColumn",
+            ActionId::EditorConvertToParagraph => "editor::ConvertToParagraph",
+            ActionId::EditorConvertToHeading => "editor::ConvertToHeading",
+            ActionId::EditorConvertToTable => "editor::ConvertToTable",
+            ActionId::EditorConvertToEquation => "editor::ConvertToEquation",
+            ActionId::EditorConvertToFigure => "editor::ConvertToFigure",
             ActionId::EditorFocusField => "editor::FocusField",
             ActionId::BibliographyCreateEntry => "bibliography::CreateEntry",
             ActionId::BibliographyOpenEntry => "bibliography::OpenEntry",
@@ -309,6 +324,11 @@ impl FromStr for ActionId {
             "editor::AddTableColumn" => Ok(ActionId::EditorAddTableColumn),
             "editor::RemoveTableRow" => Ok(ActionId::EditorRemoveTableRow),
             "editor::RemoveTableColumn" => Ok(ActionId::EditorRemoveTableColumn),
+            "editor::ConvertToParagraph" => Ok(ActionId::EditorConvertToParagraph),
+            "editor::ConvertToHeading" => Ok(ActionId::EditorConvertToHeading),
+            "editor::ConvertToTable" => Ok(ActionId::EditorConvertToTable),
+            "editor::ConvertToEquation" => Ok(ActionId::EditorConvertToEquation),
+            "editor::ConvertToFigure" => Ok(ActionId::EditorConvertToFigure),
             "editor::FocusField" => Ok(ActionId::EditorFocusField),
             "bibliography::CreateEntry" => Ok(ActionId::BibliographyCreateEntry),
             "bibliography::OpenEntry" => Ok(ActionId::BibliographyOpenEntry),

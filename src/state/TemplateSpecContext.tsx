@@ -68,3 +68,7 @@ export const useTemplateSpecContext = (): TemplateSpecContextValue => {
     }
     return context;
 };
+
+export const useOptionalTemplateSpecContext = ():
+    | TemplateSpecContextValue
+    | undefined => useContext(TemplateSpecContext);

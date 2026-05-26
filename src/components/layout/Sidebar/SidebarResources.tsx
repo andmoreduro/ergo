@@ -1,4 +1,3 @@
-import { open } from "@tauri-apps/plugin-dialog";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { AssetEntry } from "../../../bindings/AssetEntry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
@@ -6,7 +5,6 @@ import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { ResourceEntry } from "../../../bindings/ResourceEntry";
 import { useDocument } from "../../../state/DocumentContext";
 import { useActionDispatcher } from "../../../actions/runtime";
-import { TauriApi } from "../../../api/tauri";
 import { useTypstCanvasPage } from "../../../hooks/useTypstCanvasPage";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { defaultFieldIdForElement } from "../../../editor/fieldIds";
@@ -176,23 +174,6 @@ export const SidebarResourcesPanel = memo(({
         [state.sections],
     );
 
-    const startImport = async () => {
-        void dispatchAction({
-            id: "resources::Create",
-            payload: { source: "file" },
-        });
-        const selected = await open({
-            multiple: false,
-            directory: false,
-        });
-        if (typeof selected !== "string") {
-            return;
-        }
-        const result = await TauriApi.importResourceFile(selected);
-        await CompilerClient.writeFile(result.asset.path, new Uint8Array(result.bytes));
-        dispatch({ type: "ADD_ASSET", payload: { asset: result.asset } });
-    };
-
     const openResource = (entry: ResourceEntry) => {
         void dispatchAction({
             id: "resources::Open",
@@ -297,15 +278,6 @@ export const SidebarResourcesPanel = memo(({
             ) : (
                 <p className={styles.empty}>{m.sidebar_empty_resources()}</p>
             )}
-            <Button
-                fullWidth
-                size="small"
-                type="button"
-                variant="secondary"
-                onClick={() => void startImport()}
-            >
-                {m.resources_import()}
-            </Button>
             {draft && (
                 <SidebarResourceDialog title={m.resources_edit()}>
                     <TextInput

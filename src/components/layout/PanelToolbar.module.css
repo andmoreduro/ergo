@@ -57,6 +57,15 @@
     font-size: var(--font-size-sm);
     font-variant-numeric: tabular-nums;
     text-align: center;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    background: transparent;
+    cursor: pointer;
+}
+
+.zoomLabel:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-tertiary);
 }
 
 .exportButton {

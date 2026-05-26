@@ -1,19 +1,30 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { memo, useCallback, useMemo } from "react";
+import {
+    memo,
+    useCallback,
+    useEffect,
+    useId,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+    type KeyboardEventHandler,
+    type MutableRefObject,
+    type ReactNode,
+} from "react";
+import { caretPlainOffsetFromSelection } from "../../../richText/richText";
 import { TauriApi } from "../../../api/tauri";
 import { CompilerClient } from "../../../workers/compilerClient";
-import { useDocumentAst } from "../../../state/DocumentContext";
+import { useDocument, useDocumentAst } from "../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import {
     ActionContextProvider,
-    useActionDispatcher,
     type ActionHandlerMap,
 } from "../../../actions/runtime";
 import {
     equationSourceFieldId,
     figureBodyFieldId,
-    figureCaptionFieldId,
     figurePlacementFieldId,
     richTextFieldId,
     tableCellFieldId,
@@ -21,14 +32,43 @@ import {
     elementExtraFieldFieldId,
 } from "../../../editor/fieldIds";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
-import { Button } from "../../atoms/Button/Button";
+import { Image24Regular, Settings24Regular } from "@fluentui/react-icons";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { Select } from "../../atoms/Select/Select";
 import { RichTextField } from "../../molecules/RichTextField/RichTextField";
 import { Textarea } from "../../atoms/Textarea/Textarea";
 import { TextInput } from "../../atoms/TextInput/TextInput";
+import { usesStandardTypstFigureWrapper } from "../../../editor/templateElementOverrides";
+import { useDeferredRichTextCommit } from "../../../editor/useDeferredRichTextCommit";
+import {
+    normalizeEditableText,
+    normalizeRichTextContent,
+} from "../../../editor/textInput";
+import {
+    wrapperFieldDraftValues,
+    wrapperFieldValue,
+    type WrapperHostElement,
+} from "../../../editor/wrapperFields";
+import {
+    getAssetPreviewUrl,
+    setAssetPreviewUrl,
+} from "../../../editor/assetPreview";
+import {
+    figureHasLinkedAsset,
+    textSignificantlyEqual,
+} from "../../../state/ast/commitPolicy";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./ElementEditor.module.css";
+import type { ExtraFieldSpec } from "../../../bindings/ExtraFieldSpec";
+import type { ConvertibleElementKind } from "../../../state/ast/convertElement";
+import { trailingParagraphAction } from "../../../editor/ensureTrailingParagraph";
+import { insertParagraphAfterElement } from "../../../editor/insertParagraphAfterElement";
+import { useElementEnterInsertsParagraph } from "../../../editor/useInsertParagraphAfterElement";
+import {
+    contentSection,
+    paragraphHasText,
+} from "../../../editor/fieldNavigation";
+import { EditorAddButton } from "../../atoms/EditorAddButton/EditorAddButton";
 
 export interface ElementEditorProps {
     element: DocumentElement;
@@ -52,44 +92,35 @@ const getPlacementOptions = () => [
     { value: "bottom", label: m.placement_bottom() },
 ];
 
-const elementLabel = (element: DocumentElement): string => {
-    if (element.type === "Heading") {
-        return m.sidebar_heading({ level: element.level });
-    }
-
-    if (element.type === "Paragraph") {
-        return m.sidebar_paragraph();
-    }
-
-    if (element.type === "Table") {
-        return m.sidebar_table();
-    }
-
-    if (element.type === "Equation") {
-        return m.sidebar_equation();
-    }
-
-    return m.sidebar_figure();
-};
+const FIGURE_SETTINGS_KEYS = new Set(["width"]);
 
 export const ElementEditor = memo(function ElementEditor({ element }: ElementEditorProps) {
     const { dispatch } = useDocumentAst();
-    const dispatchAction = useActionDispatcher();
     const tableRows = element.type === "Table" ? element.rows : 0;
     const tableCols = element.type === "Table" ? element.cols : 0;
 
-    const handleDelete = useCallback(() => {
-        if (window.confirm(m.element_delete_confirm())) {
-            dispatch({ type: "REMOVE_ELEMENT", payload: { elementId: element.id } });
-        }
-    }, [dispatch, element.id]);
+    const convertTo = useCallback(
+        (targetKind: ConvertibleElementKind) => {
+            if (element.type === targetKind) {
+                return false;
+            }
+
+            dispatch({
+                type: "CONVERT_ELEMENT",
+                payload: { elementId: element.id, targetKind },
+            });
+            return true;
+        },
+        [dispatch, element.id, element.type],
+    );
 
     const elementHandlers: ActionHandlerMap = useMemo(
         () => ({
-            "editor::DeleteElement": () => {
-                handleDelete();
-                return true;
-            },
+            "editor::ConvertToParagraph": () => convertTo("Paragraph"),
+            "editor::ConvertToHeading": () => convertTo("Heading"),
+            "editor::ConvertToTable": () => convertTo("Table"),
+            "editor::ConvertToEquation": () => convertTo("Equation"),
+            "editor::ConvertToFigure": () => convertTo("Figure"),
             "editor::AddTableRow": () => {
                 if (element.type !== "Table") {
                     return false;
@@ -159,7 +190,7 @@ export const ElementEditor = memo(function ElementEditor({ element }: ElementEdi
                 return true;
             },
         }),
-        [dispatch, element.id, element.type, handleDelete, tableCols, tableRows],
+        [convertTo, dispatch, element.id, element.type, tableCols, tableRows],
     );
 
     return (
@@ -172,32 +203,42 @@ export const ElementEditor = memo(function ElementEditor({ element }: ElementEdi
             }}
             handlers={elementHandlers}
         >
-            <div className={styles.container} data-element-id={element.id}>
-                <div className={styles.header}>
-                    <span className={styles.title}>{elementLabel(element)}</span>
-                    <div className={styles.actions}>
-                        <Button
-                            variant="danger"
-                            size="small"
-                            type="button"
-                            onClick={() =>
-                                dispatchAction({
-                                    id: "editor::DeleteElement",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            {m.element_delete()}
-                        </Button>
-                    </div>
-                </div>
-                <div className={styles.content}>
-                    <ElementContent element={element} />
-                </div>
+            <div className={styles.elementBlock} data-element-id={element.id}>
+                <ElementContent element={element} />
             </div>
         </ActionContextProvider>
     );
 });
+
+const ElementSettingsButton = ({
+    children,
+}: {
+    children: ReactNode;
+}) => {
+    const [open, setOpen] = useState(false);
+    const panelId = useId();
+
+    return (
+        <div className={styles.settingsAnchor}>
+            <button
+                aria-controls={panelId}
+                aria-expanded={open}
+                aria-label={m.editor_element_settings()}
+                className={styles.settingsButton}
+                title={m.editor_element_settings()}
+                type="button"
+                onClick={() => setOpen((value) => !value)}
+            >
+                <Settings24Regular />
+            </button>
+            {open ? (
+                <div className={styles.settingsPanel} id={panelId} role="region">
+                    {children}
+                </div>
+            ) : null}
+        </div>
+    );
+};
 
 const ElementContent = ({ element }: { element: DocumentElement }) => {
     if (element.type === "Heading") {
@@ -239,33 +280,71 @@ const CustomElementEditor = ({ element }: { element: CustomElementUnion }) => {
 
     return (
         <>
-            {(spec.fields || []).map((field) => {
-                const value = element.fields[field.key] ?? "";
-                return (
-                    <Textarea
-                        key={field.key}
-                        fullWidth
-                        label={field.label || field.key}
-                        value={value}
-                        onChange={(event) =>
-                            dispatch({
-                                type: "UPDATE_CUSTOM_ELEMENT_FIELD",
-                                payload: {
-                                    elementId: element.id,
-                                    field: field.key,
-                                    value: event.target.value,
-                                },
-                            })
-                        }
-                    />
-                );
-            })}
+            {(spec.fields || []).map((field) => (
+                <CustomElementFieldInput
+                    key={field.key}
+                    elementId={element.id}
+                    fieldKey={field.key}
+                    label={field.label || field.key}
+                    committed={String(element.fields[field.key] ?? "")}
+                    dispatch={dispatch}
+                />
+            ))}
         </>
+    );
+};
+
+const CustomElementFieldInput = ({
+    elementId,
+    fieldKey,
+    label,
+    committed,
+    dispatch,
+}: {
+    elementId: string;
+    fieldKey: string;
+    label: string;
+    committed: string;
+    dispatch: ReturnType<typeof useDocumentAst>["dispatch"];
+}) => {
+    const [draft, setDraft] = useState(committed);
+    const handleEnterKey = useElementEnterInsertsParagraph(elementId);
+
+    useEffect(() => {
+        setDraft(committed);
+    }, [elementId, fieldKey, committed]);
+
+    return (
+        <Textarea
+            fullWidth
+            label={label}
+            value={draft}
+            onKeyDown={handleEnterKey}
+            onChange={(event) => {
+                const next = normalizeEditableText(event.target.value);
+                setDraft(next);
+                if (!textSignificantlyEqual(next, committed)) {
+                    dispatch({
+                        type: "UPDATE_CUSTOM_ELEMENT_FIELD",
+                        payload: {
+                            elementId,
+                            field: fieldKey,
+                            value: next,
+                        },
+                    });
+                }
+            }}
+        />
     );
 };
 
 const HeadingEditor = ({ element }: { element: HeadingElement }) => {
     const { dispatch } = useDocumentAst();
+    const handleEnterKey = useElementEnterInsertsParagraph(element.id);
+    const { content, setDraft, shouldCommit } = useDeferredRichTextCommit(
+        element.id,
+        element.content,
+    );
     const textField = useEditorFieldBinding<HTMLDivElement>({
         elementId: element.id,
         fieldId: richTextFieldId(element.id),
@@ -273,68 +352,158 @@ const HeadingEditor = ({ element }: { element: HeadingElement }) => {
 
     return (
         <>
-            <Select
-                fullWidth
-                label={m.editor_heading_level()}
-                value={String(element.level)}
-                options={headingLevels}
-                onChange={(event) =>
-                    dispatch({
-                        type: "UPDATE_HEADING",
-                        payload: {
-                            headingId: element.id,
-                            level: Number(event.target.value),
-                        },
-                    })
-                }
-            />
+            <div className={styles.headingLevelRow}>
+                <Select
+                    fullWidth
+                    label={m.editor_heading_level()}
+                    value={String(element.level)}
+                    options={headingLevels}
+                    onChange={(event) =>
+                        dispatch({
+                            type: "UPDATE_HEADING",
+                            payload: {
+                                headingId: element.id,
+                                level: Number(event.target.value),
+                            },
+                        })
+                    }
+                />
+            </div>
             <RichTextField
-                content={element.content}
+                variant="document"
+                content={content}
                 fieldBinding={textField}
-                onChange={(content) =>
-                    dispatch({
-                        type: "UPDATE_HEADING_CONTENT",
-                        payload: {
-                            headingId: element.id,
-                            content,
-                        },
-                    })
-                }
+                onChange={(next) => {
+                    const normalized = normalizeRichTextContent(next);
+                    setDraft(normalized);
+                    if (shouldCommit(normalized)) {
+                        dispatch({
+                            type: "UPDATE_HEADING_CONTENT",
+                            payload: {
+                                headingId: element.id,
+                                content: next,
+                            },
+                        });
+                    }
+                }}
+                onKeyDown={handleEnterKey}
             />
         </>
     );
 };
 
 const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
-    const { dispatch } = useDocumentAst();
+    const { state, dispatch } = useDocumentAst();
+    const { setDocumentFocus } = useDocument();
+    const { content, setDraft, shouldCommit } = useDeferredRichTextCommit(
+        element.id,
+        element.content,
+    );
     const textField = useEditorFieldBinding<HTMLDivElement>({
         elementId: element.id,
         fieldId: richTextFieldId(element.id),
     });
 
+    const handleEnter = () => {
+        if (!paragraphHasText(content)) {
+            return;
+        }
+
+        insertParagraphAfterElement(
+            state,
+            dispatch,
+            setDocumentFocus,
+            element.id,
+        );
+    };
+
+    const handleBackspaceOnEmpty: KeyboardEventHandler<HTMLDivElement> = (event) => {
+        if (event.key !== "Backspace" || paragraphHasText(content)) {
+            return;
+        }
+
+        const root = event.currentTarget;
+        const selection = document.getSelection();
+        if (!selection || !root.contains(selection.anchorNode)) {
+            return;
+        }
+
+        const offset = caretPlainOffsetFromSelection(root, selection);
+        if (offset !== 0) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const section = contentSection(state);
+        if (!section) {
+            return;
+        }
+
+        dispatch({
+            type: "REMOVE_ELEMENT",
+            payload: { elementId: element.id },
+        });
+
+        const remaining = section.elements.filter(
+            (candidate) => candidate.id !== element.id,
+        );
+        const provisionalAst = {
+            ...state,
+            sections: state.sections.map((candidate) =>
+                candidate.type === "Content" && candidate.id === section.id
+                    ? { ...candidate, elements: remaining }
+                    : candidate,
+            ),
+        };
+        const trailing = trailingParagraphAction(provisionalAst);
+        if (trailing) {
+            dispatch(trailing);
+        }
+    };
+
     return (
         <RichTextField
-            content={element.content}
+            variant="document"
+            content={content}
             fieldBinding={textField}
-            onChange={(content) =>
-                dispatch({
-                    type: "UPDATE_PARAGRAPH_CONTENT",
-                    payload: {
-                        paragraphId: element.id,
-                        content,
-                    },
-                })
-            }
+            onChange={(next) => {
+                const normalized = normalizeRichTextContent(next);
+                setDraft(normalized);
+                if (shouldCommit(normalized)) {
+                    dispatch({
+                        type: "UPDATE_PARAGRAPH_CONTENT",
+                        payload: {
+                            paragraphId: element.id,
+                            content: next,
+                        },
+                    });
+                }
+            }}
+            onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey) {
+                    event.preventDefault();
+                    handleEnter();
+                    return;
+                }
+                handleBackspaceOnEmpty(event);
+            }}
         />
     );
 };
 
 const EquationEditor = ({ element }: { element: EquationElement }) => {
     const { dispatch } = useDocumentAst();
+    const [draftLatex, setDraftLatex] = useState(element.latex_source);
+    const handleEnterKey = useElementEnterInsertsParagraph(element.id);
     const sourceField = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: element.id,
         fieldId: equationSourceFieldId(element.id),
     });
+
+    useEffect(() => {
+        setDraftLatex(element.latex_source);
+    }, [element.id, element.latex_source]);
 
     return (
         <>
@@ -342,16 +511,21 @@ const EquationEditor = ({ element }: { element: EquationElement }) => {
                 {...sourceField}
                 fullWidth
                 label={m.editor_equation_source()}
-                value={element.latex_source}
-                onChange={(event) =>
-                    dispatch({
-                        type: "UPDATE_EQUATION",
-                        payload: {
-                            equationId: element.id,
-                            latexSource: event.target.value,
-                        },
-                    })
-                }
+                value={draftLatex}
+                onChange={(event) => {
+                    const next = normalizeEditableText(event.target.value);
+                    setDraftLatex(next);
+                    if (!textSignificantlyEqual(next, element.latex_source)) {
+                        dispatch({
+                            type: "UPDATE_EQUATION",
+                            payload: {
+                                equationId: element.id,
+                                latexSource: next,
+                            },
+                        });
+                    }
+                }}
+                onKeyDown={handleEnterKey}
             />
             <Checkbox
                 label={m.editor_equation_block()}
@@ -371,113 +545,93 @@ const EquationEditor = ({ element }: { element: EquationElement }) => {
 };
 
 const TableEditor = ({ element }: { element: TableElement }) => {
-    const dispatchAction = useActionDispatcher();
     const { dispatch } = useDocumentAst();
     const { spec: templateSpec } = useTemplateSpecContext();
-    const extraFields = templateSpec?.element_overrides?.table?.extra_fields ?? [];
+    const tableOverride = templateSpec?.element_overrides?.table ?? null;
+    const annotationFields = tableOverride?.extra_fields ?? [];
+
+    const insertRow = (rowIndex: number) => {
+        dispatch({
+            type: "ADD_TABLE_ROW",
+            payload: { tableId: element.id, rowIndex },
+        });
+    };
+
+    const insertColumn = (colIndex: number) => {
+        dispatch({
+            type: "ADD_TABLE_COLUMN",
+            payload: { tableId: element.id, colIndex },
+        });
+    };
 
     return (
         <>
-            <div className={styles.columnSizes}>
-                {element.column_sizes.map((size, colIndex) => (
-                    <TableColumnSizeEditor
-                        colIndex={colIndex}
-                        element={element}
-                        key={colIndex}
-                        size={size}
+            <ElementSettingsButton>
+                <div className={styles.columnSizes}>
+                    {element.column_sizes.map((size, colIndex) => (
+                        <TableColumnSizeEditor
+                            colIndex={colIndex}
+                            element={element}
+                            key={colIndex}
+                            size={size}
+                        />
+                    ))}
+                </div>
+            </ElementSettingsButton>
+            <div className={styles.tableWrap}>
+                <div
+                    className={`${styles.tableFrame} ${styles.editorTableGridSize}`}
+                >
+                    <EditorAddButton
+                        ariaLabel={m.editor_table_add_row()}
+                        className={`${styles.tableInsertButton} ${styles.tableInsertTop}`}
+                        onClick={() => insertRow(0)}
                     />
-                ))}
-            </div>
-            <div className={styles.tableGrid}>
-                {element.cells.map((row, rowIndex) => (
-                    <div className={styles.tableRow} key={`row-${rowIndex}`}>
-                        {row.map((cell, colIndex) => (
-                            <TableCellEditor
-                                cellContent={cell.content}
-                                colIndex={colIndex}
-                                element={element}
-                                key={`cell-${rowIndex}-${colIndex}`}
-                                rowIndex={rowIndex}
-                            />
+                    <EditorAddButton
+                        ariaLabel={m.editor_table_add_row()}
+                        className={`${styles.tableInsertButton} ${styles.tableInsertBottom}`}
+                        onClick={() => insertRow(element.cells.length)}
+                    />
+                    <EditorAddButton
+                        ariaLabel={m.editor_table_add_column()}
+                        className={`${styles.tableInsertButton} ${styles.tableInsertLeft}`}
+                        onClick={() => insertColumn(0)}
+                    />
+                    <EditorAddButton
+                        ariaLabel={m.editor_table_add_column()}
+                        className={`${styles.tableInsertButton} ${styles.tableInsertRight}`}
+                        onClick={() => insertColumn(element.cols)}
+                    />
+                    <div
+                        className={`${styles.tableGrid} ${styles.editorTableGridSize}`}
+                        style={
+                            {
+                                "--table-cols": String(element.cols),
+                            } as CSSProperties
+                        }
+                    >
+                        {element.cells.map((row, rowIndex) => (
+                            <div className={styles.tableRow} key={`row-${rowIndex}`}>
+                                {row.map((cell, colIndex) => (
+                                    <TableCellEditor
+                                        cellContent={cell.content}
+                                        colIndex={colIndex}
+                                        element={element}
+                                        key={`cell-${rowIndex}-${colIndex}`}
+                                        rowIndex={rowIndex}
+                                    />
+                                ))}
+                            </div>
                         ))}
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="small"
-                            disabled={element.rows <= 1}
-                            onClick={() =>
-                                dispatchAction({
-                                    id: "editor::RemoveTableRow",
-                                    payload: { rowIndex },
-                                })
-                            }
-                        >
-                            {m.editor_table_remove_row()}
-                        </Button>
                     </div>
-                ))}
+                </div>
             </div>
-            <div className={styles.tableActions}>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    onClick={() =>
-                        dispatchAction({
-                            id: "editor::AddTableRow",
-                            payload: null,
-                        })
-                    }
-                >
-                    {m.editor_table_add_row()}
-                </Button>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="small"
-                    onClick={() =>
-                        dispatchAction({
-                            id: "editor::AddTableColumn",
-                            payload: null,
-                        })
-                    }
-                >
-                    {m.editor_table_add_column()}
-                </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="small"
-                    disabled={element.cols <= 1}
-                    onClick={() =>
-                        dispatchAction({
-                            id: "editor::RemoveTableColumn",
-                            payload: { colIndex: element.cols - 1 },
-                        })
-                    }
-                >
-                    {m.editor_table_remove_column()}
-                </Button>
-            </div>
-            {extraFields.map((field) => (
-                <ExtraFieldInput
-                    key={field.key}
-                    elementId={element.id}
-                    fieldKey={field.key}
-                    label={field.label}
-                    value={element.extra_fields?.[field.key] ?? ""}
-                    onChange={(value) =>
-                        dispatch({
-                            type: "UPDATE_ELEMENT_EXTRA_FIELD",
-                            payload: {
-                                elementId: element.id,
-                                fieldKey: field.key,
-                                fieldValue: value,
-                            },
-                        })
-                    }
+            {annotationFields.length > 0 ? (
+                <ElementAnnotationFields
+                    element={element}
+                    fields={annotationFields}
                 />
-            ))}
+            ) : null}
         </>
     );
 };
@@ -530,201 +684,477 @@ const TableCellEditor = ({
     rowIndex: number;
 }) => {
     const { dispatch } = useDocumentAst();
+    const handleEnterKey = useElementEnterInsertsParagraph(element.id);
+    const cellKey = `${element.id}:${rowIndex}:${colIndex}`;
+    const [draft, setDraft] = useState(cellContent);
     const cellField = useEditorFieldBinding<HTMLInputElement>({
         elementId: element.id,
         fieldId: tableCellFieldId(element.id, rowIndex, colIndex),
     });
 
+    useEffect(() => {
+        setDraft(cellContent);
+    }, [cellKey, cellContent]);
+
     return (
         <TextInput
             {...cellField}
-            value={cellContent}
+            className={styles.tableCellInput}
+            value={draft}
             aria-label={m.editor_table_cell_label({
                 row: rowIndex + 1,
                 column: colIndex + 1,
             })}
-            onChange={(event) =>
-                dispatch({
-                    type: "UPDATE_TABLE_CELL",
-                    payload: {
-                        tableId: element.id,
-                        rowIndex,
-                        colIndex,
-                        text: event.target.value,
-                    },
-                })
-            }
+            onKeyDown={handleEnterKey}
+            onChange={(event) => {
+                const next = normalizeEditableText(event.target.value);
+                setDraft(next);
+                if (!textSignificantlyEqual(next, cellContent)) {
+                    dispatch({
+                        type: "UPDATE_TABLE_CELL",
+                        payload: {
+                            tableId: element.id,
+                            rowIndex,
+                            colIndex,
+                            text: next,
+                        },
+                    });
+                }
+            }}
         />
     );
 };
 
 const FigureEditor = ({ element }: { element: FigureElement }) => {
     const { state, dispatch } = useDocumentAst();
+    const handleEnterKey = useElementEnterInsertsParagraph(element.id);
     const { spec: templateSpec } = useTemplateSpecContext();
-    const extraFields = templateSpec?.element_overrides?.figure?.extra_fields ?? [];
+    const figureOverride = templateSpec?.element_overrides?.figure ?? null;
+    const extraFields = figureOverride?.extra_fields ?? [];
+    const showPlacement = usesStandardTypstFigureWrapper(figureOverride);
+    const hasAsset = figureHasLinkedAsset(element.asset_id);
     const linkedAsset = element.asset_id
         ? state.assets.find((asset) => asset.id === element.asset_id)
         : null;
+    const [previewUrl, setPreviewUrl] = useState<string | null>(() =>
+        element.asset_id ? getAssetPreviewUrl(element.asset_id) : null,
+    );
 
-    const chooseImage = async () => {
-        const selected = await open({
-            multiple: false,
-            directory: false,
-            filters: [
-                {
-                    name: "Images",
-                    extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"],
-                },
-            ],
-        });
-        if (typeof selected !== "string") {
+    const committedBody =
+        element.content.type === "Paragraph" ? element.content.content : [];
+    const bodyParagraphId =
+        element.content.type === "Paragraph" ? element.content.id : element.id;
+    const {
+        content: bodyContent,
+        setDraft: setBodyDraft,
+        shouldCommit: shouldCommitBody,
+    } = useDeferredRichTextCommit(bodyParagraphId, committedBody);
+
+    const [draftPlacement, setDraftPlacement] = useState(element.placement);
+    const wrapperDraftRef = useRef<Record<string, string>>(
+        wrapperFieldDraftValues(element, extraFields),
+    );
+    const hadAssetRef = useRef(hasAsset);
+
+    useEffect(() => {
+        setDraftPlacement(element.placement);
+        wrapperDraftRef.current = wrapperFieldDraftValues(element, extraFields);
+    }, [element, extraFields]);
+
+    useEffect(() => {
+        if (!element.asset_id) {
+            setPreviewUrl(null);
             return;
         }
 
-        const result = await TauriApi.importResourceFile(selected);
-        await CompilerClient.writeFile(result.asset.path, new Uint8Array(result.bytes));
-        const existing = state.assets.some((entry) => entry.id === result.asset.id);
-        if (!existing) {
-            dispatch({ type: "ADD_ASSET", payload: { asset: result.asset } });
+        const cached = getAssetPreviewUrl(element.asset_id);
+        if (cached) {
+            setPreviewUrl(cached);
+            return;
         }
-        dispatch({
-            type: "UPDATE_FIGURE",
-            payload: {
-                figureId: element.id,
-                assetId: result.asset.id,
-            },
-        });
+
+        if (!linkedAsset) {
+            setPreviewUrl(null);
+            return;
+        }
+
+        let cancelled = false;
+        void TauriApi.readVfsFile(linkedAsset.path)
+            .then((bytes) => {
+                if (cancelled) {
+                    return;
+                }
+                setPreviewUrl(
+                    setAssetPreviewUrl(
+                        element.asset_id!,
+                        bytes,
+                        linkedAsset.path,
+                    ),
+                );
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setPreviewUrl(null);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [element.asset_id, linkedAsset]);
+
+    const flushPendingFigureEdits = useCallback(() => {
+        if (
+            showPlacement &&
+            draftPlacement !== element.placement
+        ) {
+            dispatch({
+                type: "UPDATE_FIGURE",
+                payload: {
+                    figureId: element.id,
+                    placement: draftPlacement,
+                },
+            });
+        }
+
+        if (shouldCommitBody(bodyContent)) {
+            dispatch({
+                type: "UPDATE_PARAGRAPH_CONTENT",
+                payload: {
+                    paragraphId: bodyParagraphId,
+                    content: normalizeRichTextContent(bodyContent),
+                },
+            });
+        }
+
+        for (const field of extraFields) {
+            const next = wrapperDraftRef.current[field.key] ?? "";
+            const previous = wrapperFieldValue(element, field.key);
+            if (!textSignificantlyEqual(next, previous)) {
+                if (field.key === "caption") {
+                    dispatch({
+                        type: "UPDATE_FIGURE",
+                        payload: {
+                            figureId: element.id,
+                            caption: next,
+                        },
+                    });
+                } else {
+                    dispatch({
+                        type: "UPDATE_ELEMENT_EXTRA_FIELD",
+                        payload: {
+                            elementId: element.id,
+                            fieldKey: field.key,
+                            fieldValue: next,
+                        },
+                    });
+                }
+            }
+        }
+    }, [
+        bodyContent,
+        bodyParagraphId,
+        dispatch,
+        draftPlacement,
+        element,
+        extraFields,
+        shouldCommitBody,
+        showPlacement,
+    ]);
+
+    useEffect(() => {
+        if (!hadAssetRef.current && hasAsset) {
+            flushPendingFigureEdits();
+        }
+        hadAssetRef.current = hasAsset;
+    }, [hasAsset, flushPendingFigureEdits]);
+
+    const chooseImage = async () => {
+        try {
+            const selected = await open({
+                multiple: false,
+                directory: false,
+                filters: [
+                    {
+                        name: "Images",
+                        extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"],
+                    },
+                ],
+            });
+            if (typeof selected !== "string") {
+                return;
+            }
+
+            const result = await TauriApi.importResourceFile(selected);
+            await CompilerClient.writeFile(
+                result.asset.path,
+                new Uint8Array(result.bytes),
+            );
+            if (!state.assets.some((entry) => entry.id === result.asset.id)) {
+                dispatch({ type: "ADD_ASSET", payload: { asset: result.asset } });
+            }
+            dispatch({
+                type: "UPDATE_FIGURE",
+                payload: {
+                    figureId: element.id,
+                    assetId: result.asset.id,
+                },
+            });
+            setPreviewUrl(
+                setAssetPreviewUrl(
+                    result.asset.id,
+                    new Uint8Array(result.bytes),
+                    result.asset.path,
+                ),
+            );
+        } catch (error) {
+            console.error("Failed to import figure image:", error);
+        }
     };
 
-    const bodyContent =
-        element.content.type === "Paragraph" ? element.content.content : [];
     const bodyField = useEditorFieldBinding<HTMLDivElement>({
         elementId: element.id,
         fieldId: figureBodyFieldId(element.id),
-    });
-    const captionField = useEditorFieldBinding<HTMLInputElement>({
-        elementId: element.id,
-        fieldId: figureCaptionFieldId(element.id),
     });
     const placementField = useEditorFieldBinding<HTMLSelectElement>({
         elementId: element.id,
         fieldId: figurePlacementFieldId(element.id),
     });
 
+    const settingsFields = extraFields.filter((field) =>
+        FIGURE_SETTINGS_KEYS.has(field.key),
+    );
+    const annotationFields = extraFields.filter(
+        (field) => !FIGURE_SETTINGS_KEYS.has(field.key),
+    );
+    const hasSettings = settingsFields.length > 0 || showPlacement;
+
     return (
         <>
-            <div className={styles.figureAssetRow}>
-                <Button
-                    size="small"
+            {hasSettings ? (
+                <ElementSettingsButton>
+                    {settingsFields.map((field) => (
+                        <ExtraFieldInput
+                            element={element}
+                            field={field}
+                            key={field.key}
+                            value={wrapperFieldValue(element, field.key)}
+                            onChange={(value) => {
+                                const next = normalizeEditableText(value);
+                                wrapperDraftRef.current[field.key] = next;
+                                const previous = wrapperFieldValue(element, field.key);
+                                if (!textSignificantlyEqual(next, previous)) {
+                                    dispatch({
+                                        type: "UPDATE_ELEMENT_EXTRA_FIELD",
+                                        payload: {
+                                            elementId: element.id,
+                                            fieldKey: field.key,
+                                            fieldValue: next,
+                                        },
+                                    });
+                                }
+                            }}
+                        />
+                    ))}
+                    {showPlacement ? (
+                        <Select
+                            {...placementField}
+                            fullWidth
+                            label={m.editor_figure_placement()}
+                            value={draftPlacement}
+                            options={getPlacementOptions()}
+                            onChange={(event) => {
+                                const next = event.target.value;
+                                setDraftPlacement(next);
+                                if (next !== element.placement) {
+                                    dispatch({
+                                        type: "UPDATE_FIGURE",
+                                        payload: {
+                                            figureId: element.id,
+                                            placement: next,
+                                        },
+                                    });
+                                }
+                            }}
+                        />
+                    ) : null}
+                </ElementSettingsButton>
+            ) : null}
+            <div
+                className={`${styles.figureWrap} ${styles.editorTableGridSize}`}
+            >
+                <button
+                    aria-label={m.editor_figure_choose_image()}
+                    className={styles.figureImageButton}
+                    title={m.editor_figure_choose_image()}
                     type="button"
-                    variant="secondary"
                     onClick={() => {
                         void chooseImage();
                     }}
                 >
-                    {m.editor_figure_choose_image()}
-                </Button>
-                {linkedAsset && (
-                    <span className={styles.figureAssetPath}>{linkedAsset.path}</span>
-                )}
+                    {previewUrl ? (
+                        <img
+                            alt=""
+                            className={styles.figureImagePreview}
+                            src={previewUrl}
+                        />
+                    ) : (
+                        <span className={styles.figureImagePlaceholder}>
+                            <Image24Regular />
+                        </span>
+                    )}
+                </button>
+                {!hasAsset ? (
+                    <p className={styles.figureAssetHint}>
+                        {m.editor_figure_image_required()}
+                    </p>
+                ) : null}
             </div>
-            {element.content.type === "Paragraph" && (
+            {!hasAsset && element.content.type === "Paragraph" ? (
                 <RichTextField
                     label={m.editor_figure_body()}
                     content={bodyContent}
                     fieldBinding={bodyField}
-                    onChange={(content) =>
-                        dispatch({
-                            type: "UPDATE_PARAGRAPH_CONTENT",
-                            payload: {
-                                paragraphId: element.content.id,
-                                content,
-                            },
-                        })
-                    }
+                    onChange={(next) => {
+                        const normalized = normalizeRichTextContent(next);
+                        setBodyDraft(normalized);
+                        if (shouldCommitBody(normalized)) {
+                            dispatch({
+                                type: "UPDATE_PARAGRAPH_CONTENT",
+                                payload: {
+                                    paragraphId: bodyParagraphId,
+                                    content: normalized,
+                                },
+                            });
+                        }
+                    }}
+                    onKeyDown={handleEnterKey}
                 />
-            )}
-            <TextInput
-                {...captionField}
-                fullWidth
-                label={m.editor_figure_caption()}
-                value={element.caption}
-                onChange={(event) =>
-                    dispatch({
-                        type: "UPDATE_FIGURE",
-                        payload: {
-                            figureId: element.id,
-                            caption: event.target.value,
-                        },
-                    })
-                }
-            />
-            <Select
-                {...placementField}
-                fullWidth
-                label={m.editor_figure_placement()}
-                value={element.placement}
-                options={getPlacementOptions()}
-                onChange={(event) =>
-                    dispatch({
-                        type: "UPDATE_FIGURE",
-                        payload: {
-                            figureId: element.id,
-                            placement: event.target.value,
-                        },
-                    })
-                }
-            />
-            {extraFields.map((field) => (
-                <ExtraFieldInput
-                    key={field.key}
-                    elementId={element.id}
-                    fieldKey={field.key}
-                    label={field.label}
-                    value={element.extra_fields?.[field.key] ?? ""}
-                    onChange={(value) =>
-                        dispatch({
-                            type: "UPDATE_ELEMENT_EXTRA_FIELD",
-                            payload: {
-                                elementId: element.id,
-                                fieldKey: field.key,
-                                fieldValue: value,
-                            },
-                        })
-                    }
+            ) : null}
+            {annotationFields.length > 0 ? (
+                <ElementAnnotationFields
+                    draftRef={wrapperDraftRef}
+                    element={element}
+                    fields={annotationFields}
                 />
-            ))}
+            ) : null}
         </>
     );
 };
 
+const ElementAnnotationFields = ({
+    element,
+    fields,
+    draftRef,
+}: {
+    element: WrapperHostElement;
+    fields: ExtraFieldSpec[];
+    draftRef?: MutableRefObject<Record<string, string>>;
+}) => {
+    const { dispatch } = useDocumentAst();
+    const [draft, setDraft] = useState(() => wrapperFieldDraftValues(element, fields));
+
+    useEffect(() => {
+        const next = wrapperFieldDraftValues(element, fields);
+        setDraft(next);
+        if (draftRef) {
+            draftRef.current = next;
+        }
+    }, [draftRef, element, fields]);
+
+    const commitField = (key: string, next: string) => {
+        const previous = wrapperFieldValue(element, key);
+        if (!textSignificantlyEqual(next, previous)) {
+            if (element.type === "Figure" && key === "caption") {
+                dispatch({
+                    type: "UPDATE_FIGURE",
+                    payload: {
+                        figureId: element.id,
+                        caption: next,
+                    },
+                });
+            } else {
+                dispatch({
+                    type: "UPDATE_ELEMENT_EXTRA_FIELD",
+                    payload: {
+                        elementId: element.id,
+                        fieldKey: key,
+                        fieldValue: next,
+                    },
+                });
+            }
+        }
+    };
+
+    return (
+        <div className={styles.annotationFields}>
+            {fields.map((field) => (
+                <ExtraFieldInput
+                    element={element}
+                    field={field}
+                    key={field.key}
+                    value={draft[field.key] ?? ""}
+                    onChange={(value) => {
+                        const next = normalizeEditableText(value);
+                        setDraft((current) => {
+                            const updated = { ...current, [field.key]: next };
+                            if (draftRef) {
+                                draftRef.current = updated;
+                            }
+                            return updated;
+                        });
+                        commitField(field.key, next);
+                    }}
+                />
+            ))}
+        </div>
+    );
+};
+
 interface ExtraFieldInputProps {
-    elementId: string;
-    fieldKey: string;
-    label: string;
+    element: WrapperHostElement;
+    field: ExtraFieldSpec;
     value: string;
     onChange: (value: string) => void;
 }
 
-const ExtraFieldInput = ({
-    elementId,
-    fieldKey,
-    label,
-    value,
-    onChange,
-}: ExtraFieldInputProps) => {
+const ExtraFieldInput = ({ element, field, value, onChange }: ExtraFieldInputProps) => {
+    const elementId = element.id;
+    const handleEnterKey = useElementEnterInsertsParagraph(elementId);
+
+    if (field.type === "content") {
+        const fieldId = elementExtraFieldFieldId(elementId, field.key);
+        const binding = useEditorFieldBinding<HTMLTextAreaElement>({
+            elementId,
+            fieldId,
+        });
+
+        return (
+            <Textarea
+                {...binding}
+                fullWidth
+                label={field.label}
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                onKeyDown={handleEnterKey}
+            />
+        );
+    }
+
+    const fieldId = elementExtraFieldFieldId(elementId, field.key);
     const binding = useEditorFieldBinding<HTMLInputElement>({
         elementId,
-        fieldId: elementExtraFieldFieldId(elementId, fieldKey),
+        fieldId,
     });
 
     return (
         <TextInput
             {...binding}
             fullWidth
-            label={label}
+            label={field.label}
             value={value}
             onChange={(event) => onChange(event.target.value)}
+            onKeyDown={handleEnterKey}
         />
     );
 };

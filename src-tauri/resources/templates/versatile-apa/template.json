@@ -32,8 +32,66 @@
       "appendix",
       "appendix-outline",
       "title-page",
+      "apa-figure",
       { "symbol": "versatile-apa", "alias": "apa-style" }
     ]
+  },
+  "element_overrides": {
+    "figure": {
+      "wrapper": "apa-figure",
+      "extra_fields": [
+        {
+          "key": "width",
+          "type": "length",
+          "label": "Image width"
+        },
+        {
+          "key": "caption",
+          "type": "content",
+          "label": "Caption"
+        },
+        {
+          "key": "note",
+          "type": "content",
+          "label": "Note"
+        },
+        {
+          "key": "specific-note",
+          "type": "content",
+          "label": "Specific note"
+        },
+        {
+          "key": "probability-note",
+          "type": "content",
+          "label": "Probability note (significance symbols, e.g. * p < .05)"
+        }
+      ]
+    },
+    "table": {
+      "wrapper": "apa-figure",
+      "extra_fields": [
+        {
+          "key": "caption",
+          "type": "content",
+          "label": "Caption"
+        },
+        {
+          "key": "note",
+          "type": "content",
+          "label": "Note"
+        },
+        {
+          "key": "specific-note",
+          "type": "content",
+          "label": "Specific note"
+        },
+        {
+          "key": "probability-note",
+          "type": "content",
+          "label": "Probability note (significance symbols, e.g. * p < .05)"
+        }
+      ]
+    }
   },
   "show_rule": {
     "function": "apa-style",
@@ -57,7 +115,7 @@
       "id": "title",
       "type": "string",
       "label": "Document Title",
-      "importance": "required",
+      "importance": "recommended",
       "default": "Untitled Document"
     },
     {
@@ -75,9 +133,9 @@
     },
     {
       "id": "keywords",
-      "type": "array",
+      "type": "simple_list",
       "label": "Keywords",
-      "importance": "optional",
+      "importance": "recommended",
       "items": {
         "type": "string",
         "label": "Keyword"
@@ -85,12 +143,12 @@
     },
     {
       "id": "affiliations",
-      "type": "array",
+      "type": "simple_list",
       "label": "Affiliations",
       "importance": "recommended",
       "items": {
         "type": "string",
-        "label": "Affiliation Name"
+        "label": "Affiliation"
       }
     },
     {
@@ -110,8 +168,8 @@
           {
             "id": "affiliations",
             "type": "array",
-            "label": "Affiliations",
-            "importance": "optional",
+            "label": "Author's affiliations",
+            "importance": "recommended",
             "items": {
               "type": "reference",
               "target": "affiliations",
@@ -125,28 +183,28 @@
       "id": "course",
       "type": "string",
       "label": "Course",
-      "importance": "optional",
+      "importance": "recommended",
       "variants": ["student"]
     },
     {
       "id": "instructor",
       "type": "string",
       "label": "Instructor",
-      "importance": "optional",
+      "importance": "recommended",
       "variants": ["student"]
     },
     {
       "id": "due_date",
       "type": "string",
       "label": "Due Date",
-      "importance": "optional",
+      "importance": "recommended",
       "variants": ["student"]
     },
     {
       "id": "author_note",
       "type": "content",
       "label": "Author Note",
-      "importance": "optional",
+      "importance": "recommended",
       "variants": ["professional"]
     }
   ],
@@ -241,6 +299,12 @@
           "source": "inputs.keywords"
         }
       ]
+    },
+    {
+      "id": "front-matter-outlines",
+      "kind": "literal",
+      "label": "Outlines",
+      "source": "#outline()\n#pagebreak()\n#outline(target: figure.where(kind: table), title: [Tables])\n#pagebreak()\n#outline(target: figure.where(kind: image), title: [Figures])\n#pagebreak()\n#outline(target: figure.where(kind: math.equation), title: [Equations])\n#pagebreak()\n#outline(target: figure.where(kind: raw), title: [Listings])\n#pagebreak()\n#appendix-outline(title: [Appendices])\n#pagebreak()\n"
     },
     {
       "id": "body",

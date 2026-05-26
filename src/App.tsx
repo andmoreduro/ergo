@@ -180,16 +180,22 @@ const AppShellContent = () => {
         if (elementType === "heading") {
             dispatch({
                 type: "ADD_HEADING",
-                payload: { sectionId, headingId: id },
+                payload: { sectionId, headingId: id, afterElementId },
             });
             focusInsertedElement("Heading");
             return;
         }
 
+        const afterElementId =
+            documentFocus.elementId &&
+            documentFocus.elementId !== "project"
+                ? documentFocus.elementId
+                : undefined;
+
         if (elementType === "paragraph") {
             dispatch({
                 type: "ADD_PARAGRAPH",
-                payload: { sectionId, paragraphId: id },
+                payload: { sectionId, paragraphId: id, afterElementId },
             });
             focusInsertedElement("Paragraph");
             return;
@@ -198,7 +204,7 @@ const AppShellContent = () => {
         if (elementType === "table") {
             dispatch({
                 type: "ADD_TABLE",
-                payload: { sectionId, tableId: id },
+                payload: { sectionId, tableId: id, afterElementId },
             });
             focusInsertedElement("Table");
             return;
@@ -207,7 +213,7 @@ const AppShellContent = () => {
         if (elementType === "equation") {
             dispatch({
                 type: "ADD_EQUATION",
-                payload: { sectionId, equationId: id },
+                payload: { sectionId, equationId: id, afterElementId },
             });
             focusInsertedElement("Equation");
             return;
@@ -215,10 +221,10 @@ const AppShellContent = () => {
 
         dispatch({
             type: "ADD_FIGURE",
-            payload: { sectionId, figureId: id },
+            payload: { sectionId, figureId: id, afterElementId },
         });
         focusInsertedElement("Figure");
-    }, [dispatch, ensureActiveProject, setDocumentFocus, state.sections]);
+    }, [dispatch, documentFocus.elementId, ensureActiveProject, setDocumentFocus, state.sections]);
 
     const exportDocument = useCallback(
         async (format: ExportFormat) => {

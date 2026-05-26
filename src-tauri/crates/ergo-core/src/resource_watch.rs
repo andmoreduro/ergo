@@ -1,4 +1,5 @@
-use crate::ast::{AssetEntry, DocumentAST, DocumentElement, DocumentSection};
+use crate::ast::{AssetEntry, DocumentAST, DocumentElement, DocumentSection, ReferenceEntry};
+use crate::document_session_generation::resource_preview_typst_for_element;
 use crate::document_resources::{
     DocumentResources, ResourceEntry, ResourceGroup, ResourceKind, ResourcePreview,
     ResourcePreviewStatus,
@@ -17,7 +18,7 @@ pub fn write_resource_files(
 ) {
     write_if_changed(vfs, RESOURCE_LIB, lib_source);
 
-    let seeds = assign_preview_pages(resource_seeds(ast));
+    let seeds = assign_preview_pages(resource_seeds(ast, template));
     let mut resource_source = String::new();
 
     let width_pt = template
@@ -76,16 +77,16 @@ pub fn write_resource_files(
 
 pub fn build_resource_catalog(
     ast: &DocumentAST,
-    _template: &TemplateSpec,
+    template: &TemplateSpec,
     vfs: &VirtualFileSystem,
 ) -> DocumentResources {
-    let seeds = assign_preview_pages(resource_seeds(ast));
+    let seeds = assign_preview_pages(resource_seeds(ast, template));
     let mut groups = Vec::new();
     for (kind, label) in [
         (ResourceKind::Figure, "Figures"),
         (ResourceKind::Table, "Tables"),
         (ResourceKind::Equation, "Equations"),
-        (ResourceKind::File, "Files"),
+        (ResourceKind::File, "Assets"),
         (ResourceKind::Custom, "Custom"),
     ] {
         let entries: Vec<ResourceEntry> = seeds
@@ -190,15 +191,42 @@ fn assign_preview_pages(mut seeds: Vec<ResourceSeed>) -> Vec<ResourceSeed> {
     seeds
 }
 
-fn resource_seeds(ast: &DocumentAST) -> Vec<ResourceSeed> {
+fn linked_figure_asset_ids(ast: &DocumentAST) -> std::collections::HashSet<String> {
+    let mut linked = std::collections::HashSet::new();
+    for section in &ast.sections {
+        let DocumentSection::Content(content) = section;
+        for element in &content.elements {
+            if let DocumentElement::Figure(figure) = element {
+                if let Some(asset_id) = figure.asset_id.as_ref() {
+                    if !asset_id.trim().is_empty() {
+                        linked.insert(asset_id.clone());
+                    }
+                }
+            }
+        }
+    }
+    linked
+}
+
+fn resource_seeds(ast: &DocumentAST, template: &TemplateSpec) -> Vec<ResourceSeed> {
     let mut seeds = Vec::new();
+    let linked_assets = linked_figure_asset_ids(ast);
     for asset in &ast.assets {
+        if linked_assets.contains(&asset.id) {
+            continue;
+        }
         seeds.push(file_seed(asset));
     }
     for section in &ast.sections {
         let DocumentSection::Content(content) = section;
         for element in &content.elements {
-            collect_element_seeds(element, &mut seeds, &ast.assets);
+            collect_element_seeds(
+                element,
+                &mut seeds,
+                &ast.assets,
+                template,
+                &ast.references,
+            );
         }
     }
     seeds
@@ -208,6 +236,8 @@ fn collect_element_seeds(
     element: &DocumentElement,
     seeds: &mut Vec<ResourceSeed>,
     assets: &[AssetEntry],
+    template: &TemplateSpec,
+    references: &[ReferenceEntry],
 ) {
     match element {
         DocumentElement::Equation(equation) => {
@@ -231,20 +261,8 @@ fn collect_element_seeds(
             });
         }
         DocumentElement::Table(table) => {
-            let columns = if table.column_sizes.is_empty() {
-                "1fr".to_string()
-            } else {
-                table.column_sizes.join(", ")
-            };
-            let mut body = format!("#table(\n  columns: ({columns})");
-            for row in &table.cells {
-                for cell in row {
-                    body.push_str(",\n  [");
-                    body.push_str(&escape_typst(&cell.content));
-                    body.push(']');
-                }
-            }
-            body.push_str("\n)");
+            let preview_body = resource_preview_typst_for_element(element, template, assets, references)
+                .unwrap_or_else(|| legacy_table_preview_body(table));
             seeds.push(ResourceSeed {
                 id: table.id.clone(),
                 kind: ResourceKind::Table,
@@ -253,7 +271,7 @@ fn collect_element_seeds(
                 reference_token: reference_token(&table.id),
                 source_element_id: Some(table.id.clone()),
                 asset_id: None,
-                preview_source: Some(wrap_body(&body)),
+                preview_source: Some(wrap_body(&preview_body)),
                 preview_page: None,
                 missing_diagnostic: None,
             });
@@ -269,9 +287,8 @@ fn collect_element_seeds(
             } else {
                 caption.to_string()
             };
-            let body = asset_ref
-                .map(|a| format!("#image(\"{}\", width: 100%)", escape_typst_string(&a.path)))
-                .unwrap_or_else(|| "[Figure]".to_string());
+            let preview_body = resource_preview_typst_for_element(element, template, assets, references)
+                .unwrap_or_else(|| legacy_figure_preview_body(asset_ref));
             seeds.push(ResourceSeed {
                 id: figure.id.clone(),
                 kind: ResourceKind::Figure,
@@ -280,11 +297,11 @@ fn collect_element_seeds(
                 reference_token: reference_token(&figure.id),
                 source_element_id: Some(figure.id.clone()),
                 asset_id: figure.asset_id.clone(),
-                preview_source: Some(wrap_body(&body)),
+                preview_source: Some(wrap_body(&preview_body)),
                 preview_page: None,
                 missing_diagnostic: None,
             });
-            collect_element_seeds(&figure.content, seeds, assets);
+            collect_element_seeds(&figure.content, seeds, assets, template, references);
         }
         DocumentElement::Custom(custom) => {
             let body = format!("[{}]", escape_typst(&custom.element_type));
@@ -308,7 +325,7 @@ fn collect_element_seeds(
 fn file_seed(asset: &AssetEntry) -> ResourceSeed {
     let body = if asset.kind == "image" || image_path(&asset.path) {
         format!(
-            "#image(\"{}\", width: 100%)",
+            "image(\"{}\", width: 100%)",
             escape_typst_string(&asset.path)
         )
     } else {
@@ -326,6 +343,30 @@ fn file_seed(asset: &AssetEntry) -> ResourceSeed {
         preview_page: None,
         missing_diagnostic: None,
     }
+}
+
+fn legacy_table_preview_body(table: &crate::ast::Table) -> String {
+    let columns = if table.column_sizes.is_empty() {
+        "1fr".to_string()
+    } else {
+        table.column_sizes.join(", ")
+    };
+    let mut body = format!("#table(\n  columns: ({columns})");
+    for row in &table.cells {
+        for cell in row {
+            body.push_str(",\n  [");
+            body.push_str(&escape_typst(&cell.content));
+            body.push(']');
+        }
+    }
+    body.push_str("\n)");
+    body
+}
+
+fn legacy_figure_preview_body(asset_ref: Option<&AssetEntry>) -> String {
+    asset_ref
+        .map(|a| format!("image(\"{}\", width: 100%)", escape_typst_string(&a.path)))
+        .unwrap_or_else(|| "[Figure]".to_string())
 }
 
 fn wrap_body(body: &str) -> String {
@@ -401,6 +442,7 @@ fn write_if_changed(vfs: &VirtualFileSystem, path: &str, source: &str) {
 mod tests {
     use super::*;
     use crate::ast::{AssetEntry, DocumentElement, DocumentSection, Equation, Figure, Paragraph};
+    use crate::template_spec::load_bundled_template;
     use crate::test_fixtures::{basic_document_ast, rich_text};
 
     #[test]
@@ -429,8 +471,14 @@ mod tests {
     fn preview_pages_skip_seeds_without_preview_source() {
         let mut ast = basic_document_ast("Title", "");
         ast.assets.push(AssetEntry {
-            id: "asset-1".to_string(),
-            path: "assets/photo.png".to_string(),
+            id: "asset-folder".to_string(),
+            path: "assets/standalone.png".to_string(),
+            kind: "image".to_string(),
+            caption: None,
+        });
+        ast.assets.push(AssetEntry {
+            id: "asset-fig".to_string(),
+            path: "assets/figure.png".to_string(),
             kind: "image".to_string(),
             caption: None,
         });
@@ -445,7 +493,7 @@ mod tests {
             .elements
             .push(DocumentElement::Figure(Box::new(Figure {
                 id: "fig-1".to_string(),
-                asset_id: Some("asset-1".to_string()),
+                asset_id: Some("asset-fig".to_string()),
                 caption: "Caption".to_string(),
                 placement: "auto".to_string(),
                 content: DocumentElement::Paragraph(Paragraph {
@@ -455,7 +503,8 @@ mod tests {
                 extra_fields: std::collections::HashMap::new(),
             })));
 
-        let seeds = assign_preview_pages(resource_seeds(&ast));
+        let template = load_bundled_template("versatile-apa").unwrap();
+        let seeds = assign_preview_pages(resource_seeds(&ast, &template));
         let file_seed = seeds
             .iter()
             .find(|seed| seed.kind == ResourceKind::File)

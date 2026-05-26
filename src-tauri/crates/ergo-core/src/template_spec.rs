@@ -113,6 +113,8 @@ pub enum InputType {
     Object,
     Reference,
     Content,
+    #[serde(rename = "simple_list")]
+    SimpleList,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
@@ -345,7 +347,63 @@ pub struct DefaultsSpec {
 
 // ─── Loading ───────────────────────────────────────────────────────
 
+pub fn plain_document_template() -> TemplateSpec {
+    TemplateSpec {
+        template: TemplateIdentity {
+            id: "none".to_string(),
+            name: "No template".to_string(),
+            version: "1.0.0".to_string(),
+            description: Some(
+                "Minimal document without a bundled Typst template package".to_string(),
+            ),
+        },
+        package: PackageSpec {
+            name: String::new(),
+            version: String::new(),
+            imports: vec![],
+            dependencies: vec![],
+        },
+        variants: vec![],
+        show_rule: None,
+        inputs: vec![InputSchema {
+            id: Some("title".to_string()),
+            input_type: InputType::String,
+            label: Some("Title".to_string()),
+            description: None,
+            default: Some(serde_json::json!("")),
+            importance: Importance::Recommended,
+            variants: None,
+            properties: None,
+            items: None,
+            target: None,
+        }],
+        groups: vec![],
+        custom_elements: vec![],
+        sections: vec![SectionSpec {
+            id: "body".to_string(),
+            kind: SectionKind::Content,
+            label: None,
+            function: None,
+            params: vec![],
+            variants: None,
+            source: None,
+            file: None,
+            title: None,
+            show_rule: None,
+            editable: None,
+            pagebreak_before: false,
+        }],
+        element_overrides: None,
+        resource_policy: None,
+        defaults: None,
+    }
+}
+
 pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> {
+    if template_id == "none" {
+        return Ok(plain_document_template());
+    }
+
     static TEMPLATE_CACHE: std::sync::OnceLock<TemplateSpec> = std::sync::OnceLock::new();
     let spec = TEMPLATE_CACHE.get_or_init(|| {
         serde_json::from_str(VERSATILE_APA_TEMPLATE).expect("failed to parse bundled template spec")
@@ -500,7 +558,7 @@ mod tests {
         assert_eq!(spec.package.name, "@preview/versatile-apa");
         assert_eq!(spec.package.version, "7.2.0");
         assert_eq!(spec.variants.len(), 3);
-        assert_eq!(spec.sections.len(), 5);
+        assert_eq!(spec.sections.len(), 6);
         assert!(spec.show_rule.is_some());
         assert!(!spec.inputs.is_empty());
         assert!(!spec.groups.is_empty());
@@ -595,6 +653,14 @@ mod tests {
     }
 
     #[test]
+    fn plain_template_has_no_package_imports() {
+        let spec = load_bundled_template("none").unwrap();
+        assert_eq!(spec.template.id, "none");
+        assert!(spec.show_rule.is_none());
+        assert!(spec.package.name.is_empty());
+    }
+
+    #[test]
     fn unknown_template_returns_error() {
         let result = load_bundled_template("unknown");
         assert!(result.is_err());
@@ -624,8 +690,13 @@ mod tests {
         let spec = load_bundled_template("versatile-apa").unwrap();
         assert_eq!(spec.sections[0].kind, SectionKind::FunctionCall);
         assert_eq!(spec.sections[0].function.as_deref(), Some("title-page"));
-        assert_eq!(spec.sections[2].kind, SectionKind::Content);
-        assert_eq!(spec.sections[3].kind, SectionKind::Bibliography);
-        assert_eq!(spec.sections[4].kind, SectionKind::Appendix);
+        assert_eq!(spec.sections[2].kind, SectionKind::Literal);
+        assert_eq!(
+            spec.sections[2].source.as_deref(),
+            Some("#outline()\n#pagebreak()\n")
+        );
+        assert_eq!(spec.sections[3].kind, SectionKind::Content);
+        assert_eq!(spec.sections[4].kind, SectionKind::Bibliography);
+        assert_eq!(spec.sections[5].kind, SectionKind::Appendix);
     }
 }

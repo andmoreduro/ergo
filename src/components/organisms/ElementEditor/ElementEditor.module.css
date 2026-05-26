@@ -1,75 +1,223 @@
-.container {
-    border: var(--border-width-sm) solid var(--color-border);
-    border-radius: var(--border-radius-lg);
-    padding: var(--space-4);
+.elementBlock {
+    position: relative;
     margin-bottom: var(--space-4);
-    background-color: var(--color-bg-secondary);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
 }
 
-.header {
+.settingsAnchor {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 2;
+}
+
+.settingsButton {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-}
-
-.title {
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-bold);
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    background: transparent;
     color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0;
+    cursor: pointer;
 }
 
-.actions {
-    display: flex;
-    gap: var(--space-2);
+.settingsButton:hover,
+.settingsButton:focus-visible {
+    outline: none;
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
 }
 
-.content {
+.settingsButton svg {
+    width: 16px;
+    height: 16px;
+}
+
+.settingsPanel {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 3;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    min-width: 12rem;
+    margin-top: var(--space-1);
+    padding: var(--space-3);
+    border: var(--border-width-sm) solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    background-color: var(--color-bg-primary);
+    box-shadow: var(--shadow-md);
+}
+
+.annotationFields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
 }
 
 .columnSizes {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(var(--size-editor-table-cell-min), 1fr));
+    display: flex;
+    flex-direction: column;
     gap: var(--space-2);
+}
+
+.tableWrap {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.tableFrame {
+    position: relative;
+    display: inline-block;
+    padding: 18px;
+}
+
+.editorTableGridSize {
+    --editor-table-grid-size: calc(2 * var(--size-editor-table-cell-min));
 }
 
 .tableGrid {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
-    overflow-x: auto;
 }
 
 .tableRow {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(var(--size-editor-table-cell-min), 1fr)) auto;
-    align-items: end;
-    gap: var(--space-2);
-    min-width: min-content;
+    grid-template-columns: repeat(var(--table-cols, 1), minmax(var(--size-editor-table-cell-min), 1fr));
 }
 
-.tableActions {
+.tableInsertButton {
+    position: absolute;
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-}
-
-.figureAssetRow {
-    display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-2);
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    border: var(--border-width-sm) solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    z-index: 1;
 }
 
-.figureAssetPath {
+.tableInsertButton:hover {
+    background-color: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+}
+
+.tableInsertButton:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+}
+
+.tableInsertTop {
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.tableInsertBottom {
+    bottom: 0;
+    left: 50%;
+    transform: translate(-50%, 50%);
+}
+
+.tableInsertLeft {
+    left: 0;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.tableInsertRight {
+    right: 0;
+    top: 50%;
+    transform: translate(50%, -50%);
+}
+
+.tableCellInput {
+    gap: 0;
+    margin: 0;
+    min-width: 0;
+}
+
+.tableCellInput input {
+    border-radius: 0;
+    margin: 0;
+    min-height: var(--size-editor-table-cell-min);
+}
+
+.figureWrap {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+}
+
+.figureImageButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: var(--editor-table-grid-size, calc(2 * var(--size-editor-table-cell-min)));
+    border: none;
+    border-radius: 0;
+    background-color: var(--color-bg-secondary);
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.figureImageButton:hover {
+    background-color: var(--color-bg-tertiary);
+}
+
+.figureImageButton:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.figureImagePlaceholder {
+    color: var(--color-text-tertiary);
+}
+
+.figureImagePlaceholder svg {
+    width: 48px;
+    height: 48px;
+}
+
+.figureImagePreview {
+    display: block;
+    max-width: 100%;
+    max-height: var(--editor-table-grid-size, calc(2 * var(--size-editor-table-cell-min)));
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+.figureAssetHint {
+    margin: var(--space-1) 0 0;
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
-    word-break: break-all;
+    text-align: center;
+}
+
+.placeholder {
+    color: var(--color-text-tertiary);
+    font-style: italic;
+}
+
+.headingLevelRow {
+    max-width: 8rem;
+    margin-bottom: var(--space-1);
 }

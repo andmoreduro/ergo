@@ -10,6 +10,8 @@ import {
     createRichText,
     createTable,
 } from "./defaults";
+import { convertElement } from "./convertElement";
+import { trailingParagraphAction } from "../../editor/ensureTrailingParagraph";
 
 type ParagraphElement = Extract<DocumentElement, { type: "Paragraph" }>;
 
@@ -106,10 +108,19 @@ const paragraphWithText = (
     content: text ? [createRichText(text)] : [],
 });
 
+const withTrailingParagraph = (ast: DocumentAST): DocumentAST => {
+    const trailingAction = trailingParagraphAction(ast);
+    if (!trailingAction) {
+        return ast;
+    }
+
+    return astReducer(ast, trailingAction);
+};
+
 export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
     switch (action.type) {
         case "LOAD_DOCUMENT":
-            return action.payload.ast;
+            return withTrailingParagraph(action.payload.ast);
 
         case "UPDATE_PROJECT_TITLE":
             return {
@@ -145,6 +156,11 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
             const nextMetadata = { ...state.metadata };
             if (path === "/title" || path === "title") {
                 nextMetadata.title = value;
+            }
+            if (path === "/keywords" || pathParts[0] === "keywords") {
+                nextMetadata.keywords = Array.isArray(value)
+                    ? value.map((entry) => String(entry))
+                    : [];
             }
             return {
                 ...state,
@@ -311,16 +327,18 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         case "UPDATE_PARAGRAPH_CONTENT": {
             const { paragraphId, content } = action.payload;
 
-            return mapContentElements(state, (element) => {
-                if (element.type !== "Paragraph" || element.id !== paragraphId) {
-                    return element;
-                }
+            return withTrailingParagraph(
+                mapContentElements(state, (element) => {
+                    if (element.type !== "Paragraph" || element.id !== paragraphId) {
+                        return element;
+                    }
 
-                return {
-                    ...element,
-                    content,
-                };
-            });
+                    return {
+                        ...element,
+                        content,
+                    };
+                }),
+            );
         }
 
         case "UPDATE_HEADING": {
@@ -395,23 +413,27 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         }
 
         case "ADD_TABLE_ROW": {
-            const { tableId } = action.payload;
+            const { tableId, rowIndex } = action.payload;
 
             return mapContentElements(state, (element) => {
                 if (element.type !== "Table" || element.id !== tableId) {
                     return element;
                 }
 
+                const insertAt = rowIndex ?? element.cells.length;
+                const newRow = Array.from({ length: element.cols }, () => ({
+                    content: "",
+                    row_span: null,
+                    col_span: null,
+                }));
+
                 return {
                     ...element,
                     rows: element.rows + 1,
                     cells: [
-                        ...element.cells,
-                        Array.from({ length: element.cols }, () => ({
-                            content: "",
-                            row_span: null,
-                            col_span: null,
-                        })),
+                        ...element.cells.slice(0, insertAt),
+                        newRow,
+                        ...element.cells.slice(insertAt),
                     ],
                 };
             });
@@ -438,25 +460,33 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         }
 
         case "ADD_TABLE_COLUMN": {
-            const { tableId } = action.payload;
+            const { tableId, colIndex } = action.payload;
 
             return mapContentElements(state, (element) => {
                 if (element.type !== "Table" || element.id !== tableId) {
                     return element;
                 }
 
+                const insertAt = colIndex ?? element.column_sizes.length;
+                const emptyCell = {
+                    content: "",
+                    row_span: null,
+                    col_span: null,
+                };
+
                 return {
                     ...element,
                     cols: element.cols + 1,
                     cells: element.cells.map((row) => [
-                        ...row,
-                        {
-                            content: "",
-                            row_span: null,
-                            col_span: null,
-                        },
+                        ...row.slice(0, insertAt),
+                        emptyCell,
+                        ...row.slice(insertAt),
                     ]),
-                    column_sizes: [...element.column_sizes, "1fr"],
+                    column_sizes: [
+                        ...element.column_sizes.slice(0, insertAt),
+                        "1fr",
+                        ...element.column_sizes.slice(insertAt),
+                    ],
                 };
             });
         }
@@ -600,6 +630,18 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                 ),
             };
 
+        case "CONVERT_ELEMENT": {
+            const { elementId, targetKind } = action.payload;
+
+            return mapContentElements(state, (element) => {
+                if (element.id !== elementId) {
+                    return element;
+                }
+
+                return convertElement(element, targetKind);
+            });
+        }
+
         case "REMOVE_ELEMENT": {
             const { elementId } = action.payload;
 
@@ -610,7 +652,9 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
 
                 return {
                     ...section,
-                    elements: section.elements.filter((element) => element.id !== elementId),
+                    elements: section.elements.filter(
+                        (element) => element.id !== elementId,
+                    ),
                 };
             });
         }

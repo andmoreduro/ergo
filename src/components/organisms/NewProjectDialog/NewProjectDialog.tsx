@@ -1,15 +1,21 @@
 import { type ChangeEvent, type FormEvent, useState } from "react";
 import { Button } from "../../atoms/Button/Button";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
+import { Select } from "../../atoms/Select/Select";
 import { TextInput } from "../../atoms/TextInput/TextInput";
 import { m } from "../../../paraglide/messages.js";
 import { projectFileNameFromTitle } from "../../../project/paths";
+import {
+    DEFAULT_PROJECT_TEMPLATE_ID,
+    NO_TEMPLATE_ID,
+} from "../../../state/ast/defaults";
 import styles from "./NewProjectDialog.module.css";
 
 export interface NewProjectDialogValues {
     projectName: string;
     projectFileName: string;
     projectLocation: string;
+    templateId: string;
 }
 
 export interface NewProjectDialogProps {
@@ -33,6 +39,7 @@ export const NewProjectDialog = ({
         projectFileNameFromTitle(initialProjectName),
     );
     const [usesDefaultFileName, setUsesDefaultFileName] = useState(true);
+    const [templateId, setTemplateId] = useState(DEFAULT_PROJECT_TEMPLATE_ID);
 
     const trimmedProjectName = projectName.trim();
     const trimmedProjectLocation = projectLocation.trim();
@@ -88,6 +95,7 @@ export const NewProjectDialog = ({
             projectName: trimmedProjectName,
             projectFileName: trimmedProjectFileName,
             projectLocation: trimmedProjectLocation,
+            templateId,
         });
     };
 
@@ -132,6 +140,22 @@ export const NewProjectDialog = ({
                             {m.project_new_choose_folder()}
                         </Button>
                     </div>
+                    <Select
+                        fullWidth
+                        label={m.project_new_template_label()}
+                        options={[
+                            {
+                                value: DEFAULT_PROJECT_TEMPLATE_ID,
+                                label: m.project_new_template_apa(),
+                            },
+                            {
+                                value: NO_TEMPLATE_ID,
+                                label: m.project_new_template_none(),
+                            },
+                        ]}
+                        value={templateId}
+                        onChange={(event) => setTemplateId(event.target.value)}
+                    />
                     <div className={styles.fileNameGroup}>
                         <TextInput
                             disabled={usesDefaultFileName}
