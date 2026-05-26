@@ -53,12 +53,9 @@ flowchart TB
 Zip archive canonical layout:
 
 ```text
-main.typ
-lib.typ
-elements/
-  {element-id}.typ
 assets/
-references.bib
+packages/
+  {namespace}/{name}/{version}/...
 .ergproj/
   document_state.json
   dependency_manifest.json
@@ -70,11 +67,8 @@ references.bib
 
 | Path | Role |
 |------|------|
-| `main.typ` | Document entry: imports, metadata, section includes |
-| `lib.typ` | Template preamble and `apply(body)` wrapper |
-| `elements/{id}.typ` | Generated source per document element |
 | `assets/` | Binary files referenced by `AssetEntry` |
-| `references.bib` | Bibliography from `ReferenceEntry` rows |
+| `packages/` | Mirrored Typst package files needed for offline WASM compilation |
 | `.ergproj/document_state.json` | Canonical structured AST (required on open) |
 | `.ergproj/source_map.json` | Element → Typst byte ranges |
 | `.ergproj/field_source_map.json` | Field → Typst byte ranges and UTF-16 segments |
@@ -87,6 +81,7 @@ Optional cache paths (regenerable, not required to reopen):
 ```
 
 Preview pixels, `PreviewSyncState`, and export files are cache artifacts. They are not archive-authoritative.
+Typst sources such as `main.typ`, `lib.typ`, `elements/{id}.typ`, `references.bib`, and `resources.typ` are runtime VFS materializations derived from `.ergproj/document_state.json`.
 
 ## App Configuration
 
@@ -113,6 +108,6 @@ Per-project overrides: `.ergproj/project_settings.json`.
 ## Storage Notes
 
 - VFS paths use `/` separators on all platforms.
-- Saves pack the backend session VFS after worker sync and backend mirror sync drain.
+- Saves pack durable project state from the backend session VFS after worker sync and backend mirror sync drain.
 - Autosave defaults are controlled in global `settings.json` (`autosave_interval_ms`, blur/close toggles).
 - Keymap schema: `action_id`, `context` expression, `sequence` of logical keys with modifiers.
