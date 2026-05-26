@@ -191,12 +191,13 @@ sequenceDiagram
 
     Editor->>Hook: DocumentFocusState change
     Hook->>Worker: positions_for_focus(target, displayed_revision)
-    Worker->>Sync: jump_from_cursor / field candidates
+    Worker->>Sync: exact caret roundtrip or field anchor lookup
     Sync-->>Preview: PreviewElementPosition[]
 ```
 
 - Requests use the **displayed** preview revision, not the newest in-flight compile.
 - Backward sync prefers `FieldSourceMapEntry`, then element `SourceMapEntry`.
-- Forward sync resolves every preview occurrence of the focused field, then picks the caret position whose source offset is closest to the editor caret; when offsets tie, it prefers the page nearest the current preview anchor, then vertical position.
+- Forward sync with `caretUtf16Offset` uses exact roundtrip validation: the rendered preview point must map back through `jump_from_click` to the same form field and UTF-16 caret offset. Unresolved caret targets return `NoMatch`.
+- Forward sync without `caretUtf16Offset` may use field or element anchoring. Approximate candidate selection prefers the page nearest the current preview anchor, then vertical position.
 - Template project inputs use field ids `project-input-` + JSON pointer; backend `field_id` uses the pointer (e.g. `/title`).
 - `editor::FocusField` is a stable action shared by preview clicks and sidebar navigation.

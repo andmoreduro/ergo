@@ -66,7 +66,7 @@ stateDiagram-v2
 
 `PreviewSyncState` updates on successful main compile. Resource document may be cached (comemo) until `dirty_resource_ids` changes.
 
-While **Retained**, `PreviewSyncState` serves `jump_from_click` and `positions_for_focus` for the displayed revision; **Unavailable** when the requested revision does not match the retained preview.
+While **Retained**, `PreviewSyncState` serves `jump_from_click` and `positions_for_focus` for the displayed revision; **Unavailable** when the requested revision does not match the retained preview. Caret-specific `positions_for_focus` responses are exact roundtrip sync points. Same-field `NoMatch` for the retained revision leaves the last exact caret visible until a retained revision resolves the focused caret or focus identity changes.
 
 ## 4. Canvas Preview Renderer Lifecycle
 

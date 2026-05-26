@@ -1,13 +1,13 @@
 use super::*;
 use crate::ast::{
     AssetEntry, ContentSection, CustomElement, DependencyManifest, DocumentElement,
-    DocumentSection, GlobalSettings, ProjectMetadata, ProjectSettings, RichText,
+    DocumentSection, GlobalSettings, ProjectMetadata, ProjectSettings, ReferenceEntry, RichText,
 };
 use crate::ast::{Figure, Paragraph, Table, TableCell};
 use crate::document_source_builder::SourceBuilder;
 use crate::template_spec::{
     CustomElementSpec, ElementOverrideSpec, ElementOverrides, ExtraFieldSpec, InputGroupSpec,
-    PackageSpec, ParamSpec, SectionSpec, ShowRuleSpec, TemplateIdentity,
+    PackageSpec, ParamSpec, ParamType, SectionSpec, ShowRuleSpec, TemplateIdentity,
 };
 use serde_json::json;
 

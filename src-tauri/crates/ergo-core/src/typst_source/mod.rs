@@ -328,7 +328,9 @@ fn resolve_input_param(
             }
         }
         ParamType::StringArray => resolve_string_array_param(key, &val, builder),
-        ParamType::AuthorList => resolve_author_list_param(&val, builder),
+        ParamType::AuthorList => {
+            resolve_author_list_param(&val, raw.unwrap_or(&serde_json::Value::Null), builder)
+        }
         ParamType::AffiliationMap => resolve_affiliation_map_param(&val, builder),
         _ => false,
     }
@@ -369,7 +371,11 @@ fn resolve_string_array_param(
     }
 }
 
-fn resolve_author_list_param(val: &serde_json::Value, builder: &mut SourceBuilder) -> bool {
+fn resolve_author_list_param(
+    val: &serde_json::Value,
+    raw: &serde_json::Value,
+    builder: &mut SourceBuilder,
+) -> bool {
     if let Some(arr) = val.as_array() {
         if arr.is_empty() {
             return false;
@@ -388,12 +394,12 @@ fn resolve_author_list_param(val: &serde_json::Value, builder: &mut SourceBuilde
                 let mut has_field = false;
                 if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
                     builder.push_literal("name: [");
-                    builder.push_escaped_field(
-                        "inputs",
-                        &format!("/authors/{}/name", idx),
-                        name,
-                        0,
-                    );
+                    let field_id = format!("/authors/{}/name", idx);
+                    if raw_author_name_is_empty(raw, idx) {
+                        builder.push_escaped_generated_field_marker("inputs", &field_id, name, 0);
+                    } else {
+                        builder.push_escaped_field("inputs", &field_id, name, 0);
+                    }
                     builder.push_literal("]");
                     has_field = true;
                 }
@@ -459,6 +465,16 @@ fn resolve_author_list_param(val: &serde_json::Value, builder: &mut SourceBuilde
     } else {
         false
     }
+}
+
+fn raw_author_name_is_empty(raw: &serde_json::Value, index: usize) -> bool {
+    raw.as_array()
+        .and_then(|authors| authors.get(index))
+        .and_then(|author| author.get("name"))
+        .and_then(|name| name.as_str())
+        .map(str::trim)
+        .map(str::is_empty)
+        .unwrap_or(true)
 }
 
 fn resolve_affiliation_map_param(val: &serde_json::Value, builder: &mut SourceBuilder) -> bool {

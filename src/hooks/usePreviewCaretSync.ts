@@ -38,6 +38,12 @@ export function usePreviewCaretSync({
     dispatchAction,
 }: UsePreviewCaretSyncOptions) {
     const syncCueRequestIdRef = useRef(0);
+    const pendingCueFrameRef = useRef<number | null>(null);
+    const pendingCueRequestRef = useRef<{
+        target: PreviewFocusTarget;
+        displayedRevision: number;
+        shouldScroll: boolean;
+    } | null>(null);
     const lastCaretScrollKeyRef = useRef<string | null>(null);
     const focusScrollIdentityRef = useRef<string | null>(null);
     const lastCaretFetchKeyRef = useRef<string | null>(null);
@@ -47,6 +53,15 @@ export function usePreviewCaretSync({
     const layoutScrollRef = useRef<{ zoom: number } | null>(null);
     const [highlightedPosition, setHighlightedPosition] =
         useState<PreviewElementPosition | null>(null);
+    const highlightedPositionRef = useRef<PreviewElementPosition | null>(null);
+
+    const setHighlightedPositionState = useCallback(
+        (position: PreviewElementPosition | null) => {
+            highlightedPositionRef.current = position;
+            setHighlightedPosition(position);
+        },
+        [],
+    );
 
     useEffect(() => {
         const scrollRoot = scrollRef.current;
@@ -74,12 +89,21 @@ export function usePreviewCaretSync({
         return () => scrollRoot.removeEventListener("scroll", onUserScroll);
     }, [scrollRef]);
 
+    const cancelPendingCueRequest = useCallback(() => {
+        if (pendingCueFrameRef.current !== null) {
+            cancelAnimationFrame(pendingCueFrameRef.current);
+            pendingCueFrameRef.current = null;
+        }
+        pendingCueRequestRef.current = null;
+    }, []);
+
     const clearHighlightedPosition = useCallback(() => {
         syncCueRequestIdRef.current += 1;
+        cancelPendingCueRequest();
         lastCaretScrollKeyRef.current = null;
         focusScrollIdentityRef.current = null;
-        setHighlightedPosition(null);
-    }, []);
+        setHighlightedPositionState(null);
+    }, [cancelPendingCueRequest, setHighlightedPositionState]);
 
     const normalizeCaretPosition = useCallback(
         (position: PreviewElementPosition): PreviewElementPosition => ({
@@ -158,27 +182,92 @@ export function usePreviewCaretSync({
                         ? result.positions[0]
                         : null;
                 if (!raw) {
+                    const previous = highlightedPositionRef.current;
+                    if (
+                        previous &&
+                        previewPositionMatchesTarget(
+                            previous,
+                            target,
+                            displayedRevision,
+                        )
+                    ) {
+                        if (shouldScroll) {
+                            scheduleScrollToHighlightedCaret(previous);
+                        }
+                        return;
+                    }
+
                     lastCaretScrollKeyRef.current = null;
-                    setHighlightedPosition(null);
+                    setHighlightedPositionState(null);
                     return;
                 }
 
                 const position = normalizeCaretPosition(raw);
                 anchorPageRef.current = position.pageNumber;
-                setHighlightedPosition(position);
+                setHighlightedPositionState(position);
                 if (shouldScroll) {
                     scheduleScrollToHighlightedCaret(position);
                 }
             } catch (error) {
                 if (requestId === syncCueRequestIdRef.current) {
                     lastCaretScrollKeyRef.current = null;
-                    setHighlightedPosition(null);
+                    setHighlightedPositionState(null);
                     logPreviewSyncError("positionsForFocus", error);
                 }
             }
         },
-        [normalizeCaretPosition, scheduleScrollToHighlightedCaret],
+        [
+            normalizeCaretPosition,
+            scheduleScrollToHighlightedCaret,
+            setHighlightedPositionState,
+        ],
     );
+
+    const scheduleHighlightedPositionRequest = useCallback(
+        (
+            target: PreviewFocusTarget,
+            displayedRevision: number,
+            shouldScroll: boolean,
+            immediate: boolean,
+        ) => {
+            if (immediate) {
+                cancelPendingCueRequest();
+                void requestHighlightedPosition(
+                    target,
+                    displayedRevision,
+                    shouldScroll,
+                );
+                return;
+            }
+
+            pendingCueRequestRef.current = {
+                target,
+                displayedRevision,
+                shouldScroll,
+            };
+            if (pendingCueFrameRef.current !== null) {
+                return;
+            }
+
+            pendingCueFrameRef.current = requestAnimationFrame(() => {
+                pendingCueFrameRef.current = null;
+                const pending = pendingCueRequestRef.current;
+                pendingCueRequestRef.current = null;
+                if (!pending) {
+                    return;
+                }
+
+                void requestHighlightedPosition(
+                    pending.target,
+                    pending.displayedRevision,
+                    pending.shouldScroll,
+                );
+            });
+        },
+        [cancelPendingCueRequest, requestHighlightedPosition],
+    );
+
+    useEffect(() => cancelPendingCueRequest, [cancelPendingCueRequest]);
 
     useEffect(() => {
         if (!documentFocus.elementId || previewRevision === null) {
@@ -234,7 +323,13 @@ export function usePreviewCaretSync({
             userOverrodeScrollRef.current = false;
         }
 
-        void requestHighlightedPosition(target, previewRevision, shouldScroll);
+        scheduleHighlightedPositionRequest(
+            target,
+            previewRevision,
+            shouldScroll,
+            documentFocus.forcePreviewScroll ||
+                documentFocus.focusSource === "preview",
+        );
     }, [
         clearHighlightedPosition,
         documentFocus.anchorPageNumber,
@@ -242,8 +337,9 @@ export function usePreviewCaretSync({
         documentFocus.elementId,
         documentFocus.fieldId,
         documentFocus.forcePreviewScroll,
+        documentFocus.focusSource,
         previewRevision,
-        requestHighlightedPosition,
+        scheduleHighlightedPositionRequest,
         scrollRef,
     ]);
 
@@ -359,3 +455,12 @@ export function usePreviewCaretSync({
         syncCaretScrollToLayout,
     };
 }
+
+const previewPositionMatchesTarget = (
+    position: PreviewElementPosition,
+    target: PreviewFocusTarget,
+    displayedRevision: number,
+) =>
+    position.sourceRevision === displayedRevision &&
+    position.elementId === target.elementId &&
+    (position.fieldId ?? null) === (target.fieldId ?? null);
