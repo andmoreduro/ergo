@@ -41,7 +41,9 @@ describe("astReducer", () => {
         });
 
         expect(nextState.metadata.title).toBe("Loaded");
-        expect(nextState).toBe(nextDocument);
+        const content = nextState.sections.find((section) => section.type === "Content");
+        expect(content?.type).toBe("Content");
+        expect(content?.elements.at(-1)?.type).toBe("Paragraph");
     });
 
     it("updates input values via UPDATE_INPUT without mutating the original state", () => {
@@ -86,8 +88,8 @@ describe("astReducer", () => {
             },
         });
 
-        expect(state.inputs.authors).toHaveLength(0); // default has 0 authors
-        expect(withAuthor.inputs.authors).toHaveLength(1);
+        expect(state.inputs.authors).toHaveLength(1);
+        expect(withAuthor.inputs.authors).toHaveLength(2);
         expect(updated.inputs.authors[0].name).toBe("Ada Lovelace");
     });
 

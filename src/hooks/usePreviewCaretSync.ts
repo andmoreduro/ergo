@@ -40,6 +40,7 @@ export function usePreviewCaretSync({
     const syncCueRequestIdRef = useRef(0);
     const lastCaretScrollKeyRef = useRef<string | null>(null);
     const focusScrollIdentityRef = useRef<string | null>(null);
+    const lastCaretFetchKeyRef = useRef<string | null>(null);
     const anchorPageRef = useRef<number | null>(null);
     const userOverrodeScrollRef = useRef(false);
     const programmaticScrollRef = useRef(false);
@@ -213,6 +214,16 @@ export function usePreviewCaretSync({
             target.fieldId,
         );
         const identityChanged = focusScrollIdentityRef.current !== identity;
+        const caretFetchKey = `${previewRevision}:${target.elementId}:${target.fieldId ?? ""}:${target.caretUtf16Offset ?? ""}`;
+        const caretFetchUnchanged =
+            lastCaretFetchKeyRef.current === caretFetchKey;
+
+        if (caretFetchUnchanged && !documentFocus.forcePreviewScroll) {
+            return;
+        }
+
+        lastCaretFetchKeyRef.current = caretFetchKey;
+
         const shouldScroll =
             documentFocus.forcePreviewScroll || identityChanged;
         if (identityChanged) {
@@ -233,6 +244,7 @@ export function usePreviewCaretSync({
         documentFocus.forcePreviewScroll,
         previewRevision,
         requestHighlightedPosition,
+        scrollRef,
     ]);
 
     const scrollCaretAfterPageRender = useCallback(

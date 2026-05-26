@@ -78,6 +78,9 @@
     "resource_policy": {
       "$ref": "#/$defs/resource_policy"
     },
+    "element_overrides": {
+      "$ref": "#/$defs/element_overrides"
+    },
     "sections": {
       "type": "array",
       "description": "Ordered structural sections of the document.",
@@ -134,7 +137,7 @@
       "additionalProperties": false,
       "properties": {
         "id":          { "type": "string" },
-        "type":        { "type": "string", "enum": ["string", "integer", "float", "boolean", "array", "object", "reference", "content"] },
+        "type":        { "type": "string", "enum": ["string", "integer", "float", "boolean", "array", "object", "reference", "content", "simple_list"] },
         "label":       { "type": "string" },
         "description": { "type": "string" },
         "default":     { "description": "Default input value." },
@@ -175,6 +178,42 @@
           "type": "array",
           "items": { "$ref": "#/$defs/param" }
         }
+      }
+    },
+    "element_overrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "figure": { "$ref": "#/$defs/element_override" },
+        "table": { "$ref": "#/$defs/element_override" }
+      }
+    },
+    "element_override": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "function": {
+          "type": "string",
+          "description": "Typst function for figure emission when wrapper is omitted (legacy)."
+        },
+        "wrapper": {
+          "type": "string",
+          "description": "Typst function wrapping table and image elements (e.g. figure, apa-figure)."
+        },
+        "extra_fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/extra_field" }
+        }
+      }
+    },
+    "extra_field": {
+      "type": "object",
+      "required": ["key", "type", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "key":   { "type": "string" },
+        "type":  { "type": "string" },
+        "label": { "type": "string" }
       }
     },
     "resource_policy": {

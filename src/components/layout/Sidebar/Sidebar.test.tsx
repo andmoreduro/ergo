@@ -189,7 +189,6 @@ describe("Sidebar outline", () => {
             </DocumentProvider>,
         );
 
-        fireEvent.click(screen.getByRole("button", { name: "Bibliography" }));
         fireEvent.click(screen.getByRole("button", { name: "Add Bibliography Entry" }));
         expect(dispatchActionMock).toHaveBeenLastCalledWith({
             id: "bibliography::CreateEntry",
@@ -329,7 +328,6 @@ describe("Sidebar outline", () => {
             </DocumentProvider>,
         );
 
-        fireEvent.click(screen.getByRole("button", { name: "Resources" }));
         expect(screen.getByText("Equations")).toBeInTheDocument();
         expect(screen.getByText("Tables")).toBeInTheDocument();
         expect(screen.getByText("preview failed")).toBeInTheDocument();

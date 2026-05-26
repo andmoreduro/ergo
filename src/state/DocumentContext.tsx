@@ -9,13 +9,14 @@ import {
     useRef,
 } from "react";
 import { astReducer } from "./ast/reducer";
+import { shouldCommitAstAction } from "./ast/commitPolicy";
 import type { ASTAction } from "./ast/actions";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { ProjectFile } from "../bindings/ProjectFile";
 import type { DocumentEvent as BackendDocumentEvent } from "../bindings/DocumentEvent";
 import { createDefaultDocumentAST } from "./ast/defaults";
 import {
-    applyDocumentEventToAst,
+    applyDocumentEvents,
     createDocumentEventHistoryEntry,
     type DocumentEventHistoryEntry,
 } from "./documentEvents";
@@ -141,14 +142,14 @@ const createSessionReducer =
 
             return {
                 ...state,
-                ast: applyDocumentEventToAst(state.ast, previous.inverseEvent),
+                ast: applyDocumentEvents(state.ast, previous.inverseEvents),
                 past: state.past.slice(0, -1),
                 future: [previous, ...state.future],
                 events: [
                     ...state.events,
                     {
                         id: state.nextEventId,
-                        event: previous.inverseEvent,
+                        event: previous.inverseEvents[previous.inverseEvents.length - 1]!,
                         timestamp: Date.now(),
                     },
                 ],
@@ -165,14 +166,14 @@ const createSessionReducer =
 
             return {
                 ...state,
-                ast: applyDocumentEventToAst(state.ast, next.forwardEvent),
+                ast: applyDocumentEvents(state.ast, next.forwardEvents),
                 past: [...state.past, next].slice(-historyLimit),
                 future: state.future.slice(1),
                 events: [
                     ...state.events,
                     {
                         id: state.nextEventId,
-                        event: next.forwardEvent,
+                        event: next.forwardEvents[next.forwardEvents.length - 1]!,
                         timestamp: Date.now(),
                     },
                 ],
@@ -209,6 +210,14 @@ const createSessionReducer =
 
         const nextAST = astReducer(state.ast, action.action);
 
+        if (
+            action.action.type !== "LOAD_DOCUMENT" &&
+            nextAST !== state.ast &&
+            !shouldCommitAstAction(state.ast, action.action, nextAST)
+        ) {
+            return state;
+        }
+
         if (action.action.type === "LOAD_DOCUMENT") {
             return {
                 ...createInitialSessionState(nextAST, state.sessionId + 1),
@@ -226,9 +235,9 @@ const createSessionReducer =
             action.action,
             nextAST,
         );
-        const eventAppliedAst = applyDocumentEventToAst(
+        const eventAppliedAst = applyDocumentEvents(
             state.ast,
-            historyEntry.forwardEvent,
+            historyEntry.forwardEvents,
         );
 
         return {
@@ -238,13 +247,14 @@ const createSessionReducer =
             future: [],
             events: [
                 ...state.events,
-                {
-                    id: state.nextEventId,
-                    event: historyEntry.forwardEvent,
+                ...historyEntry.forwardEvents.map((event, index) => ({
+                    id: state.nextEventId + index,
+                    event,
                     timestamp: historyEntry.timestamp,
-                },
+                })),
             ],
-            nextEventId: state.nextEventId + 1,
+            nextEventId:
+                state.nextEventId + historyEntry.forwardEvents.length,
             isDirty: true,
         };
     };

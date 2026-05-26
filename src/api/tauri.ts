@@ -58,6 +58,11 @@ export const TauriApi = {
         return invoke("import_resource_file", { sourcePath });
     },
 
+    async readVfsFile(path: string): Promise<Uint8Array> {
+        const bytes = await invoke<number[]>("read_vfs_file", { path });
+        return new Uint8Array(bytes);
+    },
+
     async saveProject(path: string): Promise<void> {
         return invoke("save_project", { path });
     },

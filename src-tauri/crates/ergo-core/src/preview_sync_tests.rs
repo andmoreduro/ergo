@@ -405,10 +405,11 @@ fn apa_title_caret_position_roundtrips_through_preview_click() {
         status.source_map.clone(),
         status.field_source_map.clone(),
     );
+    let expected_caret = "Título con ñ".encode_utf16().count();
     let target = PreviewFocusTarget {
         element_id: "inputs".to_string(),
         field_id: Some("/title".to_string()),
-        caret_utf16_offset: Some("Título con ñ".encode_utf16().count()),
+        caret_utf16_offset: Some(expected_caret),
         anchor_page_number: None,
         source_revision: status.source_revision,
     };
@@ -432,13 +433,21 @@ fn apa_title_caret_position_roundtrips_through_preview_click() {
         status.source_revision,
     );
 
-    assert!(matches!(
-        jump,
-        PreviewJumpResult::Field { target: ref actual, .. }
-            if actual.element_id == target.element_id
-                && actual.field_id == target.field_id
-                && actual.caret_utf16_offset == target.caret_utf16_offset
-    ));
+    match jump {
+        PreviewJumpResult::Field { target: ref actual, .. } => {
+            assert_eq!(actual.element_id, target.element_id);
+            assert_eq!(actual.field_id, target.field_id);
+            assert_eq!(
+                actual.caret_utf16_offset,
+                Some(expected_caret),
+                "title click at x={} y={} mapped to caret {:?}, expected {expected_caret}",
+                position.x_pt,
+                position.y_pt,
+                actual.caret_utf16_offset,
+            );
+        }
+        result => panic!("expected title field jump, got {result:?}"),
+    }
 }
 
 #[test]

@@ -104,6 +104,36 @@ export const DEFAULT_KEYMAP: KeymapProfile = {
             "editor",
             "editor && !input",
         ),
+        defaultBinding(
+            "editor::ConvertToParagraph",
+            "Ctrl+Alt+1",
+            "editor",
+            "element && !input",
+        ),
+        defaultBinding(
+            "editor::ConvertToHeading",
+            "Ctrl+Alt+2",
+            "editor",
+            "element && !input",
+        ),
+        defaultBinding(
+            "editor::ConvertToTable",
+            "Ctrl+Alt+3",
+            "editor",
+            "element && !input",
+        ),
+        defaultBinding(
+            "editor::ConvertToEquation",
+            "Ctrl+Alt+4",
+            "editor",
+            "element && !input",
+        ),
+        defaultBinding(
+            "editor::ConvertToFigure",
+            "Ctrl+Alt+5",
+            "editor",
+            "element && !input",
+        ),
     ],
 };
 

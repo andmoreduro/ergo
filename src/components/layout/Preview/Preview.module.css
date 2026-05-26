@@ -34,6 +34,19 @@
     font-style: italic;
 }
 
+.placeholderIntro {
+    margin: 0 0 var(--space-2);
+    font-style: normal;
+    color: var(--color-text-secondary);
+}
+
+.requiredFieldList {
+    margin: 0;
+    padding-left: var(--space-4);
+    font-style: normal;
+    color: var(--color-text-primary);
+}
+
 .svgContainer {
     display: flex;
     flex-direction: column;

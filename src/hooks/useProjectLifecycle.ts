@@ -10,7 +10,10 @@ import {
     projectPathInDirectory,
 } from "../project/paths";
 import type { ASTAction } from "../state/ast/actions";
-import { createDefaultDocumentAST } from "../state/ast/defaults";
+import {
+    createDefaultDocumentAST,
+    createDocumentAST,
+} from "../state/ast/defaults";
 import type { NewProjectDialogValues } from "../components/organisms/NewProjectDialog/NewProjectDialog";
 
 interface UseProjectLifecycleOptions {
@@ -97,12 +100,13 @@ export const useProjectLifecycle = ({
             projectName,
             projectFileName,
             projectLocation,
+            templateId,
         }: NewProjectDialogValues) => {
             if (!(await saveBeforeProjectBoundary())) {
                 return;
             }
 
-            const ast = createDefaultDocumentAST();
+            const ast = createDocumentAST(templateId);
             ast.metadata.title = projectName;
             const projectPath = projectPathInDirectory(
                 projectLocation,

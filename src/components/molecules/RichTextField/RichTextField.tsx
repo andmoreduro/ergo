@@ -33,6 +33,9 @@ export interface RichTextFieldProps {
     content: RichText[];
     onChange: (content: RichText[]) => void;
     fieldBinding: RichTextFieldBinding;
+    onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
+    /** Minimal chrome for document body text (paragraphs, headings). */
+    variant?: "default" | "document";
 }
 
 export const RichTextField = ({
@@ -41,6 +44,8 @@ export const RichTextField = ({
     content,
     onChange,
     fieldBinding,
+    onKeyDown,
+    variant = "default",
 }: RichTextFieldProps) => {
     const editorRef = useRef<HTMLDivElement | null>(null);
     const isComposingRef = useRef(false);
@@ -90,13 +95,18 @@ export const RichTextField = ({
         onChange(parsed);
     };
 
+    const fieldClass =
+        variant === "document" ? `${styles.field} ${styles.documentField}` : styles.field;
+    const editorClass =
+        variant === "document" ? `${styles.editor} ${styles.documentEditor}` : styles.editor;
+
     return (
-        <div className={styles.field}>
+        <div className={fieldClass}>
             {label && <FieldLabel importance={importance}>{label}</FieldLabel>}
             <div
                 {...fieldBinding}
                 ref={setRef}
-                className={styles.editor}
+                className={editorClass}
                 contentEditable
                 suppressContentEditableWarning
                 role="textbox"
@@ -109,6 +119,7 @@ export const RichTextField = ({
                     isComposingRef.current = false;
                     handleInput();
                 }}
+                onKeyDown={onKeyDown}
             />
         </div>
     );

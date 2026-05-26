@@ -115,6 +115,7 @@ classDiagram
             +Int rows
             +Int cols
             +TableCell[][] cells
+            +Map extra_fields
         }
 
         class Equation {
@@ -126,6 +127,8 @@ classDiagram
             +String? asset_id
             +DocumentElement content
             +String caption
+            +String placement
+            +Map extra_fields
         }
     }
 
@@ -140,6 +143,8 @@ classDiagram
     Heading "1" *-- "0..*" RichText
     Paragraph "1" *-- "0..*" RichText
 ```
+
+`Figure` and `Table` store wrapper-specific named arguments in `extra_fields` (string keys → JSON values). The bundled template manifest (`template.json`) declares `element_overrides.figure` and `element_overrides.table` with a `wrapper` function name and `extra_fields` specs (`key`, `type`, `label`). `DocumentSession` emits those values as named arguments on the wrapper call; the element editor renders one control per spec. Standard Typst `#figure` keeps `caption` and `placement` on the element; custom wrappers (for example `apa-figure`) use template-defined extras and omit placement when the wrapper is not `figure`. Each per-element `.typ` fragment that uses a custom wrapper imports that symbol from the template package at the top of the file, because `#include` runs in file-local scope.
 
 ## Action And Keymap Domain
 

@@ -138,8 +138,17 @@ fn caret_for_source_offset(entry: &FieldSourceMapEntry, offset: usize) -> Option
         if offset == segment.source_byte_end {
             return Some(segment.field_utf16_end);
         }
-        if offset >= segment.source_byte_start && offset < segment.source_byte_end {
+    }
+
+    for segment in &entry.segments {
+        if offset == segment.source_byte_start {
             return Some(segment.field_utf16_start);
+        }
+    }
+
+    for segment in &entry.segments {
+        if offset > segment.source_byte_start && offset < segment.source_byte_end {
+            return Some(segment.field_utf16_end);
         }
     }
 
@@ -158,21 +167,26 @@ pub(crate) fn source_offset_for_caret(
     entry: &FieldSourceMapEntry,
     caret_utf16_offset: usize,
 ) -> Option<usize> {
+    // Editor caret offsets follow UTF-16 indices: offset N sits immediately after the
+    // code units with indices < N. Map that to the trailing source edge of the segment
+    // whose field range ends at N, not the leading edge of the next segment.
     for segment in &entry.segments {
-        if caret_utf16_offset == segment.field_utf16_start {
-            return Some(segment.source_byte_start);
-        }
-        if caret_utf16_offset > segment.field_utf16_start
-            && caret_utf16_offset <= segment.field_utf16_end
-        {
+        if caret_utf16_offset == segment.field_utf16_end {
             return Some(segment.source_byte_end);
         }
+    }
+
+    if caret_utf16_offset == 0 {
+        return entry
+            .segments
+            .first()
+            .map(|segment| segment.source_byte_start);
     }
 
     entry
         .segments
         .last()
-        .filter(|segment| caret_utf16_offset >= segment.field_utf16_end)
+        .filter(|segment| caret_utf16_offset > segment.field_utf16_end)
         .map(|_| entry.byte_end)
         .or(entry.fallback_caret_utf16_offset.map(|_| entry.byte_start))
 }

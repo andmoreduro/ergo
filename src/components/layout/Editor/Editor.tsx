@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import { useDocument, useDocumentAst } from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
@@ -23,7 +23,20 @@ import { m } from "../../../paraglide/messages.js";
 import toolbarStyles from "../PanelToolbar.module.css";
 import styles from "./Editor.module.css";
 import type { InputSchema } from "../../../bindings/InputSchema";
-import { projectInputFieldId } from "../../../editor/fieldIds";
+import {
+    projectInputFieldId,
+    simpleListComposerFieldId,
+} from "../../../editor/fieldIds";
+import { normalizeEditableText } from "../../../editor/textInput";
+import { useDeferredTextCommit } from "../../../editor/useDeferredTextCommit";
+import { SimpleListField } from "../../molecules/SimpleListField/SimpleListField";
+import { AuthorsField } from "../../molecules/AuthorsField/AuthorsField";
+import {
+    EditorNavigationProvider,
+    useEditorNavigation,
+} from "../../../editor/EditorNavigationContext";
+import { useFieldNavigation } from "../../../editor/useFieldNavigation";
+import { Delete24Regular } from "@fluentui/react-icons";
 import {
     TextHeader124Regular,
     Table24Regular,
@@ -129,12 +142,39 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
             (templateSpec?.inputs || []).map((input) => [input.id!, input])
         );
     }, [templateSpec?.inputs]);
+    const fieldNavigation = useFieldNavigation(templateSpec, resolvedVariantId);
+
+    const deleteFocusedElement = useCallback(() => {
+        const elementId = documentFocus.elementId;
+        if (!elementId || elementId === "project") {
+            return false;
+        }
+
+        if (!window.confirm(m.element_delete_confirm())) {
+            return false;
+        }
+
+        dispatchAst({
+            type: "REMOVE_ELEMENT",
+            payload: { elementId },
+        });
+        return true;
+    }, [dispatchAst, documentFocus.elementId]);
+
+    const editorHandlersWithDelete = useMemo<ActionHandlerMap>(
+        () => ({
+            ...editorHandlers,
+            "editor::DeleteElement": () => deleteFocusedElement(),
+        }),
+        [deleteFocusedElement, editorHandlers],
+    );
 
     return (
+        <EditorNavigationProvider value={fieldNavigation}>
         <ActionContextProvider
             id="editor"
             contexts={["editor"]}
-            handlers={editorHandlers}
+            handlers={editorHandlersWithDelete}
         >
             <main className={styles.editor}>
                 <header className={toolbarStyles.toolbar}>
@@ -217,6 +257,25 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
                     >
                         <Link24Regular />
                     </button>
+                    <span className={toolbarStyles.toolbarSpacer} />
+                    <button
+                        className={toolbarStyles.toolbarButton}
+                        type="button"
+                        title={m.element_delete()}
+                        aria-label={m.element_delete()}
+                        disabled={
+                            !documentFocus.elementId ||
+                            documentFocus.elementId === "project"
+                        }
+                        onClick={() =>
+                            void dispatchAction({
+                                id: "editor::DeleteElement",
+                                payload: null,
+                            })
+                        }
+                    >
+                        <Delete24Regular />
+                    </button>
                     {templateVariants.length > 1 && (
                         <>
                             <span className={toolbarStyles.toolbarSpacer} />
@@ -276,7 +335,14 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
                     </Accordion>
                 ))}
 
-                {/* Render Content Sections */}
+                {groups.length > 0 ? (
+                    <div
+                        aria-hidden
+                        className={styles.templateContentDivider}
+                        role="separator"
+                    />
+                ) : null}
+
                 {state.sections.map((section) =>
                     section.type === "Content" ? (
                         <ContentSectionEditor key={section.id} section={section} />
@@ -285,6 +351,7 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
                 </div>
             </main>
         </ActionContextProvider>
+        </EditorNavigationProvider>
     );
 };
 
@@ -297,7 +364,27 @@ interface DynamicFieldProps {
 const getFieldLabel = (schema: InputSchema, label?: string) =>
     label || schema.label || schema.id || "";
 
+const getFieldPlaceholder = (schema: InputSchema, label?: string) => {
+    const description = schema.description?.trim();
+    if (description) {
+        return description;
+    }
+    return getFieldLabel(schema, label);
+};
+
 const DynamicField = ({ schema, path, label }: DynamicFieldProps) => {
+    if (schema.id === "affiliations" && schema.type === "simple_list") {
+        return <DynamicFieldAffiliations schema={schema} path={path} label={label} />;
+    }
+
+    if (schema.type === "simple_list") {
+        return <DynamicFieldSimpleList schema={schema} path={path} label={label} />;
+    }
+
+    if (schema.id === "authors" && schema.type === "array") {
+        return <DynamicFieldAuthors schema={schema} path={path} label={label} />;
+    }
+
     if (schema.type === "array") {
         return <DynamicFieldArray schema={schema} path={path} label={label} />;
     }
@@ -305,13 +392,83 @@ const DynamicField = ({ schema, path, label }: DynamicFieldProps) => {
     return <DynamicFieldString schema={schema} path={path} label={label} />;
 };
 
+const DynamicFieldAffiliations = ({ schema, path, label }: DynamicFieldProps) => {
+    const { state, dispatch } = useDocumentAst();
+    const { handleFieldAdvance } = useEditorNavigation();
+    const items = (getValueAtPath(state.inputs, path) ?? []) as string[];
+
+    return (
+        <SimpleListField
+            importance={schema.importance ?? undefined}
+            itemKind="string"
+            items={items.map(String)}
+            label={getFieldLabel(schema, label)}
+            path={path}
+            onAdvance={() => handleFieldAdvance(simpleListComposerFieldId(path))}
+            onChange={(nextItems) =>
+                dispatch({
+                    type: "UPDATE_INPUT",
+                    payload: { path, value: nextItems },
+                })
+            }
+        />
+    );
+};
+
+const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
+    const { state, dispatch } = useDocumentAst();
+    const { handleFieldAdvance, handleAdvanceKeyDown } = useEditorNavigation();
+    const items = (getValueAtPath(state.inputs, path) ?? []) as string[];
+    const itemKind =
+        schema.items?.type === "content" ? "content" : "string";
+
+    return (
+        <SimpleListField
+            importance={schema.importance ?? undefined}
+            itemKind={itemKind}
+            items={items.map(String)}
+            label={getFieldLabel(schema, label)}
+            path={path}
+            onAdvance={() => handleFieldAdvance(simpleListComposerFieldId(path))}
+            onChange={(nextItems) =>
+                dispatch({
+                    type: "UPDATE_INPUT",
+                    payload: { path, value: nextItems },
+                })
+            }
+        />
+    );
+};
+
+const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
+    const { state } = useDocumentAst();
+    const authors = (getValueAtPath(state.inputs, path) ?? []) as Array<{
+        name?: string;
+        affiliations?: string[];
+    }>;
+    const affiliations = (getValueAtPath(state.inputs, "/affiliations") ??
+        []) as string[];
+
+    return (
+        <AuthorsField
+            affiliations={affiliations}
+            authors={authors}
+            importance={schema.importance ?? undefined}
+            label={getFieldLabel(schema, label)}
+        />
+    );
+};
+
 const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
     const { state, dispatch } = useDocumentAst();
+    const { handleAdvanceKeyDown } = useEditorNavigation();
+    const committed = String(getValueAtPath(state.inputs, path) ?? "");
+    const { draft, setDraft, shouldCommit } = useDeferredTextCommit(committed);
+    const fieldId = projectInputFieldId(path);
     const fieldBinding = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: "project",
-        fieldId: projectInputFieldId(path),
+        fieldId,
     });
-    const value = getValueAtPath(state.inputs, path) ?? "";
 
     return (
         <Textarea
@@ -319,14 +476,23 @@ const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
             fullWidth
             label={getFieldLabel(schema, label)}
             importance={schema.importance ?? undefined}
-            placeholder={schema.description ?? undefined}
-            value={value}
-            onChange={(event) =>
-                dispatch({
-                    type: "UPDATE_INPUT",
-                    payload: { path, value: event.target.value },
-                })
-            }
+            placeholder={getFieldPlaceholder(schema, label)}
+            value={draft}
+            onChange={(event) => {
+                const next = normalizeEditableText(event.target.value);
+                setDraft(next);
+                if (shouldCommit(next)) {
+                    dispatch({
+                        type: "UPDATE_INPUT",
+                        payload: { path, value: next },
+                    });
+                }
+            }}
+            onKeyDown={(event) => {
+                if (handleAdvanceKeyDown(event, fieldId)) {
+                    return;
+                }
+            }}
         />
     );
 };
@@ -579,7 +745,7 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
 
 const ContentSectionEditor = memo(function ContentSectionEditor({ section }: { section: ContentSection }) {
     return (
-        <div className={styles.section}>
+        <div className={styles.contentSection}>
             {section.elements.map((element) => (
                 <ElementEditor key={element.id} element={element} />
             ))}

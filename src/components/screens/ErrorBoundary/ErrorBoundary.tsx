@@ -20,7 +20,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
     render() {
         if (this.state.error) {
-            return null;
+            return (
+                <div role="alert" style={{ padding: "1rem" }}>
+                    <p>Something went wrong in the editor.</p>
+                    <pre>{this.state.error.message}</pre>
+                </div>
+            );
         }
 
         return this.props.children;

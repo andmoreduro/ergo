@@ -1,5 +1,6 @@
 use crate::ast::DocumentAST;
 use crate::document_source_builder::SourceBuilder;
+use crate::required_input_fallback::RequiredInputFallbacks;
 use crate::template_spec::{ParamSpec, ParamType, TemplateSpec};
 
 pub(crate) fn escape_typst_string(value: &str) -> String {
@@ -35,19 +36,22 @@ pub(crate) fn format_typst_length_number(value: &serde_json::Number) -> Option<S
 }
 
 pub(crate) fn generate_lib_typst(ast: &DocumentAST, template: &TemplateSpec) -> SourceBuilder {
+    let fallbacks = RequiredInputFallbacks::from_ast(template, ast);
     let mut builder = SourceBuilder::default();
     push_package_imports(template, &mut builder);
     builder.push_literal("#let apply(body) = [\n");
-    push_document_show_rule(ast, template, &mut builder);
+    push_document_show_rule(ast, template, &fallbacks, &mut builder);
     push_project_text_settings(ast, &mut builder);
     builder.push_literal("  #body\n");
     builder.push_literal("]\n");
     builder
 }
 
-fn push_package_imports(template: &TemplateSpec, builder: &mut SourceBuilder) {
-    builder.push_literal(&template.package.to_typst_import_line());
-    builder.push_literal("\n");
+pub(crate) fn push_package_imports(template: &TemplateSpec, builder: &mut SourceBuilder) {
+    if !template.package.name.is_empty() {
+        builder.push_literal(&template.package.to_typst_import_line());
+        builder.push_literal("\n");
+    }
     for dep in &template.package.dependencies {
         builder.push_literal(&dep.to_typst_import_line());
         builder.push_literal("\n");
@@ -55,7 +59,28 @@ fn push_package_imports(template: &TemplateSpec, builder: &mut SourceBuilder) {
     builder.push_literal("\n");
 }
 
-fn push_document_show_rule(ast: &DocumentAST, template: &TemplateSpec, builder: &mut SourceBuilder) {
+/// Per-element `.typ` fragments are `#include`d with file-local scope; import wrapper
+/// symbols (e.g. `apa-figure`) in each fragment that uses a non-standard figure wrapper.
+pub(crate) fn push_wrapper_symbol_import(
+    template: &TemplateSpec,
+    wrapper: &str,
+    builder: &mut SourceBuilder,
+) {
+    if wrapper == "figure" {
+        return;
+    }
+    builder.push_literal(&format!(
+        "#import \"{}:{}\": {}\n\n",
+        template.package.name, template.package.version, wrapper
+    ));
+}
+
+fn push_document_show_rule(
+    ast: &DocumentAST,
+    template: &TemplateSpec,
+    fallbacks: &RequiredInputFallbacks<'_>,
+    builder: &mut SourceBuilder,
+) {
     let Some(show_rule) = &template.show_rule else {
         return;
     };
@@ -64,7 +89,7 @@ fn push_document_show_rule(ast: &DocumentAST, template: &TemplateSpec, builder: 
     let cover_id = "inputs";
     for param in &show_rule.params {
         let mut val_builder = SourceBuilder::default();
-        let pushed = resolve_param_builder(param, ast, cover_id, &mut val_builder);
+        let pushed = resolve_param_builder(param, ast, fallbacks, cover_id, &mut val_builder);
         if pushed {
             if pushed_any {
                 builder.push_literal(",\n");
@@ -111,6 +136,7 @@ fn push_project_text_settings(ast: &DocumentAST, builder: &mut SourceBuilder) {
 pub(crate) fn resolve_param_builder(
     param: &ParamSpec,
     ast: &DocumentAST,
+    fallbacks: &RequiredInputFallbacks<'_>,
     _section_id: &str,
     builder: &mut SourceBuilder,
 ) -> bool {
@@ -125,7 +151,9 @@ pub(crate) fn resolve_param_builder(
 
     match parts[0] {
         "settings" => resolve_setting_param(parts[1], ast, builder),
-        "inputs" | "cover_page" | "metadata" => resolve_input_param(parts[1], param, ast, builder),
+        "inputs" | "cover_page" | "metadata" => {
+            resolve_input_param(parts[1], param, ast, fallbacks, builder)
+        }
         _ => false,
     }
 }
@@ -197,17 +225,20 @@ fn resolve_input_param(
     key: &str,
     param: &ParamSpec,
     ast: &DocumentAST,
+    fallbacks: &RequiredInputFallbacks<'_>,
     builder: &mut SourceBuilder,
 ) -> bool {
-    let val = match ast.inputs.get(key) {
-        Some(v) => v,
-        None => return false,
-    };
+    let raw = ast.inputs.get(key);
+    let val = fallbacks.prepare_input_value(key, raw.unwrap_or(&serde_json::Value::Null));
+    if raw.is_none() && !matches!(&param.param_type, ParamType::AuthorList) {
+        return false;
+    }
 
     match &param.param_type {
         ParamType::Content => {
             if let Some(s) = val.as_str() {
-                let trimmed = s.trim();
+                let text = fallbacks.effective_string(key, s);
+                let trimmed = text.trim();
                 if trimmed.is_empty() {
                     if param.key != "_positional" {
                         return false;
@@ -225,8 +256,12 @@ fn resolve_input_param(
         }
         ParamType::String => {
             if let Some(s) = val.as_str() {
+                let text = fallbacks.effective_string(key, s);
+                if text.trim().is_empty() {
+                    return false;
+                }
                 builder.push_literal("\"");
-                builder.push_escaped_field("inputs", &format!("/{}", key), s, 0);
+                builder.push_escaped_field("inputs", &format!("/{}", key), &text, 0);
                 builder.push_literal("\"");
                 true
             } else {
@@ -272,9 +307,9 @@ fn resolve_input_param(
                 false
             }
         }
-        ParamType::StringArray => resolve_string_array_param(key, val, builder),
-        ParamType::AuthorList => resolve_author_list_param(val, builder),
-        ParamType::AffiliationMap => resolve_affiliation_map_param(val, builder),
+        ParamType::StringArray => resolve_string_array_param(key, &val, builder),
+        ParamType::AuthorList => resolve_author_list_param(&val, builder),
+        ParamType::AffiliationMap => resolve_affiliation_map_param(&val, builder),
         _ => false,
     }
 }

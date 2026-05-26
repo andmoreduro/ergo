@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import "@testing-library/jest-dom";
 
+import { DEFAULT_PROJECT_TEMPLATE_ID } from "../../../state/ast/defaults";
 import { NewProjectDialog } from "./NewProjectDialog";
 
 describe("NewProjectDialog", () => {
@@ -87,6 +88,15 @@ describe("NewProjectDialog", () => {
             projectName: "Mi proyecto",
             projectFileName: "Archivo Final.ergproj",
             projectLocation: "C:\\Users\\ada\\Documents",
+            templateId: DEFAULT_PROJECT_TEMPLATE_ID,
         });
+    });
+
+    it("defaults the template to APA", () => {
+        renderDialog();
+
+        expect(screen.getByLabelText("Template")).toHaveValue(
+            DEFAULT_PROJECT_TEMPLATE_ID,
+        );
     });
 });

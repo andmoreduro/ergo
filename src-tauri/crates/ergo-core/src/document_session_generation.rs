@@ -7,8 +7,10 @@ use crate::ast::{
 };
 use crate::document_generation_lib::{
     escape_typst_string, format_json_val, format_typst_length, format_typst_length_number,
-    generate_lib_typst, is_sized_unit, resolve_param_builder,
+    generate_lib_typst, is_sized_unit, push_package_imports, push_wrapper_symbol_import,
+    resolve_param_builder,
 };
+use crate::required_input_fallback::RequiredInputFallbacks;
 use crate::document_session::{
     DOCUMENT_STATE_PATH, FIELD_SOURCE_MAP_PATH, LIB_PATH, MAIN_PATH, PROJECT_SETTINGS_PATH,
     REFERENCES_PATH, SOURCE_MAP_PATH, TEMPLATE_PATH,
@@ -17,7 +19,7 @@ use crate::document_session_types::{
     FieldSourceMapEntry, GeneratedFragment, ProjectSourceLayout, SourceMapEntry,
 };
 use crate::document_source_builder::SourceBuilder;
-use crate::template_spec::{ParamType, SectionKind, TemplateSpec};
+use crate::template_spec::{ElementOverrideSpec, ParamType, SectionKind, TemplateSpec};
 
 pub(crate) struct GeneratedProjectSources {
     pub(crate) main_source: String,
@@ -238,6 +240,7 @@ fn generate_project_sources_inner(
     let lib_source = lib_builder.source.clone();
 
     let cover_id = "inputs".to_string();
+    let fallbacks = RequiredInputFallbacks::from_ast(template, ast);
 
     // Map fields from lib.typ to "lib.typ"
     let lib_field_ranges = lib_builder.into_absolute_field_ranges(&cover_id, LIB_PATH, 0);
@@ -246,13 +249,17 @@ fn generate_project_sources_inner(
     // Generate main source using SourceBuilder to track cover page fields
     let mut main_builder = SourceBuilder::default();
 
-    // Import lib.typ and apply show rule wrapper
+    // Element fragments are #include'd from main.typ; they need template package
+    // symbols (e.g. apa-figure) in this file's scope — importing lib.typ with * only
+    // brings lib-defined bindings such as apply, not the package imports in lib.typ.
+    push_package_imports(template, &mut main_builder);
     main_builder.push_literal("#import \"lib.typ\": *\n");
     main_builder.push_literal("#show: apply\n");
 
     // Set document title and keywords metadata
     main_builder.push_literal("#set document(title: [");
-    main_builder.push_escaped_field("inputs", "/title", &ast.metadata.title, 0);
+    let document_title = fallbacks.effective_title(&ast.metadata.title);
+    main_builder.push_escaped_field("inputs", "/title", &document_title, 0);
     main_builder.push_literal("]");
     if !ast.metadata.keywords.is_empty() {
         let escaped_keywords: Vec<String> = ast
@@ -287,8 +294,13 @@ fn generate_project_sources_inner(
                     for param in &section_spec.params {
                         if param.key == "_positional" {
                             main_builder.push_literal("  ");
-                            let pushed =
-                                resolve_param_builder(param, ast, &cover_id, &mut main_builder);
+                            let pushed = resolve_param_builder(
+                                param,
+                                ast,
+                                &fallbacks,
+                                &cover_id,
+                                &mut main_builder,
+                            );
                             if !pushed {
                                 if let Some(default_val) = &param.default {
                                     if let Some(formatted) =
@@ -306,8 +318,13 @@ fn generate_project_sources_inner(
                     for param in &section_spec.params {
                         if param.key != "_positional" {
                             let mut temp_builder = SourceBuilder::default();
-                            let pushed =
-                                resolve_param_builder(param, ast, &cover_id, &mut temp_builder);
+                            let pushed = resolve_param_builder(
+                                param,
+                                ast,
+                                &fallbacks,
+                                &cover_id,
+                                &mut temp_builder,
+                            );
                             if pushed {
                                 if positional_pushed || named_pushed {
                                     main_builder.push_literal(",\n");
@@ -417,6 +434,13 @@ fn element_path(element_id: &str) -> String {
     format!("elements/{}.typ", path_id_for_id(element_id))
 }
 
+/// Asset paths (e.g. `assets/photo.webp`) are root-relative in the VFS, but
+/// Typst resolves `image("…")` relative to the file that contains the call.
+/// Element files live under `elements/`, so prepend `../` to reach the root.
+fn asset_path_relative_to_element(root_relative_path: &str) -> String {
+    format!("../{root_relative_path}")
+}
+
 fn element_id(element: &DocumentElement) -> String {
     match element {
         DocumentElement::Heading(heading) => heading.id.clone(),
@@ -462,6 +486,144 @@ fn table_cell_field_id(element_id: &str, row_index: usize, col_index: usize) -> 
 
 fn figure_caption_field_id(element_id: &str) -> String {
     format!("{element_id}:caption")
+}
+
+/// Typst function used to wrap table and image elements (defaults to `figure`).
+fn element_figure_wrapper_name(over: Option<&ElementOverrideSpec>) -> &str {
+    if let Some(spec) = over {
+        if let Some(wrapper) = spec.wrapper.as_deref() {
+            if !wrapper.is_empty() {
+                return wrapper;
+            }
+        }
+        if let Some(function) = spec.function.as_deref() {
+            if !function.is_empty() {
+                return function;
+            }
+        }
+    }
+    "figure"
+}
+
+fn uses_standard_typst_figure(wrapper: &str) -> bool {
+    wrapper == "figure"
+}
+
+/// Emit `#wrapper(...)` for template-specific wrappers such as `apa-figure`.
+fn figure_image_typst_source(
+    path: &str,
+    extra_fields: &std::collections::HashMap<String, serde_json::Value>,
+) -> String {
+    let escaped = escape_typst_string(path);
+    if let Some(serde_json::Value::String(width)) = extra_fields.get("width") {
+        if let Some(length) = format_typst_length(width) {
+            return format!("image(\"{escaped}\", width: {length})");
+        }
+    }
+    format!("image(\"{escaped}\")")
+}
+
+/// The body (`#image`, `table(...)`, or rich text) is a direct argument — never wrapped
+/// in Typst's built-in `#figure(...)`.
+fn push_custom_wrapper_figure_element(
+    builder: &mut SourceBuilder,
+    template: &TemplateSpec,
+    wrapper: &str,
+    element_id: &str,
+    override_spec: Option<&ElementOverrideSpec>,
+    body: SourceBuilder,
+    asset_path: Option<&str>,
+    caption: &str,
+    extra_fields: &std::collections::HashMap<String, serde_json::Value>,
+    skip_extra_keys: &[&str],
+) {
+    push_wrapper_symbol_import(template, wrapper, builder);
+    builder.push_literal(&format!("#{wrapper}(\n"));
+
+    if let Some(path) = asset_path {
+        let image_source = figure_image_typst_source(path, extra_fields);
+        builder.push_literal("  ");
+        builder.push_generated_field_marker(
+            element_id,
+            &figure_body_field_id(element_id),
+            &image_source,
+            0,
+        );
+        builder.push_literal("\n");
+    } else if body.source.trim().is_empty() {
+        builder.push_literal("  ");
+        builder.push_generated_field_marker(
+            element_id,
+            &figure_body_field_id(element_id),
+            "Figure content",
+            0,
+        );
+        builder.push_literal("\n");
+    } else {
+        builder.push_literal("  ");
+        builder.push_builder(body);
+        builder.push_literal("\n");
+    }
+
+    if !caption.is_empty() {
+        builder.push_literal(",\n  caption: [");
+        builder.push_escaped_field(element_id, &figure_caption_field_id(element_id), caption, 0);
+        builder.push_literal("]\n");
+    }
+
+    push_override_extra_fields(
+        builder,
+        element_id,
+        override_spec,
+        extra_fields,
+        skip_extra_keys,
+    );
+
+    builder.push_literal(")\n");
+}
+
+fn extra_field_id(element_id: &str, key: &str) -> String {
+    format!("{element_id}:extra:{key}")
+}
+
+fn extra_field_value_is_empty(val: &serde_json::Value) -> bool {
+    match val {
+        serde_json::Value::String(s) => s.trim().is_empty(),
+        serde_json::Value::Null => true,
+        _ => false,
+    }
+}
+
+fn push_override_extra_fields(
+    builder: &mut SourceBuilder,
+    element_id: &str,
+    override_spec: Option<&ElementOverrideSpec>,
+    stored: &std::collections::HashMap<String, serde_json::Value>,
+    skip_keys: &[&str],
+) {
+    let Some(over) = override_spec else {
+        return;
+    };
+
+    for field_spec in &over.extra_fields {
+        if skip_keys.contains(&field_spec.key.as_str()) {
+            continue;
+        }
+        let Some(val) = stored.get(&field_spec.key) else {
+            continue;
+        };
+        if extra_field_value_is_empty(val) {
+            continue;
+        }
+        builder.push_literal(&format!(",\n  {}: ", field_spec.key));
+        format_json_val_for_custom_field(
+            element_id,
+            &field_spec.key,
+            val,
+            &param_type_from_str(&field_spec.param_type),
+            builder,
+        );
+    }
 }
 
 fn path_id_for_id(id: &str) -> String {
@@ -569,7 +731,7 @@ fn element_fragment(
     let kind = element_kind(element);
     let label = label_for_id(&element_id);
     let bibliography_keys = bibliography_citation_keys(references);
-    let builder = generate_element_typst(element, &label, template, assets, &bibliography_keys);
+    let builder = generate_element_typst(element, &label, template, assets, &bibliography_keys, true);
     let source = builder.source.clone();
     let field_source_map_ranges =
         builder.into_absolute_field_ranges(section_id, file_path, section_byte_start);
@@ -601,12 +763,31 @@ fn element_fragment(
     }
 }
 
+pub(crate) fn resource_preview_typst_for_element(
+    element: &DocumentElement,
+    template: &TemplateSpec,
+    assets: &[AssetEntry],
+    references: &[ReferenceEntry],
+) -> Option<String> {
+    let bibliography_keys = bibliography_citation_keys(references);
+    let id = element_id(element);
+    let label = label_for_id(&id);
+    let builder = generate_element_typst(element, &label, template, assets, &bibliography_keys, false);
+    let source = builder.source.trim();
+    if source.is_empty() {
+        None
+    } else {
+        Some(builder.source)
+    }
+}
+
 fn generate_element_typst(
     element: &DocumentElement,
     label: &str,
     template: &TemplateSpec,
     assets: &[AssetEntry],
     bibliography_keys: &HashMap<String, String>,
+    adjust_asset_paths: bool,
 ) -> SourceBuilder {
     let mut builder = SourceBuilder::default();
     match element {
@@ -676,17 +857,11 @@ fn generate_element_typst(
                 .element_overrides
                 .as_ref()
                 .and_then(|o| o.table.as_ref());
+            let wrapper = element_figure_wrapper_name(table_override);
+            push_wrapper_symbol_import(template, wrapper, &mut builder);
 
-            if let Some(over) = table_override {
-                if let Some(wrapper) = &over.wrapper {
-                    builder
-                        .push_literal(&format!("#{wrapper}(\n  table(\n    columns: ({columns})"));
-                } else {
-                    builder.push_literal(&format!("#table(\n  columns: ({columns})"));
-                }
-            } else {
-                builder.push_literal(&format!("#table(\n  columns: ({columns})"));
-            }
+            // Same `apa-figure` wrapper as figures: `table(...)` is a direct argument.
+            builder.push_literal(&format!("#{wrapper}(\n  table(\n    columns: ({columns})"));
 
             for (row_index, row) in table.cells.iter().enumerate() {
                 for (col_index, cell) in row.iter().enumerate() {
@@ -701,28 +876,17 @@ fn generate_element_typst(
                 }
             }
 
-            if let Some(over) = table_override {
-                if over.wrapper.is_some() {
-                    builder.push_literal("\n  )");
-                    for field_spec in &over.extra_fields {
-                        if let Some(val) = table.extra_fields.get(&field_spec.key) {
-                            builder.push_literal(&format!(",\n  {}: ", field_spec.key));
-                            format_json_val_for_custom_field(
-                                &table.id,
-                                &field_spec.key,
-                                val,
-                                &param_type_from_str(&field_spec.param_type),
-                                &mut builder,
-                            );
-                        }
-                    }
-                    builder.push_literal(&format!("\n) <{label}>\n\n"));
-                } else {
-                    builder.push_literal(&format!("\n) <{label}>\n\n"));
-                }
-            } else {
-                builder.push_literal(&format!("\n) <{label}>\n\n"));
-            }
+            builder.push_literal("\n  )");
+
+            push_override_extra_fields(
+                &mut builder,
+                &table.id,
+                table_override,
+                &table.extra_fields,
+                &[],
+            );
+
+            builder.push_literal(&format!("\n) <{label}>\n\n"));
         }
         DocumentElement::Figure(figure) => {
             let mut body = SourceBuilder::default();
@@ -747,7 +911,8 @@ fn generate_element_typst(
                         .find(|asset| asset.id == *asset_id)
                         .map(|asset| asset.path.clone())
                         .or_else(|| Some(format!("assets/{}", path_id_for_id(asset_id))))
-                });
+                })
+                .map(|p| if adjust_asset_paths { asset_path_relative_to_element(&p) } else { p });
 
             if body.source.trim().is_empty() && caption.is_empty() && asset_path.is_none() {
                 return builder;
@@ -757,58 +922,68 @@ fn generate_element_typst(
                 .element_overrides
                 .as_ref()
                 .and_then(|o| o.figure.as_ref());
-            let function_name = figure_override
-                .and_then(|over| over.function.as_deref())
-                .unwrap_or("figure");
+            let wrapper = element_figure_wrapper_name(figure_override);
 
-            builder.push_literal(&format!("#{function_name}(\n  ["));
-            if let Some(path) = asset_path {
-                builder.push_generated_field_marker(
-                    &figure.id,
-                    &figure_body_field_id(&figure.id),
-                    &format!("#image(\"{}\")", escape_typst_string(&path)),
-                    0,
-                );
-            } else if body.source.trim().is_empty() {
-                builder.push_generated_field_marker(
-                    &figure.id,
-                    &figure_body_field_id(&figure.id),
-                    "Figure content",
-                    0,
-                );
-            } else {
-                builder.push_builder(body);
-            }
-            builder.push_literal("]");
-            if !caption.is_empty() {
-                builder.push_literal(",\n  caption: [");
-                builder.push_escaped_field(
-                    &figure.id,
-                    &figure_caption_field_id(&figure.id),
-                    caption,
-                    0,
-                );
-                builder.push_literal("]");
-            }
+            if uses_standard_typst_figure(wrapper) {
+                builder.push_literal(&format!("#{wrapper}(\n  ["));
 
-            builder.push_literal(&format!(",\n  placement: {placement}"));
-
-            if let Some(over) = figure_override {
-                for field_spec in &over.extra_fields {
-                    if let Some(val) = figure.extra_fields.get(&field_spec.key) {
-                        builder.push_literal(&format!(",\n  {}: ", field_spec.key));
-                        format_json_val_for_custom_field(
-                            &figure.id,
-                            &field_spec.key,
-                            val,
-                            &param_type_from_str(&field_spec.param_type),
-                            &mut builder,
-                        );
-                    }
+                if let Some(path) = asset_path {
+                    let image_source =
+                        figure_image_typst_source(&path, &figure.extra_fields);
+                    builder.push_generated_field_marker(
+                        &figure.id,
+                        &figure_body_field_id(&figure.id),
+                        &image_source,
+                        0,
+                    );
+                } else if body.source.trim().is_empty() {
+                    builder.push_generated_field_marker(
+                        &figure.id,
+                        &figure_body_field_id(&figure.id),
+                        "Figure content",
+                        0,
+                    );
+                } else {
+                    builder.push_builder(body);
                 }
-            }
 
-            builder.push_literal(&format!("\n) <{label}>\n\n"));
+                builder.push_literal("]");
+
+                if !caption.is_empty() {
+                    builder.push_literal(",\n  caption: [");
+                    builder.push_escaped_field(
+                        &figure.id,
+                        &figure_caption_field_id(&figure.id),
+                        caption,
+                        0,
+                    );
+                    builder.push_literal("]");
+                }
+
+                builder.push_literal(&format!(",\n  placement: {placement}"));
+                push_override_extra_fields(
+                    &mut builder,
+                    &figure.id,
+                    figure_override,
+                    &figure.extra_fields,
+                    &["caption", "width"],
+                );
+                builder.push_literal(&format!("\n) <{label}>\n\n"));
+            } else {
+                push_custom_wrapper_figure_element(
+                    &mut builder,
+                    template,
+                    wrapper,
+                    &figure.id,
+                    figure_override,
+                    body,
+                    asset_path.as_deref(),
+                    caption,
+                    &figure.extra_fields,
+                    &["caption", "width"],
+                );
+                builder.push_literal(&format!("<{label}>\n\n"));
+            }
         }
         DocumentElement::Custom(custom) => {
             if let Some(spec) = template
@@ -879,7 +1054,7 @@ fn format_json_val_for_custom_field(
     param_type: &ParamType,
     builder: &mut SourceBuilder,
 ) {
-    let field_id = format!("{}:field:{}", element_id, key);
+    let field_id = extra_field_id(element_id, key);
     match (param_type, val) {
         (ParamType::Content, serde_json::Value::String(s)) => {
             builder.push_literal("[");

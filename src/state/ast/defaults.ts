@@ -92,10 +92,70 @@ export const createContentSection = (id = createId()): ContentSection => ({
     elements: [],
 });
 
+export const DEFAULT_PROJECT_TEMPLATE_ID = "versatile-apa";
+export const NO_TEMPLATE_ID = "none";
+
+export const createDocumentAST = (
+    templateId: string = DEFAULT_PROJECT_TEMPLATE_ID,
+): DocumentAST => {
+    if (templateId === NO_TEMPLATE_ID) {
+        return {
+            version: "1.0",
+            metadata: {
+                template_id: NO_TEMPLATE_ID,
+                template_variant_id: null,
+                title: "Untitled Document",
+                running_head: null,
+                keywords: [],
+                project_settings: {
+                    paper_size: "us-letter",
+                    language: "en",
+                    text_font: "Libertinus Serif",
+                    math_font: "Libertinus Math",
+                    raw_font: "DejaVu Sans Mono",
+                    font_size: 11,
+                    table_stroke_width: 0.5,
+                    template_overrides: [],
+                },
+                local_overrides: {
+                    default_font: null,
+                    default_font_size: null,
+                    theme_mode: "system",
+                    locale: "en",
+                    recent_projects: [],
+                    keymap_profile: "Default",
+                    keymap_overrides: [],
+                    history_limit: 100,
+                    autosave_enabled: true,
+                    autosave_interval_ms: 30_000,
+                    autosave_on_window_blur: true,
+                    autosave_on_app_close: true,
+                    autosave_on_project_close: true,
+                    preview_zoom_render_debounce_ms: 120,
+                },
+            },
+            dependencies: { packages: [] },
+            references: [],
+            assets: [],
+            inputs: {
+                title: "Untitled Document",
+            },
+            sections: [
+                {
+                    type: "Content",
+                    ...createContentSection(),
+                },
+            ],
+        };
+    }
+
+    return createDefaultDocumentAST();
+};
+
 export const createDefaultDocumentAST = (): DocumentAST => ({
     version: "1.0",
     metadata: {
-        template_id: "versatile-apa",
+        template_id: DEFAULT_PROJECT_TEMPLATE_ID,
         template_variant_id: "student",
         title: "Untitled Document",
         running_head: null,
@@ -142,7 +202,7 @@ export const createDefaultDocumentAST = (): DocumentAST => ({
         running_head: "",
         abstract_text: "",
         affiliations: [],
-        authors: [],
+        authors: [{ name: "", affiliations: [] }],
         course: "",
         due_date: "",
         instructor: "",

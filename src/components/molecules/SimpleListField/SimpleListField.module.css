@@ -1,0 +1,108 @@
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.inlineComposer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: 2.25rem;
+    padding: var(--space-1) var(--space-2);
+    border: var(--border-width-sm) solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-bg-primary);
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+}
+
+.inlineComposer:focus-within {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+}
+
+.chipCommitted {
+    padding: 0 var(--space-1);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-bg-tertiary);
+}
+
+.chipCommitted:hover {
+    background-color: var(--color-bg-secondary);
+}
+
+button.chipCommitted {
+    cursor: pointer;
+}
+
+.chipFocused {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 0;
+}
+
+.chipEditing:focus-within {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 0;
+}
+
+.chipLabel {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+}
+
+.chipInput {
+    width: auto;
+    min-width: 2ch;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+    field-sizing: content;
+}
+
+.chipInput:focus {
+    outline: none;
+}
+
+.inlineInput {
+    flex: 1 1 8rem;
+    min-width: 6rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+}
+
+.inlineInput::placeholder {
+    color: var(--color-text-tertiary);
+}
+
+.inlineInput:focus {
+    outline: none;
+}

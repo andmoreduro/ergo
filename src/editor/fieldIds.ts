@@ -50,6 +50,12 @@ const projectInputFieldPrefix = "project-input-";
 export const projectInputFieldId = (path: string) =>
     `${projectInputFieldPrefix}${path}`;
 
+export const simpleListComposerFieldId = (path: string) =>
+    projectInputFieldId(`${path}/composer`);
+
+export const authorsComposerFieldId = () =>
+    projectInputFieldId("/authors/composer");
+
 export const backendFocusIdsForEditorField = (
     elementId: string,
     fieldId: string | null,

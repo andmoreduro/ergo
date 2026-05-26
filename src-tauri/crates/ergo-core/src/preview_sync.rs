@@ -583,18 +583,23 @@ fn caret_source_targets(
 ) -> Vec<CaretSourceTarget> {
     let mut targets = Vec::new();
 
-    for segment in &entry.segments {
-        if caret_utf16_offset == segment.field_utf16_start {
+    if caret_utf16_offset == 0 {
+        if let Some(segment) = entry.segments.first() {
             targets.push(CaretSourceTarget {
                 source_byte_offset: segment.source_byte_start,
                 boundary: CaretClickBoundary::Leading,
             });
         }
+        return targets;
+    }
+
+    for segment in &entry.segments {
         if caret_utf16_offset == segment.field_utf16_end {
             targets.push(CaretSourceTarget {
                 source_byte_offset: segment.source_byte_end,
                 boundary: CaretClickBoundary::Trailing,
             });
+            break;
         }
     }
 
@@ -659,12 +664,16 @@ fn click_candidates_for_source_targets(
                                 CaretClickBoundary::Leading
                                     if target.source_byte_offset == glyph_start =>
                                 {
-                                    Some(glyph_pos.x + width / 4.0)
+                                    Some(glyph_pos.x)
                                 }
                                 CaretClickBoundary::Trailing
-                                    if target.source_byte_offset == glyph_end =>
+                                    if target.source_byte_offset >= glyph_start
+                                        && target.source_byte_offset <= glyph_end =>
                                 {
-                                    Some(glyph_pos.x + width * 0.75)
+                                    // Keep the dot slightly inside the glyph's ink box:
+                                    // Typst click targets miss when the point sits past the
+                                    // glyph's advance width.
+                                    Some(glyph_pos.x + width * 0.995)
                                 }
                                 _ => None,
                             };
