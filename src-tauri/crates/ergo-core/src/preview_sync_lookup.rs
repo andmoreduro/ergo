@@ -180,15 +180,19 @@ pub(crate) fn source_offset_for_caret(
         return entry
             .segments
             .first()
-            .map(|segment| segment.source_byte_start);
+            .map(|segment| segment.source_byte_start)
+            .or_else(|| {
+                entry
+                    .fallback_caret_utf16_offset
+                    .filter(|fallback| *fallback == caret_utf16_offset)
+                    .map(|_| entry.byte_start)
+            });
     }
 
     entry
-        .segments
-        .last()
-        .filter(|segment| caret_utf16_offset > segment.field_utf16_end)
-        .map(|_| entry.byte_end)
-        .or(entry.fallback_caret_utf16_offset.map(|_| entry.byte_start))
+        .fallback_caret_utf16_offset
+        .filter(|fallback| *fallback == caret_utf16_offset)
+        .map(|_| entry.byte_start)
 }
 
 pub(crate) fn candidate_offsets(text: &str, start: usize, end: usize) -> Vec<usize> {

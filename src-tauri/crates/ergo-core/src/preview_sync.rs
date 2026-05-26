@@ -300,29 +300,44 @@ impl PreviewSyncState {
             }
         };
 
-        let preferred_offset = target
-            .caret_utf16_offset
-            .and_then(|caret| source_offset_for_caret(entry, caret))
-            .or_else(|| {
-                entry
-                    .segments
-                    .first()
-                    .map(|segment| segment.source_byte_start)
-            })
-            .unwrap_or(entry.byte_start);
+        let mut positions = if let Some(caret_utf16_offset) = target.caret_utf16_offset {
+            let Some(preferred_offset) = source_offset_for_caret(entry, caret_utf16_offset) else {
+                return PreviewElementPositionsResult::NoMatch {
+                    source_revision: Some(preview.source_revision),
+                    reason: "Field caret is not present in the displayed preview revision"
+                        .to_string(),
+                };
+            };
 
-        let mut positions = positions_for_field_entry(
-            &preview,
-            entry,
-            &source,
-            &target.element_id,
-            field_id,
-            target.caret_utf16_offset,
-            preferred_offset,
-            target.anchor_page_number,
-        );
+            roundtrip_positions_for_field_caret(
+                &preview,
+                entry,
+                &source,
+                &target.element_id,
+                field_id,
+                caret_utf16_offset,
+                preferred_offset,
+                target.anchor_page_number,
+            )
+        } else {
+            let preferred_offset = entry
+                .segments
+                .first()
+                .map(|segment| segment.source_byte_start)
+                .unwrap_or(entry.byte_start);
 
-        if positions.is_empty() {
+            positions_for_field_entry(
+                &preview,
+                entry,
+                &source,
+                &target.element_id,
+                field_id,
+                preferred_offset,
+                target.anchor_page_number,
+            )
+        };
+
+        if positions.is_empty() && target.caret_utf16_offset.is_none() {
             for fallback_field_id in
                 related_template_input_field_ids(field_id, entry, source.text())
             {
@@ -349,7 +364,6 @@ impl PreviewSyncState {
                     &fallback_source,
                     &target.element_id,
                     field_id,
-                    target.caret_utf16_offset,
                     fallback_offset,
                     target.anchor_page_number,
                 );
@@ -409,26 +423,9 @@ fn positions_for_field_entry(
     source: &typst::syntax::Source,
     element_id: &str,
     field_id: &str,
-    caret_utf16_offset: Option<usize>,
     preferred_offset: usize,
     anchor_page_number: Option<usize>,
 ) -> Vec<PreviewElementPosition> {
-    if let Some(caret_utf16_offset) = caret_utf16_offset {
-        let positions = roundtrip_positions_for_field_caret(
-            preview,
-            entry,
-            source,
-            element_id,
-            field_id,
-            caret_utf16_offset,
-            preferred_offset,
-            anchor_page_number,
-        );
-        if !positions.is_empty() {
-            return positions;
-        }
-    }
-
     let mut offsets = vec![preferred_offset];
     offsets.extend(
         candidate_offsets(source.text(), entry.byte_start, entry.byte_end)
@@ -448,7 +445,7 @@ fn positions_for_field_entry(
                             position,
                             Some(element_id.to_string()),
                             Some(field_id.to_string()),
-                            caret_utf16_offset,
+                            None,
                             preview.source_revision,
                         ),
                         offset,
@@ -589,6 +586,11 @@ fn caret_source_targets(
                 source_byte_offset: segment.source_byte_start,
                 boundary: CaretClickBoundary::Leading,
             });
+        } else if entry.fallback_caret_utf16_offset == Some(caret_utf16_offset) {
+            targets.push(CaretSourceTarget {
+                source_byte_offset: entry.byte_start,
+                boundary: CaretClickBoundary::Leading,
+            });
         }
         return targets;
     }
@@ -601,6 +603,13 @@ fn caret_source_targets(
             });
             break;
         }
+    }
+
+    if targets.is_empty() && entry.fallback_caret_utf16_offset == Some(caret_utf16_offset) {
+        targets.push(CaretSourceTarget {
+            source_byte_offset: entry.byte_start,
+            boundary: CaretClickBoundary::Leading,
+        });
     }
 
     targets

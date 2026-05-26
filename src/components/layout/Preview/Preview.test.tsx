@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { useEffect, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
@@ -30,19 +30,27 @@ vi.mock("../../../actions/runtime", () => ({
 
 import { Preview } from "./Preview";
 
-const FocusElement = ({ elementId }: { elementId: string }) => {
+const FocusElement = ({
+    caretUtf16Offset = 0,
+    elementId,
+    fieldId = `${elementId}:text`,
+}: {
+    caretUtf16Offset?: number;
+    elementId: string;
+    fieldId?: string;
+}) => {
     const { setDocumentFocus } = useDocument();
     useEffect(() => {
         setDocumentFocus({
             elementId,
-            fieldId: "heading-1:text",
-            caretUtf16Offset: 0,
+            fieldId,
+            caretUtf16Offset,
             sourceRevision: null,
             anchorPageNumber: null,
             forcePreviewScroll: false,
             focusSource: "native",
         });
-    }, [elementId, setDocumentFocus]);
+    }, [caretUtf16Offset, elementId, fieldId, setDocumentFocus]);
     return null;
 };
 
@@ -394,7 +402,189 @@ describe("Preview sync", () => {
                 .toHaveStyle({ left: "60%" });
         });
     });
+    it("keeps the previous exact caret when the same displayed field returns no match", async () => {
+        compilerClientMock.positionsForFocus
+            .mockResolvedValueOnce({
+                positions: [
+                    {
+                        caretCue: {
+                            heightPt: 10,
+                            topYPt: 14,
+                        },
+                        caretUtf16Offset: 1,
+                        elementId: "heading-1",
+                        fieldId: "heading-1:text",
+                        pageNumber: 1,
+                        sourceRevision: 4,
+                        xPt: 60,
+                        yPt: 19,
+                    },
+                ],
+                sourceRevision: 4,
+                status: "matched",
+            })
+            .mockResolvedValueOnce({
+                positions: [],
+                sourceRevision: 4,
+                status: "noMatch",
+            });
 
+        const compiler = createDefaultCompilerState();
+        const { container, rerender } = await renderPreviewAndGetCanvas(
+            <FocusElement caretUtf16Offset={1} elementId="heading-1" />,
+            compiler,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-preview-sync-caret="true"]'))
+                .toHaveStyle({ left: "60%" });
+        });
+
+        rerender(
+            <DocumentProvider>
+                <FocusElement caretUtf16Offset={2} elementId="heading-1" />
+                <div data-element-id="heading-1">
+                    <button type="button">Delete</button>
+                    <input aria-label="Heading editor" />
+                </div>
+                <Preview
+                    compiler={compiler}
+                    zoom={1}
+                    onZoomChange={() => undefined}
+                    zoomRenderDebounceMs={0}
+                    onExport={() => undefined}
+                />
+            </DocumentProvider>,
+        );
+
+        await waitFor(() => {
+            expect(compilerClientMock.positionsForFocus).toHaveBeenCalledTimes(2);
+        });
+        expect(container.querySelector('[data-preview-sync-caret="true"]'))
+            .toHaveStyle({ left: "60%" });
+    });
+
+    it("clears a stale caret when focus identity changes and the new field has no match", async () => {
+        compilerClientMock.positionsForFocus
+            .mockResolvedValueOnce({
+                positions: [
+                    {
+                        caretCue: {
+                            heightPt: 10,
+                            topYPt: 14,
+                        },
+                        caretUtf16Offset: 1,
+                        elementId: "heading-1",
+                        fieldId: "heading-1:text",
+                        pageNumber: 1,
+                        sourceRevision: 4,
+                        xPt: 60,
+                        yPt: 19,
+                    },
+                ],
+                sourceRevision: 4,
+                status: "matched",
+            })
+            .mockResolvedValueOnce({
+                positions: [],
+                sourceRevision: 4,
+                status: "noMatch",
+            });
+
+        const compiler = createDefaultCompilerState();
+        const { container, rerender } = await renderPreviewAndGetCanvas(
+            <FocusElement caretUtf16Offset={1} elementId="heading-1" />,
+            compiler,
+        );
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-preview-sync-caret="true"]'))
+                .toBeInTheDocument();
+        });
+
+        rerender(
+            <DocumentProvider>
+                <FocusElement caretUtf16Offset={1} elementId="heading-2" />
+                <div data-element-id="heading-1">
+                    <button type="button">Delete</button>
+                    <input aria-label="Heading editor" />
+                </div>
+                <Preview
+                    compiler={compiler}
+                    zoom={1}
+                    onZoomChange={() => undefined}
+                    zoomRenderDebounceMs={0}
+                    onExport={() => undefined}
+                />
+            </DocumentProvider>,
+        );
+
+        await waitFor(() => {
+            expect(compilerClientMock.positionsForFocus).toHaveBeenCalledTimes(2);
+        });
+        expect(
+            container.querySelector('[data-preview-sync-caret="true"]'),
+        ).not.toBeInTheDocument();
+    });
+
+    it("coalesces native caret requests to the latest target in an animation frame", async () => {
+        const frameCallbacks = new Map<number, FrameRequestCallback>();
+        let frameId = 0;
+        vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+            frameId += 1;
+            frameCallbacks.set(frameId, callback);
+            return frameId;
+        });
+        vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+            frameCallbacks.delete(id);
+        });
+
+        const compiler = createDefaultCompilerState();
+        const { rerender } = await renderPreviewAndGetCanvas(null, compiler);
+
+        const renderWithCaret = (caretUtf16Offset: number) =>
+            rerender(
+                <DocumentProvider>
+                    <FocusElement
+                        caretUtf16Offset={caretUtf16Offset}
+                        elementId="heading-1"
+                    />
+                    <div data-element-id="heading-1">
+                        <button type="button">Delete</button>
+                        <input aria-label="Heading editor" />
+                    </div>
+                    <Preview
+                        compiler={compiler}
+                        zoom={1}
+                        onZoomChange={() => undefined}
+                        zoomRenderDebounceMs={0}
+                        onExport={() => undefined}
+                    />
+                </DocumentProvider>,
+            );
+
+        renderWithCaret(1);
+        renderWithCaret(2);
+        renderWithCaret(3);
+
+        await waitFor(() => {
+            expect(frameCallbacks.size).toBeGreaterThan(0);
+        });
+
+        const callbacks = [...frameCallbacks.values()];
+        frameCallbacks.clear();
+        act(() => {
+            callbacks.forEach((callback) => callback(0));
+        });
+
+        await waitFor(() => {
+            expect(compilerClientMock.positionsForFocus).toHaveBeenCalledTimes(1);
+        });
+        expect(compilerClientMock.positionsForFocus).toHaveBeenCalledWith(
+            expect.objectContaining({ caretUtf16Offset: 3 }),
+            4,
+        );
+    });
     it("does not rasterize pages when previewRevision is null", async () => {
         render(
             <DocumentProvider>

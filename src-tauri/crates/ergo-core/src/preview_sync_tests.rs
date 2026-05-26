@@ -220,15 +220,25 @@ fn maps_preview_click_to_heading_element() {
         status.field_source_map.clone(),
     );
 
-    let positions = match sync.positions_for_element("heading-ñ", status.source_revision) {
+    let target = PreviewFocusTarget {
+        element_id: "heading-ñ".to_string(),
+        field_id: Some("heading-ñ:text".to_string()),
+        caret_utf16_offset: Some(0),
+        anchor_page_number: None,
+        source_revision: status.source_revision,
+    };
+    let positions = match sync.positions_for_focus(&target, status.source_revision) {
         PreviewElementPositionsResult::Matched { positions, .. } => positions,
         result => panic!("expected heading preview position, got {result:?}"),
     };
-    let first = positions.first().unwrap();
+    let first = positions
+        .iter()
+        .find(|position| position.caret_cue.is_some())
+        .expect("expected heading caret position");
     let result = sync.jump_from_click(
         first.page_number,
-        first.x_pt + 1.0,
-        first.y_pt - 1.0,
+        first.x_pt,
+        first.y_pt,
         status.source_revision,
     );
 
@@ -252,15 +262,25 @@ fn maps_preview_click_to_heading_field_target() {
         status.field_source_map.clone(),
     );
 
-    let positions = match sync.positions_for_element("heading-ñ", status.source_revision) {
+    let target = PreviewFocusTarget {
+        element_id: "heading-ñ".to_string(),
+        field_id: Some("heading-ñ:text".to_string()),
+        caret_utf16_offset: Some(0),
+        anchor_page_number: None,
+        source_revision: status.source_revision,
+    };
+    let positions = match sync.positions_for_focus(&target, status.source_revision) {
         PreviewElementPositionsResult::Matched { positions, .. } => positions,
         result => panic!("expected heading preview position, got {result:?}"),
     };
-    let first = positions.first().unwrap();
+    let first = positions
+        .iter()
+        .find(|position| position.caret_cue.is_some())
+        .expect("expected heading caret position");
     let result = sync.jump_from_click(
         first.page_number,
-        first.x_pt + 1.0,
-        first.y_pt - 1.0,
+        first.x_pt,
+        first.y_pt,
         status.source_revision,
     );
     let result_json = serde_json::to_value(result).unwrap();
@@ -478,11 +498,7 @@ fn returns_preview_positions_for_nested_template_input_focus_targets() {
         status.field_source_map.clone(),
     );
 
-    for field_id in [
-        "/authors/0/name",
-        "/authors/0/affiliations/0",
-        "/affiliations/0",
-    ] {
+    for field_id in ["/authors/0/name", "/affiliations/0"] {
         let result = sync.positions_for_focus(
             &PreviewFocusTarget {
                 element_id: "inputs".to_string(),
@@ -505,6 +521,88 @@ fn returns_preview_positions_for_nested_template_input_focus_targets() {
             "expected matched preview position for {field_id}, got {result:?}",
         );
     }
+}
+
+#[test]
+fn caret_specific_template_reference_fields_do_not_use_related_field_fallbacks() {
+    let vfs = Arc::new(VirtualFileSystem::new());
+    let session = DocumentSession::new(Arc::clone(&vfs));
+    let mut ast = preview_sync_document_ast();
+    ast.inputs.insert(
+        "affiliations".to_string(),
+        serde_json::json!(["Universidad Norte"]),
+    );
+    ast.inputs.insert(
+        "authors".to_string(),
+        serde_json::json!([
+            {
+                "name": "Ada Lovelace",
+                "affiliations": ["1"]
+            }
+        ]),
+    );
+    let status = session.sync_snapshot(ast).unwrap();
+    let sync = compile_preview(
+        Arc::clone(&vfs),
+        status.source_revision,
+        status.source_map.clone(),
+        status.field_source_map.clone(),
+    );
+
+    let result = sync.positions_for_focus(
+        &PreviewFocusTarget {
+            element_id: "inputs".to_string(),
+            field_id: Some("/authors/0/affiliations/0".to_string()),
+            caret_utf16_offset: Some(0),
+            anchor_page_number: None,
+            source_revision: status.source_revision,
+        },
+        status.source_revision,
+    );
+
+    assert!(
+        matches!(result, PreviewElementPositionsResult::NoMatch { .. }),
+        "expected no exact caret match for generated affiliation reference, got {result:?}",
+    );
+}
+
+#[test]
+fn stale_author_caret_does_not_fall_back_to_displayed_field_start() {
+    let vfs = Arc::new(VirtualFileSystem::new());
+    let session = DocumentSession::new(Arc::clone(&vfs));
+    let mut ast = preview_sync_document_ast();
+    ast.inputs.insert(
+        "authors".to_string(),
+        serde_json::json!([
+            {
+                "name": "",
+                "affiliations": []
+            }
+        ]),
+    );
+    let status = session.sync_snapshot(ast).unwrap();
+    let sync = compile_preview(
+        Arc::clone(&vfs),
+        status.source_revision,
+        status.source_map.clone(),
+        status.field_source_map.clone(),
+    );
+
+    let result = sync.positions_for_focus(
+        &PreviewFocusTarget {
+            element_id: "inputs".to_string(),
+            field_id: Some("/authors/0/name".to_string()),
+            caret_utf16_offset: Some(1),
+            anchor_page_number: None,
+            source_revision: status.source_revision,
+        },
+        status.source_revision,
+    );
+
+    assert!(
+        matches!(result, PreviewElementPositionsResult::NoMatch { .. }),
+        "expected no exact caret match for a caret outside the displayed author, got {result:?}",
+    );
 }
 
 #[test]
@@ -573,6 +671,77 @@ fn apa_author_and_affiliation_caret_positions_roundtrip_through_preview_click() 
                         && actual.caret_utf16_offset == target.caret_utf16_offset
             ),
             "expected APA preview click to roundtrip to {field_id}, got {jump:?}",
+        );
+    }
+}
+
+#[test]
+fn apa_author_caret_positions_roundtrip_at_every_utf16_boundary() {
+    let vfs = Arc::new(VirtualFileSystem::new());
+    let session = DocumentSession::new(Arc::clone(&vfs));
+    let mut ast = preview_sync_document_ast();
+    let author_name = "Ana García";
+    ast.inputs.insert(
+        "authors".to_string(),
+        serde_json::json!([
+            {
+                "name": author_name,
+                "affiliations": []
+            }
+        ]),
+    );
+    let status = session.sync_snapshot(ast).unwrap();
+    let sync = compile_preview(
+        Arc::clone(&vfs),
+        status.source_revision,
+        status.source_map.clone(),
+        status.field_source_map.clone(),
+    );
+
+    let mut caret_offsets = vec![0];
+    let mut utf16_offset = 0;
+    for character in author_name.chars() {
+        utf16_offset += character.len_utf16();
+        caret_offsets.push(utf16_offset);
+    }
+
+    for caret_utf16_offset in caret_offsets {
+        let target = PreviewFocusTarget {
+            element_id: "inputs".to_string(),
+            field_id: Some("/authors/0/name".to_string()),
+            caret_utf16_offset: Some(caret_utf16_offset),
+            anchor_page_number: None,
+            source_revision: status.source_revision,
+        };
+        let result = sync.positions_for_focus(&target, status.source_revision);
+        let position = match result {
+            PreviewElementPositionsResult::Matched { positions, .. } => positions
+                .into_iter()
+                .find(|position| position.caret_cue.is_some())
+                .unwrap_or_else(|| {
+                    panic!("expected author caret position for UTF-16 offset {caret_utf16_offset}")
+                }),
+            result => panic!(
+                "expected matched author caret position for UTF-16 offset {caret_utf16_offset}, got {result:?}"
+            ),
+        };
+
+        let jump = sync.jump_from_click(
+            position.page_number,
+            position.x_pt,
+            position.y_pt,
+            status.source_revision,
+        );
+
+        assert!(
+            matches!(
+                jump,
+                PreviewJumpResult::Field { target: ref actual, .. }
+                    if actual.element_id == target.element_id
+                        && actual.field_id == target.field_id
+                        && actual.caret_utf16_offset == target.caret_utf16_offset
+            ),
+            "expected author caret {caret_utf16_offset} to roundtrip, got {jump:?}",
         );
     }
 }

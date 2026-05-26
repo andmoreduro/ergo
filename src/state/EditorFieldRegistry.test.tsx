@@ -135,6 +135,42 @@ describe("EditorFieldRegistry", () => {
         });
     });
 
+    it("reports native caret movement on input before keyup", async () => {
+        const focusStates: DocumentFocusState[] = [];
+
+        render(
+            <FieldHarness>
+                <RegisteredInput />
+                <FocusStateProbe
+                    onFocusState={(focus) => focusStates.push(focus)}
+                />
+            </FieldHarness>,
+        );
+
+        const input = screen.getByLabelText("Heading text") as HTMLInputElement;
+        input.setSelectionRange(0, 0);
+        fireEvent.focus(input);
+        await waitFor(() => {
+            expect(focusStates.at(-1)).toMatchObject({
+                caretUtf16Offset: 0,
+                focusSource: "native",
+            });
+        });
+
+        input.value = "Hola X mundo";
+        input.setSelectionRange(6, 6);
+        fireEvent.input(input);
+
+        await waitFor(() => {
+            expect(focusStates.at(-1)).toMatchObject({
+                elementId: "heading-1",
+                fieldId: "heading-1:text",
+                caretUtf16Offset: 6,
+                focusSource: "native",
+            });
+        });
+    });
+
     it("does not report the previous native caret while applying preview focus", async () => {
         const focusStates: DocumentFocusState[] = [];
 

@@ -80,6 +80,28 @@ impl SourceBuilder {
         });
     }
 
+    pub(crate) fn push_escaped_generated_field_marker(
+        &mut self,
+        element_id: &str,
+        field_id: &str,
+        generated: &str,
+        fallback_caret_utf16_offset: usize,
+    ) {
+        let mut escaped = String::new();
+        for character in generated.chars() {
+            if should_escape_typst_text_character(character) {
+                escaped.push('\\');
+            }
+            escaped.push(character);
+        }
+        self.push_generated_field_marker(
+            element_id,
+            field_id,
+            &escaped,
+            fallback_caret_utf16_offset,
+        );
+    }
+
     pub(crate) fn into_absolute_field_ranges(
         self,
         section_id: &str,

@@ -70,6 +70,7 @@ export const EditorFieldRegistryProvider = ({
 export interface EditorFieldBinding<T extends EditorFieldElement> {
     ref: RefCallback<T>;
     onFocus: FocusEventHandler<T>;
+    onInput: (event: SyntheticEvent<T>) => void;
     onSelect: (event: SyntheticEvent<T>) => void;
     onKeyUp: KeyboardEventHandler<T>;
     onClick: MouseEventHandler<T>;
@@ -135,6 +136,11 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
         [updateNativeFocus],
     );
 
+    const onInput = useCallback(
+        (event: SyntheticEvent<T>) => updateNativeFocus(event.currentTarget),
+        [updateNativeFocus],
+    );
+
     const onKeyUp = useCallback<KeyboardEventHandler<T>>(
         (event) => updateNativeFocus(event.currentTarget),
         [updateNativeFocus],
@@ -188,6 +194,7 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
     return {
         ref,
         onFocus,
+        onInput,
         onSelect,
         onKeyUp,
         onClick,
