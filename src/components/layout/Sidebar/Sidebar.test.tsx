@@ -14,22 +14,23 @@ import { Sidebar } from "./Sidebar";
 import "@testing-library/jest-dom";
 
 const dispatchActionMock = vi.hoisted(() => vi.fn());
+const compilerClientMock = vi.hoisted(() => ({
+    renderResourcePage: vi.fn().mockResolvedValue({
+        pageIndex: 1,
+        width: 120,
+        height: 120,
+        pixels: new Uint8Array(120 * 120 * 4),
+        requestId: 1,
+    }),
+    writeFile: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("../../../actions/runtime", () => ({
     useActionDispatcher: () => dispatchActionMock,
 }));
 
 vi.mock("../../../workers/compilerClient", () => ({
-    CompilerClient: {
-        renderResourcePage: vi.fn().mockResolvedValue({
-            pageIndex: 1,
-            width: 2,
-            height: 2,
-            pixels: new Uint8Array([0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255]),
-            requestId: 1,
-        }),
-        writeFile: vi.fn().mockResolvedValue(undefined),
-    },
+    CompilerClient: compilerClientMock,
 }));
 
 const LoadDocument = ({ ast }: { ast: DocumentAST }) => {
@@ -70,6 +71,37 @@ const createDocumentWithHeadings = () => {
 describe("Sidebar outline", () => {
     beforeEach(() => {
         dispatchActionMock.mockClear();
+        compilerClientMock.renderResourcePage.mockClear();
+
+        vi.stubGlobal(
+            "ResizeObserver",
+            class {
+                observe() {}
+                disconnect() {}
+            },
+        );
+
+        vi.stubGlobal("devicePixelRatio", 1);
+        Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+            configurable: true,
+            value: 160,
+        });
+        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+            putImageData: () => {},
+        } as unknown as CanvasRenderingContext2D);
+
+        if (typeof global.ImageData === "undefined") {
+            (global as any).ImageData = class ImageData {
+                width: number;
+                height: number;
+                data: Uint8ClampedArray;
+                constructor(data: Uint8ClampedArray, width: number, height: number) {
+                    this.data = data;
+                    this.width = width;
+                    this.height = height;
+                }
+            };
+        }
     });
 
     it("renders compiled outline entries with page numbers", () => {
@@ -337,5 +369,127 @@ describe("Sidebar outline", () => {
             id: "resources::Open",
             payload: { resourceId: "equation-1" },
         });
+    });
+
+    it("does not rerender resource thumbnails for unrelated preview revisions", async () => {
+        const resources = {
+            groups: [
+                {
+                    kind: "equation",
+                    label: "Equations",
+                    entries: [
+                        {
+                            id: "equation-1",
+                            kind: "equation",
+                            label: "Equation",
+                            subtitle: "E = mc^2",
+                            reference_token: "@ergo-equation-1",
+                            source_element_id: "equation-1",
+                            asset_id: null,
+                            preview: {
+                                status: "ready" as const,
+                                path: null,
+                                page_number: 1,
+                                content: null,
+                                diagnostic: null,
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        const { rerender } = render(
+            <DocumentProvider>
+                <Sidebar
+                    previewRevision={4}
+                    mainPreviewPaintedRevision={4}
+                    resourcePreviewRevisions={{ "equation-1": 4 }}
+                    resources={resources}
+                    previewZoomRenderDebounceMs={0}
+                />
+            </DocumentProvider>,
+        );
+
+        await waitFor(() =>
+            expect(compilerClientMock.renderResourcePage).toHaveBeenCalledTimes(1),
+        );
+
+        rerender(
+            <DocumentProvider>
+                <Sidebar
+                    previewRevision={5}
+                    mainPreviewPaintedRevision={5}
+                    resourcePreviewRevisions={{ "equation-1": 4 }}
+                    resources={resources}
+                    previewZoomRenderDebounceMs={0}
+                />
+            </DocumentProvider>,
+        );
+
+        await waitFor(() =>
+            expect(compilerClientMock.renderResourcePage).toHaveBeenCalledTimes(1),
+        );
+    });
+
+    it("waits for the main preview paint before rendering a dirty resource thumbnail", async () => {
+        const resources = {
+            groups: [
+                {
+                    kind: "equation",
+                    label: "Equations",
+                    entries: [
+                        {
+                            id: "equation-1",
+                            kind: "equation",
+                            label: "Equation",
+                            subtitle: "E = mc^2",
+                            reference_token: "@ergo-equation-1",
+                            source_element_id: "equation-1",
+                            asset_id: null,
+                            preview: {
+                                status: "ready" as const,
+                                path: null,
+                                page_number: 1,
+                                content: null,
+                                diagnostic: null,
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        const { rerender } = render(
+            <DocumentProvider>
+                <Sidebar
+                    previewRevision={8}
+                    mainPreviewPaintedRevision={7}
+                    resourcePreviewRevisions={{ "equation-1": 8 }}
+                    resources={resources}
+                    previewZoomRenderDebounceMs={0}
+                />
+            </DocumentProvider>,
+        );
+
+        await waitFor(() =>
+            expect(compilerClientMock.renderResourcePage).not.toHaveBeenCalled(),
+        );
+
+        rerender(
+            <DocumentProvider>
+                <Sidebar
+                    previewRevision={8}
+                    mainPreviewPaintedRevision={8}
+                    resourcePreviewRevisions={{ "equation-1": 8 }}
+                    resources={resources}
+                    previewZoomRenderDebounceMs={0}
+                />
+            </DocumentProvider>,
+        );
+
+        await waitFor(() =>
+            expect(compilerClientMock.renderResourcePage).toHaveBeenCalledTimes(1),
+        );
     });
 });

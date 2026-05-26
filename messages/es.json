@@ -74,7 +74,7 @@
     "titlebar_close": "Cerrar",
     "workspace_form_editor": "Editor de formulario",
     "workspace_live_preview": "Vista previa en vivo",
-    "preview_telemetry": "Latencia: {latency}ms",
+    "preview_telemetry": "Latencia: {latency}ms · Cola: {queue}ms · Sinc.: {sync}ms · Compilar: {compile}ms · Pintar: {paint}ms",
     "workspace_preview_placeholder": "Marcador de posición de la vista previa...",
     "preview_required_fields_intro": "Completa todos los campos obligatorios para ver la vista previa:",
     "workspace_compiling": "Compilando...",

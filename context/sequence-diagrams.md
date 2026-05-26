@@ -38,6 +38,7 @@ sequenceDiagram
 - Resource preview VFS uses the same `lib.typ` and `#show: apply` as the main document; `resources.typ` adds preview page dimensions and `#set page` / `#show page` overrides for a white background without headers or numbering. Sidebar thumbnails cap height at 40vh.
 - Compiled outline comes from `document.introspector` on the paged document (headings with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries (e.g. bibliography title) scroll the preview to that page.
 - Canvas rasterizes only viewport pages; zoom debounces per `preview_zoom_render_debounce_ms`.
+- Resource thumbnails use resource-specific revisions and wait for the matching main preview revision to paint before rasterizing.
 - Preview does not shift layout with compile-status chrome while typing.
 - **Undo/redo:** apply the stored `inverseEvents` / `forwardEvents` locally, then sync and mirror the full ordered event list with sequential event IDs. Destructive inverses carry restore payloads (`RestoreElement`, `RestoreTableRow`, `RestoreTableColumn`).
 
@@ -95,8 +96,10 @@ sequenceDiagram
     UI->>API: open_project(path)
     API->>Archive: Unzip and mount VFS
     Archive-->>API: DocumentAST from document_state.json
-    API-->>UI: AST + project files
-    UI->>Worker: bootstrap(ast, vfs files, template packages)
+    API->>Session: sync_document_snapshot(ast)
+    Session-->>API: Generated Typst sources in backend VFS
+    API-->>UI: AST + bootstrap files (assets/packages)
+    UI->>Worker: bootstrap(ast, bootstrap files, template packages)
     UI->>API: sync_document_snapshot(ast)
 ```
 

@@ -104,6 +104,12 @@ export const Workspace = ({
                             outline={compiler.outline}
                             resources={compiler.resources}
                             previewRevision={compiler.previewRevision}
+                            resourcePreviewRevisions={
+                                compiler.resourcePreviewRevisions
+                            }
+                            mainPreviewPaintedRevision={
+                                compiler.mainPreviewPaintedRevision
+                            }
                             previewZoomRenderDebounceMs={
                                 previewZoomRenderDebounceMs
                             }

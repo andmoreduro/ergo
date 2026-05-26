@@ -1,6 +1,7 @@
 import { useRef, type RefObject } from "react";
 import type { DocumentOutline } from "../../../bindings/DocumentOutline";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
+import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
 import { useDocument } from "../../../state/DocumentContext";
 import { PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS } from "../../../preview/previewZoom";
 import { Accordion } from "../../molecules/Accordion/Accordion";
@@ -15,6 +16,8 @@ export interface SidebarProps {
     outline?: DocumentOutline | null;
     resources?: DocumentResources | null;
     previewRevision?: number | null;
+    resourcePreviewRevisions?: ResourcePreviewRevisions;
+    mainPreviewPaintedRevision?: number | null;
     previewScrollRef?: RefObject<HTMLElement | null>;
 }
 
@@ -22,6 +25,8 @@ export const Sidebar = ({
     outline = null,
     resources = null,
     previewRevision = null,
+    resourcePreviewRevisions = {},
+    mainPreviewPaintedRevision = null,
     previewZoomRenderDebounceMs = PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS,
     previewScrollRef: previewScrollRefFromParent,
 }: SidebarProps) => {
@@ -45,7 +50,8 @@ export const Sidebar = ({
             <Accordion title={m.sidebar_resources()} defaultOpen>
                 <SidebarResourcesPanel
                     resources={resources}
-                    revision={previewRevision ?? 0}
+                    resourcePreviewRevisions={resourcePreviewRevisions}
+                    mainPreviewPaintedRevision={mainPreviewPaintedRevision}
                     zoomRenderDebounceMs={previewZoomRenderDebounceMs}
                 />
             </Accordion>

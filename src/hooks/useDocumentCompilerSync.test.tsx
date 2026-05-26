@@ -48,7 +48,7 @@ const deferred = <T,>() => {
 
 const status = (sourceRevision: number) => ({
     dirtyElementIds: [],
-    dirtySectionIds: [],
+    dirtyResourceIds: [],
     fragmentCount: 0,
     layout: {
         documentStatePath: ".ergproj/document_state.json",
@@ -98,6 +98,9 @@ const Harness = ({ ast, events, ackDocumentEvents }: HarnessProps) => {
             setPreviewRevision: vi.fn(),
             setOutline: vi.fn(),
             setResources: vi.fn(),
+            setPendingPreviewTelemetry: vi.fn(),
+            updateResourcePreviewRevisions: vi.fn(),
+            resetPreviewRuntimeState: vi.fn(),
             previewRevisionRef: { current: null },
             latestRevisionRef: { current: null },
             latencyStartRef: { current: null },

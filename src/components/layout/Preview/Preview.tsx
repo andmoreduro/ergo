@@ -18,6 +18,7 @@ import {
 } from "../../../preview/canvasMetrics";
 import { useInViewport } from "../../../hooks/useInViewport";
 import { CompilerClient } from "../../../workers/compilerClient";
+import { isDebugMenuEnabled } from "../../../config/debug";
 import { useDocumentFocus } from "../../../state/DocumentContext";
 import type { useCompiler } from "../../../hooks/useCompiler";
 import type { PreviewElementPosition } from "../../../bindings/PreviewElementPosition";
@@ -59,22 +60,21 @@ export const Preview = ({
 }: PreviewProps) => {
     const { documentFocus } = useDocumentFocus();
     const dispatchAction = useActionDispatcher();
-    const { previewPages, error, sourceMap, previewRevision, latencyStartRef } = compiler;
-    const [latencyMs, setLatencyMs] = useState<number | null>(null);
+    const { previewPages, error, sourceMap, previewRevision } = compiler;
     const latencyRevisionRef = useRef<number | null>(null);
 
     const onFirstPagePainted = useCallback(() => {
-        const startedAt = latencyStartRef.current;
-        if (startedAt === null) {
+        if (previewRevision === null) {
             return;
         }
         if (latencyRevisionRef.current === previewRevision) {
             return;
         }
         latencyRevisionRef.current = previewRevision;
-        latencyStartRef.current = null;
-        setLatencyMs(Math.max(0, Math.round(Date.now() - startedAt)));
-    }, [latencyStartRef, previewRevision]);
+        compiler.markMainPreviewPainted(previewRevision);
+    }, [compiler, previewRevision]);
+    const showTelemetry =
+        isDebugMenuEnabled() && compiler.previewTelemetry !== null;
     const zoomPercent = formatPreviewZoomPercent(zoom);
     const canZoomOut = zoom > PREVIEW_ZOOM_MIN;
     const canZoomIn = zoom < PREVIEW_ZOOM_MAX;
@@ -188,9 +188,15 @@ export const Preview = ({
                         )}
                     </div>
                 </div>
-                {latencyMs !== null && (
+                {showTelemetry && compiler.previewTelemetry && (
                     <div className={styles.telemetryOverlay}>
-                        {m.preview_telemetry({ latency: latencyMs })}
+                        {m.preview_telemetry({
+                            latency: compiler.previewTelemetry.totalLatencyMs,
+                            queue: compiler.previewTelemetry.queuedToSyncMs,
+                            sync: compiler.previewTelemetry.workerSyncMs,
+                            compile: compiler.previewTelemetry.compileMs,
+                            paint: compiler.previewTelemetry.paintMs,
+                        })}
                     </div>
                 )}
             </div>

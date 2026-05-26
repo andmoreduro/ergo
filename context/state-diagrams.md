@@ -79,12 +79,14 @@ stateDiagram-v2
     Waiting --> Rasterizing : page enters viewport
     Rasterizing --> Showing : render_page complete
     Showing --> Rasterizing : scroll / zoom debounce
+    Showing --> Rasterizing : dirty resource thumbnail after main page paint
     Showing --> ResolvingSync : click or focus change
     ResolvingSync --> Showing : positions resolved
     Showing --> Empty : close project
 ```
 
 No visible compile-status UI may resize the preview pane during typing.
+Main preview pages have render priority for a revision. Resource thumbnails use resource-specific revisions and rasterize after the main preview has painted that resource revision.
 
 ## 5. Key Sequence Resolver Lifecycle
 
