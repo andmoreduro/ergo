@@ -64,12 +64,7 @@ pub fn open_project(
     path: String,
 ) -> Result<OpenProjectResult, String> {
     let ast = open_project_from_path(&state, path)?;
-    let files = state
-        .vfs
-        .get_all_files()
-        .into_iter()
-        .map(|(path, bytes)| ProjectFile { path, bytes })
-        .collect();
+    let files = project_files_for_worker_bootstrap(&state.vfs);
     Ok(OpenProjectResult { ast, files })
 }
 
@@ -113,10 +108,35 @@ pub fn open_project_from_path(
     Ok(ast)
 }
 
+fn project_files_for_worker_bootstrap(vfs: &crate::vfs::VirtualFileSystem) -> Vec<ProjectFile> {
+    let mut files = vfs
+        .get_all_files()
+        .into_iter()
+        .filter(|(path, _)| is_worker_bootstrap_file(path))
+        .map(|(path, bytes)| ProjectFile { path, bytes })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    files
+}
+
 fn should_pack_file(path: &str) -> bool {
-    !path.starts_with(".ergproj/preview/")
-        && !path.starts_with(".ergproj/exports/")
-        && !path.starts_with(".ergproj/resource-previews/")
+    is_archive_metadata_file(path) || is_worker_bootstrap_file(path)
+}
+
+fn is_archive_metadata_file(path: &str) -> bool {
+    matches!(
+        path,
+        ".ergproj/document_state.json"
+            | ".ergproj/dependency_manifest.json"
+            | ".ergproj/project_settings.json"
+            | ".ergproj/template.json"
+            | ".ergproj/source_map.json"
+            | ".ergproj/field_source_map.json"
+    )
+}
+
+fn is_worker_bootstrap_file(path: &str) -> bool {
+    path.starts_with("assets/") || path.starts_with("packages/")
 }
 
 #[tauri::command]
@@ -180,6 +200,9 @@ mod tests {
             .vfs
             .write_file(".ergproj/exports/document.pdf", vec![1, 2, 3]);
         state
+            .vfs
+            .write_source("resources.typ", "#pagebreak()".to_string());
+        state
             .document_session
             .sync_snapshot(basic_document_ast("Proyecto con ñ", "Resumen."))
             .unwrap();
@@ -190,10 +213,11 @@ mod tests {
         let names = zip_names(&path);
         fs::remove_file(&path).ok();
 
-        assert!(names.contains("main.typ"));
-        assert!(names.contains("elements/heading-1.typ"));
-
-        assert!(names.contains("references.bib"));
+        assert!(!names.contains("main.typ"));
+        assert!(!names.contains("lib.typ"));
+        assert!(!names.contains("elements/heading-1.typ"));
+        assert!(!names.contains("references.bib"));
+        assert!(!names.contains("resources.typ"));
         assert!(names.contains(".ergproj/document_state.json"));
         assert!(names.contains(".ergproj/dependency_manifest.json"));
         assert!(names.contains(".ergproj/project_settings.json"));
@@ -294,6 +318,57 @@ mod tests {
         assert_eq!(
             state.vfs.read_file("assets/image.png").unwrap(),
             vec![137, 80, 78, 71]
+        );
+    }
+
+    #[test]
+    fn open_project_returns_only_worker_bootstrap_files() {
+        let state = test_state();
+        let path = temp_project_path();
+        let file = File::create(&path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file(".ergproj/document_state.json", options)
+            .unwrap();
+        zip.write_all(
+            serde_json::to_string(&basic_document_ast("Proyecto con ñ", "Resumen."))
+                .unwrap()
+                .as_bytes(),
+        )
+        .unwrap();
+        zip.start_file(".ergproj/source_map.json", options).unwrap();
+        zip.write_all(b"[]").unwrap();
+        zip.start_file("main.typ", options).unwrap();
+        zip.write_all(b"= stale").unwrap();
+        zip.start_file("lib.typ", options).unwrap();
+        zip.write_all(b"#let stale = true").unwrap();
+        zip.start_file("elements/heading-1.typ", options).unwrap();
+        zip.write_all(b"= stale").unwrap();
+        zip.start_file("references.bib", options).unwrap();
+        zip.write_all(b"@book{stale}").unwrap();
+        zip.start_file("resources.typ", options).unwrap();
+        zip.write_all(b"#pagebreak()").unwrap();
+        zip.start_file("assets/image.png", options).unwrap();
+        zip.write_all(&[137, 80, 78, 71]).unwrap();
+        zip.start_file("packages/preview/pkg/1.0.0/lib.typ", options)
+            .unwrap();
+        zip.write_all(b"#let package = true").unwrap();
+        zip.finish().unwrap();
+
+        open_project_from_path(&state, &path).unwrap();
+        fs::remove_file(&path).ok();
+
+        let bootstrap_paths = project_files_for_worker_bootstrap(&state.vfs)
+            .into_iter()
+            .map(|file| file.path)
+            .collect::<HashSet<_>>();
+
+        assert_eq!(
+            bootstrap_paths,
+            HashSet::from([
+                "assets/image.png".to_string(),
+                "packages/preview/pkg/1.0.0/lib.typ".to_string(),
+            ]),
         );
     }
 
