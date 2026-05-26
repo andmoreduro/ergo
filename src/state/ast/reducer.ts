@@ -12,6 +12,7 @@ import {
 } from "./defaults";
 import { convertElement } from "./convertElement";
 import { trailingParagraphAction } from "../../editor/ensureTrailingParagraph";
+import { applyMinimumContentParagraph } from "./contentInvariant";
 
 type ParagraphElement = Extract<DocumentElement, { type: "Paragraph" }>;
 
@@ -120,7 +121,7 @@ const withTrailingParagraph = (ast: DocumentAST): DocumentAST => {
 export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
     switch (action.type) {
         case "LOAD_DOCUMENT":
-            return withTrailingParagraph(action.payload.ast);
+            return applyMinimumContentParagraph(action.payload.ast);
 
         case "UPDATE_PROJECT_TITLE":
             return {

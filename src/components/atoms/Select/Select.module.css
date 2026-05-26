@@ -8,6 +8,40 @@
   width: 100%;
 }
 
+.inline {
+  width: auto;
+}
+
+.inline .selectWrapper {
+  width: auto;
+}
+
+.inline .select {
+  width: auto;
+  min-width: 2.75rem;
+  padding: var(--space-1) var(--space-4) var(--space-1) var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  background-color: transparent;
+  border: none;
+  border-radius: var(--border-radius-sm);
+}
+
+.inline .select:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-tertiary);
+  border-color: transparent;
+}
+
+.inline .select:focus-visible {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-tertiary);
+  box-shadow: none;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
 .label {
   font-family: var(--font-family-sans);
   font-size: var(--font-size-sm);

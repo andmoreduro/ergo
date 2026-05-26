@@ -1,3 +1,4 @@
+import type React from "react";
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -19,7 +20,22 @@ vi.mock("../../../api/tauri", () => ({
 
 import { DocumentProvider } from "../../../state/DocumentContext";
 import { TemplateSpecProvider } from "../../../state/TemplateSpecContext";
+import { EditorNavigationProvider } from "../../../editor/EditorNavigationContext";
+import { useFieldNavigation } from "../../../editor/useFieldNavigation";
 import { ElementEditor } from "./ElementEditor";
+
+const EditorNavigationTestProvider = ({
+    children,
+}: {
+    children: React.ReactNode;
+}) => {
+    const navigation = useFieldNavigation(null, null);
+    return (
+        <EditorNavigationProvider value={navigation}>
+            {children}
+        </EditorNavigationProvider>
+    );
+};
 
 describe("ElementEditor", () => {
     it("uses localized accessible labels for table cells", () => {
@@ -34,9 +50,11 @@ describe("ElementEditor", () => {
 
         render(
             <DocumentProvider>
-                <TemplateSpecProvider templateId="versatile-apa">
-                    <ElementEditor element={table} />
-                </TemplateSpecProvider>
+                <EditorNavigationTestProvider>
+                    <TemplateSpecProvider templateId="versatile-apa">
+                        <ElementEditor element={table} />
+                    </TemplateSpecProvider>
+                </EditorNavigationTestProvider>
             </DocumentProvider>,
         );
 

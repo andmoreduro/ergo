@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import { useDocument, useDocumentAst } from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
@@ -143,6 +143,8 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
         );
     }, [templateSpec?.inputs]);
     const fieldNavigation = useFieldNavigation(templateSpec, resolvedVariantId);
+    const fieldNavigationRef = useRef(fieldNavigation);
+    fieldNavigationRef.current = fieldNavigation;
 
     const deleteFocusedElement = useCallback(() => {
         const elementId = documentFocus.elementId;
@@ -154,12 +156,8 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
             return false;
         }
 
-        dispatchAst({
-            type: "REMOVE_ELEMENT",
-            payload: { elementId },
-        });
-        return true;
-    }, [dispatchAst, documentFocus.elementId]);
+        return fieldNavigationRef.current.removeContentElement(state, elementId);
+    }, [documentFocus.elementId, state]);
 
     const editorHandlersWithDelete = useMemo<ActionHandlerMap>(
         () => ({

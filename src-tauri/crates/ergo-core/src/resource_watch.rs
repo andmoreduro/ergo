@@ -495,7 +495,7 @@ mod tests {
                 id: "fig-1".to_string(),
                 asset_id: Some("asset-fig".to_string()),
                 caption: "Caption".to_string(),
-                placement: "auto".to_string(),
+                placement: "here".to_string(),
                 content: DocumentElement::Paragraph(Paragraph {
                     id: "fig-body".to_string(),
                     content: vec![rich_text("")],

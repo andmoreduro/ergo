@@ -154,6 +154,11 @@ const AppShellContent = () => {
 
         const sectionId = contentSection.id;
         const id = createId();
+        const afterElementId =
+            documentFocus.elementId &&
+            documentFocus.elementId !== "project"
+                ? documentFocus.elementId
+                : undefined;
 
         const focusInsertedElement = (
             rustElementType:
@@ -185,12 +190,6 @@ const AppShellContent = () => {
             focusInsertedElement("Heading");
             return;
         }
-
-        const afterElementId =
-            documentFocus.elementId &&
-            documentFocus.elementId !== "project"
-                ? documentFocus.elementId
-                : undefined;
 
         if (elementType === "paragraph") {
             dispatch({

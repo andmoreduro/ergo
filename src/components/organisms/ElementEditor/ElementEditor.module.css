@@ -217,7 +217,14 @@
     font-style: italic;
 }
 
-.headingLevelRow {
-    max-width: 8rem;
-    margin-bottom: var(--space-1);
+.headingRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1);
+    width: 100%;
+}
+
+.headingText {
+    flex: 1;
+    min-width: 0;
 }

@@ -115,6 +115,7 @@ export const Preview = ({
             >
                 <button
                     type="button"
+                    tabIndex={-1}
                     className={toolbarStyles.toolbarButton}
                     title={m.menubar_zoom_out()}
                     aria-label={m.menubar_zoom_out()}
@@ -128,6 +129,7 @@ export const Preview = ({
                 </button>
                 <button
                     type="button"
+                    tabIndex={-1}
                     className={toolbarStyles.zoomLabel}
                     title={m.preview_zoom_reset()}
                     aria-label={m.preview_zoom_reset()}
@@ -137,6 +139,7 @@ export const Preview = ({
                 </button>
                 <button
                     type="button"
+                    tabIndex={-1}
                     className={toolbarStyles.toolbarButton}
                     title={m.menubar_zoom_in()}
                     aria-label={m.menubar_zoom_in()}

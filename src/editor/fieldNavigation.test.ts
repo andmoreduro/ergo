@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEditorFieldOrder } from "./fieldNavigation";
+import { buildEditorFieldOrder, findNextEditorField, findPreviousEditorField } from "./fieldNavigation";
 import { createDefaultDocumentAST } from "../state/ast/defaults";
 import {
     projectInputFieldId,
@@ -38,4 +38,17 @@ describe("buildEditorFieldOrder", () => {
             simpleListComposerFieldId("/keywords"),
         ]);
     });
+
+    it("walks fields forward and backward", () => {
+        const order = [
+            { elementId: "a", fieldId: "a:text" },
+            { elementId: "b", fieldId: "b:text" },
+        ];
+
+        expect(findNextEditorField(order, "a:text")?.fieldId).toBe("b:text");
+        expect(findNextEditorField(order, "b:text")).toBeNull();
+        expect(findPreviousEditorField(order, "b:text")?.fieldId).toBe("a:text");
+        expect(findPreviousEditorField(order, "a:text")).toBeNull();
+    });
+
 });

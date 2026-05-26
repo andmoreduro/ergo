@@ -23,6 +23,11 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
    */
   fullWidth?: boolean;
   /**
+   * Compact styling for inline toolbars (e.g. heading level beside body text).
+   * @default "default"
+   */
+  variant?: "default" | "inline";
+  /**
    * Array of options to render inside the select
    */
   options: SelectOption[];
@@ -35,6 +40,7 @@ export const Select = memo(forwardRef<HTMLSelectElement, SelectProps>(
       importance,
       error,
       fullWidth = false,
+      variant = "default",
       options,
       className = '',
       id,
@@ -49,6 +55,7 @@ export const Select = memo(forwardRef<HTMLSelectElement, SelectProps>(
     const containerClassNames = [
       styles.container,
       fullWidth ? styles.fullWidth : '',
+      variant === "inline" ? styles.inline : '',
       className,
     ]
       .filter(Boolean)

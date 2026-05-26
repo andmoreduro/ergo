@@ -662,12 +662,22 @@ fn sanitize_table_column_size(value: &str) -> String {
     }
 }
 
-fn sanitize_placement(value: &str) -> &'static str {
-    match value {
-        "top" => "top",
-        "bottom" => "bottom",
-        _ => "auto",
+fn typst_placement_arg(value: &str) -> Option<&'static str> {
+    match value.trim() {
+        "top" => Some("top"),
+        "bottom" => Some("bottom"),
+        "auto" => Some("auto"),
+        "here" | "" => None,
+        _ => None,
     }
+}
+
+fn table_placement_value(table: &crate::ast::Table) -> &str {
+    table
+        .extra_fields
+        .get("placement")
+        .and_then(|value| value.as_str())
+        .unwrap_or("here")
 }
 
 fn normalize_math_source(value: &str) -> String {
@@ -792,7 +802,7 @@ fn generate_element_typst(
     let mut builder = SourceBuilder::default();
     match element {
         DocumentElement::Heading(heading) => {
-            let level = heading.level.clamp(1, 5) as usize;
+            let level = heading.level.clamp(1, 6) as usize;
             let element_id = &heading.id;
             let field_id = rich_text_field_id(element_id);
             builder.push_literal(&format!("#heading(level: {}, [", level));
@@ -878,12 +888,16 @@ fn generate_element_typst(
 
             builder.push_literal("\n  )");
 
+            if let Some(placement) = typst_placement_arg(table_placement_value(table)) {
+                builder.push_literal(&format!(",\n  placement: {placement}"));
+            }
+
             push_override_extra_fields(
                 &mut builder,
                 &table.id,
                 table_override,
                 &table.extra_fields,
-                &[],
+                &["placement"],
             );
 
             builder.push_literal(&format!("\n) <{label}>\n\n"));
@@ -900,7 +914,7 @@ fn generate_element_typst(
                 );
             }
             let caption = figure.caption.trim();
-            let placement = sanitize_placement(&figure.placement);
+            let placement = typst_placement_arg(&figure.placement);
             let asset_path = figure
                 .asset_id
                 .as_ref()
@@ -960,7 +974,9 @@ fn generate_element_typst(
                     builder.push_literal("]");
                 }
 
-                builder.push_literal(&format!(",\n  placement: {placement}"));
+                if let Some(placement) = placement {
+                    builder.push_literal(&format!(",\n  placement: {placement}"));
+                }
                 push_override_extra_fields(
                     &mut builder,
                     &figure.id,
