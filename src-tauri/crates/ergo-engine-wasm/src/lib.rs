@@ -21,6 +21,8 @@ use engine::PageImage as EnginePageImage;
 pub struct WasmPageImage {
     width: u32,
     height: u32,
+    width_pt: f64,
+    height_pt: f64,
     pixels: Vec<u8>,
 }
 
@@ -29,6 +31,8 @@ impl From<EnginePageImage> for WasmPageImage {
         Self {
             width: image.width,
             height: image.height,
+            width_pt: image.width_pt,
+            height_pt: image.height_pt,
             pixels: image.pixels,
         }
     }
@@ -44,6 +48,16 @@ impl WasmPageImage {
     #[wasm_bindgen(getter)]
     pub fn height(&self) -> u32 {
         self.height
+    }
+
+    #[wasm_bindgen(getter, js_name = widthPt)]
+    pub fn width_pt(&self) -> f64 {
+        self.width_pt
+    }
+
+    #[wasm_bindgen(getter, js_name = heightPt)]
+    pub fn height_pt(&self) -> f64 {
+        self.height_pt
     }
 
     #[wasm_bindgen(getter)]

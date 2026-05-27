@@ -661,6 +661,32 @@ describe("Preview sync", () => {
         expect(compilerClientMock.renderPage).not.toHaveBeenCalled();
     });
 
+    it("sizes the page surface from Typst page metrics returned by render", async () => {
+        compilerClientMock.renderPage.mockResolvedValueOnce({
+            pageIndex: 0,
+            width: 100,
+            height: 50,
+            widthPt: 148,
+            heightPt: 210,
+            pixels: new Uint8Array(100 * 50 * 4),
+            requestId: 1,
+        });
+
+        const { container } = await renderPreviewAndGetCanvas();
+        const surface = container.querySelector<HTMLElement>(
+            '[data-preview-page-surface="true"]',
+        );
+
+        expect(Number.parseFloat(surface?.style.width ?? "0")).toBeCloseTo(
+            197.33,
+            1,
+        );
+        expect(Number.parseFloat(surface?.style.minHeight ?? "0")).toBeCloseTo(
+            280,
+            1,
+        );
+    });
+
     it("maps project input field ids to backend input source map targets", async () => {
         await renderPreviewAndGetCanvas(<FocusProjectInput fieldId="project-input-/abstract_text" />);
 
