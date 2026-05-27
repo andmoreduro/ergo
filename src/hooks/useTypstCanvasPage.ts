@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { RenderPagePayload } from "../workers/compilerProtocol";
 import {
     applyCanvasDisplaySize,
@@ -14,26 +14,6 @@ import {
 import { useDebouncedValue } from "./useDebouncedValue";
 
 type RenderPage = (requestId: number, pixelPerPt: number) => Promise<RenderPagePayload>;
-
-type RenderCanvasResult = {
-    requestId: number;
-    width: number;
-    height: number;
-    widthPt?: number;
-    heightPt?: number;
-};
-
-type OffscreenCanvasRenderer = {
-    attachCanvas: (canvasId: string, canvas: OffscreenCanvas) => Promise<void>;
-    detachCanvas: (canvasId: string) => Promise<void>;
-    renderPageToCanvas: (
-        canvasId: string,
-        requestId: number,
-        pixelPerPt: number,
-    ) => Promise<RenderCanvasResult>;
-};
-
-let nextCanvasId = 0;
 
 export function putTypstPageOnCanvas(
     canvas: HTMLCanvasElement,
@@ -67,28 +47,8 @@ export function putTypstPageOnCanvas(
     setCanvasPageMetrics(canvas, metrics);
 }
 
-function updateCanvasMetricsAfterWorkerPaint(
-    canvas: HTMLCanvasElement,
-    result: RenderCanvasResult,
-    metrics: CanvasPageMetrics,
-): void {
-    canvas.width = result.width;
-    canvas.height = result.height;
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.style.width = `${result.width / dpr}px`;
-    canvas.style.height = `${result.height / dpr}px`;
-    setCanvasPageMetrics(canvas, metrics);
-}
-
-function hasPixels(
-    result: RenderPagePayload | RenderCanvasResult,
-): result is RenderPagePayload {
-    return "pixels" in result;
-}
-
 function pageMetricsFromRenderResult(
-    result: RenderPagePayload | RenderCanvasResult,
+    result: RenderPagePayload,
     pixelPerPt: number,
 ): Pick<CanvasPageMetrics, "widthPt" | "heightPt"> {
     if (
@@ -124,18 +84,12 @@ export function useTypstCanvasPage(
         /** When set, scale pages to this container (resource thumbnails). */
         fitWidthPx?: number;
         fitHeightPx?: number;
-        offscreenRenderer?: OffscreenCanvasRenderer;
     },
 ) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const canvasIdRef = useRef<string | null>(null);
-    const offscreenAttachedRef = useRef(false);
-    const offscreenFailedRef = useRef(false);
     const renderRequestIdRef = useRef(0);
     const renderPageRef = useRef(renderPage);
     renderPageRef.current = renderPage;
-    const offscreenRendererRef = useRef(options?.offscreenRenderer);
-    offscreenRendererRef.current = options?.offscreenRenderer;
     const onRenderedRef = useRef(options?.onRendered);
     const onErrorRef = useRef(options?.onError);
     onRenderedRef.current = options?.onRendered;
@@ -155,35 +109,6 @@ export function useTypstCanvasPage(
     const layoutFitWidthPx = hasContainerFit ? (fitWidthPx ?? 0) : renderFitWidthPx;
     const layoutFitHeightPx = fitHeightPx ?? 0;
     const usesContainerFit = layoutFitWidthPx > 0;
-
-    const ensureOffscreenCanvas = useCallback(async () => {
-        const canvas = canvasRef.current;
-        const renderer = offscreenRendererRef.current;
-        if (
-            !canvas ||
-            !renderer ||
-            offscreenAttachedRef.current ||
-            offscreenFailedRef.current ||
-            typeof canvas.transferControlToOffscreen !== "function"
-        ) {
-            return offscreenAttachedRef.current ? canvasIdRef.current : null;
-        }
-
-        try {
-            const canvasId =
-                canvasIdRef.current ??
-                `typst-canvas-${String(nextCanvasId++).padStart(4, "0")}`;
-            canvasIdRef.current = canvasId;
-            const offscreen = canvas.transferControlToOffscreen();
-            await renderer.attachCanvas(canvasId, offscreen);
-            offscreenAttachedRef.current = true;
-            return canvasId;
-        } catch (error) {
-            offscreenFailedRef.current = true;
-            onErrorRef.current?.(error);
-            return null;
-        }
-    }, []);
 
     const containerFit = useMemo<ContainerFitPx | undefined>(
         () =>
@@ -247,44 +172,31 @@ export function useTypstCanvasPage(
         let cancelled = false;
 
         void (async () => {
-            const canvasId = await ensureOffscreenCanvas();
-            const renderer = offscreenRendererRef.current;
-            const result =
-                canvasId && renderer
-                    ? await renderer.renderPageToCanvas(
-                          canvasId,
-                          requestId,
-                          pixelPerPt,
-                      )
-                    : await renderPageRef.current(requestId, pixelPerPt);
+            const result = await renderPageRef.current(requestId, pixelPerPt);
 
-                if (cancelled || result.requestId !== renderRequestIdRef.current) {
-                    return;
-                }
+            if (cancelled || result.requestId !== renderRequestIdRef.current) {
+                return;
+            }
 
-                const { widthPt, heightPt } = pageMetricsFromRenderResult(
-                    result,
-                    pixelPerPt,
-                );
-                setPageWidthPt(widthPt);
-                setPageHeightPt(heightPt);
-                const metrics = {
-                    widthPt,
-                    heightPt,
-                    pixelPerPt,
-                };
-                if (hasPixels(result)) {
-                    putTypstPageOnCanvas(canvas, result, metrics);
-                } else {
-                    updateCanvasMetricsAfterWorkerPaint(canvas, result, metrics);
-                }
-                applyCanvasDisplaySize(
-                    canvas,
-                    zoom,
-                    metrics,
-                    containerFit,
-                );
-                onRenderedRef.current?.();
+            const { widthPt, heightPt } = pageMetricsFromRenderResult(
+                result,
+                pixelPerPt,
+            );
+            setPageWidthPt(widthPt);
+            setPageHeightPt(heightPt);
+            const metrics = {
+                widthPt,
+                heightPt,
+                pixelPerPt,
+            };
+            putTypstPageOnCanvas(canvas, result, metrics);
+            applyCanvasDisplaySize(
+                canvas,
+                zoom,
+                metrics,
+                containerFit,
+            );
+            onRenderedRef.current?.();
         })().catch((error) => {
             onErrorRef.current?.(error);
         });
@@ -294,7 +206,6 @@ export function useTypstCanvasPage(
         };
     }, [
         containerFit,
-        ensureOffscreenCanvas,
         hasContainerFit,
         isVisible,
         layoutFitWidthPx,
@@ -307,16 +218,6 @@ export function useTypstCanvasPage(
         setPageWidthPt(null);
         setPageHeightPt(null);
     }, [pageIndex, previewRevision]);
-
-    useEffect(() => {
-        return () => {
-            const canvasId = canvasIdRef.current;
-            const renderer = offscreenRendererRef.current;
-            if (canvasId && offscreenAttachedRef.current && renderer) {
-                void renderer.detachCanvas(canvasId);
-            }
-        };
-    }, []);
 
     return { canvasRef, canvasStyle };
 }

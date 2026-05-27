@@ -127,27 +127,6 @@ const ResourcePreviewCanvas = ({
         return () => observer.disconnect();
     }, []);
 
-    const offscreenRenderer = useMemo(
-        () => ({
-            attachCanvas: (canvasId: string, canvas: OffscreenCanvas) =>
-                CompilerClient.attachCanvas(canvasId, canvas),
-            detachCanvas: (canvasId: string) =>
-                CompilerClient.detachCanvas(canvasId),
-            renderPageToCanvas: (
-                canvasId: string,
-                requestId: number,
-                pixelPerPt: number,
-            ) =>
-                CompilerClient.renderResourcePageToCanvas(
-                    canvasId,
-                    pageNumber,
-                    pixelPerPt,
-                    requestId,
-                ),
-        }),
-        [pageNumber],
-    );
-
     const { canvasRef, canvasStyle } = useTypstCanvasPage(
         (requestId, pixelPerPt) =>
             CompilerClient.renderResourcePage(
@@ -163,7 +142,6 @@ const ResourcePreviewCanvas = ({
         {
             fitWidthPx: fitSize.width,
             fitHeightPx: fitSize.height,
-            offscreenRenderer,
         },
     );
 
