@@ -275,7 +275,7 @@ describe("Preview sync", () => {
         });
         expect(
             container.querySelector('[data-active-preview-page="true"]'),
-        ).toBeInTheDocument();
+        ).not.toBeInTheDocument();
     });
 
     it("renders a persistent caret cue when the backend returns click-equivalent caret geometry", async () => {

@@ -33,7 +33,7 @@ function CanvasProbe({
     isVisible?: boolean;
     offscreenRenderer?: OffscreenRenderer;
 }) {
-    const { canvasRef } = useTypstCanvasPage(
+    const { canvasRef, canvasStyle } = useTypstCanvasPage(
         renderPage,
         zoom,
         PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS,
@@ -44,7 +44,7 @@ function CanvasProbe({
             offscreenRenderer,
         },
     );
-    return <canvas ref={canvasRef} />;
+    return <canvas ref={canvasRef} style={canvasStyle} />;
 }
 
 describe("useTypstCanvasPage zoom performance", () => {
@@ -177,6 +177,53 @@ describe("useTypstCanvasPage zoom performance", () => {
         unmount();
 
         expect(offscreenRenderer.detachCanvas).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns live canvas display size while worker zoom rasterization is debounced", async () => {
+        Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
+            configurable: true,
+            value: vi.fn(() => ({} as OffscreenCanvas)),
+        });
+        const offscreenRenderer: OffscreenRenderer = {
+            attachCanvas: vi.fn(async () => undefined),
+            detachCanvas: vi.fn(async () => undefined),
+            renderPageToCanvas: vi.fn(async (_canvasId, requestId, pixelPerPt) => ({
+                requestId,
+                width: Math.round(100 * pixelPerPt),
+                height: Math.round(140 * pixelPerPt),
+            })),
+        };
+
+        const { rerender } = render(
+            <CanvasProbe
+                zoom={1}
+                renderPage={vi.fn()}
+                offscreenRenderer={offscreenRenderer}
+            />,
+        );
+
+        await act(async () => {
+            await Promise.resolve();
+            await vi.advanceTimersByTimeAsync(PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS);
+            await Promise.resolve();
+        });
+
+        const callsAfterMount = offscreenRenderer.renderPageToCanvas.mock.calls.length;
+        expect(callsAfterMount).toBe(1);
+
+        rerender(
+            <CanvasProbe
+                zoom={0.7}
+                renderPage={vi.fn()}
+                offscreenRenderer={offscreenRenderer}
+            />,
+        );
+
+        expect(offscreenRenderer.renderPageToCanvas).toHaveBeenCalledTimes(callsAfterMount);
+        const canvas = document.querySelector("canvas")!;
+        const cssWidth = Number.parseFloat(canvas.style.width);
+        expect(cssWidth).toBeGreaterThan(90);
+        expect(cssWidth).toBeLessThan(95);
     });
 
     it("debounces WASM rasterization while applying immediate CSS size", async () => {
