@@ -131,6 +131,38 @@ fn ast_with_custom_field(key: &str, value: serde_json::Value) -> DocumentAST {
 }
 
 #[test]
+fn project_paper_size_is_emitted_before_document_body() {
+    let template = custom_element_template(ParamSpec {
+        key: "body".to_string(),
+        param_type: ParamType::Content,
+        source: None,
+        label: None,
+        default: None,
+        required: false,
+        variants: None,
+    });
+    let mut ast = ast_with_custom_field("body", json!("Paper body"));
+    ast.metadata.project_settings.paper_size = Some("a4".to_string());
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+    let page_set = generated
+        .lib_source
+        .find("#set page(paper: \"a4\")")
+        .expect("project paper size should be emitted into lib.typ");
+    let body = generated
+        .lib_source
+        .find("#body")
+        .expect("lib.typ should contain body insertion");
+
+    assert!(
+        page_set < body,
+        "project page setting must precede body insertion:\n{}",
+        generated.lib_source
+    );
+}
+
+#[test]
 fn custom_elements_emit_once() {
     let template = custom_element_template(ParamSpec {
         key: "body".to_string(),
