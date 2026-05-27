@@ -83,7 +83,7 @@ flowchart TB
 
     Frontend -. "rendered in" .-> WebView
     DocState == "sync, compile, render, preview sync" ==> WorkerBridge
-    PreviewUI == "render_page, jump_from_click" ==> WorkerBridge
+    PreviewUI == "attach_canvas, render_page_to_canvas, jump_from_click" ==> WorkerBridge
     TauriClient == "actions, settings, archive mirror, write_bytes" ==> Handlers
     Archive <== "read/write zip" ==> ProjectFiles
     Settings <== "read/write JSON" ==> SettingsFile
@@ -97,7 +97,8 @@ flowchart TB
 
 ## Component Notes
 
-- **Preview Engine** wraps `DocumentSession`, `preview_pipeline`, dual `ErgoWorld` instances (main + resource previews with comemo), and `PreviewSyncState`.
+- **Preview Engine** wraps `DocumentSession`, `preview_pipeline`, dual `ErgoWorld` instances (main + resource previews with comemo), `PreviewSyncState`, and worker-owned preview canvas painting for transferred canvases.
+- **Canvas Preview** owns DOM layout, viewport observation, click coordinate conversion, and caret overlays; the worker owns bitmap painting for transferred canvases, with a main-thread canvas fallback.
 - **DocumentSession (mirror)** on the backend applies the same typed events as WASM so `save_project` packs a consistent VFS. It does not compile on the IPC sync path.
 - **Tauri API Client** imports IPC DTOs only from generated `src/bindings/`.
 - **Action Runtime** dispatches stable action IDs for commands and shortcuts; Rust owns catalog, keymap schema, sequence resolution, and context matching.
