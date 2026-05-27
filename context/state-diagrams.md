@@ -88,7 +88,7 @@ stateDiagram-v2
 ```
 
 No visible compile-status UI may resize the preview pane during typing.
-Worker-owned canvases paint pixels in the WASM worker and return page metrics to React. DOM canvas elements provide layout metrics for click mapping and caret overlays.
+Worker-owned canvases paint pixels in the WASM worker and return compiled Typst page-frame metrics to React. DOM canvas elements store those metrics for page layout, click mapping, and caret overlays.
 Main preview pages have render priority for a revision. Resource thumbnails use resource-specific revisions and rasterize after the main preview has painted that resource revision.
 
 ## 5. Key Sequence Resolver Lifecycle

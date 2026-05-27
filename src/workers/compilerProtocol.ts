@@ -68,6 +68,10 @@ export type RenderCanvasPayload = {
 
     height: number;
 
+    widthPt?: number;
+
+    heightPt?: number;
+
     requestId: number;
 
 };
@@ -185,6 +189,10 @@ export type RenderPagePayload = {
     width: number;
 
     height: number;
+
+    widthPt?: number;
+
+    heightPt?: number;
 
     pixels: Uint8Array;
 

@@ -47,10 +47,17 @@ describe("workerCanvasRegistry", () => {
         const result = paintPageImageToWorkerCanvas("page-1", {
             width: 2,
             height: 1,
+            widthPt: 1,
+            heightPt: 0.5,
             pixels: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]),
         });
 
-        expect(result).toEqual({ width: 2, height: 1 });
+        expect(result).toEqual({
+            width: 2,
+            height: 1,
+            widthPt: 1,
+            heightPt: 0.5,
+        });
         expect(canvas.width).toBe(2);
         expect(canvas.height).toBe(1);
         expect(canvas.context.imageSmoothingEnabled).toBe(false);

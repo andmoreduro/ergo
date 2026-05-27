@@ -123,6 +123,42 @@ describe("useTypstCanvasPage zoom performance", () => {
         expect(Number(canvas.dataset.pageHeightPt)).toBeCloseTo(140, 0);
     });
 
+    it("uses explicit Typst page metrics from worker paint results", async () => {
+        Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
+            configurable: true,
+            value: vi.fn(() => ({} as OffscreenCanvas)),
+        });
+        const offscreenRenderer: OffscreenRenderer = {
+            attachCanvas: vi.fn(async () => undefined),
+            detachCanvas: vi.fn(async () => undefined),
+            renderPageToCanvas: vi.fn(async (_canvasId, requestId, pixelPerPt) => ({
+                requestId,
+                width: Math.round(100 * pixelPerPt),
+                height: Math.round(140 * pixelPerPt),
+                widthPt: 148,
+                heightPt: 210,
+            }) as any),
+        };
+
+        render(
+            <CanvasProbe
+                zoom={1}
+                renderPage={vi.fn()}
+                offscreenRenderer={offscreenRenderer}
+            />,
+        );
+
+        await act(async () => {
+            await Promise.resolve();
+            await vi.advanceTimersByTimeAsync(PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS);
+            await Promise.resolve();
+        });
+
+        const canvas = document.querySelector("canvas")!;
+        expect(Number(canvas.dataset.pageWidthPt)).toBe(148);
+        expect(Number(canvas.dataset.pageHeightPt)).toBe(210);
+    });
+
     it("uses main-thread putImageData when OffscreenCanvas transfer is unavailable", async () => {
         const renderPage = vi.fn(
             async (requestId: number, pixelPerPt: number) => ({

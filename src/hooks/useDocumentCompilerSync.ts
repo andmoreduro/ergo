@@ -182,10 +182,12 @@ export function useDocumentCompilerSync({
                         console.error("Failed to load template package files:", loadError);
                     }
 
+                    const bootstrapStarted = nowMs();
                     const { status, result } = await CompilerClient.bootstrap({
                         ast: currentAst,
                         files: vfsFiles,
                     });
+                    const bootstrapFinished = nowMs();
 
                     if (
                         !isMountedRef.current ||
@@ -199,6 +201,19 @@ export function useDocumentCompilerSync({
                     latestRevisionRef.current = status.sourceRevision;
                     updateResourcePreviewRevisions(status);
                     setSourceMap(status.sourceMap);
+                    if (result.status === "succeeded") {
+                        setPendingPreviewTelemetry({
+                            revision: result.source_revision,
+                            startedAt: bootstrapStarted,
+                            compileResultAt: bootstrapFinished,
+                            queuedToSyncMs: 0,
+                            workerSyncMs: 0,
+                            compileMs: elapsedMs(
+                                bootstrapStarted,
+                                bootstrapFinished,
+                            ),
+                        });
+                    }
                     applyPreviewResult(result);
 
                     await mirrorToBackend(currentAst, [], true);

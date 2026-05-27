@@ -19,6 +19,8 @@ type RenderCanvasResult = {
     requestId: number;
     width: number;
     height: number;
+    widthPt?: number;
+    heightPt?: number;
 };
 
 type OffscreenCanvasRenderer = {
@@ -83,6 +85,30 @@ function hasPixels(
     result: RenderPagePayload | RenderCanvasResult,
 ): result is RenderPagePayload {
     return "pixels" in result;
+}
+
+function pageMetricsFromRenderResult(
+    result: RenderPagePayload | RenderCanvasResult,
+    pixelPerPt: number,
+): Pick<CanvasPageMetrics, "widthPt" | "heightPt"> {
+    if (
+        result.widthPt !== undefined &&
+        result.heightPt !== undefined &&
+        Number.isFinite(result.widthPt) &&
+        Number.isFinite(result.heightPt) &&
+        result.widthPt > 0 &&
+        result.heightPt > 0
+    ) {
+        return {
+            widthPt: result.widthPt,
+            heightPt: result.heightPt,
+        };
+    }
+
+    return {
+        widthPt: result.width / pixelPerPt,
+        heightPt: result.height / pixelPerPt,
+    };
 }
 
 export function useTypstCanvasPage(
@@ -236,8 +262,10 @@ export function useTypstCanvasPage(
                     return;
                 }
 
-                const widthPt = result.width / pixelPerPt;
-                const heightPt = result.height / pixelPerPt;
+                const { widthPt, heightPt } = pageMetricsFromRenderResult(
+                    result,
+                    pixelPerPt,
+                );
                 setPageWidthPt(widthPt);
                 setPageHeightPt(heightPt);
                 const metrics = {
