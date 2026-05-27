@@ -3,10 +3,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS } from "../preview/previewZoom";
 import { useTypstCanvasPage } from "./useTypstCanvasPage";
 
+type OffscreenRenderer = {
+    attachCanvas: (canvasId: string, canvas: OffscreenCanvas) => Promise<void>;
+    detachCanvas: (canvasId: string) => Promise<void>;
+    renderPageToCanvas: (
+        canvasId: string,
+        requestId: number,
+        pixelPerPt: number,
+    ) => Promise<{
+        requestId: number;
+        width: number;
+        height: number;
+    }>;
+};
+
 function CanvasProbe({
     zoom,
     renderPage,
     isVisible = true,
+    offscreenRenderer,
 }: {
     zoom: number;
     renderPage: (requestId: number, pixelPerPt: number) => Promise<{
@@ -16,6 +31,7 @@ function CanvasProbe({
         pixels: Uint8Array;
     }>;
     isVisible?: boolean;
+    offscreenRenderer?: OffscreenRenderer;
 }) {
     const { canvasRef } = useTypstCanvasPage(
         renderPage,
@@ -24,6 +40,9 @@ function CanvasProbe({
         isVisible,
         0,
         1,
+        {
+            offscreenRenderer,
+        },
     );
     return <canvas ref={canvasRef} />;
 }
@@ -56,6 +75,108 @@ describe("useTypstCanvasPage zoom performance", () => {
         vi.useRealTimers();
         vi.unstubAllGlobals();
         vi.restoreAllMocks();
+        delete (HTMLCanvasElement.prototype as Partial<{
+            transferControlToOffscreen: HTMLCanvasElement["transferControlToOffscreen"];
+        }>).transferControlToOffscreen;
+    });
+
+    it("transfers a visible canvas once and renders future frames in the worker", async () => {
+        const offscreen = {} as OffscreenCanvas;
+        const transferControlToOffscreen = vi.fn(() => offscreen);
+        Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
+            configurable: true,
+            value: transferControlToOffscreen,
+        });
+
+        const offscreenRenderer: OffscreenRenderer = {
+            attachCanvas: vi.fn(async () => undefined),
+            detachCanvas: vi.fn(async () => undefined),
+            renderPageToCanvas: vi.fn(async (_canvasId, requestId, pixelPerPt) => ({
+                requestId,
+                width: Math.round(100 * pixelPerPt),
+                height: Math.round(140 * pixelPerPt),
+            })),
+        };
+        const fallbackRenderPage = vi.fn();
+
+        render(
+            <CanvasProbe
+                zoom={1}
+                renderPage={fallbackRenderPage}
+                offscreenRenderer={offscreenRenderer}
+            />,
+        );
+
+        await act(async () => {
+            await Promise.resolve();
+            await vi.advanceTimersByTimeAsync(PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS);
+            await Promise.resolve();
+        });
+
+        expect(transferControlToOffscreen).toHaveBeenCalledTimes(1);
+        expect(offscreenRenderer.attachCanvas).toHaveBeenCalledTimes(1);
+        expect(offscreenRenderer.renderPageToCanvas).toHaveBeenCalledTimes(1);
+        expect(fallbackRenderPage).not.toHaveBeenCalled();
+
+        const canvas = document.querySelector("canvas")!;
+        expect(Number(canvas.dataset.pageWidthPt)).toBeCloseTo(100, 0);
+        expect(Number(canvas.dataset.pageHeightPt)).toBeCloseTo(140, 0);
+    });
+
+    it("uses main-thread putImageData when OffscreenCanvas transfer is unavailable", async () => {
+        const renderPage = vi.fn(
+            async (requestId: number, pixelPerPt: number) => ({
+                requestId,
+                width: Math.round(100 * pixelPerPt),
+                height: Math.round(140 * pixelPerPt),
+                pixels: new Uint8Array(
+                    Math.round(100 * pixelPerPt) * Math.round(140 * pixelPerPt) * 4,
+                ),
+            }),
+        );
+
+        render(<CanvasProbe zoom={1} renderPage={renderPage} />);
+
+        await act(async () => {
+            await Promise.resolve();
+            await vi.advanceTimersByTimeAsync(PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS);
+            await Promise.resolve();
+        });
+
+        expect(renderPage).toHaveBeenCalledTimes(1);
+        expect(HTMLCanvasElement.prototype.getContext).toHaveBeenCalled();
+    });
+
+    it("detaches transferred canvases on unmount", async () => {
+        Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
+            configurable: true,
+            value: vi.fn(() => ({} as OffscreenCanvas)),
+        });
+        const offscreenRenderer: OffscreenRenderer = {
+            attachCanvas: vi.fn(async () => undefined),
+            detachCanvas: vi.fn(async () => undefined),
+            renderPageToCanvas: vi.fn(async (_canvasId, requestId) => ({
+                requestId,
+                width: 100,
+                height: 140,
+            })),
+        };
+
+        const { unmount } = render(
+            <CanvasProbe
+                zoom={1}
+                renderPage={vi.fn()}
+                offscreenRenderer={offscreenRenderer}
+            />,
+        );
+
+        await act(async () => {
+            await Promise.resolve();
+            await vi.advanceTimersByTimeAsync(PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS);
+        });
+        unmount();
+
+        expect(offscreenRenderer.detachCanvas).toHaveBeenCalledTimes(1);
     });
 
     it("debounces WASM rasterization while applying immediate CSS size", async () => {
