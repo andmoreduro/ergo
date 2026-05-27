@@ -38,6 +38,40 @@ export type BootstrapPreviewResult = {
 
 };
 
+export type CanvasRenderPayload = {
+
+    canvasId: string;
+
+    requestId: number;
+
+    pixelPerPt: number;
+
+};
+
+export type RenderMainPageToCanvasPayload = CanvasRenderPayload & {
+
+    pageIndex: number;
+
+};
+
+export type RenderResourcePageToCanvasPayload = CanvasRenderPayload & {
+
+    pageNumber: number;
+
+};
+
+export type RenderCanvasPayload = {
+
+    pageIndex: number;
+
+    width: number;
+
+    height: number;
+
+    requestId: number;
+
+};
+
 
 
 export type WorkerRequest =
@@ -56,6 +90,16 @@ export type WorkerRequest =
 
     | {
 
+          type: "attach_canvas";
+
+          payload: { canvasId: string; canvas: OffscreenCanvas };
+
+      }
+
+    | { type: "detach_canvas"; payload: { canvasId: string } }
+
+    | {
+
           type: "render_page";
 
           payload: { pageIndex: number; pixelPerPt: number; requestId: number };
@@ -67,6 +111,22 @@ export type WorkerRequest =
           type: "render_resource_page";
 
           payload: { pageNumber: number; pixelPerPt: number; requestId: number };
+
+      }
+
+    | {
+
+          type: "render_page_to_canvas";
+
+          payload: RenderMainPageToCanvasPayload;
+
+      }
+
+    | {
+
+          type: "render_resource_page_to_canvas";
+
+          payload: RenderResourcePageToCanvasPayload;
 
       }
 
@@ -146,7 +206,13 @@ export type WorkerResponse =
 
     | { type: "bootstrap_done"; payload: BootstrapPreviewResult }
 
+    | { type: "canvas_attached" }
+
+    | { type: "canvas_detached" }
+
     | { type: "render_done"; payload: RenderPagePayload }
+
+    | { type: "canvas_render_done"; payload: RenderCanvasPayload }
 
     | { type: "write_file_done" }
 
