@@ -297,6 +297,7 @@ fn generate_element_typst(
                     body,
                     asset_path.as_deref(),
                     caption,
+                    placement,
                     &figure.extra_fields,
                     &["caption", "width"],
                 );

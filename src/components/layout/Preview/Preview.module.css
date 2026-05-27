@@ -69,10 +69,6 @@
     outline: 1px solid var(--color-border);
 }
 
-.pageSurface[data-active-preview-page="true"] {
-    outline: 2px solid var(--color-primary);
-}
-
 .syncCaret {
     position: absolute;
     width: 2px;
