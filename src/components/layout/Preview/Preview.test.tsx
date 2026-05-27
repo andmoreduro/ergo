@@ -1,6 +1,6 @@
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { useEffect, type ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
 import "@testing-library/jest-dom";
 
@@ -8,6 +8,9 @@ const compilerClientMock = vi.hoisted(() => ({
     syncSnapshot: vi.fn(),
     syncEvents: vi.fn(),
     compile: vi.fn(),
+    attachCanvas: vi.fn(),
+    detachCanvas: vi.fn(),
+    renderPageToCanvas: vi.fn(),
     renderPage: vi.fn(),
     writeFile: vi.fn(),
     writeSource: vi.fn(),
@@ -160,6 +163,14 @@ describe("Preview sync", () => {
             sourceRevision: 4,
             status: "noMatch",
         });
+        compilerClientMock.attachCanvas.mockResolvedValue(undefined);
+        compilerClientMock.detachCanvas.mockResolvedValue(undefined);
+        compilerClientMock.renderPageToCanvas.mockResolvedValue({
+            pageIndex: 0,
+            width: 100,
+            height: 50,
+            requestId: 1,
+        });
         compilerClientMock.renderPage.mockResolvedValue({
             pageIndex: 0,
             width: 100,
@@ -167,6 +178,12 @@ describe("Preview sync", () => {
             pixels: new Uint8Array(100 * 50 * 4),
             requestId: 1,
         });
+    });
+
+    afterEach(() => {
+        delete (HTMLCanvasElement.prototype as Partial<{
+            transferControlToOffscreen: HTMLCanvasElement["transferControlToOffscreen"];
+        }>).transferControlToOffscreen;
     });
 
     it("converts Canvas clicks to Typst preview coordinates and dispatches field focus", async () => {
@@ -618,6 +635,30 @@ describe("Preview sync", () => {
         await waitFor(() => {
             expect(compilerClientMock.renderPage).not.toHaveBeenCalled();
         });
+    });
+
+    it("renders preview pages through worker-owned OffscreenCanvas when transfer is available", async () => {
+        const offscreen = {} as OffscreenCanvas;
+        Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
+            configurable: true,
+            value: vi.fn(() => offscreen),
+        });
+
+        await renderPreviewAndGetCanvas();
+
+        await waitFor(() => {
+            expect(compilerClientMock.attachCanvas).toHaveBeenCalledWith(
+                expect.any(String),
+                offscreen,
+            );
+            expect(compilerClientMock.renderPageToCanvas).toHaveBeenCalledWith(
+                expect.any(String),
+                0,
+                expect.any(Number),
+                1,
+            );
+        });
+        expect(compilerClientMock.renderPage).not.toHaveBeenCalled();
     });
 
     it("maps project input field ids to backend input source map targets", async () => {

@@ -2,6 +2,7 @@ import {
     useCallback,
     useEffect,
     useLayoutEffect,
+    useMemo,
     useRef,
     useState,
     type Dispatch,
@@ -245,6 +246,26 @@ const PreviewPageCanvas = ({
         rootRef: previewScrollRef,
         forceVisible: needsCaretRender,
     });
+    const offscreenRenderer = useMemo(
+        () => ({
+            attachCanvas: (canvasId: string, canvas: OffscreenCanvas) =>
+                CompilerClient.attachCanvas(canvasId, canvas),
+            detachCanvas: (canvasId: string) =>
+                CompilerClient.detachCanvas(canvasId),
+            renderPageToCanvas: (
+                canvasId: string,
+                requestId: number,
+                pixelPerPt: number,
+            ) =>
+                CompilerClient.renderPageToCanvas(
+                    canvasId,
+                    pageIndex,
+                    pixelPerPt,
+                    requestId,
+                ),
+        }),
+        [pageIndex],
+    );
 
     const { canvasRef } = useTypstCanvasPage(
         (requestId, pixelPerPt) =>
@@ -272,6 +293,7 @@ const PreviewPageCanvas = ({
                 onPageRendered(pageNumber);
                 onPagePainted();
             },
+            offscreenRenderer,
         },
     );
 

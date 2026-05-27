@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useEffect } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocumentAST } from "../../../bindings/DocumentAST";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
 import {
@@ -15,6 +15,14 @@ import "@testing-library/jest-dom";
 
 const dispatchActionMock = vi.hoisted(() => vi.fn());
 const compilerClientMock = vi.hoisted(() => ({
+    attachCanvas: vi.fn().mockResolvedValue(undefined),
+    detachCanvas: vi.fn().mockResolvedValue(undefined),
+    renderResourcePageToCanvas: vi.fn().mockResolvedValue({
+        pageIndex: 1,
+        width: 120,
+        height: 120,
+        requestId: 1,
+    }),
     renderResourcePage: vi.fn().mockResolvedValue({
         pageIndex: 1,
         width: 120,
@@ -71,6 +79,9 @@ const createDocumentWithHeadings = () => {
 describe("Sidebar outline", () => {
     beforeEach(() => {
         dispatchActionMock.mockClear();
+        compilerClientMock.attachCanvas.mockClear();
+        compilerClientMock.detachCanvas.mockClear();
+        compilerClientMock.renderResourcePageToCanvas.mockClear();
         compilerClientMock.renderResourcePage.mockClear();
 
         vi.stubGlobal(
@@ -102,6 +113,12 @@ describe("Sidebar outline", () => {
                 }
             };
         }
+    });
+
+    afterEach(() => {
+        delete (HTMLCanvasElement.prototype as Partial<{
+            transferControlToOffscreen: HTMLCanvasElement["transferControlToOffscreen"];
+        }>).transferControlToOffscreen;
     });
 
     it("renders compiled outline entries with page numbers", () => {
@@ -491,5 +508,65 @@ describe("Sidebar outline", () => {
         await waitFor(() =>
             expect(compilerClientMock.renderResourcePage).toHaveBeenCalledTimes(1),
         );
+    });
+
+    it("renders resource thumbnails through worker-owned OffscreenCanvas when transfer is available", async () => {
+        const offscreen = {} as OffscreenCanvas;
+        Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
+            configurable: true,
+            value: vi.fn(() => offscreen),
+        });
+        const resources = {
+            groups: [
+                {
+                    kind: "equation",
+                    label: "Equations",
+                    entries: [
+                        {
+                            id: "equation-1",
+                            kind: "equation",
+                            label: "Equation",
+                            subtitle: "E = mc^2",
+                            reference_token: "@ergo-equation-1",
+                            source_element_id: "equation-1",
+                            asset_id: null,
+                            preview: {
+                                status: "ready" as const,
+                                path: null,
+                                page_number: 1,
+                                content: null,
+                                diagnostic: null,
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        render(
+            <DocumentProvider>
+                <Sidebar
+                    previewRevision={4}
+                    mainPreviewPaintedRevision={4}
+                    resourcePreviewRevisions={{ "equation-1": 4 }}
+                    resources={resources}
+                    previewZoomRenderDebounceMs={0}
+                />
+            </DocumentProvider>,
+        );
+
+        await waitFor(() => {
+            expect(compilerClientMock.attachCanvas).toHaveBeenCalledWith(
+                expect.any(String),
+                offscreen,
+            );
+            expect(compilerClientMock.renderResourcePageToCanvas).toHaveBeenCalledWith(
+                expect.any(String),
+                1,
+                expect.any(Number),
+                1,
+            );
+        });
+        expect(compilerClientMock.renderResourcePage).not.toHaveBeenCalled();
     });
 });
