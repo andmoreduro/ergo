@@ -56,6 +56,7 @@ pub(crate) fn push_custom_wrapper_figure_element(
     body: SourceBuilder,
     asset_path: Option<&str>,
     caption: &str,
+    placement: Option<&str>,
     extra_fields: &std::collections::HashMap<String, serde_json::Value>,
     skip_extra_keys: &[&str],
 ) {
@@ -91,6 +92,10 @@ pub(crate) fn push_custom_wrapper_figure_element(
         builder.push_literal(",\n  caption: [");
         builder.push_escaped_field(element_id, &figure_caption_field_id(element_id), caption, 0);
         builder.push_literal("]\n");
+    }
+
+    if let Some(placement) = placement {
+        builder.push_literal(&format!(",\n  placement: {placement}\n"));
     }
 
     push_override_extra_fields(

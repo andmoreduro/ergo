@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { RenderPagePayload } from "../workers/compilerProtocol";
 import {
     applyCanvasDisplaySize,
+    canvasDisplaySizeStyle,
     DEFAULT_PAGE_WIDTH_PT,
     pixelPerPtForContainerFit,
     pixelPerPtForScreenLayout,
@@ -175,8 +176,20 @@ export function useTypstCanvasPage(
               layoutPageHeightPt,
               containerFit,
               renderZoom,
-          )
+        )
         : pixelPerPtForScreenLayout(layoutPageWidthPt, renderZoom);
+    const canvasStyle =
+        pageWidthPt !== null && pageHeightPt !== null
+            ? canvasDisplaySizeStyle(
+                  zoom,
+                  {
+                      widthPt: pageWidthPt,
+                      heightPt: pageHeightPt,
+                      pixelPerPt,
+                  },
+                  containerFit,
+              )
+            : undefined;
 
     useLayoutEffect(() => {
         const canvas = canvasRef.current;
@@ -277,5 +290,5 @@ export function useTypstCanvasPage(
         };
     }, []);
 
-    return { canvasRef };
+    return { canvasRef, canvasStyle };
 }

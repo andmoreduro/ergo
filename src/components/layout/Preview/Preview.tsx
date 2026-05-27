@@ -267,7 +267,7 @@ const PreviewPageCanvas = ({
         [pageIndex],
     );
 
-    const { canvasRef } = useTypstCanvasPage(
+    const { canvasRef, canvasStyle } = useTypstCanvasPage(
         (requestId, pixelPerPt) =>
             CompilerClient.renderPage(pageIndex, pixelPerPt, requestId),
         zoom,
@@ -324,10 +324,12 @@ const PreviewPageCanvas = ({
             <div
                 className={styles.pageSurface}
                 data-preview-page-surface="true"
-                data-active-preview-page={caretStyle ? "true" : undefined}
                 style={surfaceLayout}
             >
-                <canvas ref={canvasRef} style={{ display: "block" }} />
+                <canvas
+                    ref={canvasRef}
+                    style={{ display: "block", ...canvasStyle }}
+                />
                 {caretStyle && (
                     <span
                         key={`${highlightedPosition?.sourceRevision}-${highlightedPosition?.elementId}-${highlightedPosition?.fieldId}-${highlightedPosition?.caretUtf16Offset}-${caretStyle.left}-${caretStyle.top}`}

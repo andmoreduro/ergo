@@ -61,6 +61,7 @@ pub(crate) fn generate_lib_typst(ast: &DocumentAST, template: &TemplateSpec) -> 
     push_package_imports(template, &mut builder);
     builder.push_literal("#let apply(body) = [\n");
     push_document_show_rule(ast, template, &fallbacks, &mut builder);
+    push_project_page_settings(ast, &mut builder);
     push_project_text_settings(ast, &mut builder);
     builder.push_literal("  #body\n");
     builder.push_literal("]\n");
@@ -128,6 +129,24 @@ fn push_document_show_rule(
         }
     }
     builder.push_literal("\n  )\n\n");
+}
+
+fn push_project_page_settings(ast: &DocumentAST, builder: &mut SourceBuilder) {
+    let Some(paper_size) = ast
+        .metadata
+        .project_settings
+        .paper_size
+        .as_deref()
+        .map(str::trim)
+        .filter(|paper_size| !paper_size.is_empty())
+    else {
+        return;
+    };
+
+    builder.push_literal(&format!(
+        "  #set page(paper: \"{}\")\n",
+        escape_typst_string(paper_size)
+    ));
 }
 
 fn push_project_text_settings(ast: &DocumentAST, builder: &mut SourceBuilder) {
