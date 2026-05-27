@@ -1,6 +1,6 @@
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { useEffect, type ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
 import "@testing-library/jest-dom";
 
@@ -114,7 +114,9 @@ const renderPreviewAndGetCanvas = async (
     );
     const canvas = await waitFor(() => {
         const el = renderResult.container.querySelector("canvas");
-        if (!el || el.width !== 100) throw new Error("Canvas rendering pending");
+        if (!el || !el.dataset.pageWidthPt) {
+            throw new Error("Canvas rendering pending");
+        }
         return el;
     });
     return { ...renderResult, canvas };
@@ -167,6 +169,12 @@ describe("Preview sync", () => {
             pixels: new Uint8Array(100 * 50 * 4),
             requestId: 1,
         });
+    });
+
+    afterEach(() => {
+        delete (HTMLCanvasElement.prototype as Partial<{
+            transferControlToOffscreen: HTMLCanvasElement["transferControlToOffscreen"];
+        }>).transferControlToOffscreen;
     });
 
     it("converts Canvas clicks to Typst preview coordinates and dispatches field focus", async () => {
@@ -258,7 +266,7 @@ describe("Preview sync", () => {
         });
         expect(
             container.querySelector('[data-active-preview-page="true"]'),
-        ).toBeInTheDocument();
+        ).not.toBeInTheDocument();
     });
 
     it("renders a persistent caret cue when the backend returns click-equivalent caret geometry", async () => {
@@ -618,6 +626,51 @@ describe("Preview sync", () => {
         await waitFor(() => {
             expect(compilerClientMock.renderPage).not.toHaveBeenCalled();
         });
+    });
+
+    it("renders preview pages from worker pixels even when canvas transfer is available", async () => {
+        const transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas));
+        Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
+            configurable: true,
+            value: transferControlToOffscreen,
+        });
+
+        await renderPreviewAndGetCanvas();
+
+        await waitFor(() => {
+            expect(compilerClientMock.renderPage).toHaveBeenCalledWith(
+                0,
+                expect.any(Number),
+                1,
+            );
+        });
+        expect(transferControlToOffscreen).not.toHaveBeenCalled();
+    });
+
+    it("sizes the page surface from Typst page metrics returned by render", async () => {
+        compilerClientMock.renderPage.mockResolvedValueOnce({
+            pageIndex: 0,
+            width: 100,
+            height: 50,
+            widthPt: 148,
+            heightPt: 210,
+            pixels: new Uint8Array(100 * 50 * 4),
+            requestId: 1,
+        });
+
+        const { container } = await renderPreviewAndGetCanvas();
+        const surface = container.querySelector<HTMLElement>(
+            '[data-preview-page-surface="true"]',
+        );
+
+        expect(Number.parseFloat(surface?.style.width ?? "0")).toBeCloseTo(
+            197.33,
+            1,
+        );
+        expect(Number.parseFloat(surface?.style.minHeight ?? "0")).toBeCloseTo(
+            280,
+            1,
+        );
     });
 
     it("maps project input field ids to backend input source map targets", async () => {

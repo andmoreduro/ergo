@@ -102,6 +102,23 @@ export type CanvasPageMetrics = {
     pixelPerPt: number;
 };
 
+export function canvasDisplaySizeStyle(
+    zoom: number,
+    metrics: CanvasPageMetrics,
+    fit?: number | ContainerFitPx,
+): { width: string; height: string } {
+    const { cssWidth, cssHeight } = displaySizeForContainerFit(
+        metrics.widthPt,
+        metrics.heightPt,
+        zoom,
+        fit,
+    );
+    return {
+        width: `${cssWidth}px`,
+        height: `${cssHeight}px`,
+    };
+}
+
 /** Resize canvas CSS from the last raster without re-invoking the compiler. */
 export function applyCanvasDisplaySize(
     canvas: HTMLCanvasElement,
@@ -109,14 +126,9 @@ export function applyCanvasDisplaySize(
     metrics: CanvasPageMetrics,
     fit?: number | ContainerFitPx,
 ): void {
-    const { cssWidth, cssHeight } = displaySizeForContainerFit(
-        metrics.widthPt,
-        metrics.heightPt,
-        zoom,
-        fit,
-    );
-    canvas.style.width = `${cssWidth}px`;
-    canvas.style.height = `${cssHeight}px`;
+    const style = canvasDisplaySizeStyle(zoom, metrics, fit);
+    canvas.style.width = style.width;
+    canvas.style.height = style.height;
 }
 
 export function setCanvasPageMetrics(

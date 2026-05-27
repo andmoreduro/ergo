@@ -127,7 +127,7 @@ const ResourcePreviewCanvas = ({
         return () => observer.disconnect();
     }, []);
 
-    const { canvasRef } = useTypstCanvasPage(
+    const { canvasRef, canvasStyle } = useTypstCanvasPage(
         (requestId, pixelPerPt) =>
             CompilerClient.renderResourcePage(
                 pageNumber,
@@ -148,7 +148,7 @@ const ResourcePreviewCanvas = ({
     return (
         <div ref={containerRef} className={styles.resourcePreview}>
             {fitSize.width > 0 ? (
-                <canvas ref={canvasRef} aria-hidden="true" />
+                <canvas ref={canvasRef} aria-hidden="true" style={canvasStyle} />
             ) : (
                 <span className={styles.resourcePreviewLoading} aria-hidden="true" />
             )}

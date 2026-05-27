@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { RenderPagePayload } from "../workers/compilerProtocol";
 import {
     applyCanvasDisplaySize,
+    canvasDisplaySizeStyle,
     DEFAULT_PAGE_WIDTH_PT,
     pixelPerPtForContainerFit,
     pixelPerPtForScreenLayout,
@@ -44,6 +45,30 @@ export function putTypstPageOnCanvas(
     );
     ctx.putImageData(imgData, 0, 0);
     setCanvasPageMetrics(canvas, metrics);
+}
+
+function pageMetricsFromRenderResult(
+    result: RenderPagePayload,
+    pixelPerPt: number,
+): Pick<CanvasPageMetrics, "widthPt" | "heightPt"> {
+    if (
+        result.widthPt !== undefined &&
+        result.heightPt !== undefined &&
+        Number.isFinite(result.widthPt) &&
+        Number.isFinite(result.heightPt) &&
+        result.widthPt > 0 &&
+        result.heightPt > 0
+    ) {
+        return {
+            widthPt: result.widthPt,
+            heightPt: result.heightPt,
+        };
+    }
+
+    return {
+        widthPt: result.width / pixelPerPt,
+        heightPt: result.height / pixelPerPt,
+    };
 }
 
 export function useTypstCanvasPage(
@@ -102,8 +127,20 @@ export function useTypstCanvasPage(
               layoutPageHeightPt,
               containerFit,
               renderZoom,
-          )
+        )
         : pixelPerPtForScreenLayout(layoutPageWidthPt, renderZoom);
+    const canvasStyle =
+        pageWidthPt !== null && pageHeightPt !== null
+            ? canvasDisplaySizeStyle(
+                  zoom,
+                  {
+                      widthPt: pageWidthPt,
+                      heightPt: pageHeightPt,
+                      pixelPerPt,
+                  },
+                  containerFit,
+              )
+            : undefined;
 
     useLayoutEffect(() => {
         const canvas = canvasRef.current;
@@ -134,36 +171,35 @@ export function useTypstCanvasPage(
 
         let cancelled = false;
 
-        void renderPageRef.current(requestId, pixelPerPt)
-            .then((result) => {
-                if (cancelled || result.requestId !== renderRequestIdRef.current) {
-                    return;
-                }
+        void (async () => {
+            const result = await renderPageRef.current(requestId, pixelPerPt);
 
-                const widthPt = result.width / pixelPerPt;
-                const heightPt = result.height / pixelPerPt;
-                setPageWidthPt(widthPt);
-                setPageHeightPt(heightPt);
-                putTypstPageOnCanvas(canvas, result, {
-                    widthPt,
-                    heightPt,
-                    pixelPerPt,
-                });
-                applyCanvasDisplaySize(
-                    canvas,
-                    zoom,
-                    {
-                        widthPt,
-                        heightPt,
-                        pixelPerPt,
-                    },
-                    containerFit,
-                );
-                onRenderedRef.current?.();
-            })
-            .catch((error) => {
-                onErrorRef.current?.(error);
-            });
+            if (cancelled || result.requestId !== renderRequestIdRef.current) {
+                return;
+            }
+
+            const { widthPt, heightPt } = pageMetricsFromRenderResult(
+                result,
+                pixelPerPt,
+            );
+            setPageWidthPt(widthPt);
+            setPageHeightPt(heightPt);
+            const metrics = {
+                widthPt,
+                heightPt,
+                pixelPerPt,
+            };
+            putTypstPageOnCanvas(canvas, result, metrics);
+            applyCanvasDisplaySize(
+                canvas,
+                zoom,
+                metrics,
+                containerFit,
+            );
+            onRenderedRef.current?.();
+        })().catch((error) => {
+            onErrorRef.current?.(error);
+        });
 
         return () => {
             cancelled = true;
@@ -183,5 +219,5 @@ export function useTypstCanvasPage(
         setPageHeightPt(null);
     }, [pageIndex, previewRevision]);
 
-    return { canvasRef };
+    return { canvasRef, canvasStyle };
 }
