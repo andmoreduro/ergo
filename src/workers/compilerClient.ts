@@ -8,7 +8,6 @@ import type { PreviewElementPositionsResult } from "../bindings/PreviewElementPo
 import type {
     BootstrapPreviewPayload,
     BootstrapPreviewResult,
-    RenderCanvasPayload,
     RenderPagePayload,
     VfsFileEntry,
 } from "./compilerProtocol";
@@ -60,53 +59,6 @@ export const CompilerClient = {
 
     async writeFiles(files: VfsFileEntry[]): Promise<void> {
         await callWorker({ type: "write_files", payload: files }, "write_files_done");
-    },
-
-    async attachCanvas(canvasId: string, canvas: OffscreenCanvas): Promise<void> {
-        await callWorker(
-            { type: "attach_canvas", payload: { canvasId, canvas } },
-            "canvas_attached",
-            [canvas],
-        );
-    },
-
-    async detachCanvas(canvasId: string): Promise<void> {
-        await callWorker(
-            { type: "detach_canvas", payload: { canvasId } },
-            "canvas_detached",
-        );
-    },
-
-    async renderPageToCanvas(
-        canvasId: string,
-        pageIndex: number,
-        pixelPerPt: number,
-        requestId: number,
-    ): Promise<RenderCanvasPayload> {
-        const reply = await callWorker(
-            {
-                type: "render_page_to_canvas",
-                payload: { canvasId, pageIndex, pixelPerPt, requestId },
-            },
-            "canvas_render_done",
-        );
-        return reply.payload;
-    },
-
-    async renderResourcePageToCanvas(
-        canvasId: string,
-        pageNumber: number,
-        pixelPerPt: number,
-        requestId: number,
-    ): Promise<RenderCanvasPayload> {
-        const reply = await callWorker(
-            {
-                type: "render_resource_page_to_canvas",
-                payload: { canvasId, pageNumber, pixelPerPt, requestId },
-            },
-            "canvas_render_done",
-        );
-        return reply.payload;
     },
 
     async renderPage(

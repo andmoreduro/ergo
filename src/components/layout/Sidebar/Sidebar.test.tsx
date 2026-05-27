@@ -15,14 +15,6 @@ import "@testing-library/jest-dom";
 
 const dispatchActionMock = vi.hoisted(() => vi.fn());
 const compilerClientMock = vi.hoisted(() => ({
-    attachCanvas: vi.fn().mockResolvedValue(undefined),
-    detachCanvas: vi.fn().mockResolvedValue(undefined),
-    renderResourcePageToCanvas: vi.fn().mockResolvedValue({
-        pageIndex: 1,
-        width: 120,
-        height: 120,
-        requestId: 1,
-    }),
     renderResourcePage: vi.fn().mockResolvedValue({
         pageIndex: 1,
         width: 120,
@@ -79,9 +71,6 @@ const createDocumentWithHeadings = () => {
 describe("Sidebar outline", () => {
     beforeEach(() => {
         dispatchActionMock.mockClear();
-        compilerClientMock.attachCanvas.mockClear();
-        compilerClientMock.detachCanvas.mockClear();
-        compilerClientMock.renderResourcePageToCanvas.mockClear();
         compilerClientMock.renderResourcePage.mockClear();
 
         vi.stubGlobal(
@@ -510,11 +499,11 @@ describe("Sidebar outline", () => {
         );
     });
 
-    it("renders resource thumbnails through worker-owned OffscreenCanvas when transfer is available", async () => {
-        const offscreen = {} as OffscreenCanvas;
+    it("renders resource thumbnails from worker pixels even when canvas transfer is available", async () => {
+        const transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas));
         Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
             configurable: true,
-            value: vi.fn(() => offscreen),
+            value: transferControlToOffscreen,
         });
         const resources = {
             groups: [
@@ -556,17 +545,12 @@ describe("Sidebar outline", () => {
         );
 
         await waitFor(() => {
-            expect(compilerClientMock.attachCanvas).toHaveBeenCalledWith(
-                expect.any(String),
-                offscreen,
-            );
-            expect(compilerClientMock.renderResourcePageToCanvas).toHaveBeenCalledWith(
-                expect.any(String),
+            expect(compilerClientMock.renderResourcePage).toHaveBeenCalledWith(
                 1,
                 expect.any(Number),
                 1,
             );
         });
-        expect(compilerClientMock.renderResourcePage).not.toHaveBeenCalled();
+        expect(transferControlToOffscreen).not.toHaveBeenCalled();
     });
 });
