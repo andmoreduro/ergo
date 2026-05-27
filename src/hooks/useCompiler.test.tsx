@@ -1,4 +1,4 @@
-import { render, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import { createDefaultDocumentAST } from "../state/ast/defaults";
@@ -223,6 +223,40 @@ describe("useCompiler source syncing", () => {
             expect(result.current.latencyStartRef.current).toBe(editTimestamp);
         });
 
+        unmount();
+    });
+
+    it("publishes initial preview telemetry after bootstrap page paint", async () => {
+        const ast = createDocumentWithTitle("Test");
+        const nowSpy = vi
+            .spyOn(Date, "now")
+            .mockReturnValueOnce(1_000)
+            .mockReturnValueOnce(1_030)
+            .mockReturnValue(1_040);
+
+        const { result, unmount } = renderHook(() =>
+            useCompiler(ast, [], 1, undefined, 0),
+        );
+
+        await waitFor(() => {
+            expect(result.current.previewRevision).toBe(1);
+        });
+
+        act(() => {
+            result.current.markMainPreviewPainted(1);
+        });
+
+        await waitFor(() => {
+            expect(result.current.previewTelemetry).toEqual({
+                totalLatencyMs: 40,
+                queuedToSyncMs: 0,
+                workerSyncMs: 0,
+                compileMs: 30,
+                paintMs: 10,
+            });
+        });
+
+        nowSpy.mockRestore();
         unmount();
     });
 

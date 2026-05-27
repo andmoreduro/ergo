@@ -1,6 +1,8 @@
 type PageImageLike = {
     width: number;
     height: number;
+    widthPt?: number;
+    heightPt?: number;
     pixels: Uint8Array;
 };
 
@@ -31,7 +33,7 @@ export function detachWorkerCanvas(canvasId: string): void {
 export function paintPageImageToWorkerCanvas(
     canvasId: string,
     pageImage: PageImageLike,
-): { width: number; height: number } {
+): { width: number; height: number; widthPt?: number; heightPt?: number } {
     const entry = workerCanvases.get(canvasId);
     if (!entry) {
         throw new Error(`No worker canvas attached for ${canvasId}`);
@@ -54,7 +56,12 @@ export function paintPageImageToWorkerCanvas(
         0,
     );
 
-    return { width: pageImage.width, height: pageImage.height };
+    return {
+        width: pageImage.width,
+        height: pageImage.height,
+        widthPt: pageImage.widthPt,
+        heightPt: pageImage.heightPt,
+    };
 }
 
 export function resetWorkerCanvasRegistryForTests(): void {
