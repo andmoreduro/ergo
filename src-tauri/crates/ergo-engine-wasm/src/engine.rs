@@ -91,6 +91,8 @@ pub struct VfsFileEntry {
 pub struct PageImage {
     pub width: u32,
     pub height: u32,
+    pub width_pt: f64,
+    pub height_pt: f64,
     pub pixels: Vec<u8>,
 }
 
@@ -303,11 +305,14 @@ impl ErgoPreviewEngine {
             .get(page_index)
             .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
 
+        let size = page.frame.size();
         let pixmap = typst_render::render(page, pixel_per_pt);
 
         Ok(PageImage {
             width: pixmap.width(),
             height: pixmap.height(),
+            width_pt: size.x.to_pt(),
+            height_pt: size.y.to_pt(),
             pixels: pixmap.data().to_vec(),
         })
     }
@@ -384,5 +389,47 @@ impl ErgoPreviewEngine {
     pub fn export_all_svg(&mut self) -> Result<Vec<String>, String> {
         let document = self.compiled_document()?;
         Ok(ergo_core::compile_artifacts::render_svgs(document))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ergo_core::test_fixtures::basic_document_ast;
+
+    #[test]
+    fn render_page_uses_project_paper_size_for_page_frame() {
+        let mut ast = basic_document_ast("A5 page", "");
+        ast.metadata.project_settings.paper_size = Some("a5".to_string());
+
+        let mut engine = ErgoPreviewEngine::new();
+        engine.sync_snapshot(ast).expect("snapshot sync should succeed");
+        let result = engine.compile_preview();
+        assert_eq!(result.status, CompilationStatus::Succeeded);
+
+        let image = engine
+            .render_page(0, 1.0)
+            .expect("compiled page should render");
+
+        assert!(
+            (410.0..=430.0).contains(&image.width_pt),
+            "A5 width should be about 420pt, got {}",
+            image.width_pt
+        );
+        assert!(
+            (585.0..=605.0).contains(&image.height_pt),
+            "A5 height should be about 595pt, got {}",
+            image.height_pt
+        );
+        assert!(
+            (410..=430).contains(&image.width),
+            "A5 width should be about 420pt, got {}",
+            image.width
+        );
+        assert!(
+            (585..=605).contains(&image.height),
+            "A5 height should be about 595pt, got {}",
+            image.height
+        );
     }
 }

@@ -29,6 +29,8 @@ sequenceDiagram
     API->>Session: apply_event on backend session
     API-->>State: Mirror accepted
     Preview->>Worker: render_page for viewport pages
+    Worker-->>Preview: Page pixels + metrics
+    Preview->>Preview: putImageData into DOM canvas
     Preview-->>User: Canvas preview update
 ```
 
@@ -37,6 +39,7 @@ sequenceDiagram
 - Main preview and resource previews compile in WASM via `preview_pipeline`.
 - Resource preview VFS uses the same `lib.typ` and `#show: apply` as the main document; `resources.typ` adds preview page dimensions and `#set page` / `#show page` overrides for a white background without headers or numbering. Sidebar thumbnails cap height at 40vh.
 - Compiled outline comes from `document.introspector` on the paged document (headings with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries (e.g. bibliography title) scroll the preview to that page.
+- Preview canvases use `render_page` / `render_resource_page`; the worker returns RGBA pixels and compiled page-frame metrics, and React paints DOM canvases with `putImageData`.
 - Canvas rasterizes only viewport pages; zoom debounces per `preview_zoom_render_debounce_ms`.
 - Resource thumbnails use resource-specific revisions and wait for the matching main preview revision to paint before rasterizing.
 - Preview does not shift layout with compile-status chrome while typing.

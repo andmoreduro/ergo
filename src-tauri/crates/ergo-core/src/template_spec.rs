@@ -691,10 +691,13 @@ mod tests {
         assert_eq!(spec.sections[0].kind, SectionKind::FunctionCall);
         assert_eq!(spec.sections[0].function.as_deref(), Some("title-page"));
         assert_eq!(spec.sections[2].kind, SectionKind::Literal);
-        assert_eq!(
-            spec.sections[2].source.as_deref(),
-            Some("#outline()\n#pagebreak()\n")
-        );
+        let outline_source = spec.sections[2]
+            .source
+            .as_deref()
+            .expect("front matter outline literal");
+        assert!(outline_source.starts_with("#outline()\n#pagebreak()\n"));
+        assert!(outline_source.contains("figure.where(kind: table)"));
+        assert!(outline_source.contains("appendix-outline"));
         assert_eq!(spec.sections[3].kind, SectionKind::Content);
         assert_eq!(spec.sections[4].kind, SectionKind::Bibliography);
         assert_eq!(spec.sections[5].kind, SectionKind::Appendix);

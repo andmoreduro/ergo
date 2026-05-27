@@ -145,6 +145,7 @@ export async function callWorkerOn<T extends WorkerReply["type"]>(
     worker: Worker,
     request: WorkerRequest,
     expected: T,
+    transfer?: Transferable[],
 ): Promise<Extract<WorkerReply, { type: T }>> {
     const id = nextMessageId++;
 
@@ -163,14 +164,15 @@ export async function callWorkerOn<T extends WorkerReply["type"]>(
         });
 
         const message: WorkerMessage = { ...request, id };
-        worker.postMessage(message);
+        worker.postMessage(message, transfer ?? []);
     });
 }
 
 export async function callWorker<T extends WorkerReply["type"]>(
     request: WorkerRequest,
     expected: T,
+    transfer?: Transferable[],
 ): Promise<Extract<WorkerReply, { type: T }>> {
     const worker = await getWorker();
-    return callWorkerOn(worker, request, expected);
+    return callWorkerOn(worker, request, expected, transfer);
 }
