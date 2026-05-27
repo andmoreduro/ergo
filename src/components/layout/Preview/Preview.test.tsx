@@ -8,9 +8,6 @@ const compilerClientMock = vi.hoisted(() => ({
     syncSnapshot: vi.fn(),
     syncEvents: vi.fn(),
     compile: vi.fn(),
-    attachCanvas: vi.fn(),
-    detachCanvas: vi.fn(),
-    renderPageToCanvas: vi.fn(),
     renderPage: vi.fn(),
     writeFile: vi.fn(),
     writeSource: vi.fn(),
@@ -117,7 +114,9 @@ const renderPreviewAndGetCanvas = async (
     );
     const canvas = await waitFor(() => {
         const el = renderResult.container.querySelector("canvas");
-        if (!el || el.width !== 100) throw new Error("Canvas rendering pending");
+        if (!el || !el.dataset.pageWidthPt) {
+            throw new Error("Canvas rendering pending");
+        }
         return el;
     });
     return { ...renderResult, canvas };
@@ -162,14 +161,6 @@ describe("Preview sync", () => {
             positions: [],
             sourceRevision: 4,
             status: "noMatch",
-        });
-        compilerClientMock.attachCanvas.mockResolvedValue(undefined);
-        compilerClientMock.detachCanvas.mockResolvedValue(undefined);
-        compilerClientMock.renderPageToCanvas.mockResolvedValue({
-            pageIndex: 0,
-            width: 100,
-            height: 50,
-            requestId: 1,
         });
         compilerClientMock.renderPage.mockResolvedValue({
             pageIndex: 0,
@@ -637,28 +628,23 @@ describe("Preview sync", () => {
         });
     });
 
-    it("renders preview pages through worker-owned OffscreenCanvas when transfer is available", async () => {
-        const offscreen = {} as OffscreenCanvas;
+    it("renders preview pages from worker pixels even when canvas transfer is available", async () => {
+        const transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas));
         Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
             configurable: true,
-            value: vi.fn(() => offscreen),
+            value: transferControlToOffscreen,
         });
 
         await renderPreviewAndGetCanvas();
 
         await waitFor(() => {
-            expect(compilerClientMock.attachCanvas).toHaveBeenCalledWith(
-                expect.any(String),
-                offscreen,
-            );
-            expect(compilerClientMock.renderPageToCanvas).toHaveBeenCalledWith(
-                expect.any(String),
+            expect(compilerClientMock.renderPage).toHaveBeenCalledWith(
                 0,
                 expect.any(Number),
                 1,
             );
         });
-        expect(compilerClientMock.renderPage).not.toHaveBeenCalled();
+        expect(transferControlToOffscreen).not.toHaveBeenCalled();
     });
 
     it("sizes the page surface from Typst page metrics returned by render", async () => {

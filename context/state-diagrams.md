@@ -76,10 +76,8 @@ stateDiagram-v2
 
     [*] --> Empty
     Empty --> Waiting : project active
-    Waiting --> CanvasAttached : canvas transfer available
-    Waiting --> Rasterizing : page enters viewport with main-thread fallback
-    CanvasAttached --> Rasterizing : page enters viewport
-    Rasterizing --> Showing : canvas paint complete
+    Waiting --> Rasterizing : page enters viewport
+    Rasterizing --> Showing : worker pixels painted to DOM canvas
     Showing --> Rasterizing : scroll / zoom debounce
     Showing --> Rasterizing : dirty resource thumbnail after main page paint
     Showing --> ResolvingSync : click or focus change
@@ -88,7 +86,7 @@ stateDiagram-v2
 ```
 
 No visible compile-status UI may resize the preview pane during typing.
-Worker-owned canvases paint pixels in the WASM worker and return compiled Typst page-frame metrics to React. DOM canvas elements store those metrics for page layout, click mapping, and caret overlays.
+The WASM worker rasterizes page images and returns RGBA pixels plus compiled Typst page-frame metrics to React. React paints the pixels into DOM canvas elements and stores the metrics for page layout, click mapping, and caret overlays.
 Main preview pages have render priority for a revision. Resource thumbnails use resource-specific revisions and rasterize after the main preview has painted that resource revision.
 
 ## 5. Key Sequence Resolver Lifecycle

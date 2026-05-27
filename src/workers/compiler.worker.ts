@@ -1,10 +1,5 @@
 import init, { ErgoWasmCompiler, append_font_buffers } from "../wasm-compiler/ergo_engine_wasm.js";
 import type { WorkerMessage, WorkerReply } from "./compilerProtocol";
-import {
-    attachWorkerCanvas,
-    detachWorkerCanvas,
-    paintPageImageToWorkerCanvas,
-} from "./workerCanvasRegistry";
 
 let compiler: ErgoWasmCompiler | null = null;
 let initialized = false;
@@ -77,44 +72,6 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                     })),
                 });
                 reply({ type: "bootstrap_done", payload: bootstrapResult, id });
-                break;
-            }
-            case "attach_canvas": {
-                attachWorkerCanvas(message.payload.canvasId, message.payload.canvas);
-                reply({ type: "canvas_attached", id });
-                break;
-            }
-            case "detach_canvas": {
-                detachWorkerCanvas(message.payload.canvasId);
-                reply({ type: "canvas_detached", id });
-                break;
-            }
-            case "render_page_to_canvas": {
-                if (!compiler) return;
-                const { canvasId, pageIndex, pixelPerPt, requestId } = message.payload;
-                const pageImage = compiler.render_page(pageIndex, pixelPerPt);
-                const painted = paintPageImageToWorkerCanvas(canvasId, pageImage);
-                reply({
-                    type: "canvas_render_done",
-                    payload: { pageIndex, ...painted, requestId },
-                    id,
-                });
-                break;
-            }
-            case "render_resource_page_to_canvas": {
-                if (!compiler) return;
-                const { canvasId, pageNumber, pixelPerPt, requestId } =
-                    message.payload;
-                const pageImage = compiler.render_resource_page(
-                    pageNumber,
-                    pixelPerPt,
-                );
-                const painted = paintPageImageToWorkerCanvas(canvasId, pageImage);
-                reply({
-                    type: "canvas_render_done",
-                    payload: { pageIndex: pageNumber, ...painted, requestId },
-                    id,
-                });
                 break;
             }
             case "render_page": {
