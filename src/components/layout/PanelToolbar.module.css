@@ -4,10 +4,10 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    height: 32px;
-    min-height: 32px;
+    height: var(--size-chrome);
+    min-height: var(--size-chrome);
     padding: 0 var(--space-2);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: var(--border-width-sm) solid var(--color-border);
     background-color: var(--color-bg-secondary);
     overflow-x: auto;
     overflow-y: hidden;
@@ -28,7 +28,7 @@
     align-items: center;
     gap: var(--space-1);
     padding-right: var(--space-2);
-    border-right: 1px solid var(--color-border);
+    border-right: var(--border-width-sm) solid var(--color-border);
 }
 
 .toolbarGroup:last-child {
@@ -39,8 +39,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--size-control);
+    height: var(--size-control);
     border: none;
     border-radius: var(--border-radius-sm);
     background: transparent;
@@ -64,13 +64,13 @@
 }
 
 .toolbarButton svg {
-    width: 16px;
-    height: 16px;
+    width: var(--size-icon);
+    height: var(--size-icon);
     flex-shrink: 0;
 }
 
 .zoomLabel {
-    min-width: 3rem;
+    min-width: var(--width-label-min);
     padding: 0 var(--space-1);
     color: var(--color-text-secondary);
     font-size: var(--font-size-sm);
@@ -91,7 +91,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    height: 28px;
+    height: var(--size-control);
     padding: 0 var(--space-2);
     font-size: var(--font-size-sm);
     border: none;
@@ -108,7 +108,7 @@
 }
 
 .exportButton svg {
-    width: 16px;
-    height: 16px;
+    width: var(--size-icon);
+    height: var(--size-icon);
     flex-shrink: 0;
 }

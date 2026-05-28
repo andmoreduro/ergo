@@ -17,6 +17,8 @@ import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
 import { Select } from "../../../atoms/Select/Select";
 import { Textarea } from "../../../atoms/Textarea/Textarea";
+import { ElementExtrasCollapse } from "../ElementExtrasCollapse";
+import styles from "../ElementEditor.module.css";
 import type { DiagramElement } from "../types";
 
 const diagramAssetPath = (diagramId: string) =>
@@ -118,74 +120,82 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
     }, [dispatch, element.caption, element.id, sourceDraft, state.assets]);
 
     return (
-        <>
-            <Textarea
-                {...sourceField}
-                fullWidth
-                label={m.editor_diagram_source()}
-                value={sourceDraft}
-                onChange={(event) => {
-                    const next = normalizeEditableText(event.target.value);
-                    sourceEditedRef.current = true;
-                    setSourceDraft(next);
-                    dispatch({
-                        type: "UPDATE_DIAGRAM",
-                        payload: {
-                            diagramId: element.id,
-                            mermaidSource: next,
-                        },
-                    });
-                }}
-                onKeyDown={(event) => {
-                    if (handleAdvanceKeyDown(event, sourceFieldId)) {
-                        return;
-                    }
-                    handleEnterKey(event);
-                }}
-            />
-            <Textarea
-                {...captionField}
-                fullWidth
-                label={m.editor_diagram_caption()}
-                value={captionDraft}
-                onChange={(event) => {
-                    const next = normalizeEditableText(event.target.value);
-                    setCaptionDraft(next);
-                    if (shouldCommitCaption(next)) {
-                        dispatch({
-                            type: "UPDATE_DIAGRAM",
-                            payload: {
-                                diagramId: element.id,
-                                caption: next,
-                            },
-                        });
-                    }
-                }}
-                onKeyDown={(event) => {
-                    if (handleAdvanceKeyDown(event, captionFieldId)) {
-                        return;
-                    }
-                    handleEnterKey(event);
-                }}
-            />
-            <Select
-                {...placementField}
-                fullWidth
-                label={m.editor_figure_placement()}
-                value={placementDraft}
-                options={getPlacementOptions()}
-                onChange={(event) => {
-                    const next = event.target.value;
-                    setPlacementDraft(next);
-                    dispatch({
-                        type: "UPDATE_DIAGRAM",
-                        payload: {
-                            diagramId: element.id,
-                            placement: next,
-                        },
-                    });
-                }}
-            />
-        </>
+        <ElementExtrasCollapse
+            primary={
+                <div className={styles.elementPrimary}>
+                    <Textarea
+                        {...sourceField}
+                        fullWidth
+                        label={m.editor_diagram_source()}
+                        value={sourceDraft}
+                        onChange={(event) => {
+                            const next = normalizeEditableText(event.target.value);
+                            sourceEditedRef.current = true;
+                            setSourceDraft(next);
+                            dispatch({
+                                type: "UPDATE_DIAGRAM",
+                                payload: {
+                                    diagramId: element.id,
+                                    mermaidSource: next,
+                                },
+                            });
+                        }}
+                        onKeyDown={(event) => {
+                            if (handleAdvanceKeyDown(event, sourceFieldId)) {
+                                return;
+                            }
+                            handleEnterKey(event);
+                        }}
+                    />
+                </div>
+            }
+            extras={
+                <>
+                    <Textarea
+                        {...captionField}
+                        fullWidth
+                        label={m.editor_diagram_caption()}
+                        value={captionDraft}
+                        onChange={(event) => {
+                            const next = normalizeEditableText(event.target.value);
+                            setCaptionDraft(next);
+                            if (shouldCommitCaption(next)) {
+                                dispatch({
+                                    type: "UPDATE_DIAGRAM",
+                                    payload: {
+                                        diagramId: element.id,
+                                        caption: next,
+                                    },
+                                });
+                            }
+                        }}
+                        onKeyDown={(event) => {
+                            if (handleAdvanceKeyDown(event, captionFieldId)) {
+                                return;
+                            }
+                            handleEnterKey(event);
+                        }}
+                    />
+                    <Select
+                        {...placementField}
+                        fullWidth
+                        label={m.editor_figure_placement()}
+                        value={placementDraft}
+                        options={getPlacementOptions()}
+                        onChange={(event) => {
+                            const next = event.target.value;
+                            setPlacementDraft(next);
+                            dispatch({
+                                type: "UPDATE_DIAGRAM",
+                                payload: {
+                                    diagramId: element.id,
+                                    placement: next,
+                                },
+                            });
+                        }}
+                    />
+                </>
+            }
+        />
     );
 };

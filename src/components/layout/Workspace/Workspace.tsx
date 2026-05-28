@@ -88,44 +88,6 @@ export const Workspace = ({
     );
 
     useEffect(() => {
-        const root = workspaceRef.current;
-        if (!root) {
-            return;
-        }
-
-        const hideTimers = new WeakMap<EventTarget, ReturnType<typeof setTimeout>>();
-
-        const onScroll = (event: Event) => {
-            const target = event.target;
-            if (
-                !(target instanceof HTMLElement) ||
-                !root.contains(target) ||
-                !target.hasAttribute("data-scroll-region")
-            ) {
-                return;
-            }
-
-            target.classList.add(styles.scrollbarReveal);
-
-            const previous = hideTimers.get(target);
-            if (previous) {
-                clearTimeout(previous);
-            }
-
-            hideTimers.set(
-                target,
-                setTimeout(() => {
-                    target.classList.remove(styles.scrollbarReveal);
-                    hideTimers.delete(target);
-                }, 700),
-            );
-        };
-
-        root.addEventListener("scroll", onScroll, { capture: true, passive: true });
-        return () => root.removeEventListener("scroll", onScroll, { capture: true });
-    }, []);
-
-    useEffect(() => {
         if (!compiler.error) {
             return;
         }

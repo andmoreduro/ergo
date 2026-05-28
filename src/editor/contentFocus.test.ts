@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
     applyAstActions,
+    caretOffsetAtEndForField,
     ensureMinimumContentParagraphAction,
     planContentElementRemoval,
 } from "./contentFocus";
+import { richTextFieldId } from "./fieldIds";
 import {
     createContentSection,
     createDefaultDocumentAST,
@@ -46,6 +48,22 @@ describe("contentFocus", () => {
         const plan = planContentElementRemoval(astWithContent([p1, p2]), "p2");
         expect(plan?.focus.elementId).toBe("p1");
         expect(plan?.actions).toHaveLength(1);
+    });
+
+    it("places the caret at the end of the focused field after deletion", () => {
+        const p1 = createParagraph("One", "p1");
+        const p2 = createParagraph("Two", "p2");
+        const ast = astWithContent([p1, p2]);
+        const plan = planContentElementRemoval(ast, "p2");
+        expect(plan).not.toBeNull();
+        const nextAst = applyAstActions(ast, plan!.actions);
+        expect(
+            caretOffsetAtEndForField(
+                nextAst,
+                plan!.focus.elementId,
+                richTextFieldId(plan!.focus.elementId),
+            ),
+        ).toBe(3);
     });
 
     it("focuses the next element when deleting the first block", () => {

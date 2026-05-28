@@ -171,6 +171,138 @@ describe("EditorFieldRegistry", () => {
         });
     });
 
+    it("does not move document focus to the simple-list composer on native focus", async () => {
+        const focusStates: DocumentFocusState[] = [];
+
+        const EntryInput = () => {
+            const binding = useEditorFieldBinding<HTMLInputElement>({
+                elementId: "project",
+                fieldId: "project-input-/affiliations/0",
+            });
+
+            return (
+                <input
+                    {...binding}
+                    aria-label="Affiliation entry"
+                    defaultValue="Universidad"
+                />
+            );
+        };
+
+        const ComposerInput = () => {
+            const binding = useEditorFieldBinding<HTMLInputElement>({
+                elementId: "project",
+                fieldId: "project-input-/affiliations/composer",
+            });
+
+            return (
+                <input
+                    {...binding}
+                    aria-label="Affiliation composer"
+                    defaultValue=""
+                />
+            );
+        };
+
+        render(
+            <FieldHarness>
+                <EntryInput />
+                <ComposerInput />
+                <FocusStateProbe
+                    onFocusState={(focus) => focusStates.push(focus)}
+                />
+            </FieldHarness>,
+        );
+
+        const entry = screen.getByLabelText("Affiliation entry");
+        const composer = screen.getByLabelText("Affiliation composer");
+
+        entry.setSelectionRange(11, 11);
+        fireEvent.focus(entry);
+        await waitFor(() => {
+            expect(focusStates.at(-1)).toMatchObject({
+                fieldId: "project-input-/affiliations/0",
+                caretUtf16Offset: 11,
+                focusSource: "native",
+            });
+        });
+
+        composer.focus();
+
+        await waitFor(() => {
+            expect(focusStates.at(-1)).toMatchObject({
+                fieldId: "project-input-/affiliations/0",
+                caretUtf16Offset: 11,
+                focusSource: "native",
+            });
+        });
+    });
+
+    it("restores focus to the simple-list composer when an entry field is removed on blur", async () => {
+        const RemovableEntry = ({ onRemove }: { onRemove: () => void }) => {
+            const binding = useEditorFieldBinding<HTMLInputElement>({
+                elementId: "project",
+                fieldId: "project-input-/affiliations/0",
+            });
+
+            return (
+                <input
+                    {...binding}
+                    aria-label="Affiliation entry"
+                    defaultValue=""
+                    onBlur={(event) => {
+                        binding.onBlur(event);
+                        onRemove();
+                    }}
+                />
+            );
+        };
+
+        const ComposerInput = () => {
+            const binding = useEditorFieldBinding<HTMLInputElement>({
+                elementId: "project",
+                fieldId: "project-input-/affiliations/composer",
+            });
+
+            return (
+                <input
+                    {...binding}
+                    aria-label="Affiliation composer"
+                    defaultValue=""
+                />
+            );
+        };
+
+        const Harness = () => {
+            const [showEntry, setShowEntry] = useState(true);
+
+            return (
+                <>
+                    {showEntry ? (
+                        <RemovableEntry onRemove={() => setShowEntry(false)} />
+                    ) : null}
+                    <ComposerInput />
+                </>
+            );
+        };
+
+        render(
+            <FieldHarness>
+                <Harness />
+            </FieldHarness>,
+        );
+
+        const entry = screen.getByLabelText("Affiliation entry");
+        const composer = screen.getByLabelText("Affiliation composer");
+
+        fireEvent.focus(entry);
+        fireEvent.blur(entry);
+
+        await waitFor(() => {
+            expect(composer).toHaveFocus();
+        });
+    });
+
     it("does not report the previous native caret while applying preview focus", async () => {
         const focusStates: DocumentFocusState[] = [];
 

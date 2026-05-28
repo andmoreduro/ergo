@@ -56,6 +56,7 @@ export const SettingsDialog = ({
                 aria-modal="true"
                 aria-labelledby="settings-title"
                 className={styles.dialog}
+                data-scroll-region
                 role="dialog"
             >
                 <div className={styles.header}>

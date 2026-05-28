@@ -22,10 +22,16 @@
 .scrollArea {
     flex: 1;
     min-height: 0;
-    overflow: auto;
-    overscroll-behavior: auto;
-    touch-action: pan-x pan-y;
+    touch-action: pan-y;
     padding: var(--space-2) 0;
+    background-color: var(--color-bg-secondary);
+}
+
+.scrollAreaInner {
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
 }
 
 .placeholder {
@@ -65,8 +71,8 @@
 
 .pageSurface {
     position: relative;
-    background-color: white;
-    outline: 1px solid var(--color-border);
+    background-color: var(--color-bg-primary);
+    outline: var(--border-width-sm) solid var(--color-border);
 }
 
 .zoomMenuRoot {
@@ -81,11 +87,12 @@
     left: 50%;
     z-index: 20;
     display: flex;
-    width: 7rem;
+    width: var(--width-menu);
     flex-direction: column;
+    max-height: var(--height-scroll-md);
     overflow-y: auto;
     padding: var(--space-1);
-    border: 1px solid var(--color-border);
+    border: var(--border-width-sm) solid var(--color-border);
     border-radius: var(--border-radius-sm);
     background: var(--color-bg-primary);
     box-shadow: var(--shadow-md);
@@ -93,7 +100,7 @@
 }
 
 .zoomMenu button {
-    min-height: 28px;
+    min-height: var(--size-control);
     border: 0;
     border-radius: var(--border-radius-sm);
     background: transparent;
@@ -112,7 +119,7 @@
 .svgPageContent {
     display: block;
     overflow: hidden;
-    background-color: white;
+    background-color: var(--color-bg-primary);
 }
 
 .svgPageContent > svg {
@@ -123,16 +130,16 @@
 
 .syncCaret {
     position: absolute;
-    width: 2px;
-    height: 2px;
-    min-width: 2px;
-    min-height: 2px;
+    width: var(--border-width-md);
+    height: var(--border-width-md);
+    min-width: var(--border-width-md);
+    min-height: var(--border-width-md);
     background-color: var(--color-primary);
     border-radius: 50%;
     opacity: 0.95;
     pointer-events: none;
     z-index: 2;
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 35%, transparent);
+    box-shadow: var(--shadow-ring-caret);
 }
 
 .error {
@@ -140,7 +147,7 @@
     padding: var(--space-1) var(--space-2);
     color: var(--color-danger);
     font-size: var(--font-size-sm);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: var(--border-width-sm) solid var(--color-border);
 }
 
 .telemetryOverlay {
@@ -148,7 +155,7 @@
     right: var(--space-2);
     bottom: var(--space-2);
     padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--color-border);
+    border: var(--border-width-sm) solid var(--color-border);
     background-color: color-mix(in srgb, var(--color-bg-primary) 92%, transparent);
     color: var(--color-text-secondary);
     font-size: var(--font-size-xs);

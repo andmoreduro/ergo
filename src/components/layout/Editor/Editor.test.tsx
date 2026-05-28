@@ -6,7 +6,7 @@ import { ActionRuntimeProvider } from "../../../actions/runtime";
 import { EditorFieldRegistryProvider } from "../../../state/EditorFieldRegistry";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
 import { TemplateSpecProvider } from "../../../state/TemplateSpecContext";
-import { createDefaultDocumentAST } from "../../../state/ast/defaults";
+import { createDefaultDocumentAST, createRichText } from "../../../state/ast/defaults";
 import { Editor } from "./Editor";
 
 import "@testing-library/jest-dom";
@@ -46,10 +46,10 @@ tauriApiMock.getTemplateSpec.mockResolvedValue({
         },
         {
             id: "affiliations",
-            type: "array",
+            type: "simple_list",
             label: "Affiliations",
             importance: "recommended",
-            items: { type: "string", label: "Affiliation Name" },
+            items: { type: "content", label: "Affiliation Name" },
         },
     ],
     groups: [
@@ -78,7 +78,7 @@ const createDocumentWithTemplateCollections = () => {
         ...ast,
         inputs: {
             ...ast.inputs,
-            affiliations: ["Universidad Norte"],
+            affiliations: [[createRichText("Universidad Norte")]],
             authors: [
                 {
                     name: "Ada Lovelace",

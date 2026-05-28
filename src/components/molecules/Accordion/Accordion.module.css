@@ -1,10 +1,10 @@
 .container {
-    border-top: 1px solid var(--color-border);
+    border-top: var(--border-width-sm) solid var(--color-border);
     background-color: var(--color-bg-primary);
 }
 
 .container:last-child {
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: var(--border-width-sm) solid var(--color-border);
 }
 
 .header {
@@ -12,7 +12,7 @@
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    min-height: 34px;
+    min-height: var(--size-row);
     padding: 0 var(--space-3);
     background-color: transparent;
     border: none;
@@ -28,7 +28,7 @@
 }
 
 .header:focus-visible {
-    box-shadow: inset 0 0 0 2px var(--color-primary);
+    box-shadow: var(--shadow-ring-inset);
 }
 
 .title {
@@ -53,7 +53,7 @@
 
 .content {
     padding: var(--space-2) var(--space-3);
-    border-top: 1px solid var(--color-border);
+    border-top: var(--border-width-sm) solid var(--color-border);
     font-family: var(--font-family-sans);
     color: var(--color-text-primary);
     background-color: var(--color-bg-primary);

@@ -4,6 +4,8 @@ import type { TemplateSpec } from "../bindings/TemplateSpec";
 import { createId } from "../state/ast/defaults";
 import { useDocument, useDocumentAst } from "../state/DocumentContext";
 import {
+    caretOffsetAtEndForField,
+    applyAstActions,
     planContentElementRemoval,
 } from "./contentFocus";
 import {
@@ -26,11 +28,11 @@ export const useFieldNavigation = (
     );
 
     const focusField = useCallback(
-        (elementId: string, fieldId: string) => {
+        (elementId: string, fieldId: string, caretUtf16Offset = 0) => {
             setDocumentFocus({
                 elementId,
                 fieldId,
-                caretUtf16Offset: 0,
+                caretUtf16Offset,
                 sourceRevision: null,
                 anchorPageNumber: null,
                 forcePreviewScroll: false,
@@ -105,10 +107,19 @@ export const useFieldNavigation = (
                 return false;
             }
 
+            const nextAst = applyAstActions(ast, plan.actions);
             for (const action of plan.actions) {
                 dispatch(action);
             }
-            focusField(plan.focus.elementId, plan.focus.fieldId);
+            focusField(
+                plan.focus.elementId,
+                plan.focus.fieldId,
+                caretOffsetAtEndForField(
+                    nextAst,
+                    plan.focus.elementId,
+                    plan.focus.fieldId,
+                ),
+            );
             return true;
         },
         [dispatch, focusField],

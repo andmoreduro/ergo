@@ -1,4 +1,4 @@
-use crate::ast::DocumentAST;
+use crate::ast::{DocumentAST, RichText};
 use crate::template_spec::{Importance, InputSchema, InputType, TemplateSpec};
 
 /// Substitutes required template input labels when values are empty so Typst
@@ -56,6 +56,29 @@ impl<'a> RequiredInputFallbacks<'a> {
         value: &serde_json::Value,
         schema: &InputSchema,
     ) -> serde_json::Value {
+        let item_is_content = schema
+            .items
+            .as_ref()
+            .is_some_and(|items| items.input_type == InputType::Content);
+
+        if item_is_content {
+            let items = value
+                .as_array()
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| Self::prepare_simple_list_content_item(item))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
+            if !items.is_empty() {
+                return serde_json::Value::Array(items);
+            }
+
+            return serde_json::json!([Self::rich_text_label_value(schema)]);
+        }
+
         let items = value
             .as_array()
             .map(|items| {
@@ -76,6 +99,42 @@ impl<'a> RequiredInputFallbacks<'a> {
         }
 
         serde_json::json!([Self::field_label(schema)])
+    }
+
+    fn prepare_simple_list_content_item(item: &serde_json::Value) -> Option<serde_json::Value> {
+        if let Some(text) = item.as_str() {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            return Some(Self::rich_text_label_value_text(trimmed));
+        }
+
+        let content = serde_json::from_value::<Vec<RichText>>(item.clone()).ok()?;
+        if content.iter().all(|span| {
+            span.kind.as_deref() != Some("reference") && span.text.trim().is_empty()
+        }) {
+            return None;
+        }
+
+        serde_json::to_value(content).ok()
+    }
+
+    fn rich_text_label_value(schema: &InputSchema) -> serde_json::Value {
+        Self::rich_text_label_value_text(&Self::field_label(schema))
+    }
+
+    fn rich_text_label_value_text(text: &str) -> serde_json::Value {
+        serde_json::json!([{
+            "text": text,
+            "bold": null,
+            "italic": null,
+            "underline": null,
+            "kind": null,
+            "reference_id": null,
+            "equation_source": null,
+            "equation_syntax": "typst",
+        }])
     }
 
     fn prepare_authors(
