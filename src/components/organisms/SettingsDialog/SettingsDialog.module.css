@@ -41,24 +41,58 @@
 
 .fieldGrid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+}
+
+.settingsList {
+    display: grid;
     gap: var(--space-3);
+}
+
+.settingsGroup {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: var(--border-width-sm) solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    background: var(--color-bg-secondary);
+}
+
+.settingsGroup h3 {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0;
+    text-transform: uppercase;
 }
 
 .field {
     display: grid;
-    gap: var(--space-1);
+    grid-template-columns: minmax(0, 1fr) minmax(10rem, 16rem);
+    align-items: center;
+    gap: var(--space-3);
     font-size: var(--font-size-sm);
+}
+
+.field > span:first-child {
+    color: var(--color-text-primary);
 }
 
 .field input,
 .field select {
+    width: 100%;
     min-height: 2.25rem;
     border: var(--border-width-sm) solid var(--color-border);
     border-radius: var(--border-radius-md);
     padding: var(--space-2);
     background: var(--color-bg-primary);
     color: var(--color-text-primary);
+}
+
+.fieldCheckbox {
+    justify-self: end;
 }
 
 .sectionTitle {

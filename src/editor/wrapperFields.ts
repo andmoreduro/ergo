@@ -9,11 +9,11 @@ export type WrapperHostElement = FigureElement | TableElement;
 export const wrapperFieldValue = (
     element: WrapperHostElement,
     key: string,
-): string => {
+): unknown => {
     if (element.type === "Figure" && key === "caption") {
         return element.caption;
     }
-    return String(element.extra_fields?.[key] ?? "");
+    return element.extra_fields?.[key] ?? "";
 };
 
 export const wrapperFieldDraftValues = (
@@ -22,7 +22,9 @@ export const wrapperFieldDraftValues = (
 ): Record<string, string> => {
     const draft: Record<string, string> = {};
     for (const field of fields) {
-        draft[field.key] = wrapperFieldValue(element, field.key);
+        const value = wrapperFieldValue(element, field.key);
+        draft[field.key] =
+            typeof value === "string" ? value : String(value ?? "");
     }
     return draft;
 };

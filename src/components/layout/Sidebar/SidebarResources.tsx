@@ -1,12 +1,19 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+    memo,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+} from "react";
 import type { AssetEntry } from "../../../bindings/AssetEntry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { ResourceEntry } from "../../../bindings/ResourceEntry";
+import type { ResourceKind } from "../../../bindings/ResourceKind";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
 import { useDocument } from "../../../state/DocumentContext";
 import { useActionDispatcher } from "../../../actions/runtime";
-import { useTypstCanvasPage } from "../../../hooks/useTypstCanvasPage";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { defaultFieldIdForElement } from "../../../editor/fieldIds";
 import { Button } from "../../atoms/Button/Button";
@@ -89,19 +96,35 @@ const resourcePreviewMaxHeightPx = (element: HTMLElement): number => {
     return parseCssLengthPx(maxHeight) ?? 120;
 };
 
-const ResourcePreviewCanvas = ({
+const svgPreviewStyle = (
+    widthPt: number,
+    heightPt: number,
+    fitSize: { width: number; height: number },
+): CSSProperties => {
+    const scale = Math.min(fitSize.width / widthPt, fitSize.height / heightPt);
+    const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+    return {
+        width: `${widthPt * safeScale}px`,
+        height: `${heightPt * safeScale}px`,
+    };
+};
+
+const ResourcePreviewSvg = ({
     pageNumber,
     revision,
     canRender,
-    zoomRenderDebounceMs,
 }: {
     pageNumber: number;
     revision: number;
     canRender: boolean;
-    zoomRenderDebounceMs: number;
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
+    const svgRef = useRef<HTMLDivElement>(null);
+    const requestIdRef = useRef(0);
     const [fitSize, setFitSize] = useState({ width: 0, height: 0 });
+    const [svgStyle, setSvgStyle] = useState<CSSProperties | undefined>(
+        undefined,
+    );
 
     useEffect(() => {
         const container = containerRef.current;
@@ -127,28 +150,44 @@ const ResourcePreviewCanvas = ({
         return () => observer.disconnect();
     }, []);
 
-    const { canvasRef, canvasStyle } = useTypstCanvasPage(
-        (requestId, pixelPerPt) =>
-            CompilerClient.renderResourcePage(
-                pageNumber,
-                pixelPerPt,
-                requestId,
-            ),
-        1,
-        zoomRenderDebounceMs,
-        canRender,
-        pageNumber,
-        revision,
-        {
-            fitWidthPx: fitSize.width,
-            fitHeightPx: fitSize.height,
-        },
-    );
+    useEffect(() => {
+        const element = svgRef.current;
+        if (!element || !canRender || fitSize.width <= 0 || fitSize.height <= 0) {
+            return;
+        }
+
+        const requestId = requestIdRef.current + 1;
+        requestIdRef.current = requestId;
+        let cancelled = false;
+
+        void CompilerClient.renderResourceSvgPage(pageNumber, requestId)
+            .then((page) => {
+                if (cancelled || page.requestId !== requestIdRef.current) {
+                    return;
+                }
+                element.innerHTML = page.svg;
+                setSvgStyle(
+                    svgPreviewStyle(page.widthPt, page.heightPt, fitSize),
+                );
+            })
+            .catch((error) => {
+                console.error("Failed to render resource preview SVG:", error);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [canRender, fitSize, pageNumber, revision]);
 
     return (
         <div ref={containerRef} className={styles.resourcePreview}>
             {fitSize.width > 0 ? (
-                <canvas ref={canvasRef} aria-hidden="true" style={canvasStyle} />
+                <div
+                    ref={svgRef}
+                    aria-hidden="true"
+                    className={styles.resourcePreviewSvg}
+                    style={svgStyle}
+                />
             ) : (
                 <span className={styles.resourcePreviewLoading} aria-hidden="true" />
             )}
@@ -156,16 +195,33 @@ const ResourcePreviewCanvas = ({
     );
 };
 
+const resourceGroupLabel = (kind: ResourceKind): string => {
+    switch (kind) {
+        case "file":
+            return m.resources_group_file();
+        case "figure":
+            return m.resources_group_figure();
+        case "diagram":
+            return m.resources_group_diagram();
+        case "table":
+            return m.resources_group_table();
+        case "equation":
+            return m.resources_group_equation();
+        case "custom":
+            return m.resources_group_custom();
+        default:
+            return kind;
+    }
+};
+
 export const SidebarResourcesPanel = memo(({
     resources,
     resourcePreviewRevisions,
     mainPreviewPaintedRevision,
-    zoomRenderDebounceMs,
 }: {
     resources: DocumentResources | null;
     resourcePreviewRevisions: ResourcePreviewRevisions;
     mainPreviewPaintedRevision: number | null;
-    zoomRenderDebounceMs: number;
 }) => {
     const { state, dispatch } = useDocument();
     const dispatchAction = useActionDispatcher();
@@ -246,7 +302,7 @@ export const SidebarResourcesPanel = memo(({
             {resources && resources.groups.length > 0 ? (
                 resources.groups.map((group) => (
                     <section className={styles.resourceGroup} key={group.kind}>
-                        <h3>{group.label}</h3>
+                        <h3>{resourceGroupLabel(group.kind)}</h3>
                         <div className={styles.navList}>
                             {group.entries.map((entry) => {
                                 const resourceRevision =
@@ -265,15 +321,12 @@ export const SidebarResourcesPanel = memo(({
                                         >
                                             {entry.preview.status === "ready" &&
                                             entry.preview.page_number ? (
-                                                <ResourcePreviewCanvas
+                                                <ResourcePreviewSvg
                                                     pageNumber={
                                                         entry.preview.page_number
                                                     }
                                                     revision={resourceRevision}
                                                     canRender={canRender}
-                                                    zoomRenderDebounceMs={
-                                                        zoomRenderDebounceMs
-                                                    }
                                                 />
                                             ) : (
                                                 <span

@@ -1,7 +1,7 @@
 use super::*;
 use crate::ast::{
-    AssetEntry, DocumentElement, DocumentSection, Equation, Figure, Paragraph, ProjectSettings,
-    ReferenceEntry, RichText, Table, TableCell,
+    AssetEntry, DocumentElement, DocumentSection, Equation, EquationSyntax, Figure, Paragraph,
+    ProjectSettings, ReferenceEntry, RichText, Table, TableCell,
 };
 use crate::test_fixtures::basic_document_ast;
 
@@ -10,9 +10,11 @@ fn rich_text(text: &str) -> Vec<RichText> {
         text: text.to_string(),
         bold: None,
         italic: None,
+        underline: None,
         kind: None,
         reference_id: None,
         equation_source: None,
+        equation_syntax: EquationSyntax::Typst,
     }]
 }
 
@@ -344,6 +346,7 @@ fn applies_document_event_variants_to_backend_ast() {
                 id: "equation-1".to_string(),
                 latex_source: "x".to_string(),
                 is_block: true,
+                syntax: crate::ast::EquationSyntax::Typst,
             })),
         })
         .unwrap();
@@ -352,6 +355,7 @@ fn applies_document_event_variants_to_backend_ast() {
             element_id: "equation-1".to_string(),
             latex_source: Some("x^2".to_string()),
             is_block: Some(false),
+            syntax: None,
         })
         .unwrap();
     session
@@ -741,6 +745,7 @@ fn test_incremental_dirty_resource_tracking() {
         id: "eq-1".to_string(),
         latex_source: "E = mc^2".to_string(),
         is_block: true,
+        syntax: crate::ast::EquationSyntax::Typst,
     };
     let fig = Figure {
         id: "fig-1".to_string(),
@@ -779,6 +784,7 @@ fn test_incremental_dirty_resource_tracking() {
             element_id: "eq-1".to_string(),
             latex_source: Some("F = ma".to_string()),
             is_block: None,
+            syntax: None,
         })
         .unwrap();
 

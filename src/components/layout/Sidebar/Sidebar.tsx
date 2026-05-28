@@ -3,7 +3,6 @@ import type { DocumentOutline } from "../../../bindings/DocumentOutline";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
 import { useDocument } from "../../../state/DocumentContext";
-import { PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS } from "../../../preview/previewZoom";
 import { Accordion } from "../../molecules/Accordion/Accordion";
 import { m } from "../../../paraglide/messages.js";
 import { SidebarBibliographyPanel } from "./SidebarBibliography";
@@ -12,7 +11,6 @@ import { SidebarResourcesPanel } from "./SidebarResources";
 import styles from "./Sidebar.module.css";
 
 export interface SidebarProps {
-    previewZoomRenderDebounceMs?: number;
     outline?: DocumentOutline | null;
     resources?: DocumentResources | null;
     previewRevision?: number | null;
@@ -27,7 +25,6 @@ export const Sidebar = ({
     previewRevision = null,
     resourcePreviewRevisions = {},
     mainPreviewPaintedRevision = null,
-    previewZoomRenderDebounceMs = PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS,
     previewScrollRef: previewScrollRefFromParent,
 }: SidebarProps) => {
     const fallbackPreviewScrollRef = useRef<HTMLElement>(null);
@@ -52,7 +49,6 @@ export const Sidebar = ({
                     resources={resources}
                     resourcePreviewRevisions={resourcePreviewRevisions}
                     mainPreviewPaintedRevision={mainPreviewPaintedRevision}
-                    zoomRenderDebounceMs={previewZoomRenderDebounceMs}
                 />
             </Accordion>
         </aside>

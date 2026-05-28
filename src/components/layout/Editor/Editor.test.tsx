@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { DocumentAST } from "../../../bindings/DocumentAST";
+import { ActionRuntimeProvider } from "../../../actions/runtime";
 import { EditorFieldRegistryProvider } from "../../../state/EditorFieldRegistry";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
 import { TemplateSpecProvider } from "../../../state/TemplateSpecContext";
@@ -107,6 +108,34 @@ describe("Editor template input fields", () => {
             "data-editor-field-id",
             "project-input-/authors/0/affiliations/0",
         );
+    });
+
+    it("removes the focused APA author from the editor delete button", async () => {
+        render(
+            <ActionRuntimeProvider>
+                <DocumentProvider>
+                <TemplateSpecProvider templateId="versatile-apa">
+                    <EditorFieldRegistryProvider>
+                        <LoadDocument ast={createDocumentWithTemplateCollections()} />
+                        <Editor />
+                    </EditorFieldRegistryProvider>
+                </TemplateSpecProvider>
+                </DocumentProvider>
+            </ActionRuntimeProvider>,
+        );
+
+        const authorInput = await screen.findByDisplayValue("Ada Lovelace");
+        fireEvent.focus(authorInput);
+
+        const deleteButton = screen.getByRole("button", { name: "Delete" });
+        expect(deleteButton).toBeEnabled();
+        fireEvent.click(deleteButton);
+
+        await waitFor(() => {
+            expect(
+                screen.queryByDisplayValue("Ada Lovelace"),
+            ).not.toBeInTheDocument();
+        });
     });
 
     it("renders reference arrays from schema target metadata without template-specific paths", async () => {

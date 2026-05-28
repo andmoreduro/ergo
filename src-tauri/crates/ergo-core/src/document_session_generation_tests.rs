@@ -1,14 +1,16 @@
 use super::*;
 use crate::ast::{
     AssetEntry, ContentSection, CustomElement, DependencyManifest, DocumentElement,
-    DocumentSection, GlobalSettings, ProjectMetadata, ProjectSettings, ReferenceEntry, RichText,
+    DocumentSection, Enumeration, Equation, EquationSyntax, GlobalSettings, List, ProjectMetadata,
+    ProjectSettings, Quote, ReferenceEntry, RichText,
 };
-use crate::ast::{Figure, Paragraph, Table, TableCell};
+use crate::ast::{Diagram, Figure, Paragraph, Table, TableCell};
 use crate::document_source_builder::SourceBuilder;
 use crate::template_spec::{
     CustomElementSpec, ElementOverrideSpec, ElementOverrides, ExtraFieldSpec, InputGroupSpec,
     PackageSpec, ParamSpec, ParamType, SectionSpec, ShowRuleSpec, TemplateIdentity,
 };
+use crate::test_fixtures::rich_text;
 use serde_json::json;
 
 #[test]
@@ -24,9 +26,11 @@ fn bibliography_references_emit_citation_key_not_element_label() {
         text: "See ".to_string(),
         bold: None,
         italic: None,
+        underline: None,
         kind: Some("reference".to_string()),
         reference_id: Some("bib-ref-1".to_string()),
         equation_source: None,
+        equation_syntax: EquationSyntax::Typst,
     }];
 
     push_rich_text_field(
@@ -128,6 +132,73 @@ fn ast_with_custom_field(key: &str, value: serde_json::Value) -> DocumentAST {
             })],
         })],
     }
+}
+
+#[test]
+fn native_quote_list_diagram_and_latex_equations_emit_typst() {
+    let template = custom_element_template(ParamSpec {
+        key: "body".to_string(),
+        param_type: ParamType::Content,
+        source: None,
+        label: None,
+        default: None,
+        required: false,
+        variants: None,
+    });
+    let mut ast = ast_with_custom_field("body", json!("Paper body"));
+    ast.assets = vec![AssetEntry {
+        id: "diagram-1".to_string(),
+        path: "assets/diagrams/diagram-1.svg".to_string(),
+        kind: "image".to_string(),
+        caption: None,
+    }];
+    ast.sections = vec![DocumentSection::Content(ContentSection {
+        id: "body".to_string(),
+        is_optional: false,
+        elements: vec![
+            DocumentElement::Quote(Quote {
+                id: "quote-1".to_string(),
+                content: vec![rich_text("quoted text")],
+            }),
+            DocumentElement::List(List {
+                id: "list-1".to_string(),
+                items: vec![vec![rich_text("first item")]],
+            }),
+            DocumentElement::Enumeration(Enumeration {
+                id: "enum-1".to_string(),
+                items: vec![vec![rich_text("numbered item")]],
+            }),
+            DocumentElement::Equation(Equation {
+                id: "equation-1".to_string(),
+                latex_source: "\\frac{1}{2}".to_string(),
+                is_block: true,
+                syntax: EquationSyntax::Latex,
+            }),
+            DocumentElement::Diagram(Diagram {
+                id: "diagram-1".to_string(),
+                mermaid_source: "flowchart TD\nA-->B".to_string(),
+                asset_id: Some("diagram-1".to_string()),
+                caption: "Flow".to_string(),
+                placement: "here".to_string(),
+                extra_fields: HashMap::new(),
+            }),
+        ],
+    })];
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+
+    assert!(generated.fragments["quote-1"]
+        .source
+        .contains("#quote(block: true)"));
+    assert!(generated.fragments["list-1"].source.contains("#list("));
+    assert!(generated.fragments["enum-1"].source.contains("#enum("));
+    let equation_source = &generated.fragments["equation-1"].source;
+    assert!(equation_source.contains("#import \"@preview/mitex:0.2.7\": mi, mitex"));
+    assert!(equation_source.contains("#mitex("));
+    assert!(generated.fragments["diagram-1"]
+        .source
+        .contains("image(\"../assets/diagrams/diagram-1.svg\")"));
 }
 
 #[test]
@@ -293,9 +364,11 @@ fn ast_with_table_and_figure() -> DocumentAST {
                             text: "Body".to_string(),
                             bold: None,
                             italic: None,
+                            underline: None,
                             kind: None,
                             reference_id: None,
                             equation_source: None,
+                            equation_syntax: EquationSyntax::Typst,
                         }],
                     }),
                     caption: "Caption".to_string(),
@@ -556,6 +629,35 @@ fn versatile_apa_main_typ_includes_front_matter_outlines_and_appendix_rule() {
     assert!(
         generated.main_source.contains("#show: appendix"),
         "main.typ should enable appendix show rule; got:\n{}",
+        generated.main_source
+    );
+}
+
+#[test]
+fn versatile_apa_outline_titles_use_project_template_overrides() {
+    use crate::ast::TemplateOverride;
+    use crate::template_spec::load_bundled_template;
+
+    let mut ast = ast_with_table_and_figure();
+    ast.sections = vec![DocumentSection::Content(ContentSection {
+        id: "body".to_string(),
+        is_optional: false,
+        elements: vec![],
+    })];
+    ast.metadata.project_settings.template_overrides = vec![TemplateOverride {
+        key: "outline.tables_title".to_string(),
+        value: "Tablas del documento".to_string(),
+    }];
+
+    let template = load_bundled_template("versatile-apa").expect("versatile-apa template");
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+
+    assert!(
+        generated
+            .main_source
+            .contains("#outline(target: figure.where(kind: table), title: [Tablas del documento])"),
+        "main.typ should include the configured tables outline title; got:\n{}",
         generated.main_source
     );
 }

@@ -40,6 +40,26 @@ export interface DocumentEventHistoryEntry {
 const asEventList = (event: DocumentEvent | DocumentEvent[]): DocumentEvent[] =>
     Array.isArray(event) ? event : [event];
 
+const replaceElementWith = (
+    ast: DocumentAST,
+    elementId: string,
+    insertType: "insertElement" | "restoreElement",
+): DocumentEvent[] => {
+    const location = elementLocation(ast, elementId);
+    return [
+        {
+            type: "removeElement",
+            element_id: elementId,
+        },
+        {
+            type: insertType,
+            section_id: location.section.id,
+            index: location.index,
+            element: cloneValue(location.element),
+        },
+    ];
+};
+
 export const applyDocumentEvents = (
     ast: DocumentAST,
     events: DocumentEvent[],
@@ -233,6 +253,7 @@ export const applyDocumentEventToAst = (
                           ...element,
                           latex_source: event.latex_source ?? element.latex_source,
                           is_block: event.is_block ?? element.is_block,
+                          syntax: event.syntax ?? element.syntax,
                       }
                     : element,
             );
@@ -463,6 +484,18 @@ const documentEventFromAction = (
         case "ADD_EQUATION":
             return insertElementEvent(nextAst, action.payload.sectionId, action.payload.equationId);
 
+        case "ADD_QUOTE":
+            return insertElementEvent(nextAst, action.payload.sectionId, action.payload.quoteId);
+
+        case "ADD_DIAGRAM":
+            return insertElementEvent(nextAst, action.payload.sectionId, action.payload.diagramId);
+
+        case "ADD_LIST":
+            return insertElementEvent(nextAst, action.payload.sectionId, action.payload.listId);
+
+        case "ADD_ENUMERATION":
+            return insertElementEvent(nextAst, action.payload.sectionId, action.payload.enumerationId);
+
         case "ADD_FIGURE":
             return insertElementEvent(nextAst, action.payload.sectionId, action.payload.figureId);
 
@@ -502,7 +535,24 @@ const documentEventFromAction = (
                 element_id: action.payload.equationId,
                 latex_source: action.payload.latexSource ?? null,
                 is_block: action.payload.isBlock ?? null,
+                syntax: action.payload.syntax ?? null,
             };
+
+        case "UPDATE_QUOTE_CONTENT":
+            return replaceElementWith(nextAst, action.payload.quoteId, "insertElement");
+
+        case "UPDATE_DIAGRAM":
+            return replaceElementWith(nextAst, action.payload.diagramId, "insertElement");
+
+        case "UPDATE_LIST_ITEM":
+            return replaceElementWith(nextAst, action.payload.listId, "insertElement");
+
+        case "UPDATE_ENUMERATION_ITEM":
+            return replaceElementWith(
+                nextAst,
+                action.payload.enumerationId,
+                "insertElement",
+            );
 
         case "UPDATE_TABLE_CELL":
             return {
@@ -572,13 +622,21 @@ const documentEventFromAction = (
                 asset_id: action.payload.assetId ?? null,
             };
 
-        case "UPDATE_ELEMENT_EXTRA_FIELD":
+        case "UPDATE_ELEMENT_EXTRA_FIELD": {
+            const { fieldValue } = action.payload;
+            const fieldIsEmpty =
+                fieldValue === null ||
+                fieldValue === undefined ||
+                (typeof fieldValue === "string" && fieldValue.trim() === "") ||
+                (Array.isArray(fieldValue) && fieldValue.length === 0);
+
             return {
                 type: "updateElementExtraField",
                 element_id: action.payload.elementId,
                 field_key: action.payload.fieldKey,
-                field_value: action.payload.fieldValue.trim() === "" ? null : action.payload.fieldValue,
+                field_value: fieldIsEmpty ? null : fieldValue,
             };
+        }
 
         case "ADD_REFERENCE":
             return {
@@ -728,6 +786,18 @@ const inverseDocumentEventFromAction = (
         case "ADD_EQUATION":
             return { type: "removeElement", element_id: action.payload.equationId };
 
+        case "ADD_QUOTE":
+            return { type: "removeElement", element_id: action.payload.quoteId };
+
+        case "ADD_DIAGRAM":
+            return { type: "removeElement", element_id: action.payload.diagramId };
+
+        case "ADD_LIST":
+            return { type: "removeElement", element_id: action.payload.listId };
+
+        case "ADD_ENUMERATION":
+            return { type: "removeElement", element_id: action.payload.enumerationId };
+
         case "ADD_FIGURE":
             return { type: "removeElement", element_id: action.payload.figureId };
 
@@ -777,8 +847,25 @@ const inverseDocumentEventFromAction = (
                 latex_source:
                     action.payload.latexSource === undefined ? null : equation.latex_source,
                 is_block: action.payload.isBlock === undefined ? null : equation.is_block,
+                syntax: action.payload.syntax === undefined ? null : equation.syntax,
             };
         }
+
+        case "UPDATE_QUOTE_CONTENT":
+            return replaceElementWith(previousAst, action.payload.quoteId, "restoreElement");
+
+        case "UPDATE_DIAGRAM":
+            return replaceElementWith(previousAst, action.payload.diagramId, "restoreElement");
+
+        case "UPDATE_LIST_ITEM":
+            return replaceElementWith(previousAst, action.payload.listId, "restoreElement");
+
+        case "UPDATE_ENUMERATION_ITEM":
+            return replaceElementWith(
+                previousAst,
+                action.payload.enumerationId,
+                "restoreElement",
+            );
 
         case "UPDATE_TABLE_CELL": {
             const table = tableElement(previousAst, action.payload.tableId);
@@ -864,8 +951,12 @@ const inverseDocumentEventFromAction = (
 
         case "UPDATE_ELEMENT_EXTRA_FIELD": {
             const element = elementById(previousAst, action.payload.elementId);
-            if (element.type !== "Table" && element.type !== "Figure") {
-                throw new Error(`Element ${action.payload.elementId} is not a table or figure`);
+            if (
+                element.type !== "Table" &&
+                element.type !== "Figure" &&
+                element.type !== "Diagram"
+            ) {
+                throw new Error(`Element ${action.payload.elementId} does not have extra fields`);
             }
             const prevValue = element.extra_fields?.[action.payload.fieldKey] ?? null;
             return {

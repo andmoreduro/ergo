@@ -29,6 +29,8 @@ pub fn canvas_preview_pages(page_count: usize) -> Vec<PreviewPageFile> {
             page_number,
             path: format!("page-{page_number}"),
             changed: true,
+            width_pt: None,
+            height_pt: None,
             content: None,
         })
         .collect()

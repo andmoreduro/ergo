@@ -84,6 +84,7 @@ pub fn build_resource_catalog(
     let mut groups = Vec::new();
     for (kind, label) in [
         (ResourceKind::Figure, "Figures"),
+        (ResourceKind::Diagram, "Diagrams"),
         (ResourceKind::Table, "Tables"),
         (ResourceKind::Equation, "Equations"),
         (ResourceKind::File, "Assets"),
@@ -202,6 +203,12 @@ fn linked_figure_asset_ids(ast: &DocumentAST) -> std::collections::HashSet<Strin
                         linked.insert(asset_id.clone());
                     }
                 }
+            } else if let DocumentElement::Diagram(diagram) = element {
+                if let Some(asset_id) = diagram.asset_id.as_ref() {
+                    if !asset_id.trim().is_empty() {
+                        linked.insert(asset_id.clone());
+                    }
+                }
             }
         }
     }
@@ -235,12 +242,8 @@ fn collect_element_seeds(
 ) {
     match element {
         DocumentElement::Equation(equation) => {
-            let source = normalize_math_source(&equation.latex_source);
-            let body = if source.is_empty() {
-                String::new()
-            } else {
-                format!("#math.equation(block: {}, ${source}$)", equation.is_block)
-            };
+            let body = resource_preview_typst_for_element(element, template, assets, references)
+                .unwrap_or_default();
             seeds.push(ResourceSeed {
                 id: equation.id.clone(),
                 kind: ResourceKind::Equation,
@@ -252,6 +255,32 @@ fn collect_element_seeds(
                 preview_source: Some(wrap_body(&body)),
                 preview_page: None,
                 missing_diagnostic: None,
+            });
+        }
+        DocumentElement::Diagram(diagram) => {
+            let asset_ref = diagram
+                .asset_id
+                .as_deref()
+                .and_then(|id| assets.iter().find(|a| a.id == id));
+            let caption = diagram.caption.trim();
+            let label = if caption.is_empty() {
+                "Diagram".to_string()
+            } else {
+                caption.to_string()
+            };
+            let preview_body =
+                resource_preview_typst_for_element(element, template, assets, references);
+            seeds.push(ResourceSeed {
+                id: diagram.id.clone(),
+                kind: ResourceKind::Diagram,
+                label,
+                subtitle: asset_ref.map(|a| a.path.clone()),
+                reference_token: reference_token(&diagram.id),
+                source_element_id: Some(diagram.id.clone()),
+                asset_id: diagram.asset_id.clone(),
+                preview_source: preview_body.map(|body| wrap_body(&body)),
+                preview_page: None,
+                missing_diagnostic: Some("Diagram SVG has not been generated".to_string()),
             });
         }
         DocumentElement::Table(table) => {
@@ -314,7 +343,11 @@ fn collect_element_seeds(
                 missing_diagnostic: None,
             });
         }
-        DocumentElement::Heading(_) | DocumentElement::Paragraph(_) => {}
+        DocumentElement::Heading(_)
+        | DocumentElement::Paragraph(_)
+        | DocumentElement::Quote(_)
+        | DocumentElement::List(_)
+        | DocumentElement::Enumeration(_) => {}
     }
 }
 
@@ -367,10 +400,6 @@ fn legacy_figure_preview_body(asset_ref: Option<&AssetEntry>) -> String {
 
 fn wrap_body(body: &str) -> String {
     format!("#block(width: 100%)[\n{body}\n]\n")
-}
-
-fn normalize_math_source(value: &str) -> String {
-    value.trim().trim_matches('$').trim().to_string()
 }
 
 fn escape_typst(value: &str) -> String {
@@ -484,6 +513,7 @@ mod tests {
             id: "eq-1".to_string(),
             latex_source: "E=mc^2".to_string(),
             is_block: false,
+            syntax: crate::ast::EquationSyntax::Typst,
         }));
         content
             .elements

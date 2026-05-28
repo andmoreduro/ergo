@@ -31,8 +31,12 @@ export type WorkerRequest =
           payload: { pageIndex: number; pixelPerPt: number; requestId: number };
       }
     | {
-          type: "render_resource_page";
-          payload: { pageNumber: number; pixelPerPt: number; requestId: number };
+          type: "render_svg_page";
+          payload: { pageIndex: number; requestId: number };
+      }
+    | {
+          type: "render_resource_svg_page";
+          payload: { pageNumber: number; requestId: number };
       }
     | { type: "write_file"; payload: { path: string; bytes: Uint8Array } }
     | { type: "write_files"; payload: VfsFileEntry[] }
@@ -68,6 +72,14 @@ export type RenderPagePayload = {
     requestId: number;
 };
 
+export type RenderSvgPagePayload = {
+    pageIndex: number;
+    widthPt: number;
+    heightPt: number;
+    svg: string;
+    requestId: number;
+};
+
 export type WorkerResponse =
     | { type: "init_done" }
     | { type: "load_fonts_done" }
@@ -75,6 +87,8 @@ export type WorkerResponse =
     | { type: "compile_done"; result: CompilationResult }
     | { type: "bootstrap_done"; payload: BootstrapPreviewResult }
     | { type: "render_done"; payload: RenderPagePayload }
+    | { type: "render_svg_done"; payload: RenderSvgPagePayload }
+    | { type: "render_resource_svg_done"; payload: RenderSvgPagePayload }
     | { type: "write_file_done" }
     | { type: "write_files_done" }
     | { type: "write_source_done" }

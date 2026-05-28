@@ -1,7 +1,7 @@
 #![allow(irrefutable_let_patterns)]
 use crate::ast::{
     ContentSection, DependencyManifest, DocumentAST, DocumentElement, DocumentSection,
-    GlobalSettings, Heading, Paragraph, ProjectMetadata, ProjectSettings, RichText,
+    EquationSyntax, GlobalSettings, Heading, Paragraph, ProjectMetadata, ProjectSettings, RichText,
 };
 
 pub fn rich_text(text: &str) -> RichText {
@@ -9,9 +9,11 @@ pub fn rich_text(text: &str) -> RichText {
         text: text.to_string(),
         bold: None,
         italic: None,
+        underline: None,
         kind: None,
         reference_id: None,
         equation_source: None,
+        equation_syntax: EquationSyntax::Typst,
     }
 }
 

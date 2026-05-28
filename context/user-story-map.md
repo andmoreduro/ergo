@@ -42,7 +42,7 @@ flowchart LR
             E9_1[Epic 9 Unit & E2E Testing]:::story
             E9_2[Epic 9 IPC Type Sync]:::story
             E9_5[Epic 9 Backend Source Session]:::story
-            E9_6[Epic 9 WASM Canvas Preview]:::story
+            E9_6[Epic 9 WASM SVG Preview]:::story
             J0 --- E0_1 --- E9_1 --- E9_2 --- E9_5 --- E9_6
         end
 
