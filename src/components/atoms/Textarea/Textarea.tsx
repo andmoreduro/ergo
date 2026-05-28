@@ -1,4 +1,4 @@
-import { TextareaHTMLAttributes, forwardRef, useId, memo, useEffect, useRef } from 'react';
+import { TextareaHTMLAttributes, forwardRef, useId, memo, useLayoutEffect, useRef } from 'react';
 import { FieldLabel, type FieldImportance } from '../FieldLabel/FieldLabel';
 import styles from './Textarea.module.css';
 
@@ -55,9 +55,9 @@ export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
       }
     };
 
-    useEffect(() => {
+    useLayoutEffect(() => {
       adjustHeight();
-    }, [props.value]);
+    }, [props.value, props.defaultValue]);
 
     const containerClassNames = [
       styles.container,

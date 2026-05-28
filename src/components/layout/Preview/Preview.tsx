@@ -258,6 +258,7 @@ export const Preview = ({
         <aside
             className={styles.preview}
             data-active-source-label={activeSource?.label}
+            data-editor-focus-lose-exempt=""
             onClick={handlePreviewClick}
         >
             <header
@@ -324,7 +325,6 @@ export const Preview = ({
                             aria-label={m.preview_zoom_options()}
                             className={styles.zoomMenu}
                             role="menu"
-                            style={{ maxHeight: "280px" }}
                         >
                             <button
                                 role="menuitem"
@@ -386,6 +386,10 @@ export const Preview = ({
                     data-scroll-region
                     ref={previewScrollRef as RefObject<HTMLDivElement>}
                 >
+                    <div
+                        className={styles.scrollAreaInner}
+                        data-scroll-region-x
+                    >
                     <div className={styles.svgContainer}>
                         {previewPages.length > 0 && previewRevision !== null ? (
                             previewPages.map((page, index) => {
@@ -439,6 +443,7 @@ export const Preview = ({
                                 {m.workspace_preview_placeholder()}
                             </div>
                         )}
+                    </div>
                     </div>
                 </div>
                 {showTelemetry && compiler.previewTelemetry && (

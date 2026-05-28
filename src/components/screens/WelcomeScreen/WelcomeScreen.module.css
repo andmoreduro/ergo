@@ -8,8 +8,8 @@
 }
 
 .panel {
-    width: min(460px, calc(100vw - 48px));
-    margin-top: -4vh;
+    width: min(var(--width-welcome), calc(var(--layout-viewport-w) - var(--layout-overlay-gutter)));
+    margin-top: var(--layout-welcome-offset-top);
 }
 
 .header {
@@ -35,9 +35,9 @@
 
 .appIconPlaceholder {
     flex-shrink: 0;
-    width: 44px;
-    height: 44px;
-    border: 1px dashed var(--color-border);
+    width: var(--size-avatar);
+    height: var(--size-avatar);
+    border: var(--border-width-sm) dashed var(--color-border);
     border-radius: var(--border-radius-sm);
     background: var(--color-bg-secondary);
 }
@@ -60,19 +60,19 @@
 
 .rule::after {
     flex: 1;
-    height: 1px;
+    height: var(--border-width-sm);
     content: "";
     background: color-mix(in srgb, var(--color-primary), transparent 35%);
 }
 
 .action {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-columns: var(--size-control-sm) minmax(0, 1fr) auto;
     align-items: center;
     width: 100%;
-    min-height: 34px;
+    min-height: var(--size-row);
     padding: 0 var(--space-2);
-    border: 1px solid transparent;
+    border: var(--border-width-sm) solid transparent;
     border-radius: var(--border-radius-sm);
     color: var(--color-text-primary);
     background: transparent;
@@ -89,7 +89,7 @@
 .action:focus-visible {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary), transparent 70%);
+    box-shadow: var(--shadow-ring-subtle);
 }
 
 .actionIcon {
@@ -107,20 +107,20 @@
 
 .recentProject {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 28px;
+    grid-template-columns: minmax(var(--space-0), 1fr) var(--size-control);
     align-items: center;
 }
 
 .recentAction {
-    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-columns: var(--size-control-sm) minmax(0, 1fr);
 }
 
 .recentRemove {
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
-    border: 1px solid transparent;
+    width: var(--size-control);
+    height: var(--size-control);
+    border: var(--border-width-sm) solid transparent;
     border-radius: var(--border-radius-sm);
     color: var(--color-text-secondary);
     background: transparent;
@@ -146,7 +146,7 @@
 .recentRemove:focus-visible {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary), transparent 70%);
+    box-shadow: var(--shadow-ring-subtle);
 }
 
 .empty {

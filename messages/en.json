@@ -258,6 +258,8 @@
   "editor_figure_choose_image": "Choose image…",
   "editor_figure_image_required": "Choose an image before other figure fields sync to the preview.",
   "editor_element_settings": "Settings",
+  "editor_element_show_extras": "Show extra fields",
+  "editor_element_hide_extras": "Hide extra fields",
   "editor_figure_width": "Image width",
   "element_delete": "Delete",
   "element_delete_confirm": "Delete this element?",

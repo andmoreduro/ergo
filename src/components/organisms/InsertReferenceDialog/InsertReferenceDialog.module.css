@@ -9,11 +9,11 @@
 }
 
 .dialog {
-    width: min(28rem, calc(100vw - 2rem));
-    max-height: min(32rem, calc(100vh - 4rem));
+    width: min(var(--width-panel-sm), calc(var(--layout-viewport-w) - var(--space-6)));
+    max-height: min(var(--height-panel-max), calc(var(--layout-viewport-h) - var(--space-6)));
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--color-border);
+    border: var(--border-width-sm) solid var(--color-border);
     border-radius: var(--border-radius-md);
     background: var(--color-bg-primary);
     box-shadow: var(--shadow-md);
@@ -24,7 +24,7 @@
     align-items: center;
     justify-content: space-between;
     padding: var(--space-3);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: var(--border-width-sm) solid var(--color-border);
 }
 
 .title {
@@ -54,7 +54,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: var(--space-px);
     padding: var(--space-2) var(--space-3);
     border: none;
     border-radius: var(--border-radius-sm);

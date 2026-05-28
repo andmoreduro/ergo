@@ -71,7 +71,18 @@ fn field_source_map_tracks_template_input_collection_paths() {
     let mut ast = basic_document_ast("Título con ñ", "");
     ast.inputs.insert(
         "affiliations".to_string(),
-        serde_json::json!(["Universidad Norte"]),
+        serde_json::json!([[
+            {
+                "text": "Universidad Norte",
+                "bold": null,
+                "italic": null,
+                "underline": null,
+                "kind": null,
+                "reference_id": null,
+                "equation_source": null,
+                "equation_syntax": "typst"
+            }
+        ]]),
     );
     ast.inputs.insert(
         "authors".to_string(),

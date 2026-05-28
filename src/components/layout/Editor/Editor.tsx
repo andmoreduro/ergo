@@ -1,4 +1,11 @@
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import {
+    memo,
+    useCallback,
+    useMemo,
+    useRef,
+    useState,
+    type MouseEventHandler,
+} from "react";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import { useDocument, useDocumentAst } from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
@@ -28,6 +35,7 @@ import {
     simpleListComposerFieldId,
 } from "../../../editor/fieldIds";
 import { parseInputRichText } from "../../../editor/richTextMarks";
+import { parseSimpleListContentItems } from "../../../editor/simpleListContent";
 import { normalizeEditableText, normalizeRichTextContent } from "../../../editor/textInput";
 import { useDeferredRichTextCommit } from "../../../editor/useDeferredRichTextCommit";
 import { RichTextField } from "../../molecules/RichTextField/RichTextField";
@@ -39,6 +47,10 @@ import {
     useEditorNavigation,
 } from "../../../editor/EditorNavigationContext";
 import { useFieldNavigation } from "../../../editor/useFieldNavigation";
+import {
+    focusClosestContentField,
+    isContentSectionFocusDelegationTarget,
+} from "../../../editor/contentSectionFocus";
 import { Delete24Regular } from "@fluentui/react-icons";
 import {
     Diagram24Regular,
@@ -218,21 +230,23 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
         >
             <main className={styles.editor}>
                 <header className={toolbarStyles.toolbar}>
-                    <button
-                        className={toolbarStyles.toolbarButton}
-                        type="button"
-                        title={m.element_delete()}
-                        aria-label={m.element_delete()}
-                        disabled={!canDeleteFocusedTarget}
-                        onClick={() =>
-                            void dispatchAction({
-                                id: "editor::DeleteElement",
-                                payload: null,
-                            })
-                        }
-                    >
-                        <Delete24Regular />
-                    </button>
+                    <div className={toolbarStyles.toolbarGroup}>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.element_delete()}
+                            aria-label={m.element_delete()}
+                            disabled={!canDeleteFocusedTarget}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::DeleteElement",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <Delete24Regular />
+                        </button>
+                    </div>
                     <div className={toolbarStyles.toolbarGroup}>
                         <button
                             className={toolbarStyles.toolbarButton}
@@ -529,10 +543,6 @@ const getFieldPlaceholder = (schema: InputSchema, label?: string) => {
 };
 
 const DynamicField = ({ schema, path, label }: DynamicFieldProps) => {
-    if (schema.id === "affiliations" && schema.type === "simple_list") {
-        return <DynamicFieldAffiliations schema={schema} path={path} label={label} />;
-    }
-
     if (schema.type === "simple_list") {
         return <DynamicFieldSimpleList schema={schema} path={path} label={label} />;
     }
@@ -552,40 +562,40 @@ const DynamicField = ({ schema, path, label }: DynamicFieldProps) => {
     return <DynamicFieldString schema={schema} path={path} label={label} />;
 };
 
-const DynamicFieldAffiliations = ({ schema, path, label }: DynamicFieldProps) => {
+const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
     const { state, dispatch } = useDocumentAst();
     const { handleFieldAdvance } = useEditorNavigation();
-    const items = (getValueAtPath(state.inputs, path) ?? []) as string[];
+    const rawItems = getValueAtPath(state.inputs, path);
+    const itemKind =
+        schema.items?.type === "content" ? "content" : "string";
+
+    if (itemKind === "content") {
+        const items = parseSimpleListContentItems(rawItems);
+
+        return (
+            <SimpleListField
+                importance={schema.importance ?? undefined}
+                itemKind="content"
+                items={items}
+                label={getFieldLabel(schema, label)}
+                path={path}
+                onAdvance={() => handleFieldAdvance(simpleListComposerFieldId(path))}
+                onChange={(nextItems) =>
+                    dispatch({
+                        type: "UPDATE_INPUT",
+                        payload: { path, value: nextItems },
+                    })
+                }
+            />
+        );
+    }
+
+    const items = (rawItems ?? []) as string[];
 
     return (
         <SimpleListField
             importance={schema.importance ?? undefined}
             itemKind="string"
-            items={items.map(String)}
-            label={getFieldLabel(schema, label)}
-            path={path}
-            onAdvance={() => handleFieldAdvance(simpleListComposerFieldId(path))}
-            onChange={(nextItems) =>
-                dispatch({
-                    type: "UPDATE_INPUT",
-                    payload: { path, value: nextItems },
-                })
-            }
-        />
-    );
-};
-
-const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
-    const { state, dispatch } = useDocumentAst();
-    const { handleFieldAdvance } = useEditorNavigation();
-    const items = (getValueAtPath(state.inputs, path) ?? []) as string[];
-    const itemKind =
-        schema.items?.type === "content" ? "content" : "string";
-
-    return (
-        <SimpleListField
-            importance={schema.importance ?? undefined}
-            itemKind={itemKind}
             items={items.map(String)}
             label={getFieldLabel(schema, label)}
             path={path}
@@ -606,12 +616,11 @@ const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
         name?: string;
         affiliations?: string[];
     }>;
-    const affiliations = (getValueAtPath(state.inputs, "/affiliations") ??
-        []) as string[];
+    const affiliations = getValueAtPath(state.inputs, "/affiliations");
 
     return (
         <AuthorsField
-            affiliations={affiliations}
+            affiliations={Array.isArray(affiliations) ? affiliations : []}
             authors={authors}
             importance={schema.importance ?? undefined}
             label={getFieldLabel(schema, label)}
@@ -943,8 +952,38 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
 };
 
 const ContentSectionEditor = memo(function ContentSectionEditor({ section }: { section: ContentSection }) {
+    const handleContentSectionPointerDown = useCallback<
+        MouseEventHandler<HTMLDivElement>
+    >(
+        (event) => {
+            if (event.button !== 0) {
+                return;
+            }
+
+            const target = event.target;
+            if (!isContentSectionFocusDelegationTarget(target)) {
+                return;
+            }
+
+            const focused = focusClosestContentField(
+                event.currentTarget,
+                target,
+                event.clientX,
+                event.clientY,
+            );
+            if (focused) {
+                event.preventDefault();
+            }
+        },
+        [],
+    );
+
     return (
-        <div className={styles.contentSection}>
+        <div
+            className={styles.contentSection}
+            data-content-section
+            onPointerDown={handleContentSectionPointerDown}
+        >
             {section.elements.map((element) => (
                 <ElementEditor key={element.id} element={element} />
             ))}

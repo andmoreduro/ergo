@@ -258,6 +258,8 @@
     "editor_figure_choose_image": "Elegir imagen…",
     "editor_figure_image_required": "Elige una imagen antes de que los demás campos de la figura se sincronicen con la vista previa.",
     "editor_element_settings": "Configuración",
+    "editor_element_show_extras": "Mostrar campos adicionales",
+    "editor_element_hide_extras": "Ocultar campos adicionales",
     "editor_figure_width": "Ancho de imagen",
     "element_delete": "Eliminar",
     "element_delete_confirm": "¿Eliminar este elemento?",

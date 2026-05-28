@@ -10,14 +10,14 @@
 
 .menu {
     position: absolute;
-    top: calc(100% + 4px);
+    top: calc(var(--layout-full) + var(--space-1));
     right: 0;
     z-index: 20;
-    min-width: 8rem;
+    min-width: var(--width-col-md);
     margin: 0;
     padding: var(--space-1);
     list-style: none;
-    border: 1px solid var(--color-border);
+    border: var(--border-width-sm) solid var(--color-border);
     border-radius: var(--border-radius-sm);
     background: var(--color-bg-primary);
     box-shadow: var(--shadow-md);

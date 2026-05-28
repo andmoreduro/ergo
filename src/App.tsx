@@ -49,6 +49,7 @@ import { ContextMenuProvider } from "./contextMenu/ContextMenuProvider";
 import { useCommandPalette } from "./hooks/useCommandPalette";
 import { useAppActionHandlers } from "./hooks/useAppActionHandlers";
 import { useAutosave } from "./hooks/useAutosave";
+import { useScrollRegionReveal } from "./hooks/useScrollRegionReveal";
 import { useSettingsLifecycle } from "./hooks/useSettingsLifecycle";
 import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
 import {
@@ -706,6 +707,8 @@ const AppShell = () => (
 );
 
 function App() {
+    useScrollRegionReveal();
+
     useEffect(() => {
         warmupCompiler();
     }, []);

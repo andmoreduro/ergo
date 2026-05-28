@@ -1,10 +1,61 @@
 @import "./variables.css";
 
+/* Shared scroll regions (editor + preview) */
+[data-scroll-region] {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+    scrollbar-gutter: stable;
+    overscroll-behavior: auto;
+    overflow-x: hidden;
+    overflow-y: scroll;
+}
+
+[data-scroll-region]::-webkit-scrollbar {
+    -webkit-appearance: none;
+    appearance: none;
+    width: var(--size-scrollbar);
+    height: var(--size-scrollbar);
+}
+
+[data-scroll-region]::-webkit-scrollbar-track {
+    background-color: var(--color-scrollbar-track);
+}
+
+[data-scroll-region]::-webkit-scrollbar-thumb {
+    border-radius: var(--radius-pill);
+    background-color: var(--color-scrollbar-thumb);
+}
+
+[data-scroll-region]::-webkit-scrollbar-corner {
+    background-color: var(--color-scrollbar-track);
+}
+
+/* Preview horizontal pan — same thumb/track tokens, no vertical scroll rules. */
+[data-scroll-region-x] {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+}
+
+[data-scroll-region-x]::-webkit-scrollbar {
+    -webkit-appearance: none;
+    appearance: none;
+    height: var(--size-scrollbar);
+}
+
+[data-scroll-region-x]::-webkit-scrollbar-track {
+    background-color: var(--color-scrollbar-track);
+}
+
+[data-scroll-region-x]::-webkit-scrollbar-thumb {
+    border-radius: var(--radius-pill);
+    background-color: var(--color-scrollbar-thumb);
+}
+
 html,
 body,
 #root {
-    width: 100%;
-    height: 100%;
+    width: var(--layout-full);
+    height: var(--layout-full);
     overscroll-behavior: none;
 }
 

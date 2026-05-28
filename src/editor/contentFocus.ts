@@ -6,8 +6,18 @@ import { astReducer } from "../state/ast/reducer";
 import {
     ensureMinimumContentParagraphAction,
 } from "../state/ast/contentInvariant";
-import { defaultFieldIdForElement, projectInputElementId } from "./fieldIds";
+import {
+    defaultFieldIdForElement,
+    diagramCaptionFieldId,
+    diagramSourceFieldId,
+    equationSourceFieldId,
+    figureBodyFieldId,
+    projectInputElementId,
+    quoteContentFieldId,
+    richTextFieldId,
+} from "./fieldIds";
 import { contentSection } from "./fieldNavigation";
+import { richTextPlainLength } from "../richText/richText";
 
 export { ensureMinimumContentParagraphAction } from "../state/ast/contentInvariant";
 
@@ -30,6 +40,72 @@ const focusTargetForElement = (element: DocumentElement): ContentFocusTarget => 
     elementId: element.id,
     fieldId: defaultFieldIdForElement(element),
 });
+
+/** UTF-16 offset at the end of the focused field's editable text (for post-delete focus). */
+export const caretOffsetAtEndForField = (
+    ast: DocumentAST,
+    elementId: string,
+    fieldId: string,
+): number => {
+    const section = contentSection(ast);
+    const element = section?.elements.find((entry) => entry.id === elementId);
+    if (!element) {
+        return 0;
+    }
+
+    if (fieldId === richTextFieldId(elementId)) {
+        if (element.type === "Paragraph" || element.type === "Heading") {
+            return richTextPlainLength(element.content);
+        }
+    }
+
+    if (fieldId === quoteContentFieldId(elementId) && element.type === "Quote") {
+        return richTextPlainLength(element.content);
+    }
+
+    if (fieldId === figureBodyFieldId(elementId) && element.type === "Figure") {
+        if (element.content.type === "Paragraph") {
+            return richTextPlainLength(element.content.content);
+        }
+    }
+
+    if (fieldId === equationSourceFieldId(elementId) && element.type === "Equation") {
+        return element.latex_source.length;
+    }
+
+    if (fieldId === diagramSourceFieldId(elementId) && element.type === "Diagram") {
+        return element.mermaid_source.length;
+    }
+
+    if (fieldId === diagramCaptionFieldId(elementId) && element.type === "Diagram") {
+        return element.caption.length;
+    }
+
+    const cellPrefix = `${elementId}:cell:`;
+    if (fieldId.startsWith(cellPrefix) && element.type === "Table") {
+        const parts = fieldId.slice(cellPrefix.length).split(":");
+        const rowIndex = Number(parts[0]);
+        const colIndex = Number(parts[1]);
+        const cell = element.cells[rowIndex]?.[colIndex];
+        if (cell) {
+            return richTextPlainLength(cell.content);
+        }
+    }
+
+    const itemPrefix = `${elementId}:item:`;
+    if (
+        fieldId.startsWith(itemPrefix) &&
+        (element.type === "List" || element.type === "Enumeration")
+    ) {
+        const itemIndex = Number(fieldId.slice(itemPrefix.length));
+        const item = element.items[itemIndex];
+        if (item) {
+            return richTextPlainLength(item.content);
+        }
+    }
+
+    return 0;
+};
 
 const lastParagraphInSection = (
     section: ContentSection,
