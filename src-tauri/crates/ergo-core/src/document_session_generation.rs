@@ -15,7 +15,7 @@ use crate::typst_source::element_content_hash;
 use crate::typst_source::{
     element_fragment, element_id, element_path, escape_typst_string, format_json_val,
     generate_lib_typst, generate_references_bib, hash_source, label_for_id, push_package_imports,
-    resolve_param_builder,
+    generate_front_matter_outlines, resolve_param_builder,
 };
 
 #[cfg(test)]
@@ -239,7 +239,15 @@ fn generate_project_sources_inner(
                 }
             }
             SectionKind::Literal => {
-                if let Some(lit) = &section_spec.source {
+                if section_spec.id == "front-matter-outlines" {
+                    if section_spec.pagebreak_before {
+                        main_builder.push_literal("#pagebreak()\n");
+                    }
+                    main_builder.push_literal(&generate_front_matter_outlines(
+                        &ast.metadata.project_settings.template_overrides,
+                    ));
+                    main_builder.push_literal("\n");
+                } else if let Some(lit) = &section_spec.source {
                     if section_spec.pagebreak_before {
                         main_builder.push_literal("#pagebreak()\n");
                     }

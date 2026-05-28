@@ -139,14 +139,12 @@ fn is_worker_bootstrap_file(path: &str) -> bool {
     path.starts_with("assets/") || path.starts_with("packages/")
 }
 
-#[tauri::command]
-pub fn load_template_package_files(template_id: String) -> Result<Vec<ProjectFile>, String> {
-    use ergo_core::package_resolver::{collect_package_files, PackageRef};
-    use ergo_core::template_spec::load_bundled_template;
+fn project_files_for_package(
+    package: &ergo_core::package_resolver::PackageRef,
+) -> Result<Vec<ProjectFile>, String> {
+    use ergo_core::package_resolver::collect_package_files;
 
-    let spec = load_bundled_template(&template_id)?;
-    let package = PackageRef::from_import(&spec.package.name, &spec.package.version)?;
-    collect_package_files(&package).map(|files| {
+    collect_package_files(package).map(|files| {
         files
             .into_iter()
             .map(|file| ProjectFile {
@@ -155,6 +153,41 @@ pub fn load_template_package_files(template_id: String) -> Result<Vec<ProjectFil
             })
             .collect()
     })
+}
+
+fn mirror_project_files_to_vfs(state: &TauriAppState, files: &[ProjectFile]) {
+    for file in files {
+        state.vfs.write_file(&file.path, file.bytes.clone());
+    }
+}
+
+#[tauri::command]
+pub fn load_template_package_files(
+    state: State<'_, TauriAppState>,
+    template_id: String,
+) -> Result<Vec<ProjectFile>, String> {
+    use ergo_core::package_resolver::PackageRef;
+    use ergo_core::template_spec::load_bundled_template;
+
+    let spec = load_bundled_template(&template_id)?;
+    let package = PackageRef::from_import(&spec.package.name, &spec.package.version)?;
+    let files = project_files_for_package(&package)?;
+    mirror_project_files_to_vfs(&state, &files);
+    Ok(files)
+}
+
+#[tauri::command]
+pub fn load_package_files(
+    state: State<'_, TauriAppState>,
+    name: String,
+    version: String,
+) -> Result<Vec<ProjectFile>, String> {
+    use ergo_core::package_resolver::PackageRef;
+
+    let package = PackageRef::from_import(&name, &version)?;
+    let files = project_files_for_package(&package)?;
+    mirror_project_files_to_vfs(&state, &files);
+    Ok(files)
 }
 
 #[cfg(test)]

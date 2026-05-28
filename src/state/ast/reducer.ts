@@ -3,10 +3,14 @@ import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { DocumentSection } from "../../bindings/DocumentSection";
 import type { ASTAction } from "./actions";
 import {
+    createDiagram,
+    createEnumeration,
     createEquation,
     createFigure,
     createHeading,
+    createList,
     createParagraph,
+    createQuote,
     createRichText,
     createTable,
 } from "./defaults";
@@ -276,7 +280,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         }
 
         case "ADD_EQUATION": {
-            const { sectionId, equationId, afterElementId } = action.payload;
+            const { sectionId, equationId, afterElementId, syntax } = action.payload;
 
             return mapSections(state, (section) => {
                 if (section.type !== "Content" || section.id !== sectionId) {
@@ -287,7 +291,83 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                     ...section,
                     elements: insertElement(
                         section.elements,
-                        createEquation(equationId),
+                        createEquation(equationId, "", syntax),
+                        afterElementId,
+                    ),
+                };
+            });
+        }
+
+        case "ADD_QUOTE": {
+            const { sectionId, quoteId, afterElementId } = action.payload;
+
+            return mapSections(state, (section) => {
+                if (section.type !== "Content" || section.id !== sectionId) {
+                    return section;
+                }
+
+                return {
+                    ...section,
+                    elements: insertElement(
+                        section.elements,
+                        createQuote("", quoteId),
+                        afterElementId,
+                    ),
+                };
+            });
+        }
+
+        case "ADD_DIAGRAM": {
+            const { sectionId, diagramId, afterElementId } = action.payload;
+
+            return mapSections(state, (section) => {
+                if (section.type !== "Content" || section.id !== sectionId) {
+                    return section;
+                }
+
+                return {
+                    ...section,
+                    elements: insertElement(
+                        section.elements,
+                        createDiagram(diagramId),
+                        afterElementId,
+                    ),
+                };
+            });
+        }
+
+        case "ADD_LIST": {
+            const { sectionId, listId, afterElementId } = action.payload;
+
+            return mapSections(state, (section) => {
+                if (section.type !== "Content" || section.id !== sectionId) {
+                    return section;
+                }
+
+                return {
+                    ...section,
+                    elements: insertElement(
+                        section.elements,
+                        createList(listId),
+                        afterElementId,
+                    ),
+                };
+            });
+        }
+
+        case "ADD_ENUMERATION": {
+            const { sectionId, enumerationId, afterElementId } = action.payload;
+
+            return mapSections(state, (section) => {
+                if (section.type !== "Content" || section.id !== sectionId) {
+                    return section;
+                }
+
+                return {
+                    ...section,
+                    elements: insertElement(
+                        section.elements,
+                        createEnumeration(enumerationId),
                         afterElementId,
                     ),
                 };
@@ -375,7 +455,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         }
 
         case "UPDATE_EQUATION": {
-            const { equationId, latexSource, isBlock } = action.payload;
+            const { equationId, latexSource, isBlock, syntax } = action.payload;
 
             return mapContentElements(state, (element) => {
                 if (element.type !== "Equation" || element.id !== equationId) {
@@ -386,8 +466,68 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                     ...element,
                     latex_source: latexSource ?? element.latex_source,
                     is_block: isBlock ?? element.is_block,
+                    syntax: syntax ?? element.syntax,
                 };
             });
+        }
+
+        case "UPDATE_QUOTE_CONTENT": {
+            const { quoteId, content } = action.payload;
+
+            return mapContentElements(state, (element) =>
+                element.type === "Quote" && element.id === quoteId
+                    ? { ...element, content }
+                    : element,
+            );
+        }
+
+        case "UPDATE_DIAGRAM": {
+            const { diagramId, mermaidSource, assetId, caption, placement } =
+                action.payload;
+
+            return mapContentElements(state, (element) =>
+                element.type === "Diagram" && element.id === diagramId
+                    ? {
+                          ...element,
+                          mermaid_source:
+                              mermaidSource ?? element.mermaid_source,
+                          asset_id:
+                              assetId === undefined ? element.asset_id : assetId,
+                          caption: caption ?? element.caption,
+                          placement: placement ?? element.placement,
+                      }
+                    : element,
+            );
+        }
+
+        case "UPDATE_LIST_ITEM": {
+            const { listId, itemIndex, content } = action.payload;
+
+            return mapContentElements(state, (element) =>
+                element.type === "List" && element.id === listId
+                    ? {
+                          ...element,
+                          items: element.items.map((item, index) =>
+                              index === itemIndex ? content : item,
+                          ).concat(itemIndex === element.items.length ? [content] : []),
+                      }
+                    : element,
+            );
+        }
+
+        case "UPDATE_ENUMERATION_ITEM": {
+            const { enumerationId, itemIndex, content } = action.payload;
+
+            return mapContentElements(state, (element) =>
+                element.type === "Enumeration" && element.id === enumerationId
+                    ? {
+                          ...element,
+                          items: element.items.map((item, index) =>
+                              index === itemIndex ? content : item,
+                          ).concat(itemIndex === element.items.length ? [content] : []),
+                      }
+                    : element,
+            );
         }
 
         case "UPDATE_TABLE_CELL": {
@@ -561,15 +701,24 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
 
         case "UPDATE_ELEMENT_EXTRA_FIELD": {
             const { elementId, fieldKey, fieldValue } = action.payload;
+            const extraFieldIsEmpty =
+                fieldValue === null ||
+                fieldValue === undefined ||
+                (typeof fieldValue === "string" && fieldValue.trim() === "") ||
+                (Array.isArray(fieldValue) && fieldValue.length === 0);
 
             return mapContentElements(state, (element) => {
                 if (element.id !== elementId) {
                     return element;
                 }
 
-                if (element.type === "Table" || element.type === "Figure") {
+                if (
+                    element.type === "Table" ||
+                    element.type === "Figure" ||
+                    element.type === "Diagram"
+                ) {
                     const extraFields = { ...element.extra_fields };
-                    if (fieldValue.trim() === "") {
+                    if (extraFieldIsEmpty) {
                         delete extraFields[fieldKey];
                     } else {
                         extraFields[fieldKey] = fieldValue;

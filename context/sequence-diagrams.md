@@ -12,7 +12,7 @@ sequenceDiagram
     participant UI as React UI
     participant State as Document State
     participant Worker as WASM Worker
-    participant Preview as Canvas Preview
+    participant Preview as Preview Pages
     participant API as Tauri API
     participant Session as Backend DocumentSession
 
@@ -28,10 +28,10 @@ sequenceDiagram
     State->>API: sync_document_events (backend mirror)
     API->>Session: apply_event on backend session
     API-->>State: Mirror accepted
-    Preview->>Worker: render_page for viewport pages
-    Worker-->>Preview: Page pixels + metrics
-    Preview->>Preview: putImageData into DOM canvas
-    Preview-->>User: Canvas preview update
+    Preview->>Worker: render_svg_page for changed viewport pages
+    Worker-->>Preview: Page SVG + metrics
+    Preview->>Preview: Replace stable page innerHTML
+    Preview-->>User: Preview page update
 ```
 
 - Bootstrap (open/new project): `CompilerClient.bootstrap` and `sync_document_snapshot` both complete before the document sync barrier drains.
@@ -39,9 +39,11 @@ sequenceDiagram
 - Main preview and resource previews compile in WASM via `preview_pipeline`.
 - Resource preview VFS uses the same `lib.typ` and `#show: apply` as the main document; `resources.typ` adds preview page dimensions and `#set page` / `#show page` overrides for a white background without headers or numbering. Sidebar thumbnails cap height at 40vh.
 - Compiled outline comes from `document.introspector` on the paged document (headings with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries (e.g. bibliography title) scroll the preview to that page.
-- Preview canvases use `render_page` / `render_resource_page`; the worker returns RGBA pixels and compiled page-frame metrics, and React paints DOM canvases with `putImageData`.
-- Canvas rasterizes only viewport pages; zoom debounces per `preview_zoom_render_debounce_ms`.
-- Resource thumbnails use resource-specific revisions and wait for the matching main preview revision to paint before rasterizing.
+- Main preview pages use `render_svg_page`; the worker returns serialized SVG markup and compiled page-frame metrics for layout, click mapping, and caret overlays.
+- Main preview pages render only viewport pages whose content changed; unchanged visible pages keep their existing `innerHTML`. Zoom updates page layout without requesting a page rerender.
+- Resource thumbnails use `render_resource_svg_page` and write SVG markup into stable thumbnail containers.
+- Resource thumbnails use resource-specific revisions and wait for the matching main preview revision to paint before replacing thumbnail SVG.
+- Failed compiles report localized toast notifications and keep the last successful preview-visible pages, outline, resources, source map, and preview revision.
 - Preview does not shift layout with compile-status chrome while typing.
 - **Undo/redo:** apply the stored `inverseEvents` / `forwardEvents` locally, then sync and mirror the full ordered event list with sequential event IDs. Destructive inverses carry restore payloads (`RestoreElement`, `RestoreTableRow`, `RestoreTableColumn`).
 
@@ -171,7 +173,7 @@ sequenceDiagram
     autonumber
 
     actor User
-    participant Preview as Canvas Preview
+    participant Preview as Preview Pages
     participant Hook as usePreviewCaretSync
     participant Worker as WASM Worker
     participant Sync as PreviewSyncState

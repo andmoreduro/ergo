@@ -62,8 +62,6 @@ pub struct GlobalSettings {
     pub autosave_on_app_close: Option<bool>,
     #[serde(default)]
     pub autosave_on_project_close: Option<bool>,
-    #[serde(default)]
-    pub preview_zoom_render_debounce_ms: Option<usize>,
 }
 
 impl Default for GlobalSettings {
@@ -82,7 +80,6 @@ impl Default for GlobalSettings {
             autosave_on_window_blur: Some(true),
             autosave_on_app_close: Some(true),
             autosave_on_project_close: Some(true),
-            preview_zoom_render_debounce_ms: Some(120),
         }
     }
 }
@@ -161,8 +158,26 @@ pub enum ActionId {
     EditorInsertFigure,
     #[serde(rename = "editor::InsertEquation")]
     EditorInsertEquation,
+    #[serde(rename = "editor::InsertBlockEquation")]
+    EditorInsertBlockEquation,
+    #[serde(rename = "editor::InsertInlineEquation")]
+    EditorInsertInlineEquation,
+    #[serde(rename = "editor::InsertQuote")]
+    EditorInsertQuote,
+    #[serde(rename = "editor::InsertDiagram")]
+    EditorInsertDiagram,
+    #[serde(rename = "editor::InsertList")]
+    EditorInsertList,
+    #[serde(rename = "editor::InsertEnumeration")]
+    EditorInsertEnumeration,
     #[serde(rename = "editor::InsertReference")]
     EditorInsertReference,
+    #[serde(rename = "editor::Bold")]
+    EditorBold,
+    #[serde(rename = "editor::Italic")]
+    EditorItalic,
+    #[serde(rename = "editor::Underline")]
+    EditorUnderline,
     #[serde(rename = "editor::AddAuthor")]
     EditorAddAuthor,
     #[serde(rename = "editor::RemoveAuthor")]
@@ -252,7 +267,16 @@ impl ActionId {
             ActionId::EditorInsertTable => "editor::InsertTable",
             ActionId::EditorInsertFigure => "editor::InsertFigure",
             ActionId::EditorInsertEquation => "editor::InsertEquation",
+            ActionId::EditorInsertBlockEquation => "editor::InsertBlockEquation",
+            ActionId::EditorInsertInlineEquation => "editor::InsertInlineEquation",
+            ActionId::EditorInsertQuote => "editor::InsertQuote",
+            ActionId::EditorInsertDiagram => "editor::InsertDiagram",
+            ActionId::EditorInsertList => "editor::InsertList",
+            ActionId::EditorInsertEnumeration => "editor::InsertEnumeration",
             ActionId::EditorInsertReference => "editor::InsertReference",
+            ActionId::EditorBold => "editor::Bold",
+            ActionId::EditorItalic => "editor::Italic",
+            ActionId::EditorUnderline => "editor::Underline",
             ActionId::EditorAddAuthor => "editor::AddAuthor",
             ActionId::EditorRemoveAuthor => "editor::RemoveAuthor",
             ActionId::EditorAddTableRow => "editor::AddTableRow",
@@ -317,7 +341,16 @@ impl FromStr for ActionId {
             "editor::InsertTable" => Ok(ActionId::EditorInsertTable),
             "editor::InsertFigure" => Ok(ActionId::EditorInsertFigure),
             "editor::InsertEquation" => Ok(ActionId::EditorInsertEquation),
+            "editor::InsertBlockEquation" => Ok(ActionId::EditorInsertBlockEquation),
+            "editor::InsertInlineEquation" => Ok(ActionId::EditorInsertInlineEquation),
+            "editor::InsertQuote" => Ok(ActionId::EditorInsertQuote),
+            "editor::InsertDiagram" => Ok(ActionId::EditorInsertDiagram),
+            "editor::InsertList" => Ok(ActionId::EditorInsertList),
+            "editor::InsertEnumeration" => Ok(ActionId::EditorInsertEnumeration),
             "editor::InsertReference" => Ok(ActionId::EditorInsertReference),
+            "editor::Bold" => Ok(ActionId::EditorBold),
+            "editor::Italic" => Ok(ActionId::EditorItalic),
+            "editor::Underline" => Ok(ActionId::EditorUnderline),
             "editor::AddAuthor" => Ok(ActionId::EditorAddAuthor),
             "editor::RemoveAuthor" => Ok(ActionId::EditorRemoveAuthor),
             "editor::AddTableRow" => Ok(ActionId::EditorAddTableRow),
@@ -521,9 +554,13 @@ pub struct ContentSection {
 pub enum DocumentElement {
     Heading(Heading),
     Paragraph(Paragraph),
+    Quote(Quote),
+    List(List),
+    Enumeration(Enumeration),
     Table(Table),
     Equation(Equation),
     Figure(Box<Figure>),
+    Diagram(Diagram),
     Custom(CustomElement),
 }
 
@@ -553,16 +590,41 @@ pub struct Paragraph {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
+pub struct Quote {
+    pub id: String,
+    pub content: Vec<RichText>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct List {
+    pub id: String,
+    pub items: Vec<Vec<RichText>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Enumeration {
+    pub id: String,
+    pub items: Vec<Vec<RichText>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct RichText {
     pub text: String,
     pub bold: Option<bool>,
     pub italic: Option<bool>,
+    #[serde(default)]
+    pub underline: Option<bool>,
     #[serde(default)]
     pub kind: Option<String>,
     #[serde(default)]
     pub reference_id: Option<String>,
     #[serde(default)]
     pub equation_source: Option<String>,
+    #[serde(default)]
+    pub equation_syntax: EquationSyntax,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -594,6 +656,31 @@ pub struct Equation {
     pub id: String,
     pub latex_source: String,
     pub is_block: bool,
+    #[serde(default)]
+    pub syntax: EquationSyntax,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Diagram {
+    pub id: String,
+    pub mermaid_source: String,
+    #[serde(default)]
+    pub asset_id: Option<String>,
+    pub caption: String,
+    pub placement: String,
+    #[serde(default)]
+    #[ts(type = "Record<string, any>")]
+    pub extra_fields: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, TS, PartialEq, Eq, Hash)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum EquationSyntax {
+    #[default]
+    Typst,
+    Latex,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

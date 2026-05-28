@@ -6,8 +6,8 @@ High-level runtime containers, responsibilities, and IPC boundaries for the Reac
 
 Érgo is a local-first desktop application:
 
-1. **Frontend (React / TypeScript / Vite):** UI, action context tree, local `DocumentAST` with undo/redo, settings UI, Canvas preview, and orchestration hooks.
-2. **WASM Compiler Worker:** Hot-path `DocumentSession`, VFS, main and resource preview compiles, `PreviewSyncState`, Canvas rasterization, and export rendering (`ergo-engine-wasm` + `ergo-core`).
+1. **Frontend (React / TypeScript / Vite):** UI, action context tree, local `DocumentAST` with undo/redo, settings UI, preview page rendering, and orchestration hooks.
+2. **WASM Compiler Worker:** Hot-path `DocumentSession`, VFS, main and resource preview compiles, `PreviewSyncState`, page rendering, and export rendering (`ergo-engine-wasm` + `ergo-core`).
 3. **Backend (Tauri / Rust):** Typed actions and keymap resolution, mirrored `DocumentSession` and VFS for archive I/O, settings persistence, and host file/dialog I/O.
 4. **Host OS:** WebView, `.ergproj` archives, app config under `Ergo`, and Typst package cache.
 
@@ -27,7 +27,7 @@ flowchart TB
         Actions["Action Runtime"]:::comp
         DocState["Document State + History"]:::comp
         AppOrch["App Orchestration"]:::comp
-        PreviewUI["Canvas Preview"]:::comp
+        PreviewUI["Preview Pages"]:::comp
         Sidebar["Workspace Sidebar"]:::comp
         TauriClient["Tauri API Client"]:::comp
 
@@ -46,7 +46,7 @@ flowchart TB
         PreviewEngine["Preview Engine"]:::comp
         PreviewSync["Preview Sync State"]:::comp
         WorkerVFS["Worker VFS"]:::comp
-        TypstCompile["Typst Compile + Canvas Render"]:::comp
+        TypstCompile["Typst Compile + Page Render"]:::comp
 
         WorkerBridge --> PreviewEngine
         PreviewEngine --> WorkerVFS
@@ -83,7 +83,7 @@ flowchart TB
 
     Frontend -. "rendered in" .-> WebView
     DocState == "sync, compile, render, preview sync" ==> WorkerBridge
-    PreviewUI == "render_page, render_resource_page, jump_from_click" ==> WorkerBridge
+    PreviewUI == "render_svg_page, render_resource_svg_page, jump_from_click" ==> WorkerBridge
     TauriClient == "actions, settings, archive mirror, write_bytes" ==> Handlers
     Archive <== "read/write zip" ==> ProjectFiles
     Settings <== "read/write JSON" ==> SettingsFile
@@ -97,8 +97,8 @@ flowchart TB
 
 ## Component Notes
 
-- **Preview Engine** wraps `DocumentSession`, `preview_pipeline`, dual `ErgoWorld` instances (main + resource previews with comemo), `PreviewSyncState`, and page image rasterization.
-- **Canvas Preview** owns DOM layout, viewport observation, DOM canvas painting from worker-returned pixels, click coordinate conversion, and caret overlays.
+- **Preview Engine** wraps `DocumentSession`, `preview_pipeline`, dual `ErgoWorld` instances (main + resource previews with comemo), `PreviewSyncState`, main page SVG serialization, and resource thumbnail SVG serialization.
+- **Preview Pages** own DOM layout, viewport observation, SVG page replacement, click coordinate conversion, and caret overlays. Main pages and resource thumbnails write worker-returned SVG markup into stable page containers.
 - **DocumentSession (mirror)** on the backend applies the same typed events as WASM so `save_project` packs a consistent VFS. It does not compile on the IPC sync path.
 - **Tauri API Client** imports IPC DTOs only from generated `src/bindings/`.
 - **Action Runtime** dispatches stable action IDs for commands and shortcuts; Rust owns catalog, keymap schema, sequence resolution, and context matching.

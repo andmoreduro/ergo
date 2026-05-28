@@ -54,6 +54,20 @@ pub fn read_vfs_file(state: State<'_, TauriAppState>, path: String) -> Result<Ve
 }
 
 #[tauri::command]
+pub fn write_generated_asset(
+    state: State<'_, TauriAppState>,
+    path: String,
+    bytes: Vec<u8>,
+) -> Result<(), String> {
+    let path = normalize_virtual_path(&path);
+    if !is_generated_diagram_asset_path(&path) {
+        return Err("Generated assets can only be written under assets/diagrams/*.svg".to_string());
+    }
+    state.vfs.write_file(&path, bytes);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn import_resource_file(
     state: State<'_, TauriAppState>,
     source_path: String,
@@ -61,6 +75,16 @@ pub fn import_resource_file(
     let asset = import_resource_file_into_vfs(&state.vfs, source_path)?;
     let bytes = state.vfs.read_file(&asset.path)?;
     Ok(ImportResourceResult { asset, bytes })
+}
+
+fn is_generated_diagram_asset_path(path: &str) -> bool {
+    path.starts_with("assets/diagrams/")
+        && path.ends_with(".svg")
+        && !path.contains("..")
+        && path
+            .strip_prefix("assets/diagrams/")
+            .map(|file_name| !file_name.is_empty() && !file_name.contains('/'))
+            .unwrap_or(false)
 }
 
 pub(crate) fn import_resource_file_into_vfs(

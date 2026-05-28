@@ -19,9 +19,11 @@ export const createRichText = (text = ""): RichText => ({
     text,
     bold: null,
     italic: null,
+    underline: null,
     kind: null,
     reference_id: null,
     equation_source: null,
+    equation_syntax: "typst",
 });
 
 export const createHeading = (
@@ -42,6 +44,31 @@ export const createParagraph = (
     type: "Paragraph",
     id,
     content: text ? [createRichText(text)] : [],
+});
+
+export const createQuote = (
+    text = "",
+    id = createId(),
+): DocumentElement => ({
+    type: "Quote",
+    id,
+    content: text ? [createRichText(text)] : [],
+});
+
+export const createList = (
+    id = createId(),
+): DocumentElement => ({
+    type: "List",
+    id,
+    items: [[createRichText("")]],
+});
+
+export const createEnumeration = (
+    id = createId(),
+): DocumentElement => ({
+    type: "Enumeration",
+    id,
+    items: [[createRichText("")]],
 });
 
 const createEmptyCell = (): TableCell => ({
@@ -69,11 +96,13 @@ export const createTable = (
 export const createEquation = (
     id = createId(),
     latexSource = "",
+    syntax: "typst" | "latex" = "typst",
 ): DocumentElement => ({
     type: "Equation",
     id,
     latex_source: latexSource,
     is_block: true,
+    syntax,
 });
 
 export const createFigure = (id = createId()): DocumentElement => ({
@@ -81,6 +110,16 @@ export const createFigure = (id = createId()): DocumentElement => ({
     id,
     asset_id: null,
     content: createParagraph(""),
+    caption: "",
+    placement: "here",
+    extra_fields: {},
+});
+
+export const createDiagram = (id = `diagram-${createId()}`): DocumentElement => ({
+    type: "Diagram",
+    id,
+    mermaid_source: "flowchart TD\n  A[Start] --> B[End]",
+    asset_id: null,
     caption: "",
     placement: "here",
     extra_fields: {},
@@ -131,7 +170,6 @@ export const createDocumentAST = (
                     autosave_on_window_blur: true,
                     autosave_on_app_close: true,
                     autosave_on_project_close: true,
-                    preview_zoom_render_debounce_ms: 120,
                 },
             },
             dependencies: { packages: [] },
@@ -184,7 +222,6 @@ export const createDefaultDocumentAST = (): DocumentAST => ({
             autosave_on_window_blur: true,
             autosave_on_app_close: true,
             autosave_on_project_close: true,
-            preview_zoom_render_debounce_ms: 120,
         },
     },
     dependencies: {

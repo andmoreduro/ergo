@@ -72,3 +72,19 @@
 .workspace [data-scroll-region]::-webkit-scrollbar-corner {
     background: transparent;
 }
+
+.toast {
+    position: fixed;
+    right: var(--space-4);
+    top: calc(32px + var(--space-4));
+    z-index: 2400;
+    max-width: min(28rem, calc(100vw - var(--space-8)));
+    padding: var(--space-3) var(--space-4);
+    border: var(--border-width-sm) solid var(--color-danger);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-md);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+}

@@ -4,11 +4,12 @@ import {
     PREVIEW_ZOOM_DEFAULT,
     PREVIEW_ZOOM_MAX,
     PREVIEW_ZOOM_MIN,
-    PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS,
     PREVIEW_ZOOM_UI_BASE,
     clampPreviewZoom,
+    fitPreviewZoomForPageHeight,
+    fitPreviewZoomForPageWidth,
     formatPreviewZoomPercent,
-    resolvePreviewZoomRenderDebounceMs,
+    layoutZoomForManualPreviewZoom,
     stepPreviewZoom,
 } from "./previewZoom";
 
@@ -20,8 +21,8 @@ describe("previewZoom", () => {
     });
 
     it("steps zoom in and out", () => {
-        expect(stepPreviewZoom(PREVIEW_ZOOM_DEFAULT, 1)).toBe(1);
-        expect(stepPreviewZoom(1, -1)).toBe(PREVIEW_ZOOM_DEFAULT);
+        expect(stepPreviewZoom(PREVIEW_ZOOM_DEFAULT, 1)).toBe(1.1);
+        expect(stepPreviewZoom(1, -1)).toBe(0.9);
     });
 
     it("shows the UI baseline as 100%", () => {
@@ -29,13 +30,27 @@ describe("previewZoom", () => {
         expect(formatPreviewZoomPercent(PREVIEW_ZOOM_UI_BASE * 1.1)).toBe(110);
     });
 
-    it("resolves preview zoom render debounce from settings", () => {
-        expect(resolvePreviewZoomRenderDebounceMs(null)).toBe(
-            PREVIEW_ZOOM_RENDER_DEBOUNCE_DEFAULT_MS,
-        );
-        expect(resolvePreviewZoomRenderDebounceMs(80)).toBe(80);
-        expect(resolvePreviewZoomRenderDebounceMs(-5)).toBe(0);
-        expect(resolvePreviewZoomRenderDebounceMs(900)).toBe(500);
+    it("makes 100% fit the largest page width with side gaps", () => {
+        const pages = [
+            { widthPt: 300, heightPt: 500 },
+            { widthPt: 600, heightPt: 500 },
+        ];
+
+        expect(
+            layoutZoomForManualPreviewZoom({
+                gapPx: 24,
+                manualZoom: 1,
+                pages,
+                viewportWidthPx: 824,
+            }),
+        ).toBeCloseTo(1, 5);
+    });
+
+    it("resolves dynamic fit width and fit height zoom from the target page", () => {
+        const page = { widthPt: 300, heightPt: 450 };
+
+        expect(fitPreviewZoomForPageWidth(424, page, 24)).toBeCloseTo(1, 5);
+        expect(fitPreviewZoomForPageHeight(634, page, 34)).toBeCloseTo(1, 5);
     });
 
     it("scales raster density with zoom", () => {

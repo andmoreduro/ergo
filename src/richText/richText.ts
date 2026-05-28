@@ -2,6 +2,7 @@ import type { RichText } from "../bindings/RichText";
 import { createRichText } from "../state/ast/defaults";
 
 export const REFERENCE_KIND = "reference";
+const INLINE_EQUATION_KIND = "inlineEquation";
 
 export const pathIdForId = (id: string): string => {
     let normalized = "";
@@ -34,9 +35,11 @@ export const createReferenceSpan = (
     text: label,
     bold: null,
     italic: null,
+    underline: null,
     kind: REFERENCE_KIND,
     reference_id: referenceId,
     equation_source: null,
+    equation_syntax: "typst",
 });
 
 export const isReferenceSpan = (span: RichText): boolean =>
@@ -48,6 +51,16 @@ export const richTextPlainLength = (content: readonly RichText[]): number =>
             total + (isReferenceSpan(span) ? 0 : [...span.text].length),
         0,
     );
+
+export const createInlineEquationSpan = (
+    source = "x",
+    syntax: "typst" | "latex" = "typst",
+): RichText => ({
+    ...createRichText(source),
+    kind: INLINE_EQUATION_KIND,
+    equation_source: source,
+    equation_syntax: syntax,
+});
 
 export const insertReferenceAtOffset = (
     content: readonly RichText[],
@@ -119,7 +132,10 @@ const mergeAdjacentTextSpans = (content: RichText[]): RichText[] => {
             previous &&
             !isReferenceSpan(previous) &&
             previous.bold === span.bold &&
-            previous.italic === span.italic
+            previous.italic === span.italic &&
+            previous.underline === span.underline &&
+            previous.kind === span.kind &&
+            previous.equation_syntax === span.equation_syntax
         ) {
             previous.text += span.text;
             continue;
@@ -146,11 +162,23 @@ export const richTextToPlainText = (content: readonly RichText[]): string =>
 export const parseRichTextFromEditableRoot = (root: HTMLElement): RichText[] => {
     const spans: RichText[] = [];
 
-    const walk = (node: Node) => {
+    const walk = (
+        node: Node,
+        marks: Pick<RichText, "bold" | "italic" | "underline"> = {
+            bold: null,
+            italic: null,
+            underline: null,
+        },
+    ) => {
         if (node.nodeType === Node.TEXT_NODE) {
             const text = node.textContent ?? "";
             if (text.length > 0) {
-                spans.push(createRichText(text));
+                spans.push({
+                    ...createRichText(text),
+                    bold: marks.bold,
+                    italic: marks.italic,
+                    underline: marks.underline,
+                });
             }
             return;
         }
@@ -169,11 +197,102 @@ export const parseRichTextFromEditableRoot = (root: HTMLElement): RichText[] => 
             return;
         }
 
-        node.childNodes.forEach(walk);
+        if (node.dataset.inlineEquationSource !== undefined) {
+            const source = node.dataset.inlineEquationSource ?? node.textContent ?? "";
+            spans.push({
+                ...createRichText(node.textContent ?? source),
+                kind: INLINE_EQUATION_KIND,
+                equation_source: source,
+                equation_syntax:
+                    node.dataset.inlineEquationSyntax === "latex" ? "latex" : "typst",
+            });
+            return;
+        }
+
+        const tag = node.tagName.toLowerCase();
+        const nextMarks = {
+            bold:
+                marks.bold ||
+                tag === "b" ||
+                tag === "strong" ||
+                node.style.fontWeight === "bold"
+                    ? true
+                    : null,
+            italic:
+                marks.italic ||
+                tag === "i" ||
+                tag === "em" ||
+                node.style.fontStyle === "italic"
+                    ? true
+                    : null,
+            underline:
+                marks.underline ||
+                tag === "u" ||
+                node.style.textDecorationLine.includes("underline")
+                    ? true
+                    : null,
+        };
+
+        node.childNodes.forEach((child) => walk(child, nextMarks));
     };
 
-    root.childNodes.forEach(walk);
+    root.childNodes.forEach((child) => walk(child));
     return mergeAdjacentTextSpans(spans);
+};
+
+export const insertInlineEquationAtOffset = (
+    content: readonly RichText[],
+    offset: number,
+    source = "x",
+    syntax: "typst" | "latex" = "typst",
+): RichText[] => {
+    const safeOffset = Math.max(0, Math.min(offset, richTextPlainLength(content)));
+    const equationSpan = createInlineEquationSpan(source, syntax);
+    const next: RichText[] = [];
+    let cursor = 0;
+
+    for (const span of content) {
+        if (isReferenceSpan(span)) {
+            next.push(span);
+            continue;
+        }
+
+        const spanLength = [...span.text].length;
+        const spanStart = cursor;
+        const spanEnd = cursor + spanLength;
+
+        if (safeOffset <= spanStart) {
+            next.push(span);
+            cursor = spanEnd;
+            continue;
+        }
+
+        if (safeOffset >= spanEnd) {
+            next.push(span);
+            cursor = spanEnd;
+            continue;
+        }
+
+        const localOffset = safeOffset - spanStart;
+        const chars = [...span.text];
+        const before = chars.slice(0, localOffset).join("");
+        const after = chars.slice(localOffset).join("");
+
+        if (before) {
+            next.push({ ...span, text: before });
+        }
+        next.push(equationSpan);
+        if (after) {
+            next.push({ ...span, text: after });
+        }
+        cursor = spanEnd;
+    }
+
+    if (safeOffset >= cursor) {
+        next.push(equationSpan);
+    }
+
+    return mergeAdjacentTextSpans(next);
 };
 
 export const renderRichTextToEditableHtml = (content: readonly RichText[]): string => {
@@ -190,7 +309,25 @@ export const renderRichTextToEditableHtml = (content: readonly RichText[]): stri
                 )}" data-reference-label="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
             }
 
-            return escapeHtml(span.text);
+            if (span.kind === INLINE_EQUATION_KIND) {
+                const source = span.equation_source ?? span.text;
+                const label = span.text || source;
+                return `<span contenteditable="false" data-inline-equation-source="${escapeHtml(
+                    source,
+                )}" data-inline-equation-syntax="${span.equation_syntax}">${escapeHtml(label)}</span>`;
+            }
+
+            let html = escapeHtml(span.text);
+            if (span.underline) {
+                html = `<u>${html}</u>`;
+            }
+            if (span.italic) {
+                html = `<em>${html}</em>`;
+            }
+            if (span.bold) {
+                html = `<strong>${html}</strong>`;
+            }
+            return html;
         })
         .join("");
 };

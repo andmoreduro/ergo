@@ -84,6 +84,7 @@ export const SimpleListField = ({
     const [chipFocus, setChipFocus] = useState<number | null>(null);
     const composeInputRef = useRef<HTMLInputElement | null>(null);
     const chipButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+    const [composingNewEntry, setComposingNewEntry] = useState(false);
     const { handleAdvanceKeyDown } = useEditorNavigation();
 
     const composerFieldId = simpleListComposerFieldId(path);
@@ -98,39 +99,58 @@ export const SimpleListField = ({
         requestAnimationFrame(() => composeInputRef.current?.focus());
     }, []);
 
-    const commitDraft = useCallback(
-        (target: EditTarget, text: string) => {
-            const normalized = normalizeEditableText(text).trim();
-            if (target.kind === "compose") {
-                if (!normalized) {
-                    return;
+    const syncComposeDraft = useCallback(
+        (text: string) => {
+            const normalized = normalizeEditableText(text);
+            if (!normalized.trim()) {
+                if (composingNewEntry) {
+                    setComposingNewEntry(false);
+                    onChange(items.slice(0, -1));
                 }
+                return;
+            }
+
+            if (!composingNewEntry) {
+                setComposingNewEntry(true);
                 onChange([...items, normalized]);
                 return;
             }
 
-            if (normalized) {
-                const updated = [...items];
-                updated[target.index] = normalized;
-                onChange(updated);
-                return;
-            }
-
-            onChange(items.filter((_, index) => index !== target.index));
+            onChange([...items.slice(0, -1), normalized]);
         },
-        [items, onChange],
+        [composingNewEntry, items, onChange],
     );
+
+    const finalizeComposeEntry = useCallback(() => {
+        if (!composingNewEntry || items.length === 0) {
+            setComposingNewEntry(false);
+            return;
+        }
+
+        const updated = [...items];
+        const lastIndex = updated.length - 1;
+        const finalized = normalizeEditableText(updated[lastIndex] ?? "").trim();
+        if (finalized) {
+            updated[lastIndex] = finalized;
+            onChange(updated);
+        } else {
+            onChange(items.slice(0, lastIndex));
+        }
+        setComposingNewEntry(false);
+    }, [composingNewEntry, items, onChange]);
 
     const finishEditing = useCallback(
         (advance = false) => {
-            commitDraft(editTarget, draft);
+            if (editTarget.kind === "compose") {
+                finalizeComposeEntry();
+            }
             setDraft("");
             setEditTarget({ kind: "compose" });
             if (advance) {
                 onAdvance?.();
             }
         },
-        [commitDraft, draft, editTarget, onAdvance],
+        [editTarget, finalizeComposeEntry, onAdvance],
     );
 
     const startEditingItem = useCallback((index: number) => {
@@ -170,6 +190,7 @@ export const SimpleListField = ({
         }
         const lastIndex = items.length - 1;
         const lastValue = items[lastIndex] ?? "";
+        setComposingNewEntry(false);
         onChange(items.slice(0, lastIndex));
         setEditTarget({ kind: "compose" });
         setDraft(lastValue);
@@ -287,6 +308,8 @@ export const SimpleListField = ({
 
     const isComposing = editTarget.kind === "compose";
     const showComposePill = isComposing && draft.length > 0;
+    const visibleItems =
+        composingNewEntry && items.length > 0 ? items.slice(0, -1) : items;
 
     useEffect(() => {
         if (showComposePill) {
@@ -316,7 +339,7 @@ export const SimpleListField = ({
                     }
                 }}
             >
-                {items.map((item, index) => {
+                {visibleItems.map((item, index) => {
                     const isEditing =
                         editTarget.kind === "item" && editTarget.index === index;
 
@@ -369,9 +392,11 @@ export const SimpleListField = ({
                             className={styles.chipInput}
                             type="text"
                             value={draft}
-                            onChange={(event) =>
-                                setDraft(normalizeEditableText(event.target.value))
-                            }
+                            onChange={(event) => {
+                                const next = normalizeEditableText(event.target.value);
+                                setDraft(next);
+                                syncComposeDraft(next);
+                            }}
                             onKeyDown={handleComposeKeyDown}
                         />
                     </span>
@@ -395,6 +420,7 @@ export const SimpleListField = ({
                             const next = normalizeEditableText(event.target.value);
                             setEditTarget({ kind: "compose" });
                             setDraft(next);
+                            syncComposeDraft(next);
                         }}
                         onKeyDown={handleComposeKeyDown}
                     />

@@ -214,6 +214,111 @@ describe("astReducer", () => {
         expect(figure?.type === "Figure" ? figure.caption : "").toBe("A figure");
     });
 
+    it("adds and updates quote, diagram, list, and enumeration elements", () => {
+        const state = createDefaultDocumentAST();
+        const content = getContentSection(state);
+        expect(content).toBeDefined();
+
+        const withQuote = astReducer(state, {
+            type: "ADD_QUOTE",
+            payload: { sectionId: content?.id ?? "", quoteId: "quote-1" },
+        });
+        const withDiagram = astReducer(withQuote, {
+            type: "ADD_DIAGRAM",
+            payload: { sectionId: content?.id ?? "", diagramId: "diagram-1" },
+        });
+        const withList = astReducer(withDiagram, {
+            type: "ADD_LIST",
+            payload: { sectionId: content?.id ?? "", listId: "list-1" },
+        });
+        const withEnumeration = astReducer(withList, {
+            type: "ADD_ENUMERATION",
+            payload: { sectionId: content?.id ?? "", enumerationId: "enum-1" },
+        });
+
+        const withQuoteText = astReducer(withEnumeration, {
+            type: "UPDATE_QUOTE_CONTENT",
+            payload: {
+                quoteId: "quote-1",
+                content: [
+                    {
+                        text: "Quoted",
+                        bold: null,
+                        italic: null,
+                        underline: null,
+                        kind: null,
+                        reference_id: null,
+                        equation_source: null,
+                        equation_syntax: "typst",
+                    },
+                ],
+            },
+        });
+        const withDiagramAsset = astReducer(withQuoteText, {
+            type: "UPDATE_DIAGRAM",
+            payload: {
+                diagramId: "diagram-1",
+                mermaidSource: "flowchart TD\nA-->B",
+                assetId: "diagram-1",
+                caption: "Diagram",
+            },
+        });
+        const withListItem = astReducer(withDiagramAsset, {
+            type: "UPDATE_LIST_ITEM",
+            payload: {
+                listId: "list-1",
+                itemIndex: 1,
+                content: [
+                    {
+                        text: "Second",
+                        bold: null,
+                        italic: null,
+                        underline: null,
+                        kind: null,
+                        reference_id: null,
+                        equation_source: null,
+                        equation_syntax: "typst",
+                    },
+                ],
+            },
+        });
+        const next = astReducer(withListItem, {
+            type: "UPDATE_ENUMERATION_ITEM",
+            payload: {
+                enumerationId: "enum-1",
+                itemIndex: 1,
+                content: [
+                    {
+                        text: "Second enum",
+                        bold: null,
+                        italic: null,
+                        underline: null,
+                        kind: null,
+                        reference_id: null,
+                        equation_source: null,
+                        equation_syntax: "typst",
+                    },
+                ],
+            },
+        });
+
+        const elements = getContentSection(next)?.elements ?? [];
+        expect(elements.map((element) => element.type)).toEqual([
+            "Quote",
+            "Diagram",
+            "List",
+            "Enumeration",
+        ]);
+        const quote = elements[0];
+        const diagram = elements[1];
+        const list = elements[2];
+        const enumeration = elements[3];
+        expect(quote?.type === "Quote" ? quote.content[0].text : "").toBe("Quoted");
+        expect(diagram?.type === "Diagram" ? diagram.asset_id : null).toBe("diagram-1");
+        expect(list?.type === "List" ? list.items[1][0].text : "").toBe("Second");
+        expect(enumeration?.type === "Enumeration" ? enumeration.items[1][0].text : "").toBe("Second enum");
+    });
+
     it("removes an element", () => {
         const state = createDefaultDocumentAST();
         const content = getContentSection(state);

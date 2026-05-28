@@ -27,7 +27,10 @@ import {
     projectInputFieldId,
     simpleListComposerFieldId,
 } from "../../../editor/fieldIds";
-import { normalizeEditableText } from "../../../editor/textInput";
+import { parseInputRichText } from "../../../editor/richTextMarks";
+import { normalizeEditableText, normalizeRichTextContent } from "../../../editor/textInput";
+import { useDeferredRichTextCommit } from "../../../editor/useDeferredRichTextCommit";
+import { RichTextField } from "../../molecules/RichTextField/RichTextField";
 import { useDeferredTextCommit } from "../../../editor/useDeferredTextCommit";
 import { SimpleListField } from "../../molecules/SimpleListField/SimpleListField";
 import { AuthorsField } from "../../molecules/AuthorsField/AuthorsField";
@@ -38,14 +41,20 @@ import {
 import { useFieldNavigation } from "../../../editor/useFieldNavigation";
 import { Delete24Regular } from "@fluentui/react-icons";
 import {
+    Diagram24Regular,
     TextHeader124Regular,
+    TextBold24Regular,
+    TextBulletList24Regular,
+    TextItalic24Regular,
+    TextNumberListLtr24Regular,
+    TextQuote24Regular,
+    TextUnderline24Regular,
     Table24Regular,
     MathFormula24Regular,
     Image24Regular,
     Link24Regular,
 } from "@fluentui/react-icons";
 import { TextParagraph24Regular } from "../../icons/TextParagraph24Regular";
-import { Accordion } from "../../molecules/Accordion/Accordion";
 
 type ContentSection = Extract<DocumentSection, { type: "Content" }>;
 
@@ -64,6 +73,26 @@ const getValueAtPath = (obj: any, path: string): any => {
         }
     }
     return current;
+};
+
+const focusedAuthorIndex = (elementId: string | null, fieldId: string | null) => {
+    if (
+        (elementId !== "project" && elementId !== "inputs") ||
+        !fieldId
+    ) {
+        return null;
+    }
+
+    const path = fieldId.startsWith("project-input-")
+        ? fieldId.slice("project-input-".length)
+        : fieldId;
+    const match = path.match(/^\/authors\/(\d+)(?:\/|$)/);
+    if (!match) {
+        return null;
+    }
+
+    const index = Number(match[1]);
+    return Number.isInteger(index) && index >= 0 ? index : null;
 };
 
 export interface EditorProps {
@@ -148,6 +177,15 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
 
     const deleteFocusedElement = useCallback(() => {
         const elementId = documentFocus.elementId;
+        const authorIndex = focusedAuthorIndex(elementId, documentFocus.fieldId);
+        if (authorIndex !== null) {
+            dispatchAst({
+                type: "REMOVE_INPUT_ARRAY_ITEM",
+                payload: { path: "/authors", index: authorIndex },
+            });
+            return true;
+        }
+
         if (!elementId || elementId === "project") {
             return false;
         }
@@ -157,7 +195,11 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
         }
 
         return fieldNavigationRef.current.removeContentElement(state, elementId);
-    }, [documentFocus.elementId, state]);
+    }, [dispatchAst, documentFocus.elementId, documentFocus.fieldId, state]);
+
+    const canDeleteFocusedTarget =
+        Boolean(documentFocus.elementId && documentFocus.elementId !== "project") ||
+        focusedAuthorIndex(documentFocus.elementId, documentFocus.fieldId) !== null;
 
     const editorHandlersWithDelete = useMemo<ActionHandlerMap>(
         () => ({
@@ -179,92 +221,9 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
                     <button
                         className={toolbarStyles.toolbarButton}
                         type="button"
-                        title={m.menubar_insert_heading()}
-                        onClick={() =>
-                            void dispatchAction({
-                                id: "editor::InsertHeading",
-                                payload: null,
-                            })
-                        }
-                    >
-                        <TextHeader124Regular />
-                    </button>
-                    <button
-                        className={toolbarStyles.toolbarButton}
-                        type="button"
-                        title={m.menubar_insert_paragraph()}
-                        aria-label={m.menubar_insert_paragraph()}
-                        onClick={() =>
-                            void dispatchAction({
-                                id: "editor::InsertParagraph",
-                                payload: null,
-                            })
-                        }
-                    >
-                        <TextParagraph24Regular aria-hidden />
-                    </button>
-                    <button
-                        className={toolbarStyles.toolbarButton}
-                        type="button"
-                        title={m.menubar_insert_table()}
-                        onClick={() =>
-                            void dispatchAction({
-                                id: "editor::InsertTable",
-                                payload: null,
-                            })
-                        }
-                    >
-                        <Table24Regular />
-                    </button>
-                    <button
-                        className={toolbarStyles.toolbarButton}
-                        type="button"
-                        title={m.menubar_insert_equation()}
-                        onClick={() =>
-                            void dispatchAction({
-                                id: "editor::InsertEquation",
-                                payload: null,
-                            })
-                        }
-                    >
-                        <MathFormula24Regular />
-                    </button>
-                    <button
-                        className={toolbarStyles.toolbarButton}
-                        type="button"
-                        title={m.menubar_insert_figure()}
-                        onClick={() =>
-                            void dispatchAction({
-                                id: "editor::InsertFigure",
-                                payload: null,
-                            })
-                        }
-                    >
-                        <Image24Regular />
-                    </button>
-                    <button
-                        className={toolbarStyles.toolbarButton}
-                        type="button"
-                        title={m.menubar_insert_reference()}
-                        onClick={() =>
-                            void dispatchAction({
-                                id: "editor::InsertReference",
-                                payload: null,
-                            })
-                        }
-                    >
-                        <Link24Regular />
-                    </button>
-                    <span className={toolbarStyles.toolbarSpacer} />
-                    <button
-                        className={toolbarStyles.toolbarButton}
-                        type="button"
                         title={m.element_delete()}
                         aria-label={m.element_delete()}
-                        disabled={
-                            !documentFocus.elementId ||
-                            documentFocus.elementId === "project"
-                        }
+                        disabled={!canDeleteFocusedTarget}
                         onClick={() =>
                             void dispatchAction({
                                 id: "editor::DeleteElement",
@@ -274,6 +233,212 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
                     >
                         <Delete24Regular />
                     </button>
+                    <div className={toolbarStyles.toolbarGroup}>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_text_bold()}
+                            aria-label={m.menubar_text_bold()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::Bold",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <TextBold24Regular />
+                        </button>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_text_italic()}
+                            aria-label={m.menubar_text_italic()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::Italic",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <TextItalic24Regular />
+                        </button>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_text_underline()}
+                            aria-label={m.menubar_text_underline()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::Underline",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <TextUnderline24Regular />
+                        </button>
+                    </div>
+                    <div className={toolbarStyles.toolbarGroup}>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_heading()}
+                            aria-label={m.menubar_insert_heading()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertHeading",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <TextHeader124Regular />
+                        </button>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_paragraph()}
+                            aria-label={m.menubar_insert_paragraph()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertParagraph",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <TextParagraph24Regular aria-hidden />
+                        </button>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_quote()}
+                            aria-label={m.menubar_insert_quote()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertQuote",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <TextQuote24Regular />
+                        </button>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_list()}
+                            aria-label={m.menubar_insert_list()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertList",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <TextBulletList24Regular />
+                        </button>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_enumeration()}
+                            aria-label={m.menubar_insert_enumeration()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertEnumeration",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <TextNumberListLtr24Regular />
+                        </button>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_table()}
+                            aria-label={m.menubar_insert_table()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertTable",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <Table24Regular />
+                        </button>
+                    </div>
+                    <div className={toolbarStyles.toolbarGroup}>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_block_equation()}
+                            aria-label={m.menubar_insert_block_equation()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertBlockEquation",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <MathFormula24Regular />
+                        </button>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_inline_equation()}
+                            aria-label={m.menubar_insert_inline_equation()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertInlineEquation",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <MathFormula24Regular />
+                        </button>
+                    </div>
+                    <div className={toolbarStyles.toolbarGroup}>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_figure()}
+                            aria-label={m.menubar_insert_figure()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertFigure",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <Image24Regular />
+                        </button>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_diagram()}
+                            aria-label={m.menubar_insert_diagram()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertDiagram",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <Diagram24Regular />
+                        </button>
+                    </div>
+                    <div className={toolbarStyles.toolbarGroup}>
+                        <button
+                            className={toolbarStyles.toolbarButton}
+                            type="button"
+                            title={m.menubar_insert_reference()}
+                            aria-label={m.menubar_insert_reference()}
+                            onClick={() =>
+                                void dispatchAction({
+                                    id: "editor::InsertReference",
+                                    payload: null,
+                                })
+                            }
+                        >
+                            <Link24Regular />
+                        </button>
+                    </div>
                     {templateVariants.length > 1 && (
                         <>
                             <span className={toolbarStyles.toolbarSpacer} />
@@ -315,7 +480,8 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
 
                 <div className={styles.editorScroll} data-scroll-region>
                 {groups.map((group) => (
-                    <Accordion key={group.id} title={group.label} defaultOpen>
+                    <section key={group.id} className={styles.templateGroupCard}>
+                        <h2>{group.label}</h2>
                         <div className={styles.groupContent}>
                             {group.inputs.map((inputId) => {
                                 const schema = inputsMap.get(inputId);
@@ -330,16 +496,8 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
                                 );
                             })}
                         </div>
-                    </Accordion>
+                    </section>
                 ))}
-
-                {groups.length > 0 ? (
-                    <div
-                        aria-hidden
-                        className={styles.templateContentDivider}
-                        role="separator"
-                    />
-                ) : null}
 
                 {state.sections.map((section) =>
                     section.type === "Content" ? (
@@ -385,6 +543,10 @@ const DynamicField = ({ schema, path, label }: DynamicFieldProps) => {
 
     if (schema.type === "array") {
         return <DynamicFieldArray schema={schema} path={path} label={label} />;
+    }
+
+    if (schema.type === "content") {
+        return <DynamicFieldContent schema={schema} path={path} label={label} />;
     }
 
     return <DynamicFieldString schema={schema} path={path} label={label} />;
@@ -453,6 +615,45 @@ const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
             authors={authors}
             importance={schema.importance ?? undefined}
             label={getFieldLabel(schema, label)}
+        />
+    );
+};
+
+const DynamicFieldContent = ({ schema, path, label }: DynamicFieldProps) => {
+    const { state, dispatch } = useDocumentAst();
+    const { handleAdvanceKeyDown } = useEditorNavigation();
+    const committed = parseInputRichText(getValueAtPath(state.inputs, path));
+    const { content, setDraft, shouldCommit } = useDeferredRichTextCommit(
+        projectInputFieldId(path),
+        committed,
+    );
+    const fieldId = projectInputFieldId(path);
+    const fieldBinding = useEditorFieldBinding<HTMLDivElement>({
+        elementId: "project",
+        fieldId,
+    });
+
+    return (
+        <RichTextField
+            label={getFieldLabel(schema, label)}
+            importance={schema.importance ?? undefined}
+            content={content}
+            fieldBinding={fieldBinding}
+            onChange={(next) => {
+                const normalized = normalizeRichTextContent(next);
+                setDraft(normalized);
+                if (shouldCommit(normalized)) {
+                    dispatch({
+                        type: "UPDATE_INPUT",
+                        payload: { path, value: normalized },
+                    });
+                }
+            }}
+            onKeyDown={(event) => {
+                if (handleAdvanceKeyDown(event, fieldId)) {
+                    return;
+                }
+            }}
         />
     );
 };

@@ -117,6 +117,14 @@ describe("SettingsDialog global panel", () => {
             }),
         );
     });
+
+    it("does not expose a main preview renderer setting", () => {
+        renderGlobalDialog();
+
+        expect(
+            screen.queryByLabelText("Preview renderer"),
+        ).not.toBeInTheDocument();
+    });
 });
 
 describe("SettingsDialog keymap panel", () => {

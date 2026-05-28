@@ -13,21 +13,33 @@ import {
 import { DocumentProvider, useDocument } from "./state/DocumentContext";
 import type { TemplateVariantSpec } from "./bindings/TemplateVariantSpec";
 import { createId } from "./state/ast/defaults";
-import { defaultFieldIdForElement } from "./editor/fieldIds";
+import {
+    defaultFieldIdForElement,
+    figureBodyFieldId,
+    listItemFieldId,
+    quoteContentFieldId,
+    richTextFieldId,
+} from "./editor/fieldIds";
 import { m } from "./paraglide/messages.js";
 import { createCommandRegistry } from "./commands/registry";
 import type { Command, CommandContext } from "./commands/types";
 import { workspaceCommands } from "./commands/workspaceCommands";
 import { TauriApi } from "./api/tauri";
 import type { ExportFormat } from "./bindings/ExportFormat";
+import type { RichText } from "./bindings/RichText";
 import { pageExportFileName, saveExportDialog } from "./platform/export";
 import { CompilerClient, warmupCompiler } from "./workers/compilerClient";
-import { editorCommands } from "./commands/editorCommands";
+import { editorCommands, type ElementType } from "./commands/editorCommands";
 import { viewCommands } from "./commands/viewCommands";
 import { themeCommands } from "./commands/themeCommands";
 import { editCommands } from "./commands/editCommands";
 import { settingsCommands } from "./commands/settingsCommands";
 import { helpCommands } from "./commands/helpCommands";
+import { applyRichTextMarkToFocusedField } from "./editor/richTextMarks";
+import {
+    insertInlineEquationAtOffset,
+    richTextPlainLength,
+} from "./richText/richText";
 import {
     ActionContextProvider,
     ActionRuntimeProvider,
@@ -41,7 +53,7 @@ import { useSettingsLifecycle } from "./hooks/useSettingsLifecycle";
 import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
 import {
     PREVIEW_ZOOM_DEFAULT,
-    resolvePreviewZoomRenderDebounceMs,
+    type PreviewZoomMode,
     stepPreviewZoom,
 } from "./preview/previewZoom";
 import styles from "./App.module.css";
@@ -96,6 +108,8 @@ const AppShellContent = () => {
     const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
     const [templateVariants, setTemplateVariants] = useState<TemplateVariantSpec[]>([]);
     const [previewZoom, setPreviewZoom] = useState(PREVIEW_ZOOM_DEFAULT);
+    const [previewZoomMode, setPreviewZoomMode] =
+        useState<PreviewZoomMode>("manual");
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [commandQuery, setCommandQuery] = useState("");
     const dispatchAction = useActionDispatcher();
@@ -131,18 +145,145 @@ const AppShellContent = () => {
     useEffect(() => {
         if (!hasActiveProject) {
             setPreviewZoom(PREVIEW_ZOOM_DEFAULT);
+            setPreviewZoomMode("manual");
         }
     }, [hasActiveProject]);
 
     const zoomPreviewIn = useCallback(() => {
+        setPreviewZoomMode("manual");
         setPreviewZoom((current) => stepPreviewZoom(current, 1));
     }, []);
 
     const zoomPreviewOut = useCallback(() => {
+        setPreviewZoomMode("manual");
         setPreviewZoom((current) => stepPreviewZoom(current, -1));
     }, []);
 
-    const insertElement = useCallback((elementType: "heading" | "paragraph" | "table" | "equation" | "figure") => {
+    const insertInlineEquation = useCallback(() => {
+        const elementId = documentFocus.elementId;
+        const fieldId = documentFocus.fieldId;
+        if (!elementId || !fieldId) {
+            return false;
+        }
+
+        const contentSection = state.sections.find(
+            (section) => section.type === "Content",
+        );
+        if (!contentSection || contentSection.type !== "Content") {
+            return false;
+        }
+
+        const element = contentSection.elements.find(
+            (entry) => entry.id === elementId,
+        );
+        if (!element) {
+            return false;
+        }
+
+        const insertAt = (content: RichText[]) =>
+            insertInlineEquationAtOffset(
+                content,
+                documentFocus.caretUtf16Offset ?? richTextPlainLength(content),
+            );
+
+        if (
+            element.type === "Paragraph" &&
+            fieldId === richTextFieldId(element.id)
+        ) {
+            dispatch({
+                type: "UPDATE_PARAGRAPH_CONTENT",
+                payload: {
+                    paragraphId: element.id,
+                    content: insertAt(element.content),
+                },
+            });
+            return true;
+        }
+
+        if (element.type === "Heading" && fieldId === richTextFieldId(element.id)) {
+            dispatch({
+                type: "UPDATE_HEADING_CONTENT",
+                payload: {
+                    headingId: element.id,
+                    content: insertAt(element.content),
+                },
+            });
+            return true;
+        }
+
+        if (element.type === "Quote" && fieldId === quoteContentFieldId(element.id)) {
+            dispatch({
+                type: "UPDATE_QUOTE_CONTENT",
+                payload: {
+                    quoteId: element.id,
+                    content: insertAt(element.content),
+                },
+            });
+            return true;
+        }
+
+        if (
+            element.type === "Figure" &&
+            fieldId === figureBodyFieldId(element.id) &&
+            element.content.type === "Paragraph"
+        ) {
+            dispatch({
+                type: "UPDATE_PARAGRAPH_CONTENT",
+                payload: {
+                    paragraphId: element.content.id,
+                    content: insertAt(element.content.content),
+                },
+            });
+            return true;
+        }
+
+        if (element.type === "List" || element.type === "Enumeration") {
+            const itemIndex = element.items.findIndex(
+                (_, index) => fieldId === listItemFieldId(element.id, index),
+            );
+            if (itemIndex === -1) {
+                return false;
+            }
+            const content = insertAt(element.items[itemIndex] ?? []);
+            if (element.type === "List") {
+                dispatch({
+                    type: "UPDATE_LIST_ITEM",
+                    payload: {
+                        listId: element.id,
+                        itemIndex,
+                        content,
+                    },
+                });
+                return true;
+            }
+            dispatch({
+                type: "UPDATE_ENUMERATION_ITEM",
+                payload: {
+                    enumerationId: element.id,
+                    itemIndex,
+                    content,
+                },
+            });
+            return true;
+        }
+
+        return false;
+    }, [
+        dispatch,
+        documentFocus.caretUtf16Offset,
+        documentFocus.elementId,
+        documentFocus.fieldId,
+        state.sections,
+    ]);
+
+    const applyRichTextMark = useCallback(
+        (mark: "bold" | "italic" | "underline") => {
+            applyRichTextMarkToFocusedField(mark, documentFocus.fieldId);
+        },
+        [documentFocus.fieldId],
+    );
+
+    const insertElement = useCallback((elementType: ElementType) => {
         const contentSection = state.sections.find(
             (section) => section.type === "Content",
         );
@@ -153,10 +294,11 @@ const AppShellContent = () => {
         ensureActiveProject();
 
         const sectionId = contentSection.id;
-        const id = createId();
+        const id = elementType === "diagram" ? `diagram-${createId()}` : createId();
         const afterElementId =
             documentFocus.elementId &&
             documentFocus.elementId !== "project"
+            && documentFocus.elementId !== "inputs"
                 ? documentFocus.elementId
                 : undefined;
 
@@ -166,6 +308,10 @@ const AppShellContent = () => {
                 | "Paragraph"
                 | "Table"
                 | "Equation"
+                | "Quote"
+                | "Diagram"
+                | "List"
+                | "Enumeration"
                 | "Figure",
         ) => {
             setDocumentFocus({
@@ -218,12 +364,64 @@ const AppShellContent = () => {
             return;
         }
 
+        if (elementType === "inlineEquation") {
+            if (insertInlineEquation()) {
+                return;
+            }
+            dispatch({
+                type: "ADD_EQUATION",
+                payload: { sectionId, equationId: id, afterElementId },
+            });
+            dispatch({
+                type: "UPDATE_EQUATION",
+                payload: { equationId: id, isBlock: false },
+            });
+            focusInsertedElement("Equation");
+            return;
+        }
+
+        if (elementType === "quote") {
+            dispatch({
+                type: "ADD_QUOTE",
+                payload: { sectionId, quoteId: id, afterElementId },
+            });
+            focusInsertedElement("Quote");
+            return;
+        }
+
+        if (elementType === "diagram") {
+            dispatch({
+                type: "ADD_DIAGRAM",
+                payload: { sectionId, diagramId: id, afterElementId },
+            });
+            focusInsertedElement("Diagram");
+            return;
+        }
+
+        if (elementType === "list") {
+            dispatch({
+                type: "ADD_LIST",
+                payload: { sectionId, listId: id, afterElementId },
+            });
+            focusInsertedElement("List");
+            return;
+        }
+
+        if (elementType === "enumeration") {
+            dispatch({
+                type: "ADD_ENUMERATION",
+                payload: { sectionId, enumerationId: id, afterElementId },
+            });
+            focusInsertedElement("Enumeration");
+            return;
+        }
+
         dispatch({
             type: "ADD_FIGURE",
             payload: { sectionId, figureId: id, afterElementId },
         });
         focusInsertedElement("Figure");
-    }, [dispatch, documentFocus.elementId, ensureActiveProject, setDocumentFocus, state.sections]);
+    }, [dispatch, documentFocus.elementId, ensureActiveProject, insertInlineEquation, setDocumentFocus, state.sections]);
 
     const exportDocument = useCallback(
         async (format: ExportFormat) => {
@@ -299,6 +497,7 @@ const AppShellContent = () => {
             }),
             ...editorCommands({
                 insertElement,
+                applyRichTextMark,
             }),
             ...viewCommands({
                 setCommandPaletteOpen,
@@ -325,6 +524,7 @@ const AppShellContent = () => {
             closeProject,
             canRedo,
             canUndo,
+            applyRichTextMark,
             insertElement,
             openProject,
             redo,
@@ -385,10 +585,9 @@ const AppShellContent = () => {
                     <ActionContextProvider id="workspace" contexts={["workspace"]}>
                         <Workspace
                             previewZoom={previewZoom}
+                            previewZoomMode={previewZoomMode}
                             onPreviewZoomChange={setPreviewZoom}
-                            previewZoomRenderDebounceMs={resolvePreviewZoomRenderDebounceMs(
-                                globalSettings.preview_zoom_render_debounce_ms,
-                            )}
+                            onPreviewZoomModeChange={setPreviewZoomMode}
                             onExportDocument={exportDocument}
                         />
                     </ActionContextProvider>

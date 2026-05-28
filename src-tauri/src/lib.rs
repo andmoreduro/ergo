@@ -79,6 +79,7 @@ pub fn run() {
             document_session_commands::get_document_session_status,
             document_session_commands::import_resource_file,
             document_session_commands::read_vfs_file,
+            document_session_commands::write_generated_asset,
             settings::load_global_settings,
             settings::save_global_settings,
             settings::load_keymap_settings,
@@ -86,7 +87,8 @@ pub fn run() {
             settings::get_template_spec,
             archive::save_project,
             archive::open_project,
-            archive::load_template_package_files
+            archive::load_template_package_files,
+            archive::load_package_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

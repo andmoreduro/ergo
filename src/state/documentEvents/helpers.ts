@@ -307,9 +307,13 @@ export const elementIdOf = (element: DocumentElement): string => {
     switch (element.type) {
         case "Heading":
         case "Paragraph":
+        case "Quote":
+        case "List":
+        case "Enumeration":
         case "Table":
         case "Equation":
         case "Figure":
+        case "Diagram":
         case "Custom":
             return element.id;
         default:

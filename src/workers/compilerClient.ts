@@ -9,6 +9,7 @@ import type {
     BootstrapPreviewPayload,
     BootstrapPreviewResult,
     RenderPagePayload,
+    RenderSvgPagePayload,
     VfsFileEntry,
 } from "./compilerProtocol";
 import {
@@ -76,17 +77,30 @@ export const CompilerClient = {
         return reply.payload;
     },
 
-    async renderResourcePage(
-        pageNumber: number,
-        pixelPerPt: number,
+    async renderSvgPage(
+        pageIndex: number,
         requestId: number,
-    ): Promise<RenderPagePayload> {
+    ): Promise<RenderSvgPagePayload> {
         const reply = await callWorker(
             {
-                type: "render_resource_page",
-                payload: { pageNumber, pixelPerPt, requestId },
+                type: "render_svg_page",
+                payload: { pageIndex, requestId },
             },
-            "render_done",
+            "render_svg_done",
+        );
+        return reply.payload;
+    },
+
+    async renderResourceSvgPage(
+        pageNumber: number,
+        requestId: number,
+    ): Promise<RenderSvgPagePayload> {
+        const reply = await callWorker(
+            {
+                type: "render_resource_svg_page",
+                payload: { pageNumber, requestId },
+            },
+            "render_resource_svg_done",
         );
         return reply.payload;
     },

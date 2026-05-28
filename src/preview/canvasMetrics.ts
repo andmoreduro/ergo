@@ -135,21 +135,28 @@ export function setCanvasPageMetrics(
     canvas: HTMLCanvasElement,
     metrics: CanvasPageMetrics,
 ): void {
-    canvas.dataset.pageWidthPt = String(metrics.widthPt);
-    canvas.dataset.pageHeightPt = String(metrics.heightPt);
-    canvas.dataset.pixelPerPt = String(metrics.pixelPerPt);
+    setPreviewPageMetrics(canvas, metrics);
 }
 
-export function readCanvasPageMetrics(
-    canvas: HTMLCanvasElement | null,
+export function setPreviewPageMetrics(
+    element: HTMLElement,
+    metrics: CanvasPageMetrics,
+): void {
+    element.dataset.pageWidthPt = String(metrics.widthPt);
+    element.dataset.pageHeightPt = String(metrics.heightPt);
+    element.dataset.pixelPerPt = String(metrics.pixelPerPt);
+}
+
+export function readPreviewPageMetrics(
+    element: HTMLElement | null,
 ): CanvasPageMetrics | null {
-    if (!canvas) {
+    if (!element) {
         return null;
     }
 
-    const widthPt = Number(canvas.dataset.pageWidthPt);
-    const heightPt = Number(canvas.dataset.pageHeightPt);
-    const pixelPerPt = Number(canvas.dataset.pixelPerPt);
+    const widthPt = Number(element.dataset.pageWidthPt);
+    const heightPt = Number(element.dataset.pageHeightPt);
+    const pixelPerPt = Number(element.dataset.pixelPerPt);
     if (
         !Number.isFinite(widthPt) ||
         !Number.isFinite(heightPt) ||
@@ -163,16 +170,22 @@ export function readCanvasPageMetrics(
     return { widthPt, heightPt, pixelPerPt };
 }
 
-export function previewPointFromCanvasMouseEvent(
+export function readCanvasPageMetrics(
+    canvas: HTMLCanvasElement | null,
+): CanvasPageMetrics | null {
+    return readPreviewPageMetrics(canvas);
+}
+
+export function previewPointFromPageMouseEvent(
     event: MouseEvent,
-    canvas: HTMLCanvasElement,
+    pageContent: HTMLElement,
 ): { xPt: number; yPt: number } | null {
-    const metrics = readCanvasPageMetrics(canvas);
+    const metrics = readPreviewPageMetrics(pageContent);
     if (!metrics) {
         return null;
     }
 
-    const rect = canvas.getBoundingClientRect();
+    const rect = pageContent.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) {
         return null;
     }
@@ -184,6 +197,13 @@ export function previewPointFromCanvasMouseEvent(
         xPt: xRatio * metrics.widthPt,
         yPt: yRatio * metrics.heightPt,
     };
+}
+
+export function previewPointFromCanvasMouseEvent(
+    event: MouseEvent,
+    canvas: HTMLCanvasElement,
+): { xPt: number; yPt: number } | null {
+    return previewPointFromPageMouseEvent(event, canvas);
 }
 
 export function pageSurfaceLayoutStyle(
@@ -227,9 +247,9 @@ export function resolvePreviewPageMetrics(
     }
 
     if (pageElement) {
-        const nested = pageElement.querySelector("canvas");
-        if (nested instanceof HTMLCanvasElement) {
-            const fromNested = readCanvasPageMetrics(nested);
+        const nested = pageElement.querySelector("[data-preview-page-content]");
+        if (nested instanceof HTMLElement) {
+            const fromNested = readPreviewPageMetrics(nested);
             if (fromNested) {
                 return fromNested;
             }

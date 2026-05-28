@@ -91,9 +91,15 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
         }
 
         for (const field of extraFields) {
+            if (field.type === "content") {
+                continue;
+            }
+
             const next = wrapperDraftRef.current[field.key] ?? "";
             const previous = wrapperFieldValue(element, field.key);
-            if (!textSignificantlyEqual(next, previous)) {
+            const previousText =
+                typeof previous === "string" ? previous : String(previous ?? "");
+            if (!textSignificantlyEqual(next, previousText)) {
                 if (field.key === "caption") {
                     dispatch({
                         type: "UPDATE_FIGURE",

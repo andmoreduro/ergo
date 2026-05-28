@@ -11,7 +11,7 @@ import type { PreviewFocusTarget } from "../bindings/PreviewFocusTarget";
 import { logPreviewSyncError } from "../config/previewSync";
 import { backendFocusIdsForEditorField } from "../editor/fieldIds";
 import {
-    previewPointFromCanvasMouseEvent,
+    previewPointFromPageMouseEvent,
     syntheticCaretCue,
 } from "../preview/canvasMetrics";
 import {
@@ -389,10 +389,12 @@ export function usePreviewCaretSync({
                 "[data-preview-page-number]",
             );
             const pageNumber = Number(pageElement?.dataset.previewPageNumber);
-            const canvas = pageElement?.querySelector("canvas");
+            const pageContent = pageElement?.querySelector(
+                "[data-preview-page-content]",
+            );
             const point =
-                canvas instanceof HTMLCanvasElement
-                    ? previewPointFromCanvasMouseEvent(event.nativeEvent, canvas)
+                pageContent instanceof HTMLElement
+                    ? previewPointFromPageMouseEvent(event.nativeEvent, pageContent)
                     : null;
 
             if (!pageElement || !Number.isFinite(pageNumber) || !point) {

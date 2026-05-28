@@ -1,4 +1,4 @@
-use crate::ast::DocumentAST;
+use crate::ast::{DocumentAST, RichText};
 use crate::document_source_builder::SourceBuilder;
 use crate::required_input_fallback::RequiredInputFallbacks;
 use crate::template_spec::{ParamSpec, ParamType, TemplateSpec};
@@ -9,12 +9,14 @@ mod fragments;
 mod hashing;
 mod paths;
 mod references;
+mod outlines;
 mod rich_text;
 mod tables;
 
 pub(crate) use fragments::{element_fragment, resource_preview_typst_for_element};
 pub(crate) use hashing::{element_content_hash, hash_source};
 pub(crate) use paths::{element_id, element_path, label_for_id};
+pub(crate) use outlines::generate_front_matter_outlines;
 pub(crate) use references::generate_references_bib;
 
 #[cfg(test)]
@@ -275,6 +277,26 @@ fn resolve_input_param(
 
     match &param.param_type {
         ParamType::Content => {
+            if let Some(content) = rich_text_array_from_value(&val) {
+                if content.is_empty() {
+                    if param.key != "_positional" {
+                        return false;
+                    }
+                    builder.push_literal("[]");
+                } else {
+                    builder.push_literal("[");
+                    rich_text::push_rich_text_field(
+                        builder,
+                        "inputs",
+                        &format!("/{}", key),
+                        &content,
+                        &std::collections::HashMap::new(),
+                    );
+                    builder.push_literal("]");
+                }
+                return true;
+            }
+
             if let Some(s) = val.as_str() {
                 let text = fallbacks.effective_string(key, s);
                 let trimmed = text.trim();
@@ -534,6 +556,14 @@ fn resolve_affiliation_map_param(val: &serde_json::Value, builder: &mut SourceBu
     } else {
         false
     }
+}
+
+fn rich_text_array_from_value(value: &serde_json::Value) -> Option<Vec<RichText>> {
+    if let Ok(content) = serde_json::from_value::<Vec<RichText>>(value.clone()) {
+        return Some(content);
+    }
+
+    None
 }
 
 pub(crate) fn format_json_val(val: &serde_json::Value, param_type: &ParamType) -> Option<String> {

@@ -26,10 +26,27 @@ fn hash_document_element(element: &DocumentElement, hasher: &mut impl Hasher) {
             p.id.hash(hasher);
             hash_rich_text_slice(&p.content, hasher);
         }
+        DocumentElement::Quote(q) => {
+            q.id.hash(hasher);
+            hash_rich_text_slice(&q.content, hasher);
+        }
+        DocumentElement::List(l) => {
+            l.id.hash(hasher);
+            for item in &l.items {
+                hash_rich_text_slice(item, hasher);
+            }
+        }
+        DocumentElement::Enumeration(e) => {
+            e.id.hash(hasher);
+            for item in &e.items {
+                hash_rich_text_slice(item, hasher);
+            }
+        }
         DocumentElement::Equation(e) => {
             e.id.hash(hasher);
             e.latex_source.hash(hasher);
             e.is_block.hash(hasher);
+            e.syntax.hash(hasher);
         }
         DocumentElement::Table(t) => {
             t.id.hash(hasher);
@@ -55,6 +72,14 @@ fn hash_document_element(element: &DocumentElement, hasher: &mut impl Hasher) {
             f.placement.hash(hasher);
             hash_json_map(&f.extra_fields, hasher);
         }
+        DocumentElement::Diagram(d) => {
+            d.id.hash(hasher);
+            d.mermaid_source.hash(hasher);
+            d.asset_id.hash(hasher);
+            d.caption.hash(hasher);
+            d.placement.hash(hasher);
+            hash_json_map(&d.extra_fields, hasher);
+        }
         DocumentElement::Custom(c) => {
             c.id.hash(hasher);
             c.element_type.hash(hasher);
@@ -69,9 +94,11 @@ fn hash_rich_text_slice(content: &[RichText], hasher: &mut impl Hasher) {
         rt.text.hash(hasher);
         rt.bold.hash(hasher);
         rt.italic.hash(hasher);
+        rt.underline.hash(hasher);
         rt.kind.hash(hasher);
         rt.reference_id.hash(hasher);
         rt.equation_source.hash(hasher);
+        rt.equation_syntax.hash(hasher);
     }
 }
 

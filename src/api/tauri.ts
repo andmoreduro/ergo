@@ -63,6 +63,13 @@ export const TauriApi = {
         return new Uint8Array(bytes);
     },
 
+    async writeGeneratedAsset(path: string, bytes: Uint8Array): Promise<void> {
+        return invoke("write_generated_asset", {
+            path,
+            bytes: Array.from(bytes),
+        });
+    },
+
     async saveProject(path: string): Promise<void> {
         return invoke("save_project", { path });
     },
@@ -123,6 +130,10 @@ export const TauriApi = {
 
     async loadTemplatePackageFiles(templateId: string): Promise<ProjectFile[]> {
         return invoke("load_template_package_files", { templateId });
+    },
+
+    async loadPackageFiles(name: string, version: string): Promise<ProjectFile[]> {
+        return invoke("load_package_files", { name, version });
     },
 
     async documentDir(): Promise<string> {

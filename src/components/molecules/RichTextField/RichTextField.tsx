@@ -20,6 +20,7 @@ import styles from "./RichTextField.module.css";
 export interface RichTextFieldBinding {
     ref: RefCallback<HTMLDivElement>;
     onFocus: FocusEventHandler<HTMLDivElement>;
+    onInput: (event: SyntheticEvent<HTMLDivElement>) => void;
     onSelect: (event: SyntheticEvent<HTMLDivElement>) => void;
     onKeyUp: KeyboardEventHandler<HTMLDivElement>;
     onClick: MouseEventHandler<HTMLDivElement>;
@@ -84,7 +85,7 @@ export const RichTextField = ({
         }
     }, [content]);
 
-    const handleInput = () => {
+    const handleInput = (event?: SyntheticEvent<HTMLDivElement>) => {
         const node = editorRef.current;
         if (!node) {
             return;
@@ -93,6 +94,9 @@ export const RichTextField = ({
         const parsed = parseRichTextFromEditableRoot(node);
         lastRenderedRef.current = renderRichTextToEditableHtml(parsed);
         onChange(parsed);
+        if (event) {
+            fieldBinding.onInput(event);
+        }
     };
 
     const fieldClass =
@@ -115,9 +119,9 @@ export const RichTextField = ({
                 onCompositionStart={() => {
                     isComposingRef.current = true;
                 }}
-                onCompositionEnd={() => {
+                onCompositionEnd={(event) => {
                     isComposingRef.current = false;
-                    handleInput();
+                    handleInput(event);
                 }}
                 onKeyDown={onKeyDown}
             />

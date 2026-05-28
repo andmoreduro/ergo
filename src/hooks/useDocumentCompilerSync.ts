@@ -19,6 +19,12 @@ import {
 } from "./previewTelemetry";
 
 type SourceRevision = number;
+type PackageDependency = { name: string; version: string };
+
+const MITEX_PACKAGE: PackageDependency = {
+    name: "@preview/mitex",
+    version: "0.2.7",
+};
 
 export interface CompilerPreviewSetters {
     setPreviewPages: Dispatch<SetStateAction<PreviewPageFile[]>>;
@@ -47,6 +53,44 @@ export interface UseDocumentCompilerSyncParams {
     bootstrapFiles: ProjectFile[] | null;
     preview: CompilerPreviewSetters;
 }
+
+const richTextUsesLatex = (
+    content: Array<{ kind: string | null; equation_syntax?: string }>,
+): boolean =>
+    content.some(
+        (span) =>
+            span.kind === "inlineEquation" && span.equation_syntax === "latex",
+    );
+
+const astUsesLatexEquations = (ast: DocumentAST): boolean =>
+    ast.sections.some((section) => {
+        if (section.type !== "Content") {
+            return false;
+        }
+
+        return section.elements.some((element) => {
+            switch (element.type) {
+                case "Heading":
+                case "Paragraph":
+                case "Quote":
+                    return richTextUsesLatex(element.content);
+                case "List":
+                case "Enumeration":
+                    return element.items.some(richTextUsesLatex);
+                case "Equation":
+                    return element.syntax === "latex";
+                case "Figure":
+                    return element.content.type === "Paragraph"
+                        ? richTextUsesLatex(element.content.content)
+                        : false;
+                default:
+                    return false;
+            }
+        });
+    });
+
+const requiredPackagesForAst = (ast: DocumentAST): PackageDependency[] =>
+    astUsesLatexEquations(ast) ? [MITEX_PACKAGE] : [];
 
 export function useDocumentCompilerSync({
     ast,
@@ -82,18 +126,25 @@ export function useDocumentCompilerSync({
     const syncRunningRef = useRef(false);
     const syncFailedRef = useRef(false);
     const failedEventCountRef = useRef(0);
+    const loadedDependencyPackagesRef = useRef(new Set<string>());
     const isMountedRef = useRef(false);
 
     const isNewerPreviewResult = (result: CompilationResult): boolean =>
         previewRevisionRef.current === null ||
         result.source_revision > previewRevisionRef.current;
 
-    const applyPreviewResult = (result: CompilationResult) => {
+    const applyPreviewResult = (
+        status: DocumentSessionStatus,
+        result: CompilationResult,
+    ) => {
         if (!isNewerPreviewResult(result)) {
             return;
         }
 
         if (result.status === "succeeded") {
+            latestRevisionRef.current = status.sourceRevision;
+            updateResourcePreviewRevisions(status);
+            setSourceMap(status.sourceMap);
             setOutline(result.outline);
             if (result.resources) {
                 setResources(result.resources);
@@ -106,7 +157,7 @@ export function useDocumentCompilerSync({
                 latestRevisionRef.current === null ||
                 result.source_revision >= latestRevisionRef.current
             ) {
-                setIsCompiling(false);
+                    setIsCompiling(false);
             }
         } else if (result.status === "failed") {
             setError(result.diagnostics.join("\n") || "Compilation failed");
@@ -163,6 +214,7 @@ export function useDocumentCompilerSync({
                 }
 
                 if (bootstrappedSessionIdRef.current !== currentSessionId) {
+                    loadedDependencyPackagesRef.current = new Set();
                     const vfsFiles = [
                         ...projectFilesToVfsEntries(
                             desiredBootstrapFilesRef.current ?? [],
@@ -176,6 +228,16 @@ export function useDocumentCompilerSync({
                                 await TauriApi.loadTemplatePackageFiles(templateId);
                             vfsFiles.push(
                                 ...projectFilesToVfsEntries(templatePackageFiles),
+                            );
+                        }
+                        for (const dependency of requiredPackagesForAst(currentAst)) {
+                            const packageFiles = await TauriApi.loadPackageFiles(
+                                dependency.name,
+                                dependency.version,
+                            );
+                            vfsFiles.push(...projectFilesToVfsEntries(packageFiles));
+                            loadedDependencyPackagesRef.current.add(
+                                `${dependency.name}:${dependency.version}`,
                             );
                         }
                     } catch (loadError) {
@@ -198,9 +260,6 @@ export function useDocumentCompilerSync({
 
                     bootstrappedSessionIdRef.current = currentSessionId;
                     syncedEventIdRef.current = 0;
-                    latestRevisionRef.current = status.sourceRevision;
-                    updateResourcePreviewRevisions(status);
-                    setSourceMap(status.sourceMap);
                     if (result.status === "succeeded") {
                         setPendingPreviewTelemetry({
                             revision: result.source_revision,
@@ -214,10 +273,34 @@ export function useDocumentCompilerSync({
                             ),
                         });
                     }
-                    applyPreviewResult(result);
+                    applyPreviewResult(status, result);
 
                     await mirrorToBackend(currentAst, [], true);
                     continue;
+                }
+
+                const missingDependencies = requiredPackagesForAst(currentAst).filter(
+                    (dependency) =>
+                        !loadedDependencyPackagesRef.current.has(
+                            `${dependency.name}:${dependency.version}`,
+                        ),
+                );
+                if (missingDependencies.length > 0) {
+                    const dependencyFiles: ProjectFile[] = [];
+                    for (const dependency of missingDependencies) {
+                        dependencyFiles.push(
+                            ...(await TauriApi.loadPackageFiles(
+                                dependency.name,
+                                dependency.version,
+                            )),
+                        );
+                        loadedDependencyPackagesRef.current.add(
+                            `${dependency.name}:${dependency.version}`,
+                        );
+                    }
+                    await CompilerClient.writeFiles(
+                        projectFilesToVfsEntries(dependencyFiles),
+                    );
                 }
 
                 const pendingEvents = desiredEventsRef.current.filter(
@@ -245,10 +328,6 @@ export function useDocumentCompilerSync({
 
                 latencyStartRef.current = lastEvent.timestamp;
 
-                latestRevisionRef.current = status.sourceRevision;
-                updateResourcePreviewRevisions(status);
-                setSourceMap(status.sourceMap);
-
                 const mirrorPromise = mirrorToBackend(
                     currentAst,
                     pendingEvents,
@@ -266,7 +345,7 @@ export function useDocumentCompilerSync({
                     workerSyncMs: elapsedMs(syncStarted, syncFinished),
                     compileMs: elapsedMs(compileStarted, compileFinished),
                 });
-                applyPreviewResult(result);
+                applyPreviewResult(status, result);
 
                 await mirrorPromise;
 

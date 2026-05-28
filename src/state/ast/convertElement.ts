@@ -2,9 +2,13 @@ import type { DocumentAST } from "../../bindings/DocumentAST";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
 import {
+    createEnumeration,
     createEquation,
     createFigure,
+    createList,
     createParagraph,
+    createQuote,
+    createRichText,
     createTable,
 } from "./defaults";
 import { richTextPlainText } from "../documentEvents/helpers";
@@ -14,7 +18,10 @@ export type ConvertibleElementKind =
     | "Heading"
     | "Table"
     | "Equation"
-    | "Figure";
+    | "Figure"
+    | "Quote"
+    | "List"
+    | "Enumeration";
 
 const richTextFromElement = (element: DocumentElement): RichText[] => {
     if (element.type === "Paragraph" || element.type === "Heading") {
@@ -23,8 +30,18 @@ const richTextFromElement = (element: DocumentElement): RichText[] => {
 
     if (element.type === "Equation") {
         return element.latex_source
-            ? [{ text: element.latex_source, bold: null, italic: null, kind: null, reference_id: null, equation_source: null }]
+            ? [createRichText(element.latex_source)]
             : [];
+    }
+
+    if (element.type === "Quote") {
+        return element.content;
+    }
+
+    if (element.type === "List" || element.type === "Enumeration") {
+        return element.items.flatMap((item, index) =>
+            index === 0 ? item : [createRichText("\n"), ...item],
+        );
     }
 
     if (
@@ -66,6 +83,20 @@ export const convertElement = (
                 };
             }
             return figure;
+        }
+        case "Quote": {
+            const quote = createQuote("", id);
+            return quote.type === "Quote" ? { ...quote, content } : quote;
+        }
+        case "List": {
+            const list = createList(id);
+            return list.type === "List" ? { ...list, items: [content] } : list;
+        }
+        case "Enumeration": {
+            const enumeration = createEnumeration(id);
+            return enumeration.type === "Enumeration"
+                ? { ...enumeration, items: [content] }
+                : enumeration;
         }
         default:
             return element;

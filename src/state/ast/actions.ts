@@ -101,6 +101,43 @@ export type AddEquationAction = {
     sectionId: string;
     equationId: string;
     afterElementId?: string;
+    syntax?: 'typst' | 'latex';
+  };
+};
+
+export type AddQuoteAction = {
+  type: 'ADD_QUOTE';
+  payload: {
+    sectionId: string;
+    quoteId: string;
+    afterElementId?: string;
+  };
+};
+
+export type AddDiagramAction = {
+  type: 'ADD_DIAGRAM';
+  payload: {
+    sectionId: string;
+    diagramId: string;
+    afterElementId?: string;
+  };
+};
+
+export type AddListAction = {
+  type: 'ADD_LIST';
+  payload: {
+    sectionId: string;
+    listId: string;
+    afterElementId?: string;
+  };
+};
+
+export type AddEnumerationAction = {
+  type: 'ADD_ENUMERATION';
+  payload: {
+    sectionId: string;
+    enumerationId: string;
+    afterElementId?: string;
   };
 };
 
@@ -153,6 +190,44 @@ export type UpdateEquationAction = {
     equationId: string;
     latexSource?: string;
     isBlock?: boolean;
+    syntax?: 'typst' | 'latex';
+  };
+};
+
+export type UpdateQuoteContentAction = {
+  type: 'UPDATE_QUOTE_CONTENT';
+  payload: {
+    quoteId: string;
+    content: import('../../bindings/RichText').RichText[];
+  };
+};
+
+export type UpdateDiagramAction = {
+  type: 'UPDATE_DIAGRAM';
+  payload: {
+    diagramId: string;
+    mermaidSource?: string;
+    assetId?: string | null;
+    caption?: string;
+    placement?: string;
+  };
+};
+
+export type UpdateListItemAction = {
+  type: 'UPDATE_LIST_ITEM';
+  payload: {
+    listId: string;
+    itemIndex: number;
+    content: import('../../bindings/RichText').RichText[];
+  };
+};
+
+export type UpdateEnumerationItemAction = {
+  type: 'UPDATE_ENUMERATION_ITEM';
+  payload: {
+    enumerationId: string;
+    itemIndex: number;
+    content: import('../../bindings/RichText').RichText[];
   };
 };
 
@@ -223,7 +298,7 @@ export type UpdateElementExtraFieldAction = {
   payload: {
     elementId: string;
     fieldKey: string;
-    fieldValue: string;
+    fieldValue: unknown;
   };
 };
 
@@ -280,7 +355,7 @@ export type ConvertElementAction = {
   type: 'CONVERT_ELEMENT';
   payload: {
     elementId: string;
-    targetKind: 'Paragraph' | 'Heading' | 'Table' | 'Equation' | 'Figure';
+    targetKind: 'Paragraph' | 'Heading' | 'Table' | 'Equation' | 'Figure' | 'Quote' | 'List' | 'Enumeration';
   };
 };
 
@@ -297,12 +372,20 @@ export type ASTAction =
   | AddHeadingAction
   | AddTableAction
   | AddEquationAction
+  | AddQuoteAction
+  | AddDiagramAction
+  | AddListAction
+  | AddEnumerationAction
   | AddFigureAction
   | UpdateParagraphTextAction
   | UpdateParagraphContentAction
   | UpdateHeadingAction
   | UpdateHeadingContentAction
   | UpdateEquationAction
+  | UpdateQuoteContentAction
+  | UpdateDiagramAction
+  | UpdateListItemAction
+  | UpdateEnumerationItemAction
   | UpdateTableCellAction
   | AddTableRowAction
   | RemoveTableRowAction

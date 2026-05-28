@@ -1,5 +1,11 @@
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
-import { useEffect, type ReactNode } from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    useEffect,
+    useState,
+    type Dispatch,
+    type ReactNode,
+    type SetStateAction,
+} from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentProvider, useDocument } from "../../../state/DocumentContext";
 import "@testing-library/jest-dom";
@@ -9,6 +15,7 @@ const compilerClientMock = vi.hoisted(() => ({
     syncEvents: vi.fn(),
     compile: vi.fn(),
     renderPage: vi.fn(),
+    renderSvgPage: vi.fn(),
     writeFile: vi.fn(),
     writeSource: vi.fn(),
     applyPatch: vi.fn(),
@@ -92,7 +99,7 @@ const createDefaultCompilerState = () => ({
     markMainPreviewPainted: vi.fn(),
 });
 
-const renderPreviewAndGetCanvas = async (
+const renderPreviewAndGetPage = async (
     children: ReactNode = null,
     compiler = createDefaultCompilerState(),
 ) => {
@@ -106,21 +113,34 @@ const renderPreviewAndGetCanvas = async (
             <Preview
                 compiler={compiler}
                 zoom={1}
+                zoomMode="manual"
                 onZoomChange={() => undefined}
-                zoomRenderDebounceMs={0}
+                onZoomModeChange={() => undefined}
                 onExport={() => undefined}
             />
         </DocumentProvider>,
     );
-    const canvas = await waitFor(() => {
-        const el = renderResult.container.querySelector("canvas");
+    const pageContent = await waitFor(() => {
+        const el = renderResult.container.querySelector<HTMLElement>(
+            '[data-preview-page-content="svg"]',
+        );
         if (!el || !el.dataset.pageWidthPt) {
-            throw new Error("Canvas rendering pending");
+            throw new Error("Preview page rendering pending");
         }
         return el;
     });
-    return { ...renderResult, canvas };
+    return { ...renderResult, pageContent, canvas: pageContent };
 };
+
+const renderPreviewAndGetSvgPage = async (
+    children: ReactNode = null,
+    compiler = createDefaultCompilerState(),
+) => {
+    const result = await renderPreviewAndGetPage(children, compiler);
+    return { ...result, svgPage: result.pageContent };
+};
+
+const renderPreviewAndGetCanvas = renderPreviewAndGetPage;
 
 describe("Preview sync", () => {
     beforeEach(() => {
@@ -167,6 +187,13 @@ describe("Preview sync", () => {
             width: 100,
             height: 50,
             pixels: new Uint8Array(100 * 50 * 4),
+            requestId: 1,
+        });
+        compilerClientMock.renderSvgPage.mockResolvedValue({
+            pageIndex: 0,
+            widthPt: 100,
+            heightPt: 50,
+            svg: '<svg viewBox="0 0 100 50"><text>Page</text></svg>',
             requestId: 1,
         });
     });
@@ -471,8 +498,9 @@ describe("Preview sync", () => {
                 <Preview
                     compiler={compiler}
                     zoom={1}
+                    zoomMode="manual"
                     onZoomChange={() => undefined}
-                    zoomRenderDebounceMs={0}
+                    onZoomModeChange={() => undefined}
                     onExport={() => undefined}
                 />
             </DocumentProvider>,
@@ -533,8 +561,9 @@ describe("Preview sync", () => {
                 <Preview
                     compiler={compiler}
                     zoom={1}
+                    zoomMode="manual"
                     onZoomChange={() => undefined}
-                    zoomRenderDebounceMs={0}
+                    onZoomModeChange={() => undefined}
                     onExport={() => undefined}
                 />
             </DocumentProvider>,
@@ -574,13 +603,14 @@ describe("Preview sync", () => {
                         <button type="button">Delete</button>
                         <input aria-label="Heading editor" />
                     </div>
-                    <Preview
-                        compiler={compiler}
-                        zoom={1}
-                        onZoomChange={() => undefined}
-                        zoomRenderDebounceMs={0}
-                        onExport={() => undefined}
-                    />
+                        <Preview
+                            compiler={compiler}
+                            zoom={1}
+                            zoomMode="manual"
+                            onZoomChange={() => undefined}
+                            onZoomModeChange={() => undefined}
+                            onExport={() => undefined}
+                        />
                 </DocumentProvider>,
             );
 
@@ -607,7 +637,7 @@ describe("Preview sync", () => {
         );
     });
 
-    it("does not rasterize pages when previewRevision is null", async () => {
+    it("does not render pages when previewRevision is null", async () => {
         render(
             <DocumentProvider>
                 <Preview
@@ -616,8 +646,9 @@ describe("Preview sync", () => {
                         previewRevision: null,
                     }}
                     zoom={1}
+                    zoomMode="manual"
                     onZoomChange={() => undefined}
-                    zoomRenderDebounceMs={0}
+                    onZoomModeChange={() => undefined}
                     onExport={() => undefined}
                 />
             </DocumentProvider>,
@@ -625,52 +656,250 @@ describe("Preview sync", () => {
 
         await waitFor(() => {
             expect(compilerClientMock.renderPage).not.toHaveBeenCalled();
+            expect(compilerClientMock.renderSvgPage).not.toHaveBeenCalled();
         });
     });
 
-    it("renders preview pages from worker pixels even when canvas transfer is available", async () => {
+    it("renders main preview pages through SVG instead of the canvas raster path", async () => {
         const transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas));
         Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
             configurable: true,
             value: transferControlToOffscreen,
         });
 
-        await renderPreviewAndGetCanvas();
+        const { container } = await renderPreviewAndGetCanvas();
 
         await waitFor(() => {
-            expect(compilerClientMock.renderPage).toHaveBeenCalledWith(
-                0,
-                expect.any(Number),
-                1,
-            );
+            expect(compilerClientMock.renderSvgPage).toHaveBeenCalledWith(0, 1);
         });
+        expect(container.querySelector("canvas")).not.toBeInTheDocument();
+        expect(compilerClientMock.renderPage).not.toHaveBeenCalled();
         expect(transferControlToOffscreen).not.toHaveBeenCalled();
     });
 
     it("sizes the page surface from Typst page metrics returned by render", async () => {
-        compilerClientMock.renderPage.mockResolvedValueOnce({
+        compilerClientMock.renderSvgPage.mockResolvedValueOnce({
             pageIndex: 0,
-            width: 100,
-            height: 50,
             widthPt: 148,
             heightPt: 210,
-            pixels: new Uint8Array(100 * 50 * 4),
+            svg: '<svg viewBox="0 0 148 210"><text>Page</text></svg>',
             requestId: 1,
         });
 
-        const { container } = await renderPreviewAndGetCanvas();
-        const surface = container.querySelector<HTMLElement>(
-            '[data-preview-page-surface="true"]',
+        const { pageContent } = await renderPreviewAndGetCanvas();
+
+        expect(pageContent.dataset.pageWidthPt).toBe("148");
+        expect(pageContent.dataset.pageHeightPt).toBe("210");
+    });
+
+    it("renders SVG preview pages through innerHTML", async () => {
+        const { svgPage } = await renderPreviewAndGetSvgPage();
+
+        expect(compilerClientMock.renderSvgPage).toHaveBeenCalledWith(0, 1);
+        expect(compilerClientMock.renderPage).not.toHaveBeenCalled();
+        expect(svgPage.innerHTML).toBe(
+            '<svg viewBox="0 0 100 50"><text>Page</text></svg>',
+        );
+    });
+
+    it("opens a bounded zoom menu with fit modes and 10 percent zoom levels", async () => {
+        const onZoomChange = vi.fn();
+        const onZoomModeChange = vi.fn();
+
+        render(
+            <DocumentProvider>
+                <Preview
+                    compiler={createDefaultCompilerState()}
+                    zoom={1}
+                    zoomMode="manual"
+                    onZoomChange={onZoomChange}
+                    onZoomModeChange={onZoomModeChange}
+                    onExport={() => undefined}
+                />
+            </DocumentProvider>,
         );
 
-        expect(Number.parseFloat(surface?.style.width ?? "0")).toBeCloseTo(
-            197.33,
-            1,
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: "Preview zoom options",
+            }),
         );
-        expect(Number.parseFloat(surface?.style.minHeight ?? "0")).toBeCloseTo(
-            280,
-            1,
+
+        const menu = screen.getByRole("menu", {
+            name: "Preview zoom options",
+        });
+        expect(menu).toHaveStyle({ maxHeight: "280px" });
+        expect(
+            screen.getByRole("menuitem", { name: "Fit width" }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("menuitem", { name: "Fit height" }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole("menuitem", { name: "50%" })).toBeInTheDocument();
+        expect(screen.getByRole("menuitem", { name: "300%" })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("menuitem", { name: "150%" }));
+
+        expect(onZoomModeChange).toHaveBeenCalledWith("manual");
+        expect(onZoomChange).toHaveBeenCalledWith(1.5);
+    });
+
+    it("lets users enter a decimal zoom level by double-clicking the zoom indicator", async () => {
+        const onZoomChange = vi.fn();
+        const onZoomModeChange = vi.fn();
+
+        render(
+            <DocumentProvider>
+                <Preview
+                    compiler={createDefaultCompilerState()}
+                    zoom={1}
+                    zoomMode="manual"
+                    onZoomChange={onZoomChange}
+                    onZoomModeChange={onZoomModeChange}
+                    onExport={() => undefined}
+                />
+            </DocumentProvider>,
         );
+
+        fireEvent.doubleClick(
+            await screen.findByRole("button", {
+                name: "Preview zoom options",
+            }),
+        );
+        const input = screen.getByRole("spinbutton", {
+            name: "Custom zoom percentage",
+        });
+        fireEvent.change(input, { target: { value: "133.5" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+
+        expect(onZoomModeChange).toHaveBeenCalledWith("manual");
+        expect(onZoomChange).toHaveBeenCalledWith(1.335);
+    });
+
+    it("uses 10 percent deltas for the toolbar zoom buttons", async () => {
+        const onZoomChange = vi.fn();
+        const onZoomModeChange = vi.fn();
+
+        render(
+            <DocumentProvider>
+                <Preview
+                    compiler={createDefaultCompilerState()}
+                    zoom={1}
+                    zoomMode="manual"
+                    onZoomChange={onZoomChange}
+                    onZoomModeChange={onZoomModeChange}
+                    onExport={() => undefined}
+                />
+            </DocumentProvider>,
+        );
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: /zoom in/i }),
+        );
+
+        expect(onZoomModeChange).toHaveBeenCalledWith("manual");
+        const updater = onZoomChange.mock.calls[0][0] as (zoom: number) => number;
+        expect(updater(1)).toBe(1.1);
+    });
+
+    it("replaces only changed SVG page content and keeps unchanged pages in place", async () => {
+        compilerClientMock.renderSvgPage.mockImplementation(
+            async (pageIndex: number, requestId: number) => ({
+                pageIndex,
+                widthPt: 100,
+                heightPt: 50,
+                svg: `<svg><text>revision 4 page ${pageIndex + 1}</text></svg>`,
+                requestId,
+            }),
+        );
+
+        const firstCompiler = {
+            ...createDefaultCompilerState(),
+            previewPages: [
+                { page_number: 1, path: "page-1", changed: true, content: null },
+                { page_number: 2, path: "page-2", changed: true, content: null },
+            ],
+        };
+        let setCompiler!: Dispatch<SetStateAction<typeof firstCompiler>>;
+        const Harness = () => {
+            const [compiler, updateCompiler] = useState(firstCompiler);
+            setCompiler = updateCompiler;
+            return (
+                <DocumentProvider>
+                    <div data-element-id="heading-1">
+                        <button type="button">Delete</button>
+                        <input aria-label="Heading editor" />
+                    </div>
+                    <Preview
+                        compiler={compiler}
+                        zoom={1}
+                        zoomMode="manual"
+                        onZoomChange={() => undefined}
+                        onZoomModeChange={() => undefined}
+                        onExport={() => undefined}
+                    />
+                </DocumentProvider>
+            );
+        };
+        const { container } = render(<Harness />);
+        await waitFor(
+            () => {
+                const el = container.querySelector<HTMLElement>(
+                    '[data-preview-page-content="svg"]',
+                );
+                if (!el || !el.dataset.pageWidthPt) {
+                    throw new Error("Preview page rendering pending");
+                }
+            },
+        );
+
+        await waitFor(() => {
+            expect(compilerClientMock.renderSvgPage).toHaveBeenCalledTimes(2);
+        });
+
+        const firstPage = container.querySelector<HTMLElement>(
+            '[data-preview-page-number="1"] [data-preview-page-content="svg"]',
+        );
+        const secondPage = container.querySelector<HTMLElement>(
+            '[data-preview-page-number="2"] [data-preview-page-content="svg"]',
+        );
+        expect(firstPage?.innerHTML).toContain("revision 4 page 1");
+        expect(secondPage?.innerHTML).toContain("revision 4 page 2");
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        compilerClientMock.renderSvgPage.mockClear();
+        compilerClientMock.renderSvgPage.mockImplementation(
+            async (pageIndex: number, requestId: number) => ({
+                pageIndex,
+                widthPt: 100,
+                heightPt: 50,
+                svg: `<svg><text>revision 5 page ${pageIndex + 1}</text></svg>`,
+                requestId,
+            }),
+        );
+
+        act(() => {
+            setCompiler({
+                ...firstCompiler,
+                previewRevision: 5,
+                previewPages: [
+                    { page_number: 1, path: "page-1", changed: false, content: null },
+                    { page_number: 2, path: "page-2", changed: true, content: null },
+                ],
+            });
+        });
+
+        await waitFor(() => {
+            expect(compilerClientMock.renderSvgPage).toHaveBeenCalledTimes(1);
+        });
+        expect(compilerClientMock.renderSvgPage).toHaveBeenCalledWith(
+            1,
+            expect.any(Number),
+        );
+        expect(firstPage?.innerHTML).toContain("revision 4 page 1");
+        expect(secondPage?.innerHTML).toContain("revision 5 page 2");
     });
 
     it("maps project input field ids to backend input source map targets", async () => {

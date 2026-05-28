@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 /**
  * Returns `value` after it has been stable for `delayMs`.
- * Used to defer expensive work (e.g. canvas rasterization) during rapid input.
+ * Used to defer expensive resource thumbnail rasterization during rapid input.
  */
 export function useDebouncedValue<T>(value: T, delayMs: number): T {
     const [debounced, setDebounced] = useState(value);

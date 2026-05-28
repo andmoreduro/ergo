@@ -15,11 +15,11 @@ import "@testing-library/jest-dom";
 
 const dispatchActionMock = vi.hoisted(() => vi.fn());
 const compilerClientMock = vi.hoisted(() => ({
-    renderResourcePage: vi.fn().mockResolvedValue({
+    renderResourceSvgPage: vi.fn().mockResolvedValue({
         pageIndex: 1,
-        width: 120,
-        height: 120,
-        pixels: new Uint8Array(120 * 120 * 4),
+        widthPt: 120,
+        heightPt: 120,
+        svg: '<svg viewBox="0 0 120 120"><text>Resource</text></svg>',
         requestId: 1,
     }),
     writeFile: vi.fn().mockResolvedValue(undefined),
@@ -71,7 +71,7 @@ const createDocumentWithHeadings = () => {
 describe("Sidebar outline", () => {
     beforeEach(() => {
         dispatchActionMock.mockClear();
-        compilerClientMock.renderResourcePage.mockClear();
+        compilerClientMock.renderResourceSvgPage.mockClear();
 
         vi.stubGlobal(
             "ResizeObserver",
@@ -418,7 +418,7 @@ describe("Sidebar outline", () => {
         );
 
         await waitFor(() =>
-            expect(compilerClientMock.renderResourcePage).toHaveBeenCalledTimes(1),
+            expect(compilerClientMock.renderResourceSvgPage).toHaveBeenCalledTimes(1),
         );
 
         rerender(
@@ -434,7 +434,7 @@ describe("Sidebar outline", () => {
         );
 
         await waitFor(() =>
-            expect(compilerClientMock.renderResourcePage).toHaveBeenCalledTimes(1),
+            expect(compilerClientMock.renderResourceSvgPage).toHaveBeenCalledTimes(1),
         );
     });
 
@@ -479,7 +479,7 @@ describe("Sidebar outline", () => {
         );
 
         await waitFor(() =>
-            expect(compilerClientMock.renderResourcePage).not.toHaveBeenCalled(),
+            expect(compilerClientMock.renderResourceSvgPage).not.toHaveBeenCalled(),
         );
 
         rerender(
@@ -495,11 +495,11 @@ describe("Sidebar outline", () => {
         );
 
         await waitFor(() =>
-            expect(compilerClientMock.renderResourcePage).toHaveBeenCalledTimes(1),
+            expect(compilerClientMock.renderResourceSvgPage).toHaveBeenCalledTimes(1),
         );
     });
 
-    it("renders resource thumbnails from worker pixels even when canvas transfer is available", async () => {
+    it("renders resource thumbnails from worker SVG even when canvas transfer is available", async () => {
         const transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas));
         Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", {
             configurable: true,
@@ -545,9 +545,8 @@ describe("Sidebar outline", () => {
         );
 
         await waitFor(() => {
-            expect(compilerClientMock.renderResourcePage).toHaveBeenCalledWith(
+            expect(compilerClientMock.renderResourceSvgPage).toHaveBeenCalledWith(
                 1,
-                expect.any(Number),
                 1,
             );
         });

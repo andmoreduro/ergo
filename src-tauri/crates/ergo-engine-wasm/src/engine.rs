@@ -2,7 +2,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use ergo_core::ast::DocumentAST;
-use ergo_core::compilation_types::{CompilationResult, CompilationStatus};
+use ergo_core::compilation_types::{CompilationResult, CompilationStatus, PreviewPageFile};
+use ergo_core::compile_artifacts::fingerprint_page;
 use ergo_core::document_session::DocumentSession;
 use ergo_core::document_session_types::{DocumentEvent, DocumentSessionStatus};
 use ergo_core::path_utils::file_id_for_virtual_path;
@@ -97,6 +98,13 @@ pub struct PageImage {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PageSvg {
+    pub width_pt: f64,
+    pub height_pt: f64,
+    pub svg: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BootstrapPreviewOutput {
     pub status: DocumentSessionStatus,
     pub result: CompilationResult,
@@ -111,7 +119,33 @@ fn make_world(vfs: Arc<VirtualFileSystem>, main: &str) -> ErgoWorld {
     )
 }
 
-/// Native/WASM preview engine: AST sync → Typst compile → canvas rasterization.
+fn preview_pages_for_document(
+    document: &PagedDocument,
+    previous_fingerprints: &mut Vec<u64>,
+) -> Vec<PreviewPageFile> {
+    let fingerprints: Vec<u64> = document.pages.iter().map(fingerprint_page).collect();
+    let pages = document
+        .pages
+        .iter()
+        .enumerate()
+        .map(|(index, page)| {
+            let page_number = index + 1;
+            let size = page.frame.size();
+            PreviewPageFile {
+                page_number,
+                path: format!("page-{page_number}"),
+                changed: previous_fingerprints.get(index) != Some(&fingerprints[index]),
+                width_pt: Some(size.x.to_pt()),
+                height_pt: Some(size.y.to_pt()),
+                content: None,
+            }
+        })
+        .collect();
+    *previous_fingerprints = fingerprints;
+    pages
+}
+
+/// Native/WASM preview engine: AST sync → Typst compile → page rendering.
 pub struct ErgoPreviewEngine {
     vfs: Arc<VirtualFileSystem>,
     session: DocumentSession,
@@ -120,6 +154,7 @@ pub struct ErgoPreviewEngine {
     world_font_stamp: u64,
     document: Option<Arc<PagedDocument>>,
     resource_document: Option<Arc<PagedDocument>>,
+    preview_page_fingerprints: Vec<u64>,
     sync_state: PreviewSyncState,
 }
 
@@ -137,6 +172,7 @@ impl ErgoPreviewEngine {
             world_font_stamp: FONT_STAMP.load(Ordering::SeqCst),
             document: None,
             resource_document: None,
+            preview_page_fingerprints: Vec::new(),
             sync_state: PreviewSyncState::default(),
         }
     }
@@ -214,6 +250,9 @@ impl ErgoPreviewEngine {
                     source_snapshot,
                 );
 
+                let preview_pages =
+                    preview_pages_for_document(&document, &mut self.preview_page_fingerprints);
+
                 self.document = Some(document);
                 if let Some(resource_document) = success.resource_document {
                     self.resource_document = Some(Arc::new(resource_document));
@@ -222,7 +261,7 @@ impl ErgoPreviewEngine {
                 let result = CompilationResult {
                     source_revision,
                     status: CompilationStatus::Succeeded,
-                    preview_pages: Some(success.preview_pages),
+                    preview_pages: Some(preview_pages),
                     export_path: None,
                     diagnostics: Vec::new(),
                     outline: Some(success.outline),
@@ -264,15 +303,14 @@ impl ErgoPreviewEngine {
         Self::render_document_page(self.document.as_deref(), page_index, pixel_per_pt)
     }
 
-    pub fn render_resource_page(
-        &self,
-        page_number: usize,
-        pixel_per_pt: f32,
-    ) -> Result<PageImage, String> {
-        Self::render_document_page(
+    pub fn render_svg_page(&self, page_index: usize) -> Result<PageSvg, String> {
+        Self::render_document_svg_page(self.document.as_deref(), page_index)
+    }
+
+    pub fn render_resource_svg_page(&self, page_number: usize) -> Result<PageSvg, String> {
+        Self::render_document_svg_page(
             self.resource_document.as_deref(),
             page_number.saturating_sub(1),
-            pixel_per_pt,
         )
     }
 
@@ -314,6 +352,25 @@ impl ErgoPreviewEngine {
             width_pt: size.x.to_pt(),
             height_pt: size.y.to_pt(),
             pixels: pixmap.data().to_vec(),
+        })
+    }
+
+    fn render_document_svg_page(
+        document: Option<&PagedDocument>,
+        page_index: usize,
+    ) -> Result<PageSvg, String> {
+        let doc = document.ok_or_else(|| "No compiled document available".to_string())?;
+
+        let page = doc
+            .pages
+            .get(page_index)
+            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
+
+        let size = page.frame.size();
+        Ok(PageSvg {
+            width_pt: size.x.to_pt(),
+            height_pt: size.y.to_pt(),
+            svg: typst_svg::svg(page),
         })
     }
 
@@ -403,7 +460,9 @@ mod tests {
         ast.metadata.project_settings.paper_size = Some("a5".to_string());
 
         let mut engine = ErgoPreviewEngine::new();
-        engine.sync_snapshot(ast).expect("snapshot sync should succeed");
+        engine
+            .sync_snapshot(ast)
+            .expect("snapshot sync should succeed");
         let result = engine.compile_preview();
         assert_eq!(result.status, CompilationStatus::Succeeded);
 
@@ -431,5 +490,61 @@ mod tests {
             "A5 height should be about 595pt, got {}",
             image.height
         );
+    }
+
+    #[test]
+    fn render_svg_page_returns_project_paper_size_and_svg_markup() {
+        let mut ast = basic_document_ast("A5 page", "");
+        ast.metadata.project_settings.paper_size = Some("a5".to_string());
+
+        let mut engine = ErgoPreviewEngine::new();
+        engine
+            .sync_snapshot(ast)
+            .expect("snapshot sync should succeed");
+        let result = engine.compile_preview();
+        assert_eq!(result.status, CompilationStatus::Succeeded);
+
+        let page = engine
+            .render_svg_page(0)
+            .expect("compiled page should render as SVG");
+
+        assert!(
+            (410.0..=430.0).contains(&page.width_pt),
+            "A5 width should be about 420pt, got {}",
+            page.width_pt
+        );
+        assert!(
+            (585.0..=605.0).contains(&page.height_pt),
+            "A5 height should be about 595pt, got {}",
+            page.height_pt
+        );
+        assert!(page.svg.starts_with("<svg"));
+    }
+
+    #[test]
+    fn compile_preview_marks_unchanged_pages_without_rerendering_metadata() {
+        let ast = basic_document_ast("Stable page", "");
+
+        let mut engine = ErgoPreviewEngine::new();
+        engine
+            .sync_snapshot(ast)
+            .expect("snapshot sync should succeed");
+
+        let first = engine.compile_preview();
+        assert!(first
+            .preview_pages
+            .as_ref()
+            .expect("first compile should return pages")
+            .iter()
+            .all(|page| page.changed));
+
+        let second = engine.compile_preview();
+        let pages = second
+            .preview_pages
+            .as_ref()
+            .expect("second compile should return pages");
+        assert!(pages.iter().all(|page| !page.changed));
+        assert!(pages.iter().all(|page| page.width_pt.is_some()));
+        assert!(pages.iter().all(|page| page.height_pt.is_some()));
     }
 }
