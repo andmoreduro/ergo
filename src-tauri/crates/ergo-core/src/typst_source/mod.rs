@@ -518,17 +518,33 @@ fn raw_author_name_is_empty(raw: &serde_json::Value, index: usize) -> bool {
         .unwrap_or(true)
 }
 
+fn input_value_has_visible_text(value: &serde_json::Value) -> bool {
+    if let Some(text) = value.as_str() {
+        return !text.trim().is_empty();
+    }
+
+    if let Some(content) = rich_text_array_from_value(value) {
+        return content.iter().any(|span| {
+            if span.kind.as_deref() == Some("reference") {
+                return true;
+            }
+            !span.text.trim().is_empty()
+        });
+    }
+
+    false
+}
+
 fn resolve_affiliation_map_param(val: &serde_json::Value, builder: &mut SourceBuilder) -> bool {
     if let Some(arr) = val.as_array() {
-        let has_any = arr
-            .iter()
-            .any(|v| v.as_str().map(|s| !s.trim().is_empty()).unwrap_or(false));
+        let has_any = arr.iter().any(input_value_has_visible_text);
         if !has_any {
             builder.push_literal("(:)");
             return true;
         }
         builder.push_literal("(");
         let mut first = true;
+        let bibliography_keys = std::collections::HashMap::new();
         for (idx, item) in arr.iter().enumerate() {
             if let Some(aff_name) = item.as_str() {
                 if aff_name.trim().is_empty() {
@@ -544,6 +560,23 @@ fn resolve_affiliation_map_param(val: &serde_json::Value, builder: &mut SourceBu
                     &format!("/affiliations/{}", idx),
                     aff_name,
                     0,
+                );
+                builder.push_literal("]");
+            } else if let Some(content) = rich_text_array_from_value(item) {
+                if !input_value_has_visible_text(item) {
+                    continue;
+                }
+                if !first {
+                    builder.push_literal(", ");
+                }
+                first = false;
+                builder.push_literal(&format!("\"{}\": [", idx + 1));
+                rich_text::push_rich_text_field(
+                    builder,
+                    "inputs",
+                    &format!("/affiliations/{}", idx),
+                    &content,
+                    &bibliography_keys,
                 );
                 builder.push_literal("]");
             }

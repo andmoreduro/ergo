@@ -49,7 +49,9 @@
     --font-weight-medium: 500;
     --font-weight-bold: 600;
 
-    /* Spacing */
+    /* Spacing scale */
+    --space-0: 0;
+    --space-px: 0.125rem;
     --space-1: 0.25rem;
     --space-2: 0.5rem;
     --space-3: 0.75rem;
@@ -58,18 +60,103 @@
     --space-6: 2rem;
     --space-8: 3rem;
 
-    /* Borders & Shadows */
+    /* Layout */
+    --layout-full: 100%;
+    --layout-viewport-w: 100vw;
+    --layout-viewport-h: 100vh;
+    --layout-overlay-gutter: var(--space-8);
+    --layout-palette-offset-top: 12vh;
+    --layout-welcome-offset-top: -4vh;
+    --layout-overlay-band: 40vh;
+
+    /* Control targets (width & height) */
+    --size-icon-sm: 0.875rem;
+    --size-icon: 1rem;
+    --size-icon-lg: 1.25rem;
+    --size-control-sm: 1.5rem;
+    --size-control: 1.75rem;
+    --size-chrome: 2rem;
+    --size-row: 2.125rem;
+    --size-field: 2.25rem;
+    --size-field-lg: 2.375rem;
+    --size-avatar: 2.75rem;
+    --size-touch: 3rem;
+    --size-window-control-w: 2.875rem;
+    --size-splitter: 0.3125rem;
+    --size-scrollbar: 0.625rem;
+
+    /* Panel & column widths */
+    --width-panel-sm: 28rem;
+    --width-panel-md: 30rem;
+    --width-panel-lg: 34rem;
+    --width-panel-xl: 44rem;
+    --width-palette: 32.5rem;
+    --width-welcome: 28.75rem;
+    --width-menu: 7.5rem;
+    --width-menu-popover: 12rem;
+    --width-col-sm: 6rem;
+    --width-col-md: 8rem;
+    --width-col-lg: 12rem;
+    --width-col-xl: 16rem;
+    --width-input-max-sm: 11rem;
+    --width-input-min: 2.75rem;
+    --width-label-min: 3rem;
+    --width-editor-cell-min: 7.5rem;
+
+    /* Scroll & overlay heights */
+    --height-scroll-sm: 9.375rem;
+    --height-scroll-md: 17.5rem;
+    --height-scroll-lg: 20rem;
+    --height-panel-max: 26.25rem;
+    --height-block: 5rem;
+
+    /* Borders & radius */
     --border-width-sm: 1px;
+    --border-width-md: 2px;
+    --border-width-lg: 3px;
     --border-radius-sm: 0.25rem;
     --border-radius-md: 0.375rem;
     --border-radius-lg: 0.5rem;
+    --radius-none: 0;
+    --radius-full: 50%;
+    --radius-pill: 999px;
 
-    /* Component sizing */
-    --size-editor-table-cell-min: 7.5rem;
+    /* Focus rings */
+    --ring-width: 3px;
+    --ring-width-sm: 2px;
+    --ring-gap: 5px;
+    --outline-width-focus: var(--border-width-md);
+    --outline-offset-sm: var(--border-width-sm);
+    --outline-offset-md: var(--border-width-md);
+    --shadow-ring-focus: 0 0 0 var(--ring-width) var(--color-focus-ring-primary);
+    --shadow-ring-focus-strong: 0 0 0 var(--ring-width)
+        var(--color-focus-ring-primary-strong);
+    --shadow-ring-focus-danger: 0 0 0 var(--ring-width)
+        var(--color-focus-ring-danger);
+    --shadow-ring-focus-button: 0 0 0 var(--ring-width) var(--color-bg-primary),
+        0 0 0 var(--ring-gap) var(--color-primary);
+    --shadow-ring-subtle: 0 0 0 var(--ring-width-sm)
+        color-mix(in srgb, var(--color-primary), transparent 70%);
+    --shadow-ring-caret: 0 0 0 var(--border-width-sm)
+        color-mix(in srgb, var(--color-primary) 35%, transparent);
+    --shadow-ring-inset: inset 0 0 0 var(--border-width-md) var(--color-primary);
+
+    /* Breakpoints */
+    --breakpoint-sm: 34rem;
+    --breakpoint-md: 38rem;
+
+    /* SVG */
+    --stroke-width-icon: 1.75;
 
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     --shadow-md:
         0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-content-paper:
+        0 1px 2px rgba(0, 0, 0, 0.12), 0 12px 32px rgba(0, 0, 0, 0.2);
+
+    /* Solid scrollbar palette (fixed hex — must not depend on content behind the gutter). */
+    --color-scrollbar-track: var(--color-bg-secondary);
+    --color-scrollbar-thumb: #8b959f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -91,6 +178,8 @@
         --color-primary-active: #2e86c1;
         --color-focus-ring-primary: rgba(93, 173, 226, 0.24);
         --color-focus-ring-primary-strong: rgba(93, 173, 226, 0.32);
+
+        --color-scrollbar-thumb: #55555c;
     }
 }
 
@@ -118,6 +207,8 @@
     --color-focus-ring-primary-strong: rgba(52, 152, 219, 0.3);
     --color-focus-ring-danger: rgba(231, 76, 60, 0.2);
     --color-overlay-backdrop: rgba(0, 0, 0, 0.38);
+
+    --color-scrollbar-thumb: #8b959f;
 }
 
 :root[data-theme="dark"],
@@ -144,4 +235,6 @@
     --color-focus-ring-primary-strong: rgba(93, 173, 226, 0.32);
     --color-focus-ring-danger: rgba(231, 76, 60, 0.24);
     --color-overlay-backdrop: rgba(0, 0, 0, 0.5);
+
+    --color-scrollbar-thumb: #55555c;
 }

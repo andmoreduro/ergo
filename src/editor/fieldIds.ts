@@ -67,6 +67,10 @@ export const simpleListComposerFieldId = (path: string) =>
 export const authorsComposerFieldId = () =>
     projectInputFieldId("/authors/composer");
 
+/** Frontend-only fields used to add list entries; not in the Typst source map. */
+export const isUiOnlyComposerFieldId = (fieldId: string) =>
+    fieldId.endsWith("/composer");
+
 export const backendFocusIdsForEditorField = (
     elementId: string,
     fieldId: string | null,

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
     useEffect,
@@ -728,7 +729,13 @@ describe("Preview sync", () => {
         const menu = screen.getByRole("menu", {
             name: "Preview zoom options",
         });
-        expect(menu).toHaveStyle({ maxHeight: "280px" });
+        const previewCss = readFileSync(
+            "src/components/layout/Preview/Preview.module.css",
+            "utf8",
+        );
+        expect(previewCss).toMatch(
+            /\.zoomMenu\s*\{[^}]*max-height:\s*var\(--height-scroll-md\)/s,
+        );
         expect(
             screen.getByRole("menuitem", { name: "Fit width" }),
         ).toBeInTheDocument();

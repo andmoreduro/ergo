@@ -5,7 +5,7 @@
     min-height: 0;
     width: 100%;
     background-color: var(--color-bg-primary);
-    padding: 0 3px;
+    padding: 0 var(--space-1);
     box-sizing: border-box;
 }
 
@@ -19,7 +19,7 @@
 
 .resizeHandle {
     flex-shrink: 0;
-    width: 5px;
+    width: var(--size-splitter);
     align-self: stretch;
     cursor: col-resize;
     touch-action: none;
@@ -32,53 +32,12 @@
     background-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
 }
 
-/* Overlay-style scrollbars on scroll regions only (not on every nested control) */
-.workspace [data-scroll-region] {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-    overscroll-behavior: auto;
-}
-
-.workspace [data-scroll-region]:hover,
-.workspace [data-scroll-region].scrollbarReveal {
-    scrollbar-color: color-mix(in srgb, var(--color-text-tertiary) 45%, transparent)
-        transparent;
-}
-
-.workspace [data-scroll-region]::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-}
-
-.workspace [data-scroll-region]::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.workspace [data-scroll-region]::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background-color: transparent;
-    transition: background-color 0.2s ease;
-}
-
-.workspace [data-scroll-region]:hover::-webkit-scrollbar-thumb,
-.workspace [data-scroll-region].scrollbarReveal::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--color-text-tertiary) 45%, transparent);
-}
-
-.workspace [data-scroll-region]::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--color-text-secondary) 65%, transparent);
-}
-
-.workspace [data-scroll-region]::-webkit-scrollbar-corner {
-    background: transparent;
-}
-
 .toast {
     position: fixed;
     right: var(--space-4);
-    top: calc(32px + var(--space-4));
+    top: calc(var(--size-chrome) + var(--space-4));
     z-index: 2400;
-    max-width: min(28rem, calc(100vw - var(--space-8)));
+    max-width: min(var(--width-panel-sm), calc(var(--layout-viewport-w) - var(--space-8)));
     padding: var(--space-3) var(--space-4);
     border: var(--border-width-sm) solid var(--color-danger);
     border-radius: var(--border-radius-sm);

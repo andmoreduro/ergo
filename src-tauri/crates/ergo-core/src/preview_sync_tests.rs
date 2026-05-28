@@ -479,7 +479,18 @@ fn returns_preview_positions_for_nested_template_input_focus_targets() {
     let mut ast = preview_sync_document_ast();
     ast.inputs.insert(
         "affiliations".to_string(),
-        serde_json::json!(["Universidad Norte"]),
+        serde_json::json!([[
+            {
+                "text": "Universidad Norte",
+                "bold": null,
+                "italic": null,
+                "underline": null,
+                "kind": null,
+                "reference_id": null,
+                "equation_source": null,
+                "equation_syntax": "typst"
+            }
+        ]]),
     );
     ast.inputs.insert(
         "authors".to_string(),
@@ -530,7 +541,18 @@ fn caret_specific_template_reference_fields_do_not_use_related_field_fallbacks()
     let mut ast = preview_sync_document_ast();
     ast.inputs.insert(
         "affiliations".to_string(),
-        serde_json::json!(["Universidad Norte"]),
+        serde_json::json!([[
+            {
+                "text": "Universidad Norte",
+                "bold": null,
+                "italic": null,
+                "underline": null,
+                "kind": null,
+                "reference_id": null,
+                "equation_source": null,
+                "equation_syntax": "typst"
+            }
+        ]]),
     );
     ast.inputs.insert(
         "authors".to_string(),
@@ -612,7 +634,18 @@ fn apa_author_and_affiliation_caret_positions_roundtrip_through_preview_click() 
     let mut ast = preview_sync_document_ast();
     ast.inputs.insert(
         "affiliations".to_string(),
-        serde_json::json!(["Universidad Norte"]),
+        serde_json::json!([[
+            {
+                "text": "Universidad Norte",
+                "bold": null,
+                "italic": null,
+                "underline": null,
+                "kind": null,
+                "reference_id": null,
+                "equation_source": null,
+                "equation_syntax": "typst"
+            }
+        ]]),
     );
     ast.inputs.insert(
         "authors".to_string(),

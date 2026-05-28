@@ -387,3 +387,52 @@ export const insertTextAtCaret = (
     const nextCaret = safeOffset + insertText.length;
     return { nextValue, nextCaret };
 };
+
+export const plainTextLengthInEditable = (root: HTMLElement): number => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let total = 0;
+    let textNode: Text | null;
+
+    while ((textNode = walker.nextNode() as Text | null)) {
+        total += textNode.textContent?.length ?? 0;
+    }
+
+    return total;
+};
+
+export const restoreCaretAtPlainOffset = (
+    root: HTMLElement,
+    offset: number,
+): void => {
+    const selection = document.getSelection();
+    if (!selection) {
+        return;
+    }
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let remaining = offset;
+    let textNode: Text | null = null;
+
+    while ((textNode = walker.nextNode() as Text | null)) {
+        const length = textNode.textContent?.length ?? 0;
+        if (remaining <= length) {
+            const range = document.createRange();
+            range.setStart(textNode, remaining);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            return;
+        }
+        remaining -= length;
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+};
+
+export const placeCaretAtEnd = (root: HTMLElement): void => {
+    restoreCaretAtPlainOffset(root, plainTextLengthInEditable(root));
+};

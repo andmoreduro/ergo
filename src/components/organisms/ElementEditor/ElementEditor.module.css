@@ -3,6 +3,76 @@
     margin-bottom: var(--space-4);
 }
 
+.extrasShell {
+    display: flex;
+    flex-direction: column;
+}
+
+.extrasPrimary {
+    position: relative;
+}
+
+.extrasToggle {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--size-control);
+    height: var(--size-control);
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+.extrasToggle:hover,
+.extrasToggle:focus-visible {
+    outline: none;
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
+}
+
+.extrasToggle svg {
+    width: var(--size-icon);
+    height: var(--size-icon);
+}
+
+.extrasReveal {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.2s ease;
+}
+
+.extrasRevealOpen {
+    grid-template-rows: 1fr;
+}
+
+.extrasRevealInner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-height: 0;
+    overflow: hidden;
+}
+
+.extrasRevealOpen .extrasRevealInner {
+    padding-top: var(--space-2);
+}
+
+.elementPrimary {
+    padding-bottom: var(--size-control);
+}
+
+.extrasRevealInner .annotationFields {
+    margin-top: 0;
+}
+
 .settingsAnchor {
     position: absolute;
     top: 0;
@@ -14,8 +84,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--size-control);
+    height: var(--size-control);
     margin: 0;
     padding: 0;
     border: none;
@@ -33,8 +103,8 @@
 }
 
 .settingsButton svg {
-    width: 16px;
-    height: 16px;
+    width: var(--size-icon);
+    height: var(--size-icon);
 }
 
 .settingsPanel {
@@ -45,7 +115,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    min-width: 12rem;
+    min-width: var(--width-col-lg);
     margin-top: var(--space-1);
     padding: var(--space-3);
     border: var(--border-width-sm) solid var(--color-border);
@@ -76,11 +146,11 @@
 .tableFrame {
     position: relative;
     display: inline-block;
-    padding: 18px;
+    padding: var(--space-5);
 }
 
 .editorTableGridSize {
-    --editor-table-grid-size: calc(2 * var(--size-editor-table-cell-min));
+    --editor-table-grid-size: calc(2 * var(--width-editor-cell-min));
 }
 
 .tableGrid {
@@ -90,7 +160,7 @@
 
 .tableRow {
     display: grid;
-    grid-template-columns: repeat(var(--table-cols, 1), minmax(var(--size-editor-table-cell-min), 1fr));
+    grid-template-columns: repeat(var(--table-cols, 1), minmax(var(--width-editor-cell-min), 1fr));
 }
 
 .tableInsertButton {
@@ -98,8 +168,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--size-control);
+    height: var(--size-control);
     margin: 0;
     padding: 0;
     border: var(--border-width-sm) solid var(--color-border);
@@ -116,8 +186,8 @@
 }
 
 .tableInsertButton:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 1px;
+    outline: var(--outline-width-focus) solid var(--color-primary);
+    outline-offset: var(--outline-offset-sm);
 }
 
 .tableInsertTop {
@@ -151,9 +221,9 @@
 }
 
 .tableCellInput input {
-    border-radius: 0;
+    border-radius: var(--radius-none);
     margin: 0;
-    min-height: var(--size-editor-table-cell-min);
+    min-height: var(--width-editor-cell-min);
 }
 
 .figureWrap {
@@ -170,9 +240,9 @@
     margin: 0;
     padding: 0;
     width: 100%;
-    height: var(--editor-table-grid-size, calc(2 * var(--size-editor-table-cell-min)));
+    height: var(--editor-table-grid-size, calc(2 * var(--width-editor-cell-min)));
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-none);
     background-color: var(--color-bg-secondary);
     cursor: pointer;
     overflow: hidden;
@@ -183,8 +253,8 @@
 }
 
 .figureImageButton:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
+    outline: var(--outline-width-focus) solid var(--color-primary);
+    outline-offset: var(--outline-offset-md);
 }
 
 .figureImagePlaceholder {
@@ -192,14 +262,14 @@
 }
 
 .figureImagePlaceholder svg {
-    width: 48px;
-    height: 48px;
+    width: var(--size-touch);
+    height: var(--size-touch);
 }
 
 .figureImagePreview {
     display: block;
     max-width: 100%;
-    max-height: var(--editor-table-grid-size, calc(2 * var(--size-editor-table-cell-min)));
+    max-height: var(--editor-table-grid-size, calc(2 * var(--width-editor-cell-min)));
     width: auto;
     height: auto;
     object-fit: contain;
@@ -232,7 +302,7 @@
 
 .quoteEditor {
     padding-left: var(--space-4);
-    border-left: 3px solid var(--color-border);
+    border-left: var(--border-width-lg) solid var(--color-border);
 }
 
 .listEditor {

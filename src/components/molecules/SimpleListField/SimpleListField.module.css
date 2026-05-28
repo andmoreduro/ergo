@@ -10,7 +10,7 @@
     align-items: center;
     gap: var(--space-2);
     width: 100%;
-    min-height: 2.25rem;
+    min-height: var(--size-field);
     padding: var(--space-1) var(--space-2);
     border: var(--border-width-sm) solid var(--color-border);
     border-radius: var(--border-radius-sm);
@@ -20,8 +20,8 @@
 }
 
 .inlineComposer:focus-within {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 1px;
+    outline: var(--outline-width-focus) solid var(--color-primary);
+    outline-offset: var(--outline-offset-sm);
 }
 
 .chip {
@@ -50,12 +50,12 @@ button.chipCommitted {
 }
 
 .chipFocused {
-    outline: 2px solid var(--color-accent);
+    outline: var(--outline-width-focus) solid var(--color-primary);
     outline-offset: 0;
 }
 
 .chipEditing:focus-within {
-    outline: 2px solid var(--color-accent);
+    outline: var(--outline-width-focus) solid var(--color-primary);
     outline-offset: 0;
 }
 
@@ -87,8 +87,8 @@ button.chipCommitted {
 }
 
 .inlineInput {
-    flex: 1 1 8rem;
-    min-width: 6rem;
+    flex: 1 1 var(--width-col-md);
+    min-width: var(--width-col-sm);
     margin: 0;
     padding: 0;
     border: none;
@@ -105,4 +105,26 @@ button.chipCommitted {
 
 .inlineInput:focus {
     outline: none;
+}
+
+.composeInputHost {
+    display: flex;
+    flex: 1 1 var(--width-col-md);
+    min-width: var(--width-col-sm);
+    max-width: 100%;
+}
+
+.chipContentEditor {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.chipContentEditor :global(.field) {
+    width: 100%;
+}
+
+.chipContentEditor :global(.documentEditor) {
+    min-height: var(--size-control-sm);
+    padding: 0;
 }

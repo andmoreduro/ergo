@@ -147,7 +147,7 @@
       "label": "Affiliations",
       "importance": "recommended",
       "items": {
-        "type": "string",
+        "type": "content",
         "label": "Affiliation"
       }
     },

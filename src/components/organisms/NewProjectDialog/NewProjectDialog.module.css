@@ -9,7 +9,7 @@
 }
 
 .dialog {
-    width: min(30rem, 100%);
+    width: min(var(--width-panel-md), var(--layout-full));
     border: var(--border-width-sm) solid var(--color-border);
     border-radius: var(--border-radius-lg);
     background: var(--color-bg-primary);
@@ -35,7 +35,7 @@
 
 .locationRow {
     display: grid;
-    grid-template-columns: minmax(12rem, 1fr) auto;
+    grid-template-columns: minmax(var(--width-col-lg), 1fr) auto;
     align-items: end;
     gap: var(--space-2);
 }
@@ -46,7 +46,7 @@
 }
 
 .folderButton {
-    min-height: 2.375rem;
+    min-height: var(--size-field-lg);
     white-space: nowrap;
 }
 
@@ -58,7 +58,7 @@
     border-top: var(--border-width-sm) solid var(--color-border);
 }
 
-@media (max-width: 34rem) {
+@media (max-width: var(--breakpoint-sm)) {
     .locationRow {
         grid-template-columns: 1fr;
     }

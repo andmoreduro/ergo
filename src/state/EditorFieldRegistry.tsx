@@ -12,8 +12,18 @@ import {
     type RefCallback,
     type SyntheticEvent,
 } from "react";
+import {
+    fallbackFieldIdsAfterBlur,
+    isEditorFieldTarget,
+    isEditorFocusLoseExempt,
+} from "../editor/editorFocusTargets";
+import { isContentSectionPointerFocusTarget } from "../editor/contentSectionFocus";
+import { isUiOnlyComposerFieldId } from "../editor/fieldIds";
 import { caretPlainOffsetFromSelection } from "../richText/richText";
 import { useDocument } from "./DocumentContext";
+
+export const EditorFieldRegistryContext =
+    createContext<EditorFieldRegistryValue | null>(null);
 
 type EditorFieldElement =
     | HTMLInputElement
@@ -31,22 +41,9 @@ interface EditorFieldRegistryValue {
     registerField: (field: RegisteredEditorField) => void;
     unregisterField: (fieldId: string) => void;
     getField: (fieldId: string) => RegisteredEditorField | undefined;
+    recordFieldFocus: (fieldId: string) => void;
+    restoreFocusAfterBlur: (blurredFieldId: string) => void;
 }
-
-const EditorFieldRegistryContext =
-    createContext<EditorFieldRegistryValue | null>(null);
-
-const isEditorFieldTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof HTMLElement)) {
-        return false;
-    }
-
-    return Boolean(
-        target.closest(
-            "[data-editor-field-id], input, textarea, select, button, [role='dialog'], [role='menu']",
-        ),
-    );
-};
 
 export const EditorFieldRegistryProvider = ({
     children,
@@ -55,6 +52,7 @@ export const EditorFieldRegistryProvider = ({
 }) => {
     const fieldsRef = useRef(new Map<string, RegisteredEditorField>());
     const activeFieldIdRef = useRef<string | null>(null);
+    const lastFocusedFieldIdRef = useRef<string | null>(null);
 
     const registerField = useCallback((field: RegisteredEditorField) => {
         fieldsRef.current.set(field.fieldId, field);
@@ -62,18 +60,67 @@ export const EditorFieldRegistryProvider = ({
 
     const unregisterField = useCallback((fieldId: string) => {
         fieldsRef.current.delete(fieldId);
-        if (activeFieldIdRef.current === fieldId) {
-            activeFieldIdRef.current = null;
-        }
     }, []);
 
     const getField = useCallback((fieldId: string) => {
         return fieldsRef.current.get(fieldId);
     }, []);
 
+    const recordFieldFocus = useCallback((fieldId: string) => {
+        lastFocusedFieldIdRef.current = fieldId;
+        activeFieldIdRef.current = fieldId;
+    }, []);
+
+    const focusRegisteredField = useCallback((fieldId: string | null) => {
+        if (!fieldId) {
+            return false;
+        }
+
+        const field = fieldsRef.current.get(fieldId);
+        if (!field?.node.isConnected) {
+            return false;
+        }
+
+        field.node.focus();
+        return true;
+    }, []);
+
+    const restoreFocusAfterBlur = useCallback(
+        (blurredFieldId: string) => {
+            if (focusRegisteredField(blurredFieldId)) {
+                return;
+            }
+
+            if (focusRegisteredField(lastFocusedFieldIdRef.current)) {
+                return;
+            }
+
+            for (const fallbackFieldId of fallbackFieldIdsAfterBlur(
+                blurredFieldId,
+            )) {
+                if (focusRegisteredField(fallbackFieldId)) {
+                    return;
+                }
+            }
+        },
+        [focusRegisteredField],
+    );
+
     const value = useMemo<EditorFieldRegistryValue>(
-        () => ({ registerField, unregisterField, getField }),
-        [getField, registerField, unregisterField],
+        () => ({
+            registerField,
+            unregisterField,
+            getField,
+            recordFieldFocus,
+            restoreFocusAfterBlur,
+        }),
+        [
+            getField,
+            recordFieldFocus,
+            registerField,
+            restoreFocusAfterBlur,
+            unregisterField,
+        ],
     );
 
     useLayoutEffect(() => {
@@ -84,6 +131,10 @@ export const EditorFieldRegistryProvider = ({
                     .closest<HTMLElement>("[data-editor-field-id]")
                     ?.dataset.editorFieldId;
                 activeFieldIdRef.current = fieldId ?? null;
+                return;
+            }
+
+            if (isContentSectionPointerFocusTarget(target)) {
                 return;
             }
 
@@ -117,6 +168,7 @@ export const EditorFieldRegistryProvider = ({
 export interface EditorFieldBinding<T extends EditorFieldElement> {
     ref: RefCallback<T>;
     onFocus: FocusEventHandler<T>;
+    onBlur: FocusEventHandler<T>;
     onInput: (event: SyntheticEvent<T>) => void;
     onSelect: (event: SyntheticEvent<T>) => void;
     onKeyUp: KeyboardEventHandler<T>;
@@ -154,9 +206,17 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
         [elementId, fieldId, registry],
     );
 
+    const onBlur = useEditorFocusLostRecovery(fieldId, registry);
+
     const updateNativeFocus = useCallback(
         (node: T) => {
             if (isApplyingProgrammaticFocusRef.current) {
+                return;
+            }
+
+            registry?.recordFieldFocus(fieldId);
+
+            if (isUiOnlyComposerFieldId(fieldId)) {
                 return;
             }
 
@@ -170,7 +230,7 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
                 focusSource: "native",
             });
         },
-        [elementId, fieldId, setDocumentFocus],
+        [elementId, fieldId, registry, setDocumentFocus],
     );
 
     const onFocus = useCallback<FocusEventHandler<T>>(
@@ -241,6 +301,7 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
     return {
         ref,
         onFocus,
+        onBlur,
         onInput,
         onSelect,
         onKeyUp,
@@ -294,6 +355,31 @@ const restoreRichTextCaret = (root: HTMLDivElement, offset: number) => {
     range.collapse(false);
     selection.removeAllRanges();
     selection.addRange(range);
+};
+
+export const useEditorFocusLostRecovery = (
+    blurredFieldId: string,
+    registry: EditorFieldRegistryValue | null,
+): FocusEventHandler<EditorFieldElement> => {
+    return useCallback(
+        (event) => {
+            requestAnimationFrame(() => {
+                if (isEditorFieldTarget(document.activeElement)) {
+                    return;
+                }
+
+                if (
+                    isEditorFocusLoseExempt(event.relatedTarget) ||
+                    isEditorFocusLoseExempt(document.activeElement)
+                ) {
+                    return;
+                }
+
+                registry?.restoreFocusAfterBlur(blurredFieldId);
+            });
+        },
+        [blurredFieldId, registry],
+    );
 };
 
 const isTextSelectionField = (

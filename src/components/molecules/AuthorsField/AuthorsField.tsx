@@ -9,6 +9,7 @@ import {
     projectInputFieldId,
 } from "../../../editor/fieldIds";
 import { normalizeEditableText } from "../../../editor/textInput";
+import { inputRichTextPlain } from "../../../editor/richTextMarks";
 import { useDeferredTextCommit } from "../../../editor/useDeferredTextCommit";
 import { useEditorNavigation } from "../../../editor/EditorNavigationContext";
 import { useDocumentAst } from "../../../state/DocumentContext";
@@ -24,7 +25,7 @@ export interface AuthorsFieldProps {
     label: string;
     importance?: InputSchema["importance"];
     authors: AuthorEntry[];
-    affiliations: string[];
+    affiliations: unknown[];
 }
 
 const AuthorAffiliationCheckbox = ({
@@ -81,7 +82,7 @@ const AuthorRow = ({
 }: {
     author: AuthorEntry;
     authorIndex: number;
-    affiliations: string[];
+    affiliations: unknown[];
 }) => {
     const { dispatch } = useDocumentAst();
     const { handleAdvanceKeyDown } = useEditorNavigation();
@@ -123,19 +124,21 @@ const AuthorRow = ({
                     handleAdvanceKeyDown(event, fieldId);
                 }}
             />
-            {affiliations.some((item) => item.trim().length > 0) ? (
+            {affiliations.some(
+                (item) => inputRichTextPlain(item).trim().length > 0,
+            ) ? (
                 <div className={styles.inlineAffiliations}>
                     {affiliations.map((item, index) => {
-                        if (!item.trim()) {
+                        const plain = inputRichTextPlain(item).trim();
+                        if (!plain) {
                             return null;
                         }
                         const referenceValue = String(index + 1);
-                        const displayName =
-                            typeof item === "string" && item.trim()
-                                ? item
-                                : m.editor_affiliation_fallback({
-                                      index: index + 1,
-                                  });
+                        const displayName = plain
+                            ? plain
+                            : m.editor_affiliation_fallback({
+                                  index: index + 1,
+                              });
 
                         return (
                             <AuthorAffiliationCheckbox
