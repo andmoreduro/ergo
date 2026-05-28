@@ -54,6 +54,7 @@ Zip archive canonical layout:
 
 ```text
 assets/
+  diagrams/
 packages/
   {namespace}/{name}/{version}/...
 .ergproj/
@@ -67,7 +68,7 @@ packages/
 
 | Path | Role |
 |------|------|
-| `assets/` | Binary files referenced by `AssetEntry` |
+| `assets/` | Binary files referenced by `AssetEntry`, including durable generated diagram SVGs under `assets/diagrams/` |
 | `packages/` | Mirrored Typst package files needed for offline WASM compilation |
 | `.ergproj/document_state.json` | Canonical structured AST (required on open) |
 | `.ergproj/source_map.json` | Element → Typst byte ranges |

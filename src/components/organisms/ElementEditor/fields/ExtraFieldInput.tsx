@@ -6,15 +6,15 @@ import { normalizeEditableText } from "../../../../editor/textInput";
 import { useEditorNavigation } from "../../../../editor/EditorNavigationContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import type { WrapperHostElement } from "../../../../editor/wrapperFields";
-import { Textarea } from "../../../atoms/Textarea/Textarea";
 import { TextInput } from "../../../atoms/TextInput/TextInput";
+import { ExtraFieldContentInput } from "./ExtraFieldContentInput";
 
 interface ExtraFieldInputProps {
     element: WrapperHostElement;
     field: ExtraFieldSpec;
     committed: string;
     onDraftChange: (value: string) => void;
-    onCommit: (value: string) => void;
+    onCommit: (value: string | unknown) => void;
 }
 
 export const ExtraFieldInput = ({
@@ -45,20 +45,11 @@ export const ExtraFieldInput = ({
     };
 
     if (field.type === "content") {
-        const binding = useEditorFieldBinding<HTMLTextAreaElement>({
-            elementId,
-            fieldId,
-        });
-
         return (
-            <Textarea
-                {...binding}
-                fullWidth
-                label={field.label}
-                placeholder={field.label}
-                value={committed}
-                onChange={(event) => handleChange(event.target.value)}
-                onKeyDown={handleKeyDown}
+            <ExtraFieldContentInput
+                element={element}
+                field={field}
+                onCommit={onCommit}
             />
         );
     }

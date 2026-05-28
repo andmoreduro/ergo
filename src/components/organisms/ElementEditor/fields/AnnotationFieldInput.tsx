@@ -16,7 +16,9 @@ export const AnnotationFieldInput = ({
 }) => {
     const { dispatch } = useDocumentAst();
     const committed = wrapperFieldValue(element, field.key);
-    const { draft, setDraft, shouldCommit } = useDeferredTextCommit(committed);
+    const committedText =
+        typeof committed === "string" ? committed : String(committed ?? "");
+    const { draft, setDraft, shouldCommit } = useDeferredTextCommit(committedText);
 
     useEffect(() => {
         if (draftRef) {
@@ -24,8 +26,21 @@ export const AnnotationFieldInput = ({
         }
     }, [draft, draftRef, field.key]);
 
-    const commit = (next: string) => {
-        if (!shouldCommit(next)) {
+    const commit = (next: string | unknown) => {
+        if (field.type === "content") {
+            dispatch({
+                type: "UPDATE_ELEMENT_EXTRA_FIELD",
+                payload: {
+                    elementId: element.id,
+                    fieldKey: field.key,
+                    fieldValue: next,
+                },
+            });
+            return;
+        }
+
+        const text = typeof next === "string" ? next : String(next ?? "");
+        if (!shouldCommit(text)) {
             return;
         }
 
@@ -34,7 +49,7 @@ export const AnnotationFieldInput = ({
                 type: "UPDATE_FIGURE",
                 payload: {
                     figureId: element.id,
-                    caption: next,
+                    caption: text,
                 },
             });
             return;
@@ -45,18 +60,21 @@ export const AnnotationFieldInput = ({
             payload: {
                 elementId: element.id,
                 fieldKey: field.key,
-                fieldValue: next,
+                fieldValue: text,
             },
         });
     };
 
     return (
         <ExtraFieldInput
-            committed={draft}
+            committed={field.type === "content" ? committedText : draft}
             element={element}
             field={field}
             onCommit={commit}
             onDraftChange={(next) => {
+                if (field.type === "content") {
+                    return;
+                }
                 setDraft(next);
                 commit(next);
             }}

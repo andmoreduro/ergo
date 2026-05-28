@@ -36,12 +36,25 @@ interface EditorFieldRegistryValue {
 const EditorFieldRegistryContext =
     createContext<EditorFieldRegistryValue | null>(null);
 
+const isEditorFieldTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) {
+        return false;
+    }
+
+    return Boolean(
+        target.closest(
+            "[data-editor-field-id], input, textarea, select, button, [role='dialog'], [role='menu']",
+        ),
+    );
+};
+
 export const EditorFieldRegistryProvider = ({
     children,
 }: {
     children: ReactNode;
 }) => {
     const fieldsRef = useRef(new Map<string, RegisteredEditorField>());
+    const activeFieldIdRef = useRef<string | null>(null);
 
     const registerField = useCallback((field: RegisteredEditorField) => {
         fieldsRef.current.set(field.fieldId, field);
@@ -49,6 +62,9 @@ export const EditorFieldRegistryProvider = ({
 
     const unregisterField = useCallback((fieldId: string) => {
         fieldsRef.current.delete(fieldId);
+        if (activeFieldIdRef.current === fieldId) {
+            activeFieldIdRef.current = null;
+        }
     }, []);
 
     const getField = useCallback((fieldId: string) => {
@@ -59,6 +75,37 @@ export const EditorFieldRegistryProvider = ({
         () => ({ registerField, unregisterField, getField }),
         [getField, registerField, unregisterField],
     );
+
+    useLayoutEffect(() => {
+        const onPointerDown = (event: PointerEvent) => {
+            const target = event.target;
+            if (target instanceof HTMLElement && target.closest("[data-editor-field-id]")) {
+                const fieldId = target
+                    .closest<HTMLElement>("[data-editor-field-id]")
+                    ?.dataset.editorFieldId;
+                activeFieldIdRef.current = fieldId ?? null;
+                return;
+            }
+
+            const activeFieldId = activeFieldIdRef.current;
+            if (!activeFieldId || isEditorFieldTarget(target)) {
+                return;
+            }
+
+            const field = fieldsRef.current.get(activeFieldId);
+            if (!field) {
+                return;
+            }
+
+            event.preventDefault();
+            requestAnimationFrame(() => {
+                field.node.focus();
+            });
+        };
+
+        document.addEventListener("pointerdown", onPointerDown, true);
+        return () => document.removeEventListener("pointerdown", onPointerDown, true);
+    }, []);
 
     return (
         <EditorFieldRegistryContext.Provider value={value}>

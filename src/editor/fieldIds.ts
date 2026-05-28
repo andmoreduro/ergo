@@ -19,6 +19,17 @@ export const coverAuthorEmailFieldId = (
 export const equationSourceFieldId = (elementId: string) =>
     `${elementId}:latexSource`;
 
+export const quoteContentFieldId = (elementId: string) => `${elementId}:quote`;
+
+export const diagramSourceFieldId = (elementId: string) =>
+    `${elementId}:mermaidSource`;
+
+export const diagramCaptionFieldId = (elementId: string) =>
+    `${elementId}:caption`;
+
+export const listItemFieldId = (elementId: string, itemIndex: number) =>
+    `${elementId}:item:${itemIndex}`;
+
 export const tableCellFieldId = (
     elementId: string,
     rowIndex: number,
@@ -104,6 +115,18 @@ export const defaultFieldIdForElement = (element: {
 
     if (element.type === "Figure") {
         return figureBodyFieldId(element.id);
+    }
+
+    if (element.type === "Quote") {
+        return quoteContentFieldId(element.id);
+    }
+
+    if (element.type === "Diagram") {
+        return diagramSourceFieldId(element.id);
+    }
+
+    if (element.type === "List" || element.type === "Enumeration") {
+        return listItemFieldId(element.id, 0);
     }
 
     return richTextFieldId(element.id);

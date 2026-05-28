@@ -7,6 +7,7 @@ import { useDocumentAst } from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
 import { Checkbox } from "../../../atoms/Checkbox/Checkbox";
+import { Select } from "../../../atoms/Select/Select";
 import { Textarea } from "../../../atoms/Textarea/Textarea";
 import type { EquationElement } from "../types";
 
@@ -60,6 +61,31 @@ export const EquationEditor = ({ element }: { element: EquationElement }) => {
                         payload: {
                             equationId: element.id,
                             isBlock: event.target.checked,
+                        },
+                    })
+                }
+            />
+            <Select
+                fullWidth
+                label={m.editor_equation_syntax()}
+                value={element.syntax}
+                options={[
+                    {
+                        value: "typst",
+                        label: m.editor_equation_syntax_typst(),
+                    },
+                    {
+                        value: "latex",
+                        label: m.editor_equation_syntax_latex(),
+                    },
+                ]}
+                onChange={(event) =>
+                    dispatch({
+                        type: "UPDATE_EQUATION",
+                        payload: {
+                            equationId: element.id,
+                            syntax:
+                                event.target.value === "latex" ? "latex" : "typst",
                         },
                     })
                 }

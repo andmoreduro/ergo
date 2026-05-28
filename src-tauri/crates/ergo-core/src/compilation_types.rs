@@ -24,7 +24,7 @@ pub enum CompilationStatus {
     Failed,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
 #[ts(export)]
 pub struct CompilationResult {
     #[ts(type = "number")]
@@ -37,13 +37,17 @@ pub struct CompilationResult {
     pub resources: Option<DocumentResources>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
 #[ts(export)]
 pub struct PreviewPageFile {
     pub page_number: usize,
     pub path: String,
     #[serde(default)]
     pub changed: bool,
+    #[serde(default)]
+    pub width_pt: Option<f64>,
+    #[serde(default)]
+    pub height_pt: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
 }

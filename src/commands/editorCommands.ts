@@ -1,10 +1,21 @@
 import type { Command } from "./types";
 import { m } from "../paraglide/messages.js";
 
-export type ElementType = "heading" | "paragraph" | "table" | "equation" | "figure";
+export type ElementType =
+    | "heading"
+    | "paragraph"
+    | "table"
+    | "equation"
+    | "inlineEquation"
+    | "quote"
+    | "diagram"
+    | "list"
+    | "enumeration"
+    | "figure";
 
 export interface EditorCommandDeps {
     insertElement: (elementType: ElementType) => void;
+    applyRichTextMark: (mark: "bold" | "italic" | "underline") => void;
 }
 
 export const editorCommands = (deps: EditorCommandDeps): Command[] => [
@@ -33,6 +44,42 @@ export const editorCommands = (deps: EditorCommandDeps): Command[] => [
         run: () => deps.insertElement("equation"),
     },
     {
+        id: "editor::InsertBlockEquation",
+        label: m.menubar_insert_block_equation(),
+        scope: "editor",
+        run: () => deps.insertElement("equation"),
+    },
+    {
+        id: "editor::InsertInlineEquation",
+        label: m.menubar_insert_inline_equation(),
+        scope: "editor",
+        run: () => deps.insertElement("inlineEquation"),
+    },
+    {
+        id: "editor::InsertQuote",
+        label: m.menubar_insert_quote(),
+        scope: "editor",
+        run: () => deps.insertElement("quote"),
+    },
+    {
+        id: "editor::InsertDiagram",
+        label: m.menubar_insert_diagram(),
+        scope: "editor",
+        run: () => deps.insertElement("diagram"),
+    },
+    {
+        id: "editor::InsertList",
+        label: m.menubar_insert_list(),
+        scope: "editor",
+        run: () => deps.insertElement("list"),
+    },
+    {
+        id: "editor::InsertEnumeration",
+        label: m.menubar_insert_enumeration(),
+        scope: "editor",
+        run: () => deps.insertElement("enumeration"),
+    },
+    {
         id: "editor::InsertFigure",
         label: m.menubar_insert_figure(),
         scope: "editor",
@@ -50,5 +97,23 @@ export const editorCommands = (deps: EditorCommandDeps): Command[] => [
         label: m.menubar_insert_reference(),
         scope: "editor",
         run: () => undefined,
+    },
+    {
+        id: "editor::Bold",
+        label: m.menubar_text_bold(),
+        scope: "editor",
+        run: () => deps.applyRichTextMark("bold"),
+    },
+    {
+        id: "editor::Italic",
+        label: m.menubar_text_italic(),
+        scope: "editor",
+        run: () => deps.applyRichTextMark("italic"),
+    },
+    {
+        id: "editor::Underline",
+        label: m.menubar_text_underline(),
+        scope: "editor",
+        run: () => deps.applyRichTextMark("underline"),
     },
 ];

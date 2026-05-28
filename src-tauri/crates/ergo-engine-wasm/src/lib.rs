@@ -1,7 +1,7 @@
 mod engine;
 mod profile;
 
-pub use engine::{BootstrapPreviewOutput, ErgoPreviewEngine, PageImage, VfsFileEntry};
+pub use engine::{BootstrapPreviewOutput, ErgoPreviewEngine, PageImage, PageSvg, VfsFileEntry};
 pub use profile::{
     run_wasm_preview_profile, WasmPreviewIteration, WasmPreviewProfileOptions,
     WasmPreviewProfileReport, WasmPreviewScenario, WasmPreviewTiming,
@@ -15,6 +15,7 @@ use ergo_core::preview_sync::PreviewFocusTarget;
 
 use engine::ErgoPreviewEngine as Engine;
 use engine::PageImage as EnginePageImage;
+use engine::PageSvg as EnginePageSvg;
 
 #[wasm_bindgen]
 #[derive(Clone)]
@@ -63,6 +64,42 @@ impl WasmPageImage {
     #[wasm_bindgen(getter)]
     pub fn pixels(&self) -> js_sys::Uint8Array {
         js_sys::Uint8Array::from(self.pixels.as_slice())
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct WasmPageSvg {
+    width_pt: f64,
+    height_pt: f64,
+    svg: String,
+}
+
+impl From<EnginePageSvg> for WasmPageSvg {
+    fn from(page: EnginePageSvg) -> Self {
+        Self {
+            width_pt: page.width_pt,
+            height_pt: page.height_pt,
+            svg: page.svg,
+        }
+    }
+}
+
+#[wasm_bindgen]
+impl WasmPageSvg {
+    #[wasm_bindgen(getter, js_name = widthPt)]
+    pub fn width_pt(&self) -> f64 {
+        self.width_pt
+    }
+
+    #[wasm_bindgen(getter, js_name = heightPt)]
+    pub fn height_pt(&self) -> f64 {
+        self.height_pt
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn svg(&self) -> String {
+        self.svg.clone()
     }
 }
 
@@ -179,14 +216,18 @@ impl ErgoWasmCompiler {
     }
 
     #[wasm_bindgen]
-    pub fn render_resource_page(
-        &self,
-        page_number: usize,
-        pixel_per_pt: f32,
-    ) -> Result<WasmPageImage, JsValue> {
+    pub fn render_svg_page(&self, page_index: usize) -> Result<WasmPageSvg, JsValue> {
         self.engine
-            .render_resource_page(page_number, pixel_per_pt)
-            .map(WasmPageImage::from)
+            .render_svg_page(page_index)
+            .map(WasmPageSvg::from)
+            .map_err(|error| JsValue::from_str(&error))
+    }
+
+    #[wasm_bindgen]
+    pub fn render_resource_svg_page(&self, page_number: usize) -> Result<WasmPageSvg, JsValue> {
+        self.engine
+            .render_resource_svg_page(page_number)
+            .map(WasmPageSvg::from)
             .map_err(|error| JsValue::from_str(&error))
     }
 

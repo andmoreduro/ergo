@@ -2,7 +2,9 @@ use std::fmt;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 
-use ergo_core::ast::{DocumentAST, DocumentElement, DocumentSection, Heading, Paragraph, RichText};
+use ergo_core::ast::{
+    DocumentAST, DocumentElement, DocumentSection, EquationSyntax, Heading, Paragraph, RichText,
+};
 use ergo_core::compilation_types::CompilationStatus;
 use ergo_core::document_session_types::DocumentEvent;
 use ergo_core::test_fixtures::basic_document_ast;
@@ -105,7 +107,7 @@ pub struct WasmPreviewProfileReport {
     pub average: WasmPreviewTiming,
 }
 
-/// Simulates the WASM worker preview path: document sync → compile → canvas rasterization.
+/// Simulates the WASM worker preview path: document sync → compile → page rendering.
 pub fn run_wasm_preview_profile(
     options: WasmPreviewProfileOptions,
 ) -> Result<WasmPreviewProfileReport, String> {
@@ -277,8 +279,10 @@ fn rich_text(text: &str) -> RichText {
         text: text.to_string(),
         bold: None,
         italic: None,
+        underline: None,
         kind: None,
         reference_id: None,
         equation_source: None,
+        equation_syntax: EquationSyntax::Typst,
     }
 }

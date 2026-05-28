@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::ast::{AssetEntry, DocumentElement, ProjectSettings, ReferenceEntry, TableCell};
+use crate::ast::{
+    AssetEntry, DocumentElement, EquationSyntax, ProjectSettings, ReferenceEntry, TableCell,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[ts(export)]
@@ -136,6 +138,7 @@ pub enum DocumentEvent {
         element_id: String,
         latex_source: Option<String>,
         is_block: Option<bool>,
+        syntax: Option<EquationSyntax>,
     },
     UpdateTableCell {
         table_id: String,

@@ -13,7 +13,7 @@ flowchart LR
     Actions["Action Runtime"]
     State["Document State"]
     Worker["WASM Compiler Worker"]
-    Preview["Canvas Preview"]
+    Preview["Preview Pages"]
     Sidebar["Workspace Sidebar"]
     API["Tauri API Client"]
     Session["Backend DocumentSession"]
@@ -24,7 +24,7 @@ flowchart LR
     State -- "4: sync_events + compile" --> Worker
     Worker -- "5: Typst + retained preview" --> Worker
     Worker -- "6: page list + outline + resources" --> Preview
-    Preview -- "7: render_page for viewport" --> Worker
+    Preview -- "7: render SVG page for viewport" --> Worker
     Preview -- "8: outline + resources" --> Sidebar
     State -- "9: mirror events (async)" --> API
     API -- "10: apply on backend session" --> Session

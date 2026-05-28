@@ -17,7 +17,7 @@ Each file has one abstraction level. Use this index to find a topic without read
 
 | § | Flow |
 |---|------|
-| 1 | Real-time edit, WASM compile, Canvas preview, backend mirror (includes undo/redo) |
+| 1 | Real-time edit, WASM compile, preview pages, backend mirror (includes undo/redo) |
 | 2 | New project, `save_project`, autosave triggers |
 | 3 | Open `.ergproj` and WASM bootstrap |
 | 4 | Insert reference in editor |
@@ -44,7 +44,7 @@ Save, export, open, and keymap are **not** in `collaboration-diagrams.md` (only 
 | 1 | Frontend project UI (welcome → edit → save) |
 | 2 | Backend `DocumentSession` mirror |
 | 3 | WASM preview compile and `PreviewSyncState` |
-| 4 | Canvas preview rasterization |
+| 4 | Preview page rendering |
 | 5 | Key sequence resolver |
 
 Preview sync resolve behavior is documented under state §3, not as a separate diagram.

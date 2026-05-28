@@ -1,4 +1,11 @@
-import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type Dispatch,
+    type SetStateAction,
+} from "react";
 import { Sidebar } from "../Sidebar/Sidebar";
 import { Editor } from "../Editor/Editor";
 import { Preview } from "../Preview/Preview";
@@ -10,12 +17,15 @@ import { useSidebarOutline } from "../Sidebar/SidebarOutline";
 import { useContextMenuTrigger } from "../../../contextMenu/ContextMenuProvider";
 import { ColumnResizeHandle } from "./ColumnResizeHandle";
 import { useWorkspaceColumns } from "./useWorkspaceColumns";
+import type { PreviewZoomMode } from "../../../preview/previewZoom";
+import { m } from "../../../paraglide/messages.js";
 import styles from "./Workspace.module.css";
 
 export interface WorkspaceProps {
     previewZoom: number;
+    previewZoomMode: PreviewZoomMode;
     onPreviewZoomChange: Dispatch<SetStateAction<number>>;
-    previewZoomRenderDebounceMs: number;
+    onPreviewZoomModeChange: Dispatch<SetStateAction<PreviewZoomMode>>;
     onExportDocument: (
         format: import("../../../bindings/ExportFormat").ExportFormat,
     ) => void | Promise<void>;
@@ -23,8 +33,9 @@ export interface WorkspaceProps {
 
 export const Workspace = ({
     previewZoom,
+    previewZoomMode,
     onPreviewZoomChange,
-    previewZoomRenderDebounceMs,
+    onPreviewZoomModeChange,
     onExportDocument,
 }: WorkspaceProps) => {
     const { state } = useDocumentAst();
@@ -39,6 +50,8 @@ export const Workspace = ({
         bootstrapFiles,
     );
     const previewScrollRef = useRef<HTMLDivElement>(null);
+    const [toastMessage, setToastMessage] = useState<string | null>(null);
+    const toastTimeoutRef = useRef<number | null>(null);
     const { outlineEntries } = useSidebarOutline(
         compiler.outline,
         compiler.previewRevision,
@@ -53,6 +66,26 @@ export const Workspace = ({
         handle1,
         handle2,
     } = useWorkspaceColumns();
+
+    const showToast = useCallback((message: string) => {
+        setToastMessage(message);
+        if (toastTimeoutRef.current !== null) {
+            window.clearTimeout(toastTimeoutRef.current);
+        }
+        toastTimeoutRef.current = window.setTimeout(() => {
+            setToastMessage(null);
+            toastTimeoutRef.current = null;
+        }, 4500);
+    }, []);
+
+    useEffect(
+        () => () => {
+            if (toastTimeoutRef.current !== null) {
+                window.clearTimeout(toastTimeoutRef.current);
+            }
+        },
+        [],
+    );
 
     useEffect(() => {
         const root = workspaceRef.current;
@@ -92,6 +125,32 @@ export const Workspace = ({
         return () => root.removeEventListener("scroll", onScroll, { capture: true });
     }, []);
 
+    useEffect(() => {
+        if (!compiler.error) {
+            return;
+        }
+
+        showToast(
+            m.preview_compile_failed_toast({
+                message: compiler.error,
+            }),
+        );
+    }, [compiler.error, showToast]);
+
+    useEffect(() => {
+        const onToast = (event: Event) => {
+            const detail = (event as CustomEvent<{ message?: string }>).detail;
+            if (!detail?.message) {
+                return;
+            }
+
+            showToast(detail.message);
+        };
+
+        window.addEventListener("ergo:toast", onToast);
+        return () => window.removeEventListener("ergo:toast", onToast);
+    }, [showToast]);
+
     return (
         <TemplateSpecProvider
             templateId={state.metadata.template_id}
@@ -110,9 +169,6 @@ export const Workspace = ({
                             mainPreviewPaintedRevision={
                                 compiler.mainPreviewPaintedRevision
                             }
-                            previewZoomRenderDebounceMs={
-                                previewZoomRenderDebounceMs
-                            }
                             previewScrollRef={previewScrollRef}
                         />
                     </div>
@@ -128,12 +184,18 @@ export const Workspace = ({
                         <Preview
                             compiler={compiler}
                             zoom={previewZoom}
+                            zoomMode={previewZoomMode}
                             onZoomChange={onPreviewZoomChange}
-                            zoomRenderDebounceMs={previewZoomRenderDebounceMs}
+                            onZoomModeChange={onPreviewZoomModeChange}
                             onExport={onExportDocument}
                             scrollRef={previewScrollRef}
                         />
                     </div>
+                    {toastMessage && (
+                        <div className={styles.toast} role="alert">
+                            {toastMessage}
+                        </div>
+                    )}
                 </div>
             </EditorFieldRegistryProvider>
         </TemplateSpecProvider>

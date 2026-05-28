@@ -107,8 +107,11 @@ classDiagram
             +String text
             +Boolean? bold
             +Boolean? italic
+            +Boolean? underline
             +String? kind
             +String? reference_id
+            +String? equation_source
+            +EquationSyntax equation_syntax
         }
 
         class Table {
@@ -121,11 +124,32 @@ classDiagram
         class Equation {
             +String latex_source
             +Boolean is_block
+            +EquationSyntax syntax
         }
 
         class Figure {
             +String? asset_id
             +DocumentElement content
+            +String caption
+            +String placement
+            +Map extra_fields
+        }
+
+        class Quote {
+            +RichText[] content
+        }
+
+        class List {
+            +RichText[][] items
+        }
+
+        class Enumeration {
+            +RichText[][] items
+        }
+
+        class Diagram {
+            +String mermaid_source
+            +String? asset_id
             +String caption
             +String placement
             +Map extra_fields
@@ -137,14 +161,21 @@ classDiagram
     ContentSection "1" *-- "0..*" DocumentElement
     DocumentElement <|-- Heading
     DocumentElement <|-- Paragraph
+    DocumentElement <|-- Quote
+    DocumentElement <|-- List
+    DocumentElement <|-- Enumeration
     DocumentElement <|-- Table
     DocumentElement <|-- Equation
     DocumentElement <|-- Figure
+    DocumentElement <|-- Diagram
     Heading "1" *-- "0..*" RichText
     Paragraph "1" *-- "0..*" RichText
+    Quote "1" *-- "0..*" RichText
+    List "1" *-- "0..*" RichText
+    Enumeration "1" *-- "0..*" RichText
 ```
 
-`Figure` and `Table` store wrapper-specific named arguments in `extra_fields` (string keys → JSON values). The bundled template manifest (`template.json`) declares `element_overrides.figure` and `element_overrides.table` with a `wrapper` function name and `extra_fields` specs (`key`, `type`, `label`). `DocumentSession` emits those values as named arguments on the wrapper call; the element editor renders one control per spec. Standard Typst `#figure` keeps `caption` and `placement` on the element; custom wrappers (for example `apa-figure`) use template-defined extras and omit placement when the wrapper is not `figure`. Each per-element `.typ` fragment that uses a custom wrapper imports that symbol from the template package at the top of the file, because `#include` runs in file-local scope.
+`Figure`, `Diagram`, and `Table` store wrapper-specific named arguments in `extra_fields` (string keys → JSON values). The bundled template manifest (`template.json`) declares element overrides with a `wrapper` function name and `extra_fields` specs (`key`, `type`, `label`). `DocumentSession` emits those values as named arguments on the wrapper call; the element editor renders one control per spec. Standard Typst `#figure` keeps `caption` and `placement` on figure-like elements; custom wrappers use template-defined extras and omit placement when the wrapper is not `figure`. Each per-element `.typ` fragment that uses a custom wrapper imports that symbol from the template package at the top of the file, because `#include` runs in file-local scope. `Diagram` stores editable Mermaid source and references a durable generated SVG asset under `assets/diagrams/{diagram-id}.svg`.
 
 ## Action And Keymap Domain
 
@@ -282,7 +313,8 @@ classDiagram
             +sync_events(events)
             +compile_preview()
             +render_page(pageIndex, pixelPerPt)
-            +render_resource_page(pageNumber, pixelPerPt)
+            +render_svg_page(pageIndex)
+            +render_resource_svg_page(pageNumber)
             +jump_from_click(page, x_pt, y_pt, revision)
             +positions_for_focus(target, revision)
             +export_pdf()
@@ -346,7 +378,7 @@ classDiagram
 - `DocumentEvent` variants are defined in `document_session_types` and exported to TypeScript; the diagram omits the full enum list.
 - `GeneratedFragment` is an in-memory cache entry, not a persisted archive file.
 - `FieldSourceMapEntry` maps Typst byte ranges to editor field IDs with UTF-16 segments for browser selection APIs.
-- `PreviewPageFile.path` is a logical page id (`page-N`) for Canvas rendering, not a VFS SVG artifact in the preview path.
+- `PreviewPageFile.path` is a logical page id (`page-N`) for preview rendering, not a VFS SVG artifact in the preview path.
 - `PreviewSyncState` is runtime-only WASM state tied to the last successful non-stale compile.
 - `SourceMapEntry` byte ranges are half-open: `byte_start` inclusive, `byte_end` exclusive.
 - Module ownership and dependency direction are documented in `package-diagrams.md`.

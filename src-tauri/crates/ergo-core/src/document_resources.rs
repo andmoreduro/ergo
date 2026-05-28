@@ -10,6 +10,7 @@ use crate::template_spec::TemplateSpec;
 pub enum ResourceKind {
     File,
     Figure,
+    Diagram,
     Table,
     Equation,
     Custom,

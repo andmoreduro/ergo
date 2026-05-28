@@ -61,6 +61,21 @@ pub(crate) fn format_json_val_for_custom_field(
             builder.push_escaped_field(element_id, &field_id, s, 0);
             builder.push_literal("]");
         }
+        (ParamType::Content, serde_json::Value::Array(items)) => {
+            if let Ok(content) = serde_json::from_value::<Vec<crate::ast::RichText>>(
+                serde_json::Value::Array(items.clone()),
+            ) {
+                builder.push_literal("[");
+                super::rich_text::push_rich_text_field(
+                    builder,
+                    element_id,
+                    &field_id,
+                    &content,
+                    &std::collections::HashMap::new(),
+                );
+                builder.push_literal("]");
+            }
+        }
         (ParamType::String, serde_json::Value::String(s)) => {
             builder.push_literal("\"");
             builder.push_escaped_field(element_id, &field_id, s, 0);

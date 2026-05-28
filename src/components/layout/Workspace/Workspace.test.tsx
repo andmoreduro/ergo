@@ -64,7 +64,9 @@ describe("Workspace component", () => {
             <DocumentProvider>
                 <Workspace
                     previewZoom={1}
+                    previewZoomMode="manual"
                     onPreviewZoomChange={() => undefined}
+                    onPreviewZoomModeChange={() => undefined}
                     previewZoomRenderDebounceMs={0}
                     onExportDocument={() => undefined}
                 />
@@ -90,7 +92,9 @@ describe("Workspace component", () => {
             <DocumentProvider>
                 <Workspace
                     previewZoom={1}
+                    previewZoomMode="manual"
                     onPreviewZoomChange={() => undefined}
+                    onPreviewZoomModeChange={() => undefined}
                     previewZoomRenderDebounceMs={0}
                     onExportDocument={() => undefined}
                 />

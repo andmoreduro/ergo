@@ -356,8 +356,13 @@ fn resource_id_for_element(element: &DocumentElement) -> Option<String> {
         DocumentElement::Table(table) => Some(table.id.clone()),
         DocumentElement::Equation(equation) => Some(equation.id.clone()),
         DocumentElement::Figure(figure) => Some(figure.id.clone()),
+        DocumentElement::Diagram(diagram) => Some(diagram.id.clone()),
         DocumentElement::Custom(custom) => Some(custom.id.clone()),
-        DocumentElement::Heading(_) | DocumentElement::Paragraph(_) => None,
+        DocumentElement::Heading(_)
+        | DocumentElement::Paragraph(_)
+        | DocumentElement::Quote(_)
+        | DocumentElement::List(_)
+        | DocumentElement::Enumeration(_) => None,
     }
 }
 
@@ -368,6 +373,9 @@ fn figure_ids_for_asset(ast: &DocumentAST, asset_id: &str) -> HashSet<String> {
         .filter_map(|element| match element {
             DocumentElement::Figure(figure) if figure.asset_id.as_deref() == Some(asset_id) => {
                 Some(figure.id.clone())
+            }
+            DocumentElement::Diagram(diagram) if diagram.asset_id.as_deref() == Some(asset_id) => {
+                Some(diagram.id.clone())
             }
             _ => None,
         })

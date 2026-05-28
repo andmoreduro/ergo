@@ -39,7 +39,7 @@ pub fn render_svgs(document: &PagedDocument) -> Vec<String> {
     document.pages.par_iter().map(typst_svg::svg).collect()
 }
 
-fn fingerprint_page(page: &Page) -> u64 {
+pub fn fingerprint_page(page: &Page) -> u64 {
     let mut hasher = DefaultHasher::new();
     page.frame.width().hash(&mut hasher);
     page.frame.height().hash(&mut hasher);
@@ -176,6 +176,8 @@ pub fn write_svg_pages(
             changed: changed_pages[index],
             page_number: index + 1,
             path: format!("{}/page-{}.svg", directory, index + 1),
+            width_pt: None,
+            height_pt: None,
             content: if changed_pages[index] {
                 Some(svgs[index].clone())
             } else {
@@ -370,12 +372,16 @@ mod tests {
                     changed: true,
                     page_number: 1,
                     path: ".ergproj/preview/svg/page-1.svg".to_string(),
+                    width_pt: None,
+                    height_pt: None,
                     content: Some("<svg>uno</svg>".to_string()),
                 },
                 PreviewPageFile {
                     changed: true,
                     page_number: 2,
                     path: ".ergproj/preview/svg/page-2.svg".to_string(),
+                    width_pt: None,
+                    height_pt: None,
                     content: Some("<svg>dos</svg>".to_string()),
                 },
             ]

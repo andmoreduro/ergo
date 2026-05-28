@@ -97,27 +97,38 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                 );
                 break;
             }
-            case "render_resource_page": {
+            case "render_svg_page": {
                 if (!compiler) return;
-                const { pageNumber, pixelPerPt, requestId } = message.payload;
-                const pageImage = compiler.render_resource_page(pageNumber, pixelPerPt);
-                const pixels = pageImage.pixels;
-                reply(
-                    {
-                        type: "render_done",
-                        payload: {
-                            pageIndex: pageNumber,
-                            width: pageImage.width,
-                            height: pageImage.height,
-                            widthPt: pageImage.widthPt,
-                            heightPt: pageImage.heightPt,
-                            pixels,
-                            requestId,
-                        },
-                        id,
+                const { pageIndex, requestId } = message.payload;
+                const page = compiler.render_svg_page(pageIndex);
+                reply({
+                    type: "render_svg_done",
+                    payload: {
+                        pageIndex,
+                        widthPt: page.widthPt,
+                        heightPt: page.heightPt,
+                        svg: page.svg,
+                        requestId,
                     },
-                    [pixels.buffer],
-                );
+                    id,
+                });
+                break;
+            }
+            case "render_resource_svg_page": {
+                if (!compiler) return;
+                const { pageNumber, requestId } = message.payload;
+                const page = compiler.render_resource_svg_page(pageNumber);
+                reply({
+                    type: "render_resource_svg_done",
+                    payload: {
+                        pageIndex: pageNumber,
+                        widthPt: page.widthPt,
+                        heightPt: page.heightPt,
+                        svg: page.svg,
+                        requestId,
+                    },
+                    id,
+                });
                 break;
             }
             case "write_file": {

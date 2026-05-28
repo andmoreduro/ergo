@@ -15,9 +15,13 @@ pub(crate) fn element_id(element: &DocumentElement) -> String {
     match element {
         DocumentElement::Heading(heading) => heading.id.clone(),
         DocumentElement::Paragraph(paragraph) => paragraph.id.clone(),
+        DocumentElement::Quote(quote) => quote.id.clone(),
+        DocumentElement::List(list) => list.id.clone(),
+        DocumentElement::Enumeration(enumeration) => enumeration.id.clone(),
         DocumentElement::Table(table) => table.id.clone(),
         DocumentElement::Equation(equation) => equation.id.clone(),
         DocumentElement::Figure(figure) => figure.id.clone(),
+        DocumentElement::Diagram(diagram) => diagram.id.clone(),
         DocumentElement::Custom(custom) => custom.id.clone(),
     }
 }
@@ -26,9 +30,13 @@ pub(crate) fn element_kind(element: &DocumentElement) -> &'static str {
     match element {
         DocumentElement::Heading(_) => "Heading",
         DocumentElement::Paragraph(_) => "Paragraph",
+        DocumentElement::Quote(_) => "Quote",
+        DocumentElement::List(_) => "List",
+        DocumentElement::Enumeration(_) => "Enumeration",
         DocumentElement::Table(_) => "Table",
         DocumentElement::Equation(_) => "Equation",
         DocumentElement::Figure(_) => "Figure",
+        DocumentElement::Diagram(_) => "Diagram",
         DocumentElement::Custom(_) => "Custom",
     }
 }

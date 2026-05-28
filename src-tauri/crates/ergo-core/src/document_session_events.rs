@@ -1,6 +1,6 @@
 use crate::ast::{
-    AssetEntry, DocumentAST, DocumentElement, DocumentSection, Figure, Paragraph, ReferenceEntry,
-    RichText, Table, TableCell,
+    AssetEntry, DocumentAST, DocumentElement, DocumentSection, EquationSyntax, Figure, Paragraph,
+    ReferenceEntry, RichText, Table, TableCell,
 };
 use crate::document_session_types::DocumentEvent;
 
@@ -109,6 +109,7 @@ pub(crate) fn apply_document_event(
             element_id,
             latex_source,
             is_block,
+            syntax,
         } => {
             let element = element_mut(ast, &element_id)?;
             match element {
@@ -118,6 +119,9 @@ pub(crate) fn apply_document_event(
                     }
                     if let Some(is_block) = is_block {
                         equation.is_block = is_block;
+                    }
+                    if let Some(syntax) = syntax {
+                        equation.syntax = syntax;
                     }
                     Ok(())
                 }
@@ -251,7 +255,17 @@ pub(crate) fn apply_document_event(
                     }
                     Ok(())
                 }
-                _ => Err(format!("Element {element_id} is not a table or figure")),
+                DocumentElement::Diagram(diagram) => {
+                    if field_value.is_null() {
+                        diagram.extra_fields.remove(&field_key);
+                    } else {
+                        diagram.extra_fields.insert(field_key, field_value);
+                    }
+                    Ok(())
+                }
+                _ => Err(format!(
+                    "Element {element_id} is not a table, figure, or diagram"
+                )),
             }
         }
         DocumentEvent::InsertReference { index, reference }
@@ -700,9 +714,11 @@ fn rich_text_from_string(text: String) -> Vec<RichText> {
         text,
         bold: None,
         italic: None,
+        underline: None,
         kind: None,
         reference_id: None,
         equation_source: None,
+        equation_syntax: EquationSyntax::Typst,
     }]
 }
 
@@ -710,9 +726,13 @@ fn element_id_of(element: &DocumentElement) -> &str {
     match element {
         DocumentElement::Heading(heading) => &heading.id,
         DocumentElement::Paragraph(paragraph) => &paragraph.id,
+        DocumentElement::Quote(quote) => &quote.id,
+        DocumentElement::List(list) => &list.id,
+        DocumentElement::Enumeration(enumeration) => &enumeration.id,
         DocumentElement::Table(table) => &table.id,
         DocumentElement::Equation(equation) => &equation.id,
         DocumentElement::Figure(figure) => &figure.id,
+        DocumentElement::Diagram(diagram) => &diagram.id,
         DocumentElement::Custom(custom) => &custom.id,
     }
 }
