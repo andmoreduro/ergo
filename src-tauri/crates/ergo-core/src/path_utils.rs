@@ -21,17 +21,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalizes_windows_separators() {
+    fn virtual_path_roundtrip() {
         assert_eq!(
             normalize_virtual_path("sections\\intro.typ"),
             "sections/intro.typ"
         );
-    }
-
-    #[test]
-    fn converts_file_id_to_rootless_virtual_path() {
         let file_id = file_id_for_virtual_path("sections\\intro.typ");
-
         assert_eq!(path_from_file_id(file_id), "sections/intro.typ");
     }
 }

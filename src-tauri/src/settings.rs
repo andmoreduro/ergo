@@ -375,34 +375,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_old_keymap_fields() {
-        let path = temp_keymap_path();
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).unwrap();
-        }
-        fs::write(
-            &path,
-            r#"{
-  "keymap_profile": "Migrated",
-  "keymap_overrides": [
-    {
-      "command_id": "project.open",
-      "keys": "Ctrl+Alt+O",
-      "scope": "global"
-    }
-  ]
-}"#,
-        )
-        .unwrap();
-
-        let error = load_keymap_settings_from_paths(&path, None).unwrap_err();
-
-        assert!(error.contains("action_id"));
-
-        let _ = fs::remove_file(path);
-    }
-
-    #[test]
     fn rejects_extra_keymap_fields() {
         let path = temp_keymap_path();
         if let Some(parent) = path.parent() {

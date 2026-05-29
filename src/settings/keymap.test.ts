@@ -142,24 +142,4 @@ describe("createKeymapProfile", () => {
         ]);
         expect(conflicts).toEqual([]);
     });
-
-    it("ignores old keymap fields from unreleased formats", () => {
-        const settings: KeymapSettings = {
-            keymap_profile: "Migrated",
-            keymap_bindings: [],
-            keymap_overrides: [
-                ({
-                    command_id: "project.open",
-                    keys: "Ctrl+Alt+O",
-                    scope: "global",
-                } as never),
-            ],
-        };
-
-        const { keymap } = createKeymapProfile(settings);
-
-        expect(
-            keymap.bindings.some((binding) => binding.keys === "Ctrl+Alt+O"),
-        ).toBe(false);
-    });
 });

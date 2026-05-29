@@ -1,10 +1,10 @@
 {
   "$schema": "../../schemas/ergo-template.schema.json",
   "template": {
-    "id": "versatile-apa",
+    "id": "apa7",
     "name": "APA 7th Edition",
     "version": "1.1.0",
-    "description": "American Psychological Association 7th Edition formatting via the versatile-apa Typst package."
+    "description": "American Psychological Association 7th Edition formatting via the @preview/versatile-apa Typst package."
   },
   "variants": [
     {

@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn empty_required_authors_receive_field_label() {
-        let template = load_bundled_template("versatile-apa").expect("template");
+        let template = load_bundled_template("apa7").expect("template");
         let fallbacks = RequiredInputFallbacks::new(&template, Some("student"));
         let prepared = fallbacks.prepare_input_value("authors", &serde_json::json!([]));
 
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn empty_author_name_uses_authors_field_label() {
-        let template = load_bundled_template("versatile-apa").expect("template");
+        let template = load_bundled_template("apa7").expect("template");
         let fallbacks = RequiredInputFallbacks::new(&template, Some("student"));
         let prepared = fallbacks.prepare_input_value(
             "authors",
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn optional_inputs_are_not_modified() {
-        let template = load_bundled_template("versatile-apa").expect("template");
+        let template = load_bundled_template("apa7").expect("template");
         let fallbacks = RequiredInputFallbacks::new(&template, Some("student"));
         let prepared = fallbacks.prepare_input_value("keywords", &serde_json::json!([]));
 

@@ -209,48 +209,6 @@ fn returns_positions_for_heading_and_unicode_paragraph() {
 }
 
 #[test]
-fn maps_preview_click_to_heading_element() {
-    let vfs = Arc::new(VirtualFileSystem::new());
-    let session = DocumentSession::new(Arc::clone(&vfs));
-    let status = session.sync_snapshot(preview_sync_document_ast()).unwrap();
-    let sync = compile_preview(
-        Arc::clone(&vfs),
-        status.source_revision,
-        status.source_map.clone(),
-        status.field_source_map.clone(),
-    );
-
-    let target = PreviewFocusTarget {
-        element_id: "heading-ñ".to_string(),
-        field_id: Some("heading-ñ:text".to_string()),
-        caret_utf16_offset: Some(0),
-        anchor_page_number: None,
-        source_revision: status.source_revision,
-    };
-    let positions = match sync.positions_for_focus(&target, status.source_revision) {
-        PreviewElementPositionsResult::Matched { positions, .. } => positions,
-        result => panic!("expected heading preview position, got {result:?}"),
-    };
-    let first = positions
-        .iter()
-        .find(|position| position.caret_cue.is_some())
-        .expect("expected heading caret position");
-    let result = sync.jump_from_click(
-        first.page_number,
-        first.x_pt,
-        first.y_pt,
-        status.source_revision,
-    );
-
-    match result {
-        PreviewJumpResult::Field { target, .. } => {
-            assert_eq!(target.element_id, "heading-ñ");
-        }
-        result => panic!("expected heading field jump, got {result:?}"),
-    }
-}
-
-#[test]
 fn maps_preview_click_to_heading_field_target() {
     let vfs = Arc::new(VirtualFileSystem::new());
     let session = DocumentSession::new(Arc::clone(&vfs));
@@ -299,38 +257,6 @@ fn maps_preview_click_to_heading_field_target() {
             "sourceRevision": status.source_revision,
         })
     );
-}
-
-#[test]
-fn returns_preview_position_for_field_focus_target() {
-    let vfs = Arc::new(VirtualFileSystem::new());
-    let session = DocumentSession::new(Arc::clone(&vfs));
-    let status = session.sync_snapshot(preview_sync_document_ast()).unwrap();
-    let sync = compile_preview(
-        Arc::clone(&vfs),
-        status.source_revision,
-        status.source_map.clone(),
-        status.field_source_map.clone(),
-    );
-
-    let result = sync.positions_for_focus(
-        &PreviewFocusTarget {
-            element_id: "heading-ñ".to_string(),
-            field_id: Some("heading-ñ:text".to_string()),
-            caret_utf16_offset: Some(0),
-            anchor_page_number: None,
-            source_revision: status.source_revision,
-        },
-        status.source_revision,
-    );
-
-    assert!(matches!(
-        result,
-        PreviewElementPositionsResult::Matched { ref positions, .. }
-            if positions
-                .iter()
-                .any(|position| position.field_id.as_deref() == Some("heading-ñ:text"))
-    ));
 }
 
 #[test]

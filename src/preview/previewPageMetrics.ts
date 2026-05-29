@@ -5,15 +5,6 @@ export const CSS_PX_PER_PT = 96 / 72;
 export const DEFAULT_PAGE_WIDTH_PT = 612;
 export const DEFAULT_PAGE_HEIGHT_PT = 792;
 
-export function fallbackPixelPerPt(): number {
-    return CSS_PX_PER_PT * (window.devicePixelRatio || 1);
-}
-
-export function pixelPerPtForDisplayWidth(displayWidthPx: number, pageWidthPt: number): number {
-    const dpr = window.devicePixelRatio || 1;
-    return (displayWidthPx * dpr) / pageWidthPt;
-}
-
 /** CSS width of a page from its Typst width and zoom (independent of the preview pane). */
 export function previewPageDisplayWidthPx(
     pageWidthPt: number,
@@ -22,49 +13,10 @@ export function previewPageDisplayWidthPx(
     return pageWidthPt * CSS_PX_PER_PT * zoom;
 }
 
-/**
- * Raster density for a page at the target display size.
- * When `fitWidthPx` is set (resource thumbnails), scale to that container width.
- */
-export function pixelPerPtForScreenLayout(
-    pageWidthPt: number,
-    zoom: number,
-    fitWidthPx?: number,
-): number {
-    const displayWidthPx =
-        fitWidthPx && fitWidthPx > 0
-            ? fitWidthPx * zoom
-            : previewPageDisplayWidthPx(pageWidthPt, zoom);
-    return pixelPerPtForDisplayWidth(displayWidthPx, pageWidthPt);
-}
-
 export type ContainerFitPx = {
     widthPx: number;
     heightPx?: number;
 };
-
-/**
- * Raster density to fit content inside a box while preserving aspect ratio.
- * Used for resource thumbnails with both width and max-height limits.
- */
-export function pixelPerPtForContainerFit(
-    pageWidthPt: number,
-    pageHeightPt: number,
-    fit: ContainerFitPx,
-    zoom: number,
-): number {
-    if (pageWidthPt <= 0 || pageHeightPt <= 0 || fit.widthPx <= 0) {
-        return pixelPerPtForScreenLayout(pageWidthPt, zoom, fit.widthPx);
-    }
-
-    const fromWidth = pixelPerPtForScreenLayout(pageWidthPt, zoom, fit.widthPx);
-    if (!fit.heightPx || fit.heightPx <= 0) {
-        return fromWidth;
-    }
-
-    const fromHeight = pixelPerPtForDisplayWidth(fit.heightPx * zoom, pageHeightPt);
-    return Math.min(fromWidth, fromHeight);
-}
 
 function displaySizeForContainerFit(
     widthPt: number,

@@ -131,7 +131,7 @@ export const createContentSection = (id = createId()): ContentSection => ({
     elements: [],
 });
 
-export const DEFAULT_PROJECT_TEMPLATE_ID = "versatile-apa";
+export const DEFAULT_PROJECT_TEMPLATE_ID = "apa7";
 export const NO_TEMPLATE_ID = "none";
 
 export const createDocumentAST = (
