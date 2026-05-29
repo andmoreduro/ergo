@@ -17,6 +17,7 @@ import { useActionDispatcher } from "../../../actions/runtime";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { defaultFieldIdForElement } from "../../../editor/fieldIds";
 import { Button } from "../../atoms/Button/Button";
+import { NavItemButton } from "../../atoms/NavItemButton/NavItemButton";
 import { TextInput } from "../../atoms/TextInput/TextInput";
 import { m } from "../../../paraglide/messages.js";
 import { SidebarResourceDialog } from "./SidebarResourceDialog";
@@ -314,9 +315,8 @@ export const SidebarResourcesPanel = memo(({
 
                                 return (
                                     <div className={styles.resourceRow} key={entry.id}>
-                                        <button
-                                            className={styles.navItem}
-                                            type="button"
+                                        <NavItemButton
+                                            variant="sidebar"
                                             onClick={() => openResource(entry)}
                                         >
                                             {entry.preview.status === "ready" &&
@@ -342,7 +342,7 @@ export const SidebarResourcesPanel = memo(({
                                             {entry.subtitle && (
                                                 <small>{entry.subtitle}</small>
                                             )}
-                                        </button>
+                                        </NavItemButton>
                                     </div>
                                 );
                             })}

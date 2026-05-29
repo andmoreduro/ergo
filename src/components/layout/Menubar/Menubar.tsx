@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { MenubarMenuButton } from "../../atoms/MenubarMenuButton/MenubarMenuButton";
+import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
+import { WindowControlButton } from "../../atoms/WindowControlButton/WindowControlButton";
 import { m } from "../../../paraglide/messages.js";
 import type { ActionId } from "../../../commands/types";
 import styles from "./Menubar.module.css";
@@ -195,20 +198,17 @@ export const Menubar = ({
                                 }
                             }}
                         >
-                            <button
+                            <MenubarMenuButton
                                 aria-controls={menuId}
                                 aria-expanded={isOpen}
                                 aria-haspopup="menu"
-                                className={`${styles.menuTitle} ${
-                                    isOpen ? styles.open : ""
-                                }`}
-                                type="button"
+                                open={isOpen}
                                 onClick={() =>
                                     setOpenMenuIndex(isOpen ? null : index)
                                 }
                             >
                                 {group.title}
-                            </button>
+                            </MenubarMenuButton>
                             {isOpen && (
                                 <div
                                     aria-label={group.title}
@@ -217,13 +217,12 @@ export const Menubar = ({
                                     role="menu"
                                 >
                                     {group.actions.map((action) => (
-                                        <button
-                                            className={styles.dropdownItem}
+                                        <MenuItemButton
+                                            variant="menubarDropdown"
                                             disabled={
                                                 !action.commandId ||
                                                 !isCommandEnabled(action.commandId)
                                             }
-                                            type="button"
                                             role="menuitem"
                                             key={action.label}
                                             onClick={() => {
@@ -234,7 +233,7 @@ export const Menubar = ({
                                             }}
                                         >
                                             {action.label}
-                                        </button>
+                                        </MenuItemButton>
                                     ))}
                                 </div>
                             )}
@@ -245,9 +244,7 @@ export const Menubar = ({
 
             <div className={styles.dragRegion} data-tauri-drag-region="" />
             <div className={styles.windowControls}>
-                <button
-                    type="button"
-                    className={styles.windowControl}
+                <WindowControlButton
                     aria-label={m.titlebar_minimize()}
                     title={m.titlebar_minimize()}
                     onClick={minimizeWindow}
@@ -255,10 +252,8 @@ export const Menubar = ({
                     <svg aria-hidden="true" viewBox="0 0 12 12">
                         <path d="M2 6h8" />
                     </svg>
-                </button>
-                <button
-                    type="button"
-                    className={styles.windowControl}
+                </WindowControlButton>
+                <WindowControlButton
                     aria-label={m.titlebar_maximize()}
                     title={`${m.titlebar_maximize()} / ${m.titlebar_restore()}`}
                     onClick={toggleMaximizeWindow}
@@ -266,10 +261,9 @@ export const Menubar = ({
                     <svg aria-hidden="true" viewBox="0 0 12 12">
                         <rect x="3" y="3" width="6" height="6" />
                     </svg>
-                </button>
-                <button
-                    type="button"
-                    className={`${styles.windowControl} ${styles.closeControl}`}
+                </WindowControlButton>
+                <WindowControlButton
+                    variant="close"
                     aria-label={m.titlebar_close()}
                     title={m.titlebar_close()}
                     onClick={closeWindow}
@@ -277,7 +271,7 @@ export const Menubar = ({
                     <svg aria-hidden="true" viewBox="0 0 12 12">
                         <path d="M3 3l6 6M9 3L3 9" />
                     </svg>
-                </button>
+                </WindowControlButton>
             </div>
         </nav>
     );

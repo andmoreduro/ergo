@@ -18,6 +18,7 @@ import { useDocument } from "../../../state/DocumentContext";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { createId } from "../../../state/ast/defaults";
 import { Button } from "../../atoms/Button/Button";
+import { NavItemButton } from "../../atoms/NavItemButton/NavItemButton";
 import { Select } from "../../atoms/Select/Select";
 import { Textarea } from "../../atoms/Textarea/Textarea";
 import { TextInput } from "../../atoms/TextInput/TextInput";
@@ -149,14 +150,13 @@ export const SidebarBibliographyPanel = memo(
                 {references.length > 0 ? (
                     <div className={styles.navList}>
                         {references.map((reference) => (
-                            <button
-                                className={styles.navItem}
-                                type="button"
+                            <NavItemButton
+                                variant="sidebar"
                                 key={reference.id}
                                 onClick={() => startEdit(reference)}
                             >
                                 <span>{formatReferenceCitation(reference)}</span>
-                            </button>
+                            </NavItemButton>
                         ))}
                     </div>
                 ) : (

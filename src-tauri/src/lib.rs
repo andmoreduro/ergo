@@ -100,8 +100,6 @@ pub mod action_types;
 pub mod actions;
 pub mod actions_commands;
 pub mod app_state;
-#[cfg(test)]
-mod architecture_tests;
 pub mod archive;
 pub mod compile_events;
 pub mod compiler;

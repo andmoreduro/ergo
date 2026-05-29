@@ -77,13 +77,10 @@ export const buildTargetedOutlineEntries = (options: {
 }): TargetedOutlineEntry[] => {
     const { outline, headingTargets, isAbstractEntry, abstractTarget } = options;
 
-    const usedHeadingIds = new Set<string>();
-    let usedAbstract = false;
     const entries: TargetedOutlineEntry[] = [];
 
     for (const [index, entry] of (outline?.entries ?? []).entries()) {
-        if (isAbstractEntry(entry.text) && !usedAbstract) {
-            usedAbstract = true;
+        if (isAbstractEntry(entry.text)) {
             entries.push({
                 key: `abstract-${index}`,
                 level: entry.level,
@@ -96,13 +93,11 @@ export const buildTargetedOutlineEntries = (options: {
 
         const match = headingTargets.find(
             ({ element, level, text }) =>
-                !usedHeadingIds.has(element.id) &&
                 level === entry.level &&
                 headingMatchesOutline(text, entry.text),
         );
 
         if (match) {
-            usedHeadingIds.add(match.element.id);
             entries.push({
                 key: `${match.element.id}-${entry.page}-${index}`,
                 level: entry.level,

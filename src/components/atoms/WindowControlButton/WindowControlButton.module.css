@@ -1,0 +1,32 @@
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--size-window-control-w);
+    height: var(--size-chrome);
+    border: 0;
+    color: var(--color-text-primary);
+    background: transparent;
+    cursor: pointer;
+}
+
+.button:hover,
+.button:focus-visible {
+    outline: none;
+    background-color: var(--color-bg-tertiary);
+}
+
+.button svg {
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: var(--stroke-width-icon);
+    vector-effect: non-scaling-stroke;
+}
+
+.close:hover,
+.close:focus-visible {
+    color: var(--color-text-on-danger);
+    background-color: var(--color-danger-hover);
+}

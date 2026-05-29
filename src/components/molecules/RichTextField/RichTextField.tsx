@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { RichText } from "../../../bindings/RichText";
 import { FieldLabel, type FieldImportance } from "../../atoms/FieldLabel/FieldLabel";
+import { RichTextEditable } from "../../atoms/RichTextEditable/RichTextEditable";
 import {
     caretPlainOffsetFromSelection,
     parseRichTextFromEditableRoot,
@@ -117,20 +118,14 @@ export const RichTextField = ({
 
     const fieldClass =
         variant === "document" ? `${styles.field} ${styles.documentField}` : styles.field;
-    const editorClass =
-        variant === "document" ? `${styles.editor} ${styles.documentEditor}` : styles.editor;
 
     return (
         <div className={fieldClass}>
             {label && <FieldLabel importance={importance}>{label}</FieldLabel>}
-            <div
+            <RichTextEditable
                 {...fieldBinding}
                 ref={setRef}
-                className={editorClass}
-                contentEditable
-                suppressContentEditableWarning
-                role="textbox"
-                aria-multiline="true"
+                variant={variant}
                 onInput={handleInput}
                 onCompositionStart={() => {
                     isComposingRef.current = true;

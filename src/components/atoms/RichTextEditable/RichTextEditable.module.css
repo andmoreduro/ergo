@@ -1,0 +1,44 @@
+.editor {
+    min-height: var(--size-field);
+    padding: var(--space-2) var(--space-3);
+    border: var(--border-width-sm) solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font: inherit;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-y: hidden;
+}
+
+.editor:focus-visible {
+    outline: var(--outline-width-focus) solid var(--color-primary);
+    outline-offset: var(--outline-offset-sm);
+}
+
+.documentEditor {
+    min-height: var(--size-control-sm);
+    padding: var(--space-1) 0;
+    border: none;
+    border-radius: var(--radius-none);
+    background: transparent;
+}
+
+.documentEditor:focus-visible {
+    outline: none;
+}
+
+:global(.ergo-ref-chip) {
+    display: inline-flex;
+    align-items: center;
+    margin: 0 var(--space-px);
+    padding: 0 var(--space-2);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-tertiary);
+    color: var(--color-primary);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    vertical-align: baseline;
+    user-select: none;
+}

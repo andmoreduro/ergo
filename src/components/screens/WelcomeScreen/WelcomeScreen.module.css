@@ -65,88 +65,16 @@
     background: color-mix(in srgb, var(--color-primary), transparent 35%);
 }
 
-.action {
-    display: grid;
-    grid-template-columns: var(--size-control-sm) minmax(0, 1fr) auto;
-    align-items: center;
-    width: 100%;
-    min-height: var(--size-row);
-    padding: 0 var(--space-2);
-    border: var(--border-width-sm) solid transparent;
-    border-radius: var(--border-radius-sm);
-    color: var(--color-text-primary);
-    background: transparent;
-    font-size: var(--font-size-sm);
-    text-align: left;
-    cursor: pointer;
-}
-
-.action:hover {
-    border-color: var(--color-border);
-    background: var(--color-bg-secondary);
-}
-
-.action:focus-visible {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: var(--shadow-ring-subtle);
-}
-
-.actionIcon {
-    color: var(--color-text-secondary);
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-xs);
-}
-
-.action kbd {
-    color: var(--color-text-secondary);
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-normal);
-}
-
 .recentProject {
     display: grid;
     grid-template-columns: minmax(var(--space-0), 1fr) var(--size-control);
     align-items: center;
 }
 
-.recentAction {
-    grid-template-columns: var(--size-control-sm) minmax(0, 1fr);
-}
-
-.recentRemove {
-    display: grid;
-    place-items: center;
-    width: var(--size-control);
-    height: var(--size-control);
-    border: var(--border-width-sm) solid transparent;
-    border-radius: var(--border-radius-sm);
-    color: var(--color-text-secondary);
-    background: transparent;
-    font-size: var(--font-size-md);
-    line-height: 1;
-    opacity: 0;
-    pointer-events: none;
-    cursor: pointer;
-}
-
 .recentProject:hover .recentRemove,
 .recentProject:focus-within .recentRemove {
     opacity: 1;
     pointer-events: auto;
-}
-
-.recentRemove:hover {
-    border-color: color-mix(in srgb, var(--color-danger), transparent 40%);
-    color: var(--color-danger);
-    background: color-mix(in srgb, var(--color-danger), transparent 90%);
-}
-
-.recentRemove:focus-visible {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: var(--shadow-ring-subtle);
 }
 
 .empty {

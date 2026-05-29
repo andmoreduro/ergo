@@ -1,0 +1,16 @@
+.button {
+    padding: 0 var(--space-3);
+    border: 0;
+    color: inherit;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.button:hover,
+.button:focus-visible,
+.open {
+    outline: none;
+    background-color: var(--color-bg-tertiary);
+}

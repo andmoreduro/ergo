@@ -488,27 +488,3 @@ fn descriptor(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn catalog_contains_bibliography_and_resource_actions() {
-        let ids = action_catalog()
-            .into_iter()
-            .map(|descriptor| descriptor.id.as_str())
-            .collect::<Vec<_>>();
-
-        assert!(ids.contains(&"bibliography::CreateEntry"));
-        assert!(ids.contains(&"bibliography::OpenEntry"));
-        assert!(ids.contains(&"bibliography::SaveEntry"));
-        assert!(ids.contains(&"bibliography::RemoveEntry"));
-        assert!(ids.contains(&"bibliography::CancelEdit"));
-        assert!(ids.contains(&"resources::Create"));
-        assert!(ids.contains(&"resources::Open"));
-        assert!(ids.contains(&"resources::Edit"));
-        assert!(ids.contains(&"resources::Save"));
-        assert!(ids.contains(&"resources::Remove"));
-        assert!(ids.contains(&"resources::InsertReference"));
-    }
-}

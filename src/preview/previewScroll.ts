@@ -1,7 +1,7 @@
 import {
     resolvePreviewPageMetrics,
     type PagePtMetrics,
-} from "./canvasMetrics";
+} from "./previewPageMetrics";
 
 export type CaretScrollPosition = {
     pageNumber: number;
@@ -50,7 +50,7 @@ export function scrollPreviewToCaretPosition(
         return false;
     }
 
-    const metrics = resolvePreviewPageMetrics(page, null, options?.fallbackMetrics);
+    const metrics = resolvePreviewPageMetrics(page, options?.fallbackMetrics);
     if (!metrics) {
         return false;
     }

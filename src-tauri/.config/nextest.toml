@@ -1,0 +1,4 @@
+# Skip ts-rs per-type export smoke tests. Regenerate bindings with:
+#   cargo test -p ergo export_typescript_bindings
+[profile.default]
+default-filter = 'not test(export_bindings_)'

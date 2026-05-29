@@ -19,16 +19,22 @@ export interface FieldLabelProps {
     htmlFor?: string;
     children: string;
     importance?: FieldImportance;
+    className?: string;
 }
 
-export const FieldLabel = ({ htmlFor, children, importance }: FieldLabelProps) => {
+export const FieldLabel = ({
+    htmlFor,
+    children,
+    importance,
+    className = "",
+}: FieldLabelProps) => {
     const markerTitle = importance ? importanceTitle(importance) : undefined;
     const Tag = htmlFor ? "label" : "span";
 
     return (
         <Tag
             {...(htmlFor ? { htmlFor } : {})}
-            className={styles.label}
+            className={[styles.label, className].filter(Boolean).join(" ")}
             title={markerTitle}
         >
             {children}

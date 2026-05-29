@@ -14,11 +14,11 @@ import { TemplateSpecProvider } from "../../../state/TemplateSpecContext";
 import { useDocumentAst, useDocumentSync } from "../../../state/DocumentContext";
 import { useCompiler } from "../../../hooks/useCompiler";
 import { useSidebarOutline } from "../Sidebar/SidebarOutline";
-import { useContextMenuTrigger } from "../../../contextMenu/ContextMenuProvider";
+import { useContextMenuTrigger } from "../../organisms/ContextMenu/ContextMenuProvider";
 import { ColumnResizeHandle } from "./ColumnResizeHandle";
 import { useWorkspaceColumns } from "./useWorkspaceColumns";
 import type { PreviewZoomMode } from "../../../preview/previewZoom";
-import { m } from "../../../paraglide/messages.js";
+import { Toast } from "../../molecules/Toast/Toast";
 import styles from "./Workspace.module.css";
 
 export interface WorkspaceProps {
@@ -153,11 +153,7 @@ export const Workspace = ({
                             scrollRef={previewScrollRef}
                         />
                     </div>
-                    {toastMessage && (
-                        <div className={styles.toast} role="alert">
-                            {toastMessage}
-                        </div>
-                    )}
+                    {toastMessage ? <Toast message={toastMessage} /> : null}
                 </div>
             </EditorFieldRegistryProvider>
         </TemplateSpecProvider>

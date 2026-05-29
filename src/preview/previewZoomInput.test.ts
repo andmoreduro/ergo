@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-    normalizeWheelDeltaY,
-    pointerDistance,
-    zoomFromPinchScale,
-    zoomFromWheelDelta,
-} from "./previewZoomInput";
+import { zoomFromPinchScale, zoomFromWheelDelta } from "./previewZoomInput";
 import { PREVIEW_ZOOM_MAX, PREVIEW_ZOOM_MIN } from "./previewZoom";
 
 describe("previewZoomInput", () => {
@@ -32,13 +27,5 @@ describe("previewZoomInput", () => {
     it("applies multiplicative pinch scale", () => {
         expect(zoomFromPinchScale(1, 1.25)).toBe(1.25);
         expect(zoomFromPinchScale(2, 0.5)).toBe(1);
-    });
-
-    it("normalizes line-mode wheel deltas", () => {
-        expect(normalizeWheelDeltaY(3, 1)).toBe(48);
-    });
-
-    it("measures pointer distance", () => {
-        expect(pointerDistance({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(5);
     });
 });

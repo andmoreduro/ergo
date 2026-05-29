@@ -46,6 +46,7 @@ import { m } from "../../../../paraglide/messages.js";
 
 import { RichTextField } from "../../../molecules/RichTextField/RichTextField";
 
+import { MediaPickerButton } from "../../../atoms/MediaPickerButton/MediaPickerButton";
 import { Select } from "../../../atoms/Select/Select";
 
 import { ElementExtrasCollapse } from "../ElementExtrasCollapse";
@@ -480,47 +481,25 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
                     >
 
-                        <button
-
+                        <MediaPickerButton
                             aria-label={m.editor_figure_choose_image()}
-
-                            className={styles.figureImageButton}
-
                             title={m.editor_figure_choose_image()}
-
-                            type="button"
-
                             onClick={() => {
-
                                 void chooseImage();
-
                             }}
-
                         >
-
                             {previewUrl ? (
-
                                 <img
-
                                     alt=""
-
                                     className={styles.figureImagePreview}
-
                                     src={previewUrl}
-
                                 />
-
                             ) : (
-
                                 <span className={styles.figureImagePlaceholder}>
-
                                     <Image24Regular />
-
                                 </span>
-
                             )}
-
-                        </button>
+                        </MediaPickerButton>
 
                         {!hasAsset ? (
 

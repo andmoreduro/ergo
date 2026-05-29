@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-    applyDocumentEventToAst,
     applyDocumentEvents,
     createDocumentEventHistoryEntry,
 } from "./documentEvents";
@@ -9,8 +8,16 @@ import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
 import type { DocumentAST } from "../bindings/DocumentAST";
 
+const contentSectionId = (ast: DocumentAST): string => {
+    const section = ast.sections.find((entry) => entry.type === "Content");
+    if (!section || section.type !== "Content") {
+        throw new Error("content section missing");
+    }
+    return section.id;
+};
+
 describe("document event conversion", () => {
-    it("maps project title actions to forward sync events", () => {
+    it("maps UPDATE_PROJECT_TITLE to forward and inverse sync events", () => {
         const previousAst = createDefaultDocumentAST();
         const action: ASTAction = {
             type: "UPDATE_PROJECT_TITLE",
@@ -24,18 +31,6 @@ describe("document event conversion", () => {
             type: "setProjectTitle",
             title: "Borrador con ñ",
         });
-    });
-
-    it("maps project title actions to inverse sync events", () => {
-        const previousAst = createDefaultDocumentAST();
-        const action: ASTAction = {
-            type: "UPDATE_PROJECT_TITLE",
-            payload: { title: "Borrador con ñ" },
-        };
-        const nextAst = astReducer(previousAst, action);
-
-        const entry = createDocumentEventHistoryEntry(previousAst, action, nextAst);
-
         expect(entry.inverseEvents[0]).toEqual({
             type: "setProjectTitle",
             title: "Untitled Document",
@@ -56,47 +51,13 @@ describe("document event conversion", () => {
         expect(entry).not.toHaveProperty("nextAst");
     });
 
-    it("maps remove element actions to remove sync events", () => {
+    it("maps REMOVE_ELEMENT to forward and restore inverse events", () => {
         let previousAst = createDefaultDocumentAST();
-        const contentSection = previousAst.sections.find(
-            (section) => section.type === "Content",
-        );
-        if (!contentSection || contentSection.type !== "Content") {
-            throw new Error("content section missing");
-        }
+        const sectionId = contentSectionId(previousAst);
         previousAst = astReducer(previousAst, {
             type: "ADD_PARAGRAPH",
             payload: {
-                sectionId: contentSection.id,
-                paragraphId: "paragraph-1",
-            },
-        });
-        const action: ASTAction = {
-            type: "REMOVE_ELEMENT",
-            payload: { elementId: "paragraph-1" },
-        };
-        const nextAst = astReducer(previousAst, action);
-
-        const entry = createDocumentEventHistoryEntry(previousAst, action, nextAst);
-
-        expect(entry.forwardEvents[0]).toEqual({
-            type: "removeElement",
-            element_id: "paragraph-1",
-        });
-    });
-
-    it("stores removed element data and position in inverse events", () => {
-        let previousAst = createDefaultDocumentAST();
-        const contentSection = previousAst.sections.find(
-            (section) => section.type === "Content",
-        );
-        if (!contentSection || contentSection.type !== "Content") {
-            throw new Error("content section missing");
-        }
-        previousAst = astReducer(previousAst, {
-            type: "ADD_PARAGRAPH",
-            payload: {
-                sectionId: contentSection.id,
+                sectionId,
                 paragraphId: "paragraph-1",
             },
         });
@@ -115,9 +76,13 @@ describe("document event conversion", () => {
 
         const entry = createDocumentEventHistoryEntry(previousAst, action, nextAst);
 
+        expect(entry.forwardEvents[0]).toEqual({
+            type: "removeElement",
+            element_id: "paragraph-1",
+        });
         expect(entry.inverseEvents[0]).toEqual({
             type: "restoreElement",
-            section_id: contentSection.id,
+            section_id: sectionId,
             index: 0,
             element: {
                 type: "Paragraph",
@@ -155,155 +120,231 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         expect(restoredAst).toEqual(initialAst);
     }
 
-    it("handles UPDATE_PROJECT_TITLE round-trip", () => {
-        const ast = createDefaultDocumentAST();
-        verifyRoundTrip(ast, {
-            type: "UPDATE_PROJECT_TITLE",
-            payload: { title: "Nuevo Título con ñ" },
-        });
-    });
+    type RoundTripCase = {
+        name: string;
+        setup: () => { ast: DocumentAST; action: ASTAction };
+    };
 
-    it("handles UPDATE_PARAGRAPH_TEXT round-trip", () => {
-        const base = createDefaultDocumentAST();
-        const contentSection = base.sections.find((s) => s.type === "Content")!;
-        const ast = astReducer(base, {
-            type: "ADD_PARAGRAPH",
-            payload: { sectionId: contentSection.id, paragraphId: "paragraph-1" },
-        });
-        verifyRoundTrip(ast, {
-            type: "UPDATE_PARAGRAPH_TEXT",
-            payload: { paragraphId: "paragraph-1", text: "Hola Mundo con ñ" },
-        });
-    });
+    const projectRoundTrips: RoundTripCase[] = [
+        {
+            name: "UPDATE_PROJECT_TITLE",
+            setup: () => ({
+                ast: createDefaultDocumentAST(),
+                action: {
+                    type: "UPDATE_PROJECT_TITLE",
+                    payload: { title: "Nuevo Título con ñ" },
+                },
+            }),
+        },
+        {
+            name: "UPDATE_INPUT",
+            setup: () => ({
+                ast: createDefaultDocumentAST(),
+                action: {
+                    type: "UPDATE_INPUT",
+                    payload: { path: "/abstract_text", value: "New abstract text" },
+                },
+            }),
+        },
+        {
+            name: "UPDATE_INPUT title metadata",
+            setup: () => ({
+                ast: createDefaultDocumentAST(),
+                action: {
+                    type: "UPDATE_INPUT",
+                    payload: { path: "/title", value: "Title from input" },
+                },
+            }),
+        },
+        {
+            name: "INSERT_INPUT_ARRAY_ITEM",
+            setup: () => ({
+                ast: createDefaultDocumentAST(),
+                action: {
+                    type: "INSERT_INPUT_ARRAY_ITEM",
+                    payload: {
+                        path: "/authors",
+                        index: 0,
+                        value: {
+                            name: "New Author",
+                            email: "new@example.com",
+                            affiliations: [],
+                        },
+                    },
+                },
+            }),
+        },
+    ];
 
-    it("handles UPDATE_HEADING round-trip", () => {
-        const base = createDefaultDocumentAST();
-        const contentSection = base.sections.find((s) => s.type === "Content")!;
-        const ast = astReducer(base, {
-            type: "ADD_HEADING",
-            payload: { sectionId: contentSection.id, headingId: "heading-1" },
-        });
-        verifyRoundTrip(ast, {
-            type: "UPDATE_HEADING",
-            payload: { headingId: "heading-1", text: "Nueva sección", level: 2 },
-        });
-    });
-
-    it("handles ADD_PARAGRAPH round-trip", () => {
-        const ast = createDefaultDocumentAST();
-        const contentSection = ast.sections.find((s) => s.type === "Content")!;
-        verifyRoundTrip(ast, {
-            type: "ADD_PARAGRAPH",
-            payload: { sectionId: contentSection.id, paragraphId: "paragraph-1" },
-        });
-    });
-
-    it("handles REMOVE_ELEMENT round-trip", () => {
-        const base = createDefaultDocumentAST();
-        const contentSection = base.sections.find((s) => s.type === "Content")!;
-        const ast = astReducer(base, {
-            type: "ADD_PARAGRAPH",
-            payload: { sectionId: contentSection.id, paragraphId: "paragraph-1" },
-        });
-        verifyRoundTrip(ast, {
-            type: "REMOVE_ELEMENT",
-            payload: { elementId: "paragraph-1" },
-        });
-    });
-
-    it("handles UPDATE_TABLE_CELL round-trip", () => {
-        const base = createDefaultDocumentAST();
-        const contentSection = base.sections.find((s) => s.type === "Content")!;
-        const ast = astReducer(base, {
-            type: "ADD_TABLE",
-            payload: { sectionId: contentSection.id, tableId: "table-1" },
-        });
-        verifyRoundTrip(ast, {
-            type: "UPDATE_TABLE_CELL",
-            payload: { tableId: "table-1", rowIndex: 0, colIndex: 0, text: "Nueva celda" },
-        });
-    });
-
-    it("handles ADD_TABLE_ROW round-trip", () => {
-        const base = createDefaultDocumentAST();
-        const contentSection = base.sections.find((s) => s.type === "Content")!;
-        const ast = astReducer(base, {
-            type: "ADD_TABLE",
-            payload: { sectionId: contentSection.id, tableId: "table-1" },
-        });
-        verifyRoundTrip(ast, {
-            type: "ADD_TABLE_ROW",
-            payload: { tableId: "table-1" },
-        });
-    });
-
-    it("handles UPDATE_INPUT round-trip", () => {
-        const ast = createDefaultDocumentAST();
-        verifyRoundTrip(ast, {
-            type: "UPDATE_INPUT",
-            payload: { path: "/abstract_text", value: "New abstract text" },
-        });
-    });
-
-    it("handles UPDATE_INPUT title metadata round-trip", () => {
-        const ast = createDefaultDocumentAST();
-        verifyRoundTrip(ast, {
-            type: "UPDATE_INPUT",
-            payload: { path: "/title", value: "Title from input" },
-        });
-    });
-
-    it("handles INSERT_INPUT_ARRAY_ITEM round-trip", () => {
-        const ast = createDefaultDocumentAST();
-        verifyRoundTrip(ast, {
-            type: "INSERT_INPUT_ARRAY_ITEM",
-            payload: {
-                path: "/authors",
-                index: 0,
-                value: { name: "New Author", email: "new@example.com", affiliations: [] },
+    const contentRoundTrips: RoundTripCase[] = [
+        {
+            name: "UPDATE_PARAGRAPH_TEXT",
+            setup: () => {
+                const base = createDefaultDocumentAST();
+                const sectionId = contentSectionId(base);
+                const ast = astReducer(base, {
+                    type: "ADD_PARAGRAPH",
+                    payload: { sectionId, paragraphId: "paragraph-1" },
+                });
+                return {
+                    ast,
+                    action: {
+                        type: "UPDATE_PARAGRAPH_TEXT",
+                        payload: {
+                            paragraphId: "paragraph-1",
+                            text: "Hola Mundo con ñ",
+                        },
+                    },
+                };
             },
-        });
-    });
-
-    it("handles UPDATE_ELEMENT_EXTRA_FIELD round-trip", () => {
-        const base = createDefaultDocumentAST();
-        const contentSection = base.sections.find((s) => s.type === "Content")!;
-        const ast = astReducer(base, {
-            type: "ADD_FIGURE",
-            payload: { sectionId: contentSection.id, figureId: "fig-1" },
-        });
-        verifyRoundTrip(ast, {
-            type: "UPDATE_ELEMENT_EXTRA_FIELD",
-            payload: {
-                elementId: "fig-1",
-                fieldKey: "note",
-                fieldValue: "General Note Content",
+        },
+        {
+            name: "UPDATE_HEADING",
+            setup: () => {
+                const base = createDefaultDocumentAST();
+                const sectionId = contentSectionId(base);
+                const ast = astReducer(base, {
+                    type: "ADD_HEADING",
+                    payload: { sectionId, headingId: "heading-1" },
+                });
+                return {
+                    ast,
+                    action: {
+                        type: "UPDATE_HEADING",
+                        payload: {
+                            headingId: "heading-1",
+                            text: "Nueva sección",
+                            level: 2,
+                        },
+                    },
+                };
             },
-        });
+        },
+        {
+            name: "ADD_PARAGRAPH",
+            setup: () => {
+                const ast = createDefaultDocumentAST();
+                return {
+                    ast,
+                    action: {
+                        type: "ADD_PARAGRAPH",
+                        payload: {
+                            sectionId: contentSectionId(ast),
+                            paragraphId: "paragraph-1",
+                        },
+                    },
+                };
+            },
+        },
+        {
+            name: "REMOVE_ELEMENT",
+            setup: () => {
+                const base = createDefaultDocumentAST();
+                const sectionId = contentSectionId(base);
+                const ast = astReducer(base, {
+                    type: "ADD_PARAGRAPH",
+                    payload: { sectionId, paragraphId: "paragraph-1" },
+                });
+                return {
+                    ast,
+                    action: {
+                        type: "REMOVE_ELEMENT",
+                        payload: { elementId: "paragraph-1" },
+                    },
+                };
+            },
+        },
+        {
+            name: "UPDATE_TABLE_CELL",
+            setup: () => {
+                const base = createDefaultDocumentAST();
+                const sectionId = contentSectionId(base);
+                const ast = astReducer(base, {
+                    type: "ADD_TABLE",
+                    payload: { sectionId, tableId: "table-1" },
+                });
+                return {
+                    ast,
+                    action: {
+                        type: "UPDATE_TABLE_CELL",
+                        payload: {
+                            tableId: "table-1",
+                            rowIndex: 0,
+                            colIndex: 0,
+                            text: "Nueva celda",
+                        },
+                    },
+                };
+            },
+        },
+        {
+            name: "ADD_TABLE_ROW",
+            setup: () => {
+                const base = createDefaultDocumentAST();
+                const sectionId = contentSectionId(base);
+                const ast = astReducer(base, {
+                    type: "ADD_TABLE",
+                    payload: { sectionId, tableId: "table-1" },
+                });
+                return {
+                    ast,
+                    action: {
+                        type: "ADD_TABLE_ROW",
+                        payload: { tableId: "table-1" },
+                    },
+                };
+            },
+        },
+        {
+            name: "UPDATE_ELEMENT_EXTRA_FIELD",
+            setup: () => {
+                const base = createDefaultDocumentAST();
+                const sectionId = contentSectionId(base);
+                const ast = astReducer(base, {
+                    type: "ADD_FIGURE",
+                    payload: { sectionId, figureId: "fig-1" },
+                });
+                return {
+                    ast,
+                    action: {
+                        type: "UPDATE_ELEMENT_EXTRA_FIELD",
+                        payload: {
+                            elementId: "fig-1",
+                            fieldKey: "note",
+                            fieldValue: "General Note Content",
+                        },
+                    },
+                };
+            },
+        },
+    ];
+
+    it.each(projectRoundTrips)("$name round-trips", ({ setup }) => {
+        const { ast, action } = setup();
+        verifyRoundTrip(ast, action);
     });
 
-    it("handles reference add, update, and remove round-trips", () => {
+    it.each(contentRoundTrips)("$name round-trips", ({ setup }) => {
+        const { ast, action } = setup();
+        verifyRoundTrip(ast, action);
+    });
+
+    it("round-trips reference add, update, and remove", () => {
         const ast = createDefaultDocumentAST();
+        const reference = {
+            id: "ref-1",
+            citation_key: "garcia2024",
+            biblatex: "@article{garcia2024,\n  title = {Niñez}\n}",
+        };
+
         verifyRoundTrip(ast, {
             type: "ADD_REFERENCE",
-            payload: {
-                reference: {
-                    id: "ref-1",
-                    citation_key: "garcia2024",
-                    biblatex: "@article{garcia2024,\n  title = {Niñez}\n}",
-                },
-            },
+            payload: { reference },
         });
 
         const withReference = astReducer(ast, {
             type: "ADD_REFERENCE",
-            payload: {
-                reference: {
-                    id: "ref-1",
-                    citation_key: "garcia2024",
-                    biblatex: "@article{garcia2024,\n  title = {Niñez}\n}",
-                },
-            },
+            payload: { reference },
         });
 
         verifyRoundTrip(withReference, {
@@ -322,39 +363,30 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         });
     });
 
-    it("handles asset add, update, and remove round-trips", () => {
+    it("round-trips asset add, update, and remove", () => {
         const ast = createDefaultDocumentAST();
+        const asset = {
+            id: "asset-1",
+            path: "assets/chart.png",
+            kind: "image" as const,
+            caption: "Chart",
+        };
+
         verifyRoundTrip(ast, {
             type: "ADD_ASSET",
-            payload: {
-                asset: {
-                    id: "asset-1",
-                    path: "assets/chart.png",
-                    kind: "image",
-                    caption: "Chart",
-                },
-            },
+            payload: { asset },
         });
 
         const withAsset = astReducer(ast, {
             type: "ADD_ASSET",
-            payload: {
-                asset: {
-                    id: "asset-1",
-                    path: "assets/chart.png",
-                    kind: "image",
-                    caption: "Chart",
-                },
-            },
+            payload: { asset },
         });
 
         verifyRoundTrip(withAsset, {
             type: "UPDATE_ASSET",
             payload: {
                 asset: {
-                    id: "asset-1",
-                    path: "assets/chart.png",
-                    kind: "image",
+                    ...asset,
                     caption: "Updated chart",
                 },
             },

@@ -1,0 +1,24 @@
+.button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: var(--editor-table-grid-size, calc(2 * var(--width-editor-cell-min)));
+    border: none;
+    border-radius: var(--radius-none);
+    background-color: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.button:hover {
+    background-color: var(--color-bg-tertiary);
+}
+
+.button:focus-visible {
+    outline: var(--outline-width-focus) solid var(--color-primary);
+    outline-offset: var(--outline-offset-md);
+}

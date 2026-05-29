@@ -3,6 +3,7 @@ import {
     ChevronDown24Regular,
     ChevronUp24Regular,
 } from "@fluentui/react-icons";
+import { IconButton } from "../../atoms/IconButton/IconButton";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./ElementEditor.module.css";
 
@@ -21,7 +22,8 @@ export const ElementExtrasCollapse = ({
         <div className={styles.extrasShell}>
             <div className={styles.extrasPrimary}>
                 {showToggle ? (
-                    <button
+                    <IconButton
+                        variant="extras"
                         aria-expanded={open}
                         aria-label={
                             open
@@ -34,7 +36,6 @@ export const ElementExtrasCollapse = ({
                                 ? m.editor_element_hide_extras()
                                 : m.editor_element_show_extras()
                         }
-                        type="button"
                         onClick={() => setOpen((value) => !value)}
                     >
                         {open ? (
@@ -42,7 +43,7 @@ export const ElementExtrasCollapse = ({
                         ) : (
                             <ChevronDown24Regular />
                         )}
-                    </button>
+                    </IconButton>
                 ) : null}
                 {primary}
             </div>
