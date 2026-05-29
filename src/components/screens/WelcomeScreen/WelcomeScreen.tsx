@@ -1,4 +1,6 @@
-import { useContextMenuTrigger } from "../../../contextMenu/ContextMenuProvider";
+import { useContextMenuTrigger } from "../../organisms/ContextMenu/ContextMenuProvider";
+import { WelcomeActionButton } from "../../atoms/WelcomeActionButton/WelcomeActionButton";
+import { WelcomeRemoveButton } from "../../atoms/WelcomeRemoveButton/WelcomeRemoveButton";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./WelcomeScreen.module.css";
 
@@ -40,32 +42,23 @@ export const WelcomeScreen = ({
                     <div className={styles.rule}>
                         <span>{m.welcome_get_started()}</span>
                     </div>
-                    <button
-                        className={styles.action}
-                        type="button"
-                        onClick={onNewProject}
-                    >
-                        <span className={styles.actionIcon}>+</span>
-                        <span>{m.welcome_new_project()}</span>
-                    </button>
-                    <button
-                        className={styles.action}
-                        type="button"
+                    <WelcomeActionButton icon="+" onClick={onNewProject}>
+                        {m.welcome_new_project()}
+                    </WelcomeActionButton>
+                    <WelcomeActionButton
+                        icon="[]"
+                        shortcut={m.welcome_shortcut_open_project()}
                         onClick={onOpenProject}
                     >
-                        <span className={styles.actionIcon}>[]</span>
-                        <span>{m.welcome_open_project()}</span>
-                        <kbd>{m.welcome_shortcut_open_project()}</kbd>
-                    </button>
-                    <button
-                        className={styles.action}
-                        type="button"
+                        {m.welcome_open_project()}
+                    </WelcomeActionButton>
+                    <WelcomeActionButton
+                        icon=">"
+                        shortcut={m.welcome_shortcut_command_palette()}
                         onClick={onCommandPalette}
                     >
-                        <span className={styles.actionIcon}>&gt;</span>
-                        <span>{m.welcome_command_palette()}</span>
-                        <kbd>{m.welcome_shortcut_command_palette()}</kbd>
-                    </button>
+                        {m.welcome_command_palette()}
+                    </WelcomeActionButton>
                 </div>
 
                 <div className={styles.group}>
@@ -75,23 +68,21 @@ export const WelcomeScreen = ({
                     {recentProjects.length > 0 ? (
                         recentProjects.map((project) => (
                             <div className={styles.recentProject} key={project}>
-                                <button
-                                    className={`${styles.action} ${styles.recentAction}`}
-                                    type="button"
+                                <WelcomeActionButton
+                                    icon="[]"
+                                    variant="recent"
                                     onClick={() => onOpenRecentProject(project)}
                                 >
-                                    <span className={styles.actionIcon}>[]</span>
-                                    <span>{project}</span>
-                                </button>
-                                <button
+                                    {project}
+                                </WelcomeActionButton>
+                                <WelcomeRemoveButton
                                     aria-label={m.welcome_remove_recent_project()}
-                                    className={styles.recentRemove}
                                     title={m.welcome_remove_recent_project()}
-                                    type="button"
+                                    className={styles.recentRemove}
                                     onClick={() => onRemoveRecentProject(project)}
                                 >
                                     <span aria-hidden="true">&times;</span>
-                                </button>
+                                </WelcomeRemoveButton>
                             </div>
                         ))
                     ) : (

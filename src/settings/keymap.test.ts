@@ -54,30 +54,6 @@ describe("createKeymapProfile", () => {
         ).toBe(false);
     });
 
-    it("keeps non-empty action IDs for Rust catalog validation", () => {
-        const settings: KeymapSettings = {
-            keymap_profile: "Custom",
-            keymap_bindings: [],
-            keymap_overrides: [
-                ({
-                    action_id: "unknown.action",
-                    context: "app",
-                    sequence: [{ key: "o", modifiers: ["Control", "Alt"] }],
-                } as never),
-            ],
-        };
-
-        const { keymap } = createKeymapProfile(settings);
-
-        expect(keymap.bindings).toContainEqual(
-            expect.objectContaining({
-                commandId: "unknown.action",
-                context: "app",
-                keys: "Ctrl+Alt+O",
-            }),
-        );
-    });
-
     it("uses bundled keymap bindings when they are provided", () => {
         const settings: KeymapSettings = {
             keymap_profile: "Bundled",

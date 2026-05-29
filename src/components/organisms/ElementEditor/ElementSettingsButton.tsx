@@ -1,5 +1,6 @@
 import { useId, useState, type ReactNode } from "react";
 import { Settings24Regular } from "@fluentui/react-icons";
+import { IconButton } from "../../atoms/IconButton/IconButton";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./ElementEditor.module.css";
 
@@ -13,17 +14,16 @@ export const ElementSettingsButton = ({
 
     return (
         <div className={styles.settingsAnchor}>
-            <button
+            <IconButton
                 aria-controls={panelId}
                 aria-expanded={open}
                 aria-label={m.editor_element_settings()}
                 className={styles.settingsButton}
                 title={m.editor_element_settings()}
-                type="button"
                 onClick={() => setOpen((value) => !value)}
             >
                 <Settings24Regular />
-            </button>
+            </IconButton>
             {open ? (
                 <div className={styles.settingsPanel} id={panelId} role="region">
                     {children}

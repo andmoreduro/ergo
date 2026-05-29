@@ -233,30 +233,6 @@
     width: 100%;
 }
 
-.figureImageButton {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: var(--editor-table-grid-size, calc(2 * var(--width-editor-cell-min)));
-    border: none;
-    border-radius: var(--radius-none);
-    background-color: var(--color-bg-secondary);
-    cursor: pointer;
-    overflow: hidden;
-}
-
-.figureImageButton:hover {
-    background-color: var(--color-bg-tertiary);
-}
-
-.figureImageButton:focus-visible {
-    outline: var(--outline-width-focus) solid var(--color-primary);
-    outline-offset: var(--outline-offset-md);
-}
-
 .figureImagePlaceholder {
     color: var(--color-text-tertiary);
 }

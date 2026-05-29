@@ -6,6 +6,9 @@ import {
     OUTLINE_TITLE_OVERRIDE_KEYS,
     setTemplateOverride,
 } from "../../../settings/templateOverrides";
+import { Select } from "../../atoms/Select/Select";
+import { TextInput } from "../../atoms/TextInput/TextInput";
+import { FormField } from "../../molecules/FormField/FormField";
 import styles from "./SettingsDialog.module.css";
 import { toOptionalNumber } from "./settingsDialogUtils";
 
@@ -16,6 +19,25 @@ export interface ProjectSettingsPanelProps {
     templateVariantId?: string | null;
     onTemplateVariantChange?: (variantId: string) => void;
 }
+
+const outlineField = (
+    settings: ProjectSettings,
+    onChange: (settings: ProjectSettings) => void,
+    label: string,
+    key: (typeof OUTLINE_TITLE_OVERRIDE_KEYS)[keyof typeof OUTLINE_TITLE_OVERRIDE_KEYS],
+) => (
+    <FormField label={label}>
+        <TextInput
+            aria-label={label}
+            fullWidth
+            placeholder={m.settings_outline_title_placeholder()}
+            value={getTemplateOverride(settings, key)}
+            onChange={(event) =>
+                onChange(setTemplateOverride(settings, key, event.target.value))
+            }
+        />
+    </FormField>
+);
 
 export const ProjectSettingsPanel = ({
     settings,
@@ -28,143 +50,67 @@ export const ProjectSettingsPanel = ({
         <section className={styles.settingsGroup}>
             <h3>{m.settings_group_template()}</h3>
             <div className={styles.fieldGrid}>
-                {templateVariants.length > 1 && onTemplateVariantChange && (
-                    <label className={styles.field}>
-                        <span>{m.settings_template_variant()}</span>
-                        <select
+                {templateVariants.length > 1 && onTemplateVariantChange ? (
+                    <FormField label={m.settings_template_variant()}>
+                        <Select
+                            aria-label={m.settings_template_variant()}
+                            fullWidth
                             value={templateVariantId ?? templateVariants[0]?.id ?? ""}
-                            onChange={(event) => onTemplateVariantChange(event.target.value)}
-                        >
-                            {templateVariants.map((variant) => (
-                                <option key={variant.id} value={variant.id}>
-                                    {variant.label}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                            options={templateVariants.map((variant) => ({
+                                value: variant.id,
+                                label: variant.label,
+                            }))}
+                            onChange={(event) =>
+                                onTemplateVariantChange(event.target.value)
+                            }
+                        />
+                    </FormField>
+                ) : null}
+                {outlineField(
+                    settings,
+                    onChange,
+                    m.settings_outline_contents_title(),
+                    OUTLINE_TITLE_OVERRIDE_KEYS.contents,
                 )}
-                <label className={styles.field}>
-                    <span>{m.settings_outline_contents_title()}</span>
-                    <input
-                        placeholder={m.settings_outline_title_placeholder()}
-                        value={getTemplateOverride(
-                            settings,
-                            OUTLINE_TITLE_OVERRIDE_KEYS.contents,
-                        )}
-                        onChange={(event) =>
-                            onChange(
-                                setTemplateOverride(
-                                    settings,
-                                    OUTLINE_TITLE_OVERRIDE_KEYS.contents,
-                                    event.target.value,
-                                ),
-                            )
-                        }
-                    />
-                </label>
-                <label className={styles.field}>
-                    <span>{m.settings_outline_tables_title()}</span>
-                    <input
-                        placeholder={m.settings_outline_title_placeholder()}
-                        value={getTemplateOverride(
-                            settings,
-                            OUTLINE_TITLE_OVERRIDE_KEYS.tables,
-                        )}
-                        onChange={(event) =>
-                            onChange(
-                                setTemplateOverride(
-                                    settings,
-                                    OUTLINE_TITLE_OVERRIDE_KEYS.tables,
-                                    event.target.value,
-                                ),
-                            )
-                        }
-                    />
-                </label>
-                <label className={styles.field}>
-                    <span>{m.settings_outline_figures_title()}</span>
-                    <input
-                        placeholder={m.settings_outline_title_placeholder()}
-                        value={getTemplateOverride(
-                            settings,
-                            OUTLINE_TITLE_OVERRIDE_KEYS.figures,
-                        )}
-                        onChange={(event) =>
-                            onChange(
-                                setTemplateOverride(
-                                    settings,
-                                    OUTLINE_TITLE_OVERRIDE_KEYS.figures,
-                                    event.target.value,
-                                ),
-                            )
-                        }
-                    />
-                </label>
-                <label className={styles.field}>
-                    <span>{m.settings_outline_equations_title()}</span>
-                    <input
-                        placeholder={m.settings_outline_title_placeholder()}
-                        value={getTemplateOverride(
-                            settings,
-                            OUTLINE_TITLE_OVERRIDE_KEYS.equations,
-                        )}
-                        onChange={(event) =>
-                            onChange(
-                                setTemplateOverride(
-                                    settings,
-                                    OUTLINE_TITLE_OVERRIDE_KEYS.equations,
-                                    event.target.value,
-                                ),
-                            )
-                        }
-                    />
-                </label>
-                <label className={styles.field}>
-                    <span>{m.settings_outline_listings_title()}</span>
-                    <input
-                        placeholder={m.settings_outline_title_placeholder()}
-                        value={getTemplateOverride(
-                            settings,
-                            OUTLINE_TITLE_OVERRIDE_KEYS.listings,
-                        )}
-                        onChange={(event) =>
-                            onChange(
-                                setTemplateOverride(
-                                    settings,
-                                    OUTLINE_TITLE_OVERRIDE_KEYS.listings,
-                                    event.target.value,
-                                ),
-                            )
-                        }
-                    />
-                </label>
-                <label className={styles.field}>
-                    <span>{m.settings_outline_appendices_title()}</span>
-                    <input
-                        placeholder={m.settings_outline_title_placeholder()}
-                        value={getTemplateOverride(
-                            settings,
-                            OUTLINE_TITLE_OVERRIDE_KEYS.appendices,
-                        )}
-                        onChange={(event) =>
-                            onChange(
-                                setTemplateOverride(
-                                    settings,
-                                    OUTLINE_TITLE_OVERRIDE_KEYS.appendices,
-                                    event.target.value,
-                                ),
-                            )
-                        }
-                    />
-                </label>
+                {outlineField(
+                    settings,
+                    onChange,
+                    m.settings_outline_tables_title(),
+                    OUTLINE_TITLE_OVERRIDE_KEYS.tables,
+                )}
+                {outlineField(
+                    settings,
+                    onChange,
+                    m.settings_outline_figures_title(),
+                    OUTLINE_TITLE_OVERRIDE_KEYS.figures,
+                )}
+                {outlineField(
+                    settings,
+                    onChange,
+                    m.settings_outline_equations_title(),
+                    OUTLINE_TITLE_OVERRIDE_KEYS.equations,
+                )}
+                {outlineField(
+                    settings,
+                    onChange,
+                    m.settings_outline_listings_title(),
+                    OUTLINE_TITLE_OVERRIDE_KEYS.listings,
+                )}
+                {outlineField(
+                    settings,
+                    onChange,
+                    m.settings_outline_appendices_title(),
+                    OUTLINE_TITLE_OVERRIDE_KEYS.appendices,
+                )}
             </div>
         </section>
         <section className={styles.settingsGroup}>
             <h3>{m.settings_group_document()}</h3>
             <div className={styles.fieldGrid}>
-                <label className={styles.field}>
-                    <span>{m.settings_paper_size()}</span>
-                    <input
+                <FormField label={m.settings_paper_size()}>
+                    <TextInput
+                        aria-label={m.settings_paper_size()}
+                        fullWidth
                         value={settings.paper_size ?? ""}
                         onChange={(event) =>
                             onChange({
@@ -173,10 +119,11 @@ export const ProjectSettingsPanel = ({
                             })
                         }
                     />
-                </label>
-                <label className={styles.field}>
-                    <span>{m.settings_project_language()}</span>
-                    <input
+                </FormField>
+                <FormField label={m.settings_project_language()}>
+                    <TextInput
+                        aria-label={m.settings_project_language()}
+                        fullWidth
                         value={settings.language ?? ""}
                         onChange={(event) =>
                             onChange({
@@ -185,15 +132,16 @@ export const ProjectSettingsPanel = ({
                             })
                         }
                     />
-                </label>
+                </FormField>
             </div>
         </section>
         <section className={styles.settingsGroup}>
             <h3>{m.settings_group_typography()}</h3>
             <div className={styles.fieldGrid}>
-                <label className={styles.field}>
-                    <span>{m.settings_text_font()}</span>
-                    <input
+                <FormField label={m.settings_text_font()}>
+                    <TextInput
+                        aria-label={m.settings_text_font()}
+                        fullWidth
                         value={settings.text_font ?? ""}
                         onChange={(event) =>
                             onChange({
@@ -202,13 +150,14 @@ export const ProjectSettingsPanel = ({
                             })
                         }
                     />
-                </label>
-                <label className={styles.field}>
-                    <span>{m.settings_font_size()}</span>
-                    <input
+                </FormField>
+                <FormField label={m.settings_font_size()}>
+                    <TextInput
+                        aria-label={m.settings_font_size()}
+                        fullWidth
                         min="1"
                         type="number"
-                        value={settings.font_size ?? 11}
+                        value={String(settings.font_size ?? 11)}
                         onChange={(event) =>
                             onChange({
                                 ...settings,
@@ -216,7 +165,7 @@ export const ProjectSettingsPanel = ({
                             })
                         }
                     />
-                </label>
+                </FormField>
             </div>
         </section>
         <section className={styles.settingsGroup}>

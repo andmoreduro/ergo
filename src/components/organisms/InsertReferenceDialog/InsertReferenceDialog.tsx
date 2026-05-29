@@ -4,6 +4,7 @@ import type { ReferenceEntry } from "../../../bindings/ReferenceEntry";
 import { formatReferenceCitation } from "../../../bibliography/biblatex";
 import type { TargetedOutlineEntry } from "../../layout/Sidebar/SidebarOutline";
 import { Button } from "../../atoms/Button/Button";
+import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./InsertReferenceDialog.module.css";
 
@@ -171,16 +172,10 @@ const ReferenceList = ({ items }: { items: ReferenceListItem[] }) => (
     <ul className={styles.list}>
         {items.map((item) => (
             <li key={item.key}>
-                <button
-                    type="button"
-                    className={styles.itemButton}
-                    onClick={item.onPick}
-                >
+                <MenuItemButton variant="listPicker" onClick={item.onPick}>
                     <span>{item.label}</span>
-                    {item.subtitle && (
-                        <small className={styles.itemSubtitle}>{item.subtitle}</small>
-                    )}
-                </button>
+                    {item.subtitle ? <small>{item.subtitle}</small> : null}
+                </MenuItemButton>
             </li>
         ))}
     </ul>

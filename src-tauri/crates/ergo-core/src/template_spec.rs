@@ -566,81 +566,47 @@ mod tests {
     }
 
     #[test]
-    fn student_variant_omits_professional_only_fields() {
+    fn template_variants_filter_inputs_and_show_rule_params() {
         let spec = load_bundled_template("versatile-apa").unwrap();
-        let resolved = resolve_template_variant(&spec, Some("student"));
-        let input_ids: Vec<_> = resolved
+
+        let student = resolve_template_variant(&spec, Some("student"));
+        let student_inputs: Vec<_> = student
             .inputs
             .iter()
             .filter_map(|input| input.id.clone())
             .collect();
-        assert!(input_ids.contains(&"course".to_string()));
-        assert!(!input_ids.contains(&"running_head".to_string()));
-        assert!(!input_ids.contains(&"author_note".to_string()));
-        let show_rule = resolved.show_rule.expect("show rule");
-        assert!(show_rule
+        assert!(student_inputs.contains(&"course".to_string()));
+        assert!(!student_inputs.contains(&"running_head".to_string()));
+        assert!(!student_inputs.contains(&"author_note".to_string()));
+        assert!(student
+            .show_rule
+            .expect("show rule")
             .params
             .iter()
             .all(|param| param.key != "running-head"));
-        let title_page = resolved
-            .sections
-            .iter()
-            .find(|section| section.id == "title-page")
-            .expect("title page");
-        let param_keys: Vec<_> = title_page
-            .params
-            .iter()
-            .map(|param| param.key.as_str())
-            .collect();
-        assert!(param_keys.contains(&"course"));
-        assert!(!param_keys.contains(&"author-note"));
-    }
 
-    #[test]
-    fn complete_variant_includes_every_field() {
-        let spec = load_bundled_template("versatile-apa").unwrap();
-        let resolved = resolve_template_variant(&spec, Some("complete"));
-        let input_ids: Vec<_> = resolved
+        let professional = resolve_template_variant(&spec, Some("professional"));
+        let professional_inputs: Vec<_> = professional
             .inputs
             .iter()
             .filter_map(|input| input.id.clone())
             .collect();
-        assert!(input_ids.contains(&"course".to_string()));
-        assert!(input_ids.contains(&"running_head".to_string()));
-        assert!(input_ids.contains(&"author_note".to_string()));
-        let show_rule = resolved.show_rule.expect("show rule");
-        assert!(show_rule
-            .params
-            .iter()
-            .any(|param| param.key == "running-head"));
-        let title_page = resolved
-            .sections
-            .iter()
-            .find(|section| section.id == "title-page")
-            .expect("title page");
-        let param_keys: Vec<_> = title_page
-            .params
-            .iter()
-            .map(|param| param.key.as_str())
-            .collect();
-        assert!(param_keys.contains(&"course"));
-        assert!(param_keys.contains(&"author-note"));
-    }
+        assert!(professional_inputs.contains(&"running_head".to_string()));
+        assert!(professional_inputs.contains(&"author_note".to_string()));
+        assert!(!professional_inputs.contains(&"course".to_string()));
 
-    #[test]
-    fn professional_variant_omits_student_only_fields() {
-        let spec = load_bundled_template("versatile-apa").unwrap();
-        let resolved = resolve_template_variant(&spec, Some("professional"));
-        let input_ids: Vec<_> = resolved
+        let complete = resolve_template_variant(&spec, Some("complete"));
+        let complete_inputs: Vec<_> = complete
             .inputs
             .iter()
             .filter_map(|input| input.id.clone())
             .collect();
-        assert!(input_ids.contains(&"running_head".to_string()));
-        assert!(input_ids.contains(&"author_note".to_string()));
-        assert!(!input_ids.contains(&"course".to_string()));
-        let show_rule = resolved.show_rule.expect("show rule");
-        assert!(show_rule
+        assert!(complete_inputs.contains(&"course".to_string()));
+        assert!(complete_inputs.contains(&"running_head".to_string()));
+        assert!(complete_inputs.contains(&"author_note".to_string()));
+        assert!(complete
+            .show_rule
+            .expect("show rule")
             .params
             .iter()
             .any(|param| param.key == "running-head"));

@@ -31,19 +31,3 @@
 .resizeHandleActive {
     background-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
 }
-
-.toast {
-    position: fixed;
-    right: var(--space-4);
-    top: calc(var(--size-chrome) + var(--space-4));
-    z-index: 2400;
-    max-width: min(var(--width-panel-sm), calc(var(--layout-viewport-w) - var(--space-8)));
-    padding: var(--space-3) var(--space-4);
-    border: var(--border-width-sm) solid var(--color-danger);
-    border-radius: var(--border-radius-sm);
-    background: var(--color-bg-primary);
-    color: var(--color-text-primary);
-    box-shadow: var(--shadow-md);
-    font-size: var(--font-size-sm);
-    line-height: 1.4;
-}

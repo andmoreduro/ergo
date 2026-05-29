@@ -13,7 +13,7 @@ import { backendFocusIdsForEditorField } from "../editor/fieldIds";
 import {
     previewPointFromPageMouseEvent,
     syntheticCaretCue,
-} from "../preview/canvasMetrics";
+} from "../preview/previewPageMetrics";
 import {
     caretScrollKey,
     focusScrollIdentity,

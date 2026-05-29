@@ -1,0 +1,30 @@
+.input {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+}
+
+.input:focus {
+    outline: none;
+}
+
+.chip {
+    width: auto;
+    min-width: 2ch;
+    max-width: 100%;
+    field-sizing: content;
+}
+
+.inlineComposer {
+    flex: 1 1 var(--width-col-md);
+    min-width: var(--width-col-sm);
+}
+
+.inlineComposer::placeholder {
+    color: var(--color-text-tertiary);
+}

@@ -1,0 +1,11 @@
+.field {
+    display: grid;
+    grid-template-columns: minmax(var(--space-0), 1fr) minmax(var(--width-col-md), var(--width-col-xl));
+    align-items: center;
+    gap: var(--space-3);
+    font-size: var(--font-size-sm);
+}
+
+.control {
+    min-width: 0;
+}

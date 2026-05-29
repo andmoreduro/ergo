@@ -1,0 +1,9 @@
+.separator {
+    height: var(--border-width-sm);
+    margin: var(--space-1) 0;
+    background-color: var(--color-border);
+}
+
+.contextMenu {
+    width: 100%;
+}
