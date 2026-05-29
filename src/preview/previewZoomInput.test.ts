@@ -3,16 +3,14 @@ import { zoomFromPinchScale, zoomFromWheelDelta } from "./previewZoomInput";
 import { PREVIEW_ZOOM_MAX, PREVIEW_ZOOM_MIN } from "./previewZoom";
 
 describe("previewZoomInput", () => {
-    it("zooms in smoothly for negative ctrl-wheel delta", () => {
-        const next = zoomFromWheelDelta(1, -100, 0);
-        expect(next).toBeGreaterThan(1);
-        expect(next).toBeLessThan(1.2);
-    });
+    it("changes zoom smoothly with ctrl-wheel direction", () => {
+        const zoomIn = zoomFromWheelDelta(1, -100, 0);
+        expect(zoomIn).toBeGreaterThan(1);
+        expect(zoomIn).toBeLessThan(1.2);
 
-    it("zooms out smoothly for positive ctrl-wheel delta", () => {
-        const next = zoomFromWheelDelta(1, 100, 0);
-        expect(next).toBeLessThan(1);
-        expect(next).toBeGreaterThan(0.8);
+        const zoomOut = zoomFromWheelDelta(1, 100, 0);
+        expect(zoomOut).toBeLessThan(1);
+        expect(zoomOut).toBeGreaterThan(0.8);
     });
 
     it("clamps wheel zoom to configured bounds", () => {

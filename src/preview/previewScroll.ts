@@ -22,14 +22,6 @@ function pageContentRect(pageElement: HTMLElement): DOMRect | null {
         }
     }
 
-    const canvas = pageElement.querySelector("canvas");
-    if (canvas instanceof HTMLCanvasElement) {
-        const rect = canvas.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-            return rect;
-        }
-    }
-
     return null;
 }
 

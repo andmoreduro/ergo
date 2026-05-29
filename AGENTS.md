@@ -52,6 +52,13 @@ The context files describe the intended current design. They are not a changelog
 - **Sanitize user input in generated Typst.** User text must not inject raw Typst markup (unless explicitly a trusted-raw feature).
 - **No branches for unreleased formats.** Érgo is pre-release; keep current schemas strict instead of preserving old JSON/archive shapes.
 
+## Template naming
+
+Érgo **template ids** (bundled specs under `src-tauri/resources/templates/{id}/`, `DocumentAST.metadata.template_id`, `.ergproj/template.json`) name the product template. They are not Typst package names.
+
+- Bundled APA 7 template id: **`apa7`** (`resources/templates/apa7/template.json`).
+- Its Typst dependency is declared in the template spec as **`package.name`** (e.g. `@preview/versatile-apa`). Use that identifier only for imports, dependency manifests, and `collect_package_files` — not as an Érgo `template_id`.
+
 ## Stack
 
 - **Frontend**: React 18 + TypeScript + Vite + CSS Modules

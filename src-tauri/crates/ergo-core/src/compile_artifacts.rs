@@ -192,6 +192,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::ast::DocumentAST;
     use crate::document_session::DocumentSession;
     use crate::path_utils::file_id_for_virtual_path;
     use crate::test_fixtures::basic_document_ast;
@@ -247,6 +248,67 @@ mod tests {
         assert!(svgs[0].contains("<svg"));
     }
 
+    /// New project AST + bundled `apa7` template spec → canonical `.ergproj` sources → Typst compile.
+    /// Requires `@preview/versatile-apa:7.2.0` in the local Typst package cache (`typst --version`).
+    #[test]
+    fn new_apa7_project_from_bundled_template_compiles_to_svg() {
+        use crate::document_session::{DEPENDENCY_MANIFEST_PATH, TEMPLATE_PATH};
+        use crate::package_resolver::{collect_package_files, PackageRef};
+        use crate::test_fixtures::default_apa7_project_ast;
+
+        let package = PackageRef::from_import("@preview/versatile-apa", "7.2.0").unwrap();
+        let package_files = match collect_package_files(&package) {
+            Ok(files) => files,
+            Err(error) => {
+                eprintln!(
+                    "skipping new apa7 project compile test (Typst package cache): {error}"
+                );
+                return;
+            }
+        };
+
+        let vfs = Arc::new(VirtualFileSystem::new());
+        for file in package_files {
+            vfs.write_file(&file.path, file.bytes);
+        }
+
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session.sync_snapshot(default_apa7_project_ast()).unwrap();
+
+        let template_json = vfs.read_source(TEMPLATE_PATH).unwrap();
+        assert!(
+            template_json.contains("\"template_id\":\"apa7\""),
+            ".ergproj/template.json should record the bundled template; got:\n{template_json}"
+        );
+
+        let manifest_json = vfs.read_source(DEPENDENCY_MANIFEST_PATH).unwrap();
+        assert!(
+            manifest_json.contains("@preview/versatile-apa"),
+            "dependency manifest should list the template package; got:\n{manifest_json}"
+        );
+
+        let main_source = vfs.read_source("main.typ").unwrap();
+        assert!(
+            main_source.contains("#outline()"),
+            "main.typ should include document outline; got:\n{main_source}"
+        );
+        assert!(
+            main_source.contains("#appendix-outline"),
+            "main.typ should include appendix outline; got:\n{main_source}"
+        );
+        assert!(
+            main_source.contains("#show: appendix"),
+            "main.typ should enable appendix show rule; got:\n{main_source}"
+        );
+
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
+        let document = compile_document(&world).unwrap();
+        let svgs = render_svgs(&document);
+
+        assert!(!svgs.is_empty());
+        assert!(svgs[0].contains("<svg"));
+    }
+
     #[test]
     fn incremental_svg_render_updates_when_page_text_changes() {
         let vfs = Arc::new(VirtualFileSystem::new());
@@ -266,16 +328,16 @@ mod tests {
         assert_eq!(second_cached, second_fresh);
     }
 
-    #[test]
-    fn document_session_text_events_update_preview_svg_artifacts() {
+    fn assert_document_event_updates_preview_svg(
+        initial_ast: DocumentAST,
+        event: crate::document_session_types::DocumentEvent,
+    ) {
         let vfs = Arc::new(VirtualFileSystem::new());
         let session = DocumentSession::new(Arc::clone(&vfs));
         let mut cache = SvgPageCache::new();
         let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
 
-        session
-            .sync_snapshot(basic_document_ast("Título con ñ", "Resumen breve."))
-            .unwrap();
+        session.sync_snapshot(initial_ast).unwrap();
         let first_document = compile_document(&world).unwrap();
         let first_svgs = render_svgs_incremental(&first_document, &mut cache);
         write_svg_pages(&vfs, ".ergproj/preview/svg", &first_svgs);
@@ -286,15 +348,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        session
-            .apply_event(
-                crate::document_session_types::DocumentEvent::UpdateHeading {
-                    element_id: "heading-1".to_string(),
-                    text: Some("Método con ñ".to_string()),
-                    level: None,
-                },
-            )
-            .unwrap();
+        session.apply_event(event).unwrap();
         let second_document = compile_document(&world).unwrap();
         let second_svgs = render_svgs_incremental(&second_document, &mut cache);
         let pages = write_svg_pages(&vfs, ".ergproj/preview/svg", &second_svgs);
@@ -313,46 +367,25 @@ mod tests {
     }
 
     #[test]
-    fn document_session_title_input_events_update_preview_svg_artifacts() {
-        let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        let mut cache = SvgPageCache::new();
-        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
+    fn document_session_events_update_preview_svg_artifacts() {
+        use crate::document_session_types::DocumentEvent;
 
-        session
-            .sync_snapshot(basic_document_ast("Título inicial", "Resumen breve."))
-            .unwrap();
-        let first_document = compile_document(&world).unwrap();
-        let first_svgs = render_svgs_incremental(&first_document, &mut cache);
-        write_svg_pages(&vfs, ".ergproj/preview/svg", &first_svgs);
-        let first_files = (1..=first_svgs.len())
-            .map(|page_number| {
-                vfs.read_file(&format!(".ergproj/preview/svg/page-{page_number}.svg"))
-                    .unwrap()
-            })
-            .collect::<Vec<_>>();
+        assert_document_event_updates_preview_svg(
+            basic_document_ast("Título con ñ", "Resumen breve."),
+            DocumentEvent::UpdateHeading {
+                element_id: "heading-1".to_string(),
+                text: Some("Método con ñ".to_string()),
+                level: None,
+            },
+        );
 
-        session
-            .apply_event(crate::document_session_types::DocumentEvent::UpdateInput {
+        assert_document_event_updates_preview_svg(
+            basic_document_ast("Título inicial", "Resumen breve."),
+            DocumentEvent::UpdateInput {
                 path: "/title".to_string(),
                 value: serde_json::json!("Título escrito"),
-            })
-            .unwrap();
-        let second_document = compile_document(&world).unwrap();
-        let second_svgs = render_svgs_incremental(&second_document, &mut cache);
-        let pages = write_svg_pages(&vfs, ".ergproj/preview/svg", &second_svgs);
-        let second_files = (1..=second_svgs.len())
-            .map(|page_number| {
-                vfs.read_file(&format!(".ergproj/preview/svg/page-{page_number}.svg"))
-                    .unwrap()
-            })
-            .collect::<Vec<_>>();
-
-        assert!(pages.iter().any(|page| page.changed));
-        assert!(pages.iter().any(|page| {
-            let index = page.page_number - 1;
-            page.changed && first_files.get(index) != second_files.get(index)
-        }));
+            },
+        );
     }
 
     #[test]
