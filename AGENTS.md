@@ -57,8 +57,7 @@ The context files describe the intended current design. They are not a changelog
 - **Frontend**: React 18 + TypeScript + Vite + CSS Modules
 - **Backend**: Rust (Tauri v2) — Typst document compiler
 - **Package manager**: pnpm
-- **Testing**: Vitest + jsdom + @testing-library/react
-- **Storybook**: @storybook/react-vite (port 6006)
+- **Testing**: Vitest (`*.test.ts`); RTL deferred until after next major UI pass
 
 ## Commands
 
@@ -70,10 +69,10 @@ The context files describe the intended current design. They are not a changelog
 | `pnpm test` | Compile paraglide, then `vitest run` (full suite) |
 | `pnpm test:changed` | Compile paraglide, then `vitest run --changed` (only tests affected by working-tree diff) |
 | `pnpm build` | `build:wasm` → paraglide compile → `tsc` → `vite build` |
-| `pnpm storybook` | Storybook dev server (port 6006) |
 | `pnpm tauri dev` | Full Tauri desktop app (runs `pnpm dev` internally) |
 | `cargo run --release -p ergo-engine-wasm --bin wasm_preview_profile -- --scenario typing-title --iterations 200` | Profile the WASM preview pipeline (sync → compile → canvas render) without Tauri/WebView |
-| `cargo nextest run` | Run all Rust tests via nextest (from `src-tauri/`) |
+| `cargo nextest run` | Run Rust tests via nextest (skips per-type `export_bindings_*` smoke tests; from `src-tauri/`) |
+| `cargo test -p ergo export_typescript_bindings` | Regenerate `src/bindings/` after IPC type changes |
 
 ### Fast iteration
 
@@ -157,7 +156,7 @@ src/
   api/tauri.ts          — Tauri IPC bridge (all invoke() calls)
   state/                — DocumentContext (useReducer + undo/redo)
     ast/                — AST actions, reducer, defaults
-  components/           — Atomic design: atoms, molecules, organisms, screens, layout
+  components/           — Atomic design: atoms, molecules, organisms, screens, layout (native controls only in atoms)
   commands/             — Command registry, keymap, types
   actions/runtime.tsx   — Action dispatch framework + context tree
   settings/             — Global settings, keymap defaults + merge
@@ -169,12 +168,12 @@ src/
 
 ## Component pattern
 
+Atomic design is mandatory: `<button>`, `<input>`, `<select>`, `<textarea>`, and `contentEditable` may appear only under `src/components/atoms/`. Higher layers compose atoms and molecules.
+
 ```
 Button/
   Button.tsx
   Button.module.css
-  Button.test.tsx
-  Button.stories.tsx     (optional)
 ```
 
 ## i18n (Paraglide)
@@ -187,10 +186,11 @@ Button/
 
 ## Testing
 
-- Co-located `*.test.ts(x)` with source
-- Vitest: `jsdom` environment, `globals: true`
-- RTL: prefer `screen.getByRole` with accessible names
-- Mock Tauri IPC with `vi.mock()` for components calling `TauriApi`
+See `docs/testing.md` for layers, what to add, and what to avoid.
+
+- Co-located `*.test.ts` with source (no `*.test.tsx` until RTL returns)
+- Vitest: `jsdom` environment (DOM unit tests only), `globals: true`
+- Prefer pure logic and Rust tests; no label/CSS smoke tests
 
 ## No lint/format/CI config
 

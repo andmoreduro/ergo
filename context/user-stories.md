@@ -73,7 +73,7 @@ This document categorizes the core functionalities of Érgo into specific Epics 
 ## Epic 9: Testing & Quality Assurance (Technical Epic)
 
 - **Tech9.1 (Unit Testing) - AST & VFS:** Setup Vitest and Cargo Test to ensure AST reducers and VFS text patching logic are mathematically rigorous and bug-free.
-- **Tech9.2 (Component Isolation) - Storybook:** Implement Storybook to test and visualize the custom UI primitives in isolation.
+- **Tech9.2 (Component Isolation) - Co-located tests:** Exercise custom UI primitives in isolation through co-located Vitest and React Testing Library component tests.
 - **Tech9.3 (Type Synchronization) - `ts-rs`:** Integrate the `ts-rs` crate into the Rust backend to automatically generate strict TypeScript interfaces for all IPC payloads.
 - **Tech9.4 (E2E Integration) - Playwright:** Establish Playwright for End-to-End testing of the built Tauri desktop application.
 - **Tech9.5 (Backend Source Session) - Fragmented Typst Generation:** As a developer, I want Rust to own canonical Typst source generation through a document session, section files, retained Typst sources, and an element fragment cache so that large documents can update preview sources incrementally without regenerating one monolithic file on every edit.

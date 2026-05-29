@@ -13,6 +13,7 @@ import {
 } from "../../../editor/fieldIds";
 import { scrollPreviewToPage } from "../../../preview/previewScroll";
 import { m } from "../../../paraglide/messages.js";
+import { NavItemButton } from "../../atoms/NavItemButton/NavItemButton";
 import styles from "./Sidebar.module.css";
 
 const outlineIndentStyle = (level: number): CSSProperties => ({
@@ -123,15 +124,14 @@ const CompiledOutline = memo(({
         <ol className={styles.outlineList}>
             {entries.map((entry) => (
                 <li key={entry.key}>
-                    <button
-                        className={styles.outlineItem}
+                    <NavItemButton
+                        variant="outline"
                         style={outlineIndentStyle(entry.level)}
-                        type="button"
                         onClick={() => onEntryClick(entry)}
                     >
                         <span>{entry.text}</span>
                         <small>{m.sidebar_outline_page({ page: entry.page })}</small>
-                    </button>
+                    </NavItemButton>
                 </li>
             ))}
         </ol>

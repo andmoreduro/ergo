@@ -13,13 +13,13 @@ import { usePreviewCaretSync } from "../../../hooks/usePreviewCaretSync";
 import { usePreviewZoomInput } from "../../../hooks/usePreviewZoomInput";
 import {
     caretStyleForPageMetrics,
-    canvasDisplaySizeStyle,
     pageSurfaceLayoutStyle,
+    previewPageDisplaySizeStyle,
     setPreviewPageMetrics,
     syntheticCaretCue,
-    type CanvasPageMetrics,
     type PagePtMetrics,
-} from "../../../preview/canvasMetrics";
+    type PreviewPageMetrics,
+} from "../../../preview/previewPageMetrics";
 import { useInViewport } from "../../../hooks/useInViewport";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { isDebugMenuEnabled } from "../../../config/debug";
@@ -41,7 +41,11 @@ import {
     type PreviewZoomMode,
     stepPreviewZoom,
 } from "../../../preview/previewZoom";
-import toolbarStyles from "../PanelToolbar.module.css";
+import { IconButton } from "../../atoms/IconButton/IconButton";
+import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
+import { TextInput } from "../../atoms/TextInput/TextInput";
+import { ToolbarTextButton } from "../../atoms/ToolbarTextButton/ToolbarTextButton";
+import { Toolbar, ToolbarSpacer } from "../../molecules/Toolbar/Toolbar";
 import styles from "./Preview.module.css";
 import {
     ZoomIn24Regular,
@@ -261,14 +265,9 @@ export const Preview = ({
             data-editor-focus-lose-exempt=""
             onClick={handlePreviewClick}
         >
-            <header
-                className={toolbarStyles.toolbar}
-                onClick={(event) => event.stopPropagation()}
-            >
-                <button
-                    type="button"
+            <Toolbar onClick={(event) => event.stopPropagation()}>
+                <IconButton
                     tabIndex={-1}
-                    className={toolbarStyles.toolbarButton}
                     title={m.menubar_zoom_out()}
                     aria-label={m.menubar_zoom_out()}
                     disabled={!canZoomOut}
@@ -280,13 +279,13 @@ export const Preview = ({
                     }}
                 >
                     <ZoomOut24Regular />
-                </button>
+                </IconButton>
                 <div className={styles.zoomMenuRoot}>
                     {isEditingZoom ? (
-                        <input
+                        <TextInput
                             autoFocus
                             aria-label={m.preview_zoom_custom()}
-                            className={toolbarStyles.zoomLabel}
+                            variant="toolbarZoom"
                             inputMode="decimal"
                             type="number"
                             value={zoomDraft}
@@ -302,10 +301,9 @@ export const Preview = ({
                             }}
                         />
                     ) : (
-                        <button
-                            type="button"
+                        <ToolbarTextButton
                             tabIndex={-1}
-                            className={toolbarStyles.zoomLabel}
+                            variant="zoom"
                             title={m.preview_zoom_options()}
                             aria-label={m.preview_zoom_options()}
                             aria-haspopup="menu"
@@ -318,7 +316,7 @@ export const Preview = ({
                             }}
                         >
                             {zoomLabel}
-                        </button>
+                        </ToolbarTextButton>
                     )}
                     {isZoomMenuOpen && (
                         <div
@@ -326,45 +324,43 @@ export const Preview = ({
                             className={styles.zoomMenu}
                             role="menu"
                         >
-                            <button
+                            <MenuItemButton
                                 role="menuitem"
-                                type="button"
+                                variant="export"
                                 onClick={() => {
                                     onZoomModeChange("fit-width");
                                     setZoomMenuOpen(false);
                                 }}
                             >
                                 {m.preview_zoom_fit_width()}
-                            </button>
-                            <button
+                            </MenuItemButton>
+                            <MenuItemButton
                                 role="menuitem"
-                                type="button"
+                                variant="export"
                                 onClick={() => {
                                     onZoomModeChange("fit-height");
                                     setZoomMenuOpen(false);
                                 }}
                             >
                                 {m.preview_zoom_fit_height()}
-                            </button>
+                            </MenuItemButton>
                             {zoomOptions.map((option) => (
-                                <button
+                                <MenuItemButton
                                     key={option.percent}
                                     role="menuitem"
-                                    type="button"
+                                    variant="export"
                                     onClick={() => applyManualZoom(option.value)}
                                 >
                                     {m.preview_zoom_level({
                                         percent: option.percent,
                                     })}
-                                </button>
+                                </MenuItemButton>
                             ))}
                         </div>
                     )}
                 </div>
-                <button
-                    type="button"
+                <IconButton
                     tabIndex={-1}
-                    className={toolbarStyles.toolbarButton}
                     title={m.menubar_zoom_in()}
                     aria-label={m.menubar_zoom_in()}
                     disabled={!canZoomIn}
@@ -376,10 +372,10 @@ export const Preview = ({
                     }}
                 >
                     <ZoomIn24Regular />
-                </button>
-                <span className={toolbarStyles.toolbarSpacer} />
+                </IconButton>
+                <ToolbarSpacer />
                 <ExportMenu onExport={onExport} />
-            </header>
+            </Toolbar>
             <div className={styles.viewport}>
                 <div
                     className={styles.scrollArea}
@@ -481,7 +477,7 @@ interface PreviewPageSvgProps {
 interface RenderedSvgPage {
     revision: number;
     svg: string;
-    metrics: CanvasPageMetrics;
+    metrics: PreviewPageMetrics;
 }
 
 const PreviewPageSvg = ({
@@ -608,7 +604,7 @@ const PreviewPageSvg = ({
             : null;
     const surfaceLayout = pageSurfaceLayoutStyle(zoom, pageMetrics);
     const svgStyle = pageMetrics
-        ? canvasDisplaySizeStyle(
+        ? previewPageDisplaySizeStyle(
               zoom,
               {
                   widthPt: pageMetrics.widthPt,

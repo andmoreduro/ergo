@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import type { InputSchema } from "../../../bindings/InputSchema";
+import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { EditorAddButton } from "../../atoms/EditorAddButton/EditorAddButton";
 import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
 import { TextInput } from "../../atoms/TextInput/TextInput";
@@ -63,15 +64,13 @@ const AuthorAffiliationCheckbox = ({
     };
 
     return (
-        <label className={styles.inlineCheckbox}>
-            <input
-                {...fieldBinding}
-                checked={checked}
-                type="checkbox"
-                onChange={(event) => handleToggle(event.target.checked)}
-            />
-            <span>{affiliationLabel}</span>
-        </label>
+        <Checkbox
+            {...fieldBinding}
+            className={styles.inlineCheckbox}
+            label={affiliationLabel}
+            checked={checked}
+            onChange={(event) => handleToggle(event.target.checked)}
+        />
     );
 };
 

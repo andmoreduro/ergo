@@ -1,5 +1,5 @@
 import type { ActionId } from "../bindings/ActionId";
-import type { ContextMenuEntry } from "../contextMenu/definitions";
+import type { ContextMenuEntry } from "../components/organisms/ContextMenu/definitions";
 import { m } from "../paraglide/messages.js";
 
 export type EditMenuItem =

@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { RichText } from "../../../bindings/RichText";
 import { FieldLabel, type FieldImportance } from "../../atoms/FieldLabel/FieldLabel";
+import { InlineTextInput } from "../../atoms/InlineTextInput/InlineTextInput";
 import { RichTextField } from "../RichTextField/RichTextField";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import {
@@ -92,13 +93,13 @@ const InlineStringEntry = ({
 
     return (
         <span className={`${styles.chip} ${styles.chipCommitted}`}>
-            <input
+            <InlineTextInput
                 {...fieldBinding}
                 ref={(node) => {
                     fieldBinding.ref(node);
                     entryRef(node);
                 }}
-                className={styles.chipInput}
+                variant="chip"
                 type="text"
                 value={value}
                 onBlur={(event) => {
@@ -366,14 +367,14 @@ const SimpleListStringField = ({
                     />
                 ))}
 
-                <input
+                <InlineTextInput
                     {...composeBinding}
                     ref={(node) => {
                         composeBinding.ref(node);
                         composeInputRef.current = node;
                     }}
                     aria-label={label}
-                    className={styles.inlineInput}
+                    variant="inlineComposer"
                     placeholder={label}
                     type="text"
                     value=""

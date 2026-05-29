@@ -24,10 +24,11 @@ import { InsertReferenceDialog } from "../../organisms/InsertReferenceDialog/Ins
 import type { TargetedOutlineEntry } from "../Sidebar/SidebarOutline";
 import { ElementEditor } from "../../organisms/ElementEditor/ElementEditor";
 import { Button } from "../../atoms/Button/Button";
+import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
 import { Textarea } from "../../atoms/Textarea/Textarea";
+import { EditorToolbar } from "../../organisms/EditorToolbar/EditorToolbar";
 import { m } from "../../../paraglide/messages.js";
-import toolbarStyles from "../PanelToolbar.module.css";
 import styles from "./Editor.module.css";
 import type { InputSchema } from "../../../bindings/InputSchema";
 import {
@@ -51,23 +52,6 @@ import {
     focusClosestContentField,
     isContentSectionFocusDelegationTarget,
 } from "../../../editor/contentSectionFocus";
-import { Delete24Regular } from "@fluentui/react-icons";
-import {
-    Diagram24Regular,
-    TextHeader124Regular,
-    TextBold24Regular,
-    TextBulletList24Regular,
-    TextItalic24Regular,
-    TextNumberListLtr24Regular,
-    TextQuote24Regular,
-    TextUnderline24Regular,
-    Table24Regular,
-    MathFormula24Regular,
-    Image24Regular,
-    Link24Regular,
-} from "@fluentui/react-icons";
-import { TextParagraph24Regular } from "../../icons/TextParagraph24Regular";
-
 type ContentSection = Extract<DocumentSection, { type: "Content" }>;
 
 const getValueAtPath = (obj: any, path: string): any => {
@@ -229,260 +213,101 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
             handlers={editorHandlersWithDelete}
         >
             <main className={styles.editor}>
-                <header className={toolbarStyles.toolbar}>
-                    <div className={toolbarStyles.toolbarGroup}>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.element_delete()}
-                            aria-label={m.element_delete()}
-                            disabled={!canDeleteFocusedTarget}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::DeleteElement",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <Delete24Regular />
-                        </button>
-                    </div>
-                    <div className={toolbarStyles.toolbarGroup}>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_text_bold()}
-                            aria-label={m.menubar_text_bold()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::Bold",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <TextBold24Regular />
-                        </button>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_text_italic()}
-                            aria-label={m.menubar_text_italic()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::Italic",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <TextItalic24Regular />
-                        </button>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_text_underline()}
-                            aria-label={m.menubar_text_underline()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::Underline",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <TextUnderline24Regular />
-                        </button>
-                    </div>
-                    <div className={toolbarStyles.toolbarGroup}>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_heading()}
-                            aria-label={m.menubar_insert_heading()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertHeading",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <TextHeader124Regular />
-                        </button>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_paragraph()}
-                            aria-label={m.menubar_insert_paragraph()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertParagraph",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <TextParagraph24Regular aria-hidden />
-                        </button>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_quote()}
-                            aria-label={m.menubar_insert_quote()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertQuote",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <TextQuote24Regular />
-                        </button>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_list()}
-                            aria-label={m.menubar_insert_list()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertList",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <TextBulletList24Regular />
-                        </button>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_enumeration()}
-                            aria-label={m.menubar_insert_enumeration()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertEnumeration",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <TextNumberListLtr24Regular />
-                        </button>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_table()}
-                            aria-label={m.menubar_insert_table()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertTable",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <Table24Regular />
-                        </button>
-                    </div>
-                    <div className={toolbarStyles.toolbarGroup}>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_block_equation()}
-                            aria-label={m.menubar_insert_block_equation()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertBlockEquation",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <MathFormula24Regular />
-                        </button>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_inline_equation()}
-                            aria-label={m.menubar_insert_inline_equation()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertInlineEquation",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <MathFormula24Regular />
-                        </button>
-                    </div>
-                    <div className={toolbarStyles.toolbarGroup}>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_figure()}
-                            aria-label={m.menubar_insert_figure()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertFigure",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <Image24Regular />
-                        </button>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_diagram()}
-                            aria-label={m.menubar_insert_diagram()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertDiagram",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <Diagram24Regular />
-                        </button>
-                    </div>
-                    <div className={toolbarStyles.toolbarGroup}>
-                        <button
-                            className={toolbarStyles.toolbarButton}
-                            type="button"
-                            title={m.menubar_insert_reference()}
-                            aria-label={m.menubar_insert_reference()}
-                            onClick={() =>
-                                void dispatchAction({
-                                    id: "editor::InsertReference",
-                                    payload: null,
-                                })
-                            }
-                        >
-                            <Link24Regular />
-                        </button>
-                    </div>
-                    {templateVariants.length > 1 && (
-                        <>
-                            <span className={toolbarStyles.toolbarSpacer} />
-                            <label
-                                className={styles.variantToolbarLabel}
-                                htmlFor="template-variant"
-                            >
-                                {m.settings_template_variant()}
-                            </label>
-                            <select
-                                id="template-variant"
-                                className={styles.variantToolbarSelect}
-                                value={resolvedVariantId}
-                                title={m.settings_template_variant()}
-                                onChange={(event) =>
-                                    dispatchAst({
-                                        type: "UPDATE_TEMPLATE_VARIANT",
-                                        payload: { variantId: event.target.value },
-                                    })
-                                }
-                            >
-                                {templateVariants.map((variant) => (
-                                    <option key={variant.id} value={variant.id}>
-                                        {variant.label}
-                                    </option>
-                                ))}
-                            </select>
-                        </>
-                    )}
-                </header>
+                <EditorToolbar
+                    canDeleteFocusedTarget={canDeleteFocusedTarget}
+                    templateVariants={templateVariants}
+                    resolvedVariantId={resolvedVariantId}
+                    onDelete={() =>
+                        void dispatchAction({
+                            id: "editor::DeleteElement",
+                            payload: null,
+                        })
+                    }
+                    onBold={() =>
+                        void dispatchAction({ id: "editor::Bold", payload: null })
+                    }
+                    onItalic={() =>
+                        void dispatchAction({ id: "editor::Italic", payload: null })
+                    }
+                    onUnderline={() =>
+                        void dispatchAction({
+                            id: "editor::Underline",
+                            payload: null,
+                        })
+                    }
+                    onInsertHeading={() =>
+                        void dispatchAction({
+                            id: "editor::InsertHeading",
+                            payload: null,
+                        })
+                    }
+                    onInsertParagraph={() =>
+                        void dispatchAction({
+                            id: "editor::InsertParagraph",
+                            payload: null,
+                        })
+                    }
+                    onInsertQuote={() =>
+                        void dispatchAction({
+                            id: "editor::InsertQuote",
+                            payload: null,
+                        })
+                    }
+                    onInsertList={() =>
+                        void dispatchAction({
+                            id: "editor::InsertList",
+                            payload: null,
+                        })
+                    }
+                    onInsertEnumeration={() =>
+                        void dispatchAction({
+                            id: "editor::InsertEnumeration",
+                            payload: null,
+                        })
+                    }
+                    onInsertTable={() =>
+                        void dispatchAction({
+                            id: "editor::InsertTable",
+                            payload: null,
+                        })
+                    }
+                    onInsertBlockEquation={() =>
+                        void dispatchAction({
+                            id: "editor::InsertBlockEquation",
+                            payload: null,
+                        })
+                    }
+                    onInsertInlineEquation={() =>
+                        void dispatchAction({
+                            id: "editor::InsertInlineEquation",
+                            payload: null,
+                        })
+                    }
+                    onInsertFigure={() =>
+                        void dispatchAction({
+                            id: "editor::InsertFigure",
+                            payload: null,
+                        })
+                    }
+                    onInsertDiagram={() =>
+                        void dispatchAction({
+                            id: "editor::InsertDiagram",
+                            payload: null,
+                        })
+                    }
+                    onInsertReference={() =>
+                        void dispatchAction({
+                            id: "editor::InsertReference",
+                            payload: null,
+                        })
+                    }
+                    onVariantChange={(variantId) =>
+                        dispatchAst({
+                            type: "UPDATE_TEMPLATE_VARIANT",
+                            payload: { variantId },
+                        })
+                    }
+                />
                 <InsertReferenceDialog
                     open={referenceDialogOpen}
                     resources={resources}
@@ -824,15 +649,13 @@ const ReferenceCheckbox = ({
     });
 
     return (
-        <label className={styles.checkboxLabel}>
-            <input
-                {...fieldBinding}
-                type="checkbox"
-                checked={checked}
-                onChange={(event) => onChange(event.target.checked)}
-            />
-            <span>{label}</span>
-        </label>
+        <Checkbox
+            {...fieldBinding}
+            className={styles.checkboxLabel}
+            label={label}
+            checked={checked}
+            onChange={(event) => onChange(event.target.checked)}
+        />
     );
 };
 

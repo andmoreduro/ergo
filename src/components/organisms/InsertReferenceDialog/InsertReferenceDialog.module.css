@@ -49,28 +49,6 @@
     list-style: none;
 }
 
-.itemButton {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-px);
-    padding: var(--space-2) var(--space-3);
-    border: none;
-    border-radius: var(--border-radius-sm);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-}
-
-.itemButton:hover,
-.itemButton:focus-visible {
-    outline: none;
-    background: var(--color-bg-tertiary);
-}
-
 .itemSubtitle {
     color: var(--color-text-secondary);
     font-size: var(--font-size-sm);

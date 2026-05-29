@@ -20,6 +20,11 @@ export interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
    * @default false
    */
   fullWidth?: boolean;
+  /**
+   * Visual variant for specialized surfaces.
+   * @default "default"
+   */
+  variant?: "default" | "borderless" | "toolbarZoom";
 }
 
 export const TextInput = memo(forwardRef<HTMLInputElement, TextInputProps>(
@@ -29,6 +34,7 @@ export const TextInput = memo(forwardRef<HTMLInputElement, TextInputProps>(
       importance,
       error,
       fullWidth = false,
+      variant = "default",
       className = '',
       id,
       disabled,
@@ -42,6 +48,8 @@ export const TextInput = memo(forwardRef<HTMLInputElement, TextInputProps>(
     const containerClassNames = [
       styles.container,
       fullWidth ? styles.fullWidth : '',
+      variant === "borderless" ? styles.borderless : '',
+      variant === "toolbarZoom" ? styles.toolbarZoom : '',
       className,
     ]
       .filter(Boolean)

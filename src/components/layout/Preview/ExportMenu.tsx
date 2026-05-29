@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowDownload24Regular, ChevronDown24Regular } from "@fluentui/react-icons";
 import type { ExportFormat } from "../../../bindings/ExportFormat";
+import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
+import { ToolbarTextButton } from "../../atoms/ToolbarTextButton/ToolbarTextButton";
 import { m } from "../../../paraglide/messages.js";
-import toolbarStyles from "../PanelToolbar.module.css";
 import styles from "./ExportMenu.module.css";
 
 export interface ExportMenuProps {
@@ -43,9 +44,7 @@ export const ExportMenu = ({ onExport }: ExportMenuProps) => {
 
     return (
         <div className={styles.root} ref={rootRef}>
-            <button
-                type="button"
-                className={`${toolbarStyles.exportButton} ${styles.trigger}`}
+            <ToolbarTextButton
                 aria-expanded={open}
                 aria-haspopup="menu"
                 onClick={() => setOpen((current) => !current)}
@@ -53,22 +52,21 @@ export const ExportMenu = ({ onExport }: ExportMenuProps) => {
                 <ArrowDownload24Regular aria-hidden />
                 {m.menubar_export()}
                 <ChevronDown24Regular />
-            </button>
+            </ToolbarTextButton>
             {open && (
                 <ul className={styles.menu} role="menu">
                     {formats.map((format) => (
                         <li key={format} role="none">
-                            <button
-                                type="button"
+                            <MenuItemButton
                                 role="menuitem"
-                                className={styles.menuItem}
+                                variant="export"
                                 onClick={() => {
                                     setOpen(false);
                                     void onExport(format);
                                 }}
                             >
                                 {formatLabel(format)}
-                            </button>
+                            </MenuItemButton>
                         </li>
                     ))}
                 </ul>

@@ -1,0 +1,74 @@
+.button {
+    display: block;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.button:hover:not(:disabled),
+.button:focus-visible:not(:disabled) {
+    outline: none;
+    background-color: var(--color-bg-tertiary);
+}
+
+.button:disabled {
+    cursor: default;
+}
+
+.contextMenu,
+.menubarDropdown {
+    padding: var(--space-2) var(--space-4);
+    white-space: nowrap;
+}
+
+.contextMenu:disabled {
+    color: var(--color-text-secondary);
+}
+
+.commandPalette {
+    padding: var(--space-2) var(--space-3);
+    color: var(--color-text-primary);
+    border-radius: var(--border-radius-sm);
+}
+
+.export {
+    padding: var(--space-2) var(--space-3);
+    color: var(--color-text-primary);
+}
+
+.listPicker {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-px);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--border-radius-sm);
+    text-align: left;
+}
+
+.listPicker small {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.keymap {
+    width: 100%;
+    min-height: var(--size-chrome);
+    padding: var(--space-1) var(--space-2);
+    border: var(--border-width-sm) solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    text-align: left;
+}
+
+.keymap:focus-visible:not(:disabled) {
+    outline: none;
+    box-shadow: var(--shadow-ring-focus-button);
+}

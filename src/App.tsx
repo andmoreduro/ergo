@@ -45,7 +45,7 @@ import {
     ActionRuntimeProvider,
     useActionDispatcher,
 } from "./actions/runtime";
-import { ContextMenuProvider } from "./contextMenu/ContextMenuProvider";
+import { ContextMenuProvider } from "./components/organisms/ContextMenu/ContextMenuProvider";
 import { useCommandPalette } from "./hooks/useCommandPalette";
 import { useAppActionHandlers } from "./hooks/useAppActionHandlers";
 import { useAutosave } from "./hooks/useAutosave";
@@ -57,6 +57,7 @@ import {
     type PreviewZoomMode,
     stepPreviewZoom,
 } from "./preview/previewZoom";
+import { CommandPalette } from "./components/organisms/CommandPalette/CommandPalette";
 import styles from "./App.module.css";
 
 const AppShellContent = () => {
@@ -609,46 +610,15 @@ const AppShellContent = () => {
                         id="command-palette"
                         contexts={["dialog", "commandPalette"]}
                     >
-                        <div className={styles.paletteBackdrop}>
-                            <div className={styles.palette} role="dialog" aria-modal="true">
-                                <div className={styles.paletteHeader}>
-                                    <h2>{m.command_palette_title()}</h2>
-                                    <button
-                                        type="button"
-                                        onClick={() => runCommand("settings::Close")}
-                                    >
-                                        {m.command_palette_close()}
-                                    </button>
-                                </div>
-                                <input
-                                    autoFocus
-                                    value={commandQuery}
-                                    placeholder={m.command_palette_placeholder()}
-                                    onChange={(event) => setCommandQuery(event.target.value)}
-                                />
-                                <div className={styles.commandList}>
-                                    {filteredCommands.length > 0 ? (
-                                        filteredCommands.map((command) => (
-                                            <button
-                                                type="button"
-                                                disabled={
-                                                    !commandRegistry.enabled(
-                                                        command.id,
-                                                        commandContext,
-                                                    )
-                                                }
-                                                key={command.id}
-                                                onClick={() => runCommand(command.id)}
-                                            >
-                                                {command.label}
-                                            </button>
-                                        ))
-                                    ) : (
-                                        <p>{m.command_palette_empty()}</p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                        <CommandPalette
+                            query={commandQuery}
+                            onQueryChange={setCommandQuery}
+                            commands={filteredCommands}
+                            commandRegistry={commandRegistry}
+                            commandContext={commandContext}
+                            onRunCommand={runCommand}
+                            onClose={() => runCommand("settings::Close")}
+                        />
                     </ActionContextProvider>
                 )}
                 {settingsPanel && (

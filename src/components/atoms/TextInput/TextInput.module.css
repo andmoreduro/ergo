@@ -62,3 +62,39 @@
   color: var(--color-danger);
   margin-top: var(--space-px);
 }
+
+.borderless .input {
+  width: 100%;
+  padding: var(--space-3);
+  border: 0;
+  border-bottom: var(--border-width-sm) solid var(--color-border);
+  border-radius: var(--radius-none);
+  box-shadow: none;
+}
+
+.borderless .input:hover:not(:disabled),
+.borderless .input:focus-visible {
+  border-color: var(--color-border);
+  box-shadow: none;
+}
+
+.toolbarZoom .input {
+  min-width: var(--width-label-min);
+  padding: 0 var(--space-1);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  box-shadow: none;
+}
+
+.toolbarZoom .input:focus-visible {
+  color: var(--color-text-primary);
+  background: var(--color-bg-tertiary);
+  outline: var(--outline-width-focus) solid var(--color-primary);
+  outline-offset: var(--outline-offset-sm);
+  box-shadow: none;
+}

@@ -7,50 +7,6 @@
     border-bottom: var(--border-width-sm) solid var(--color-border);
 }
 
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    min-height: var(--size-row);
-    padding: 0 var(--space-3);
-    background-color: transparent;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    transition: background-color 0.15s ease;
-}
-
-.header:hover,
-.header:focus-visible {
-    outline: none;
-    background-color: var(--color-bg-secondary);
-}
-
-.header:focus-visible {
-    box-shadow: var(--shadow-ring-inset);
-}
-
-.title {
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-primary);
-    margin: 0;
-}
-
-.icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-secondary);
-    transition: transform 0.15s ease-in-out;
-}
-
-.iconOpen {
-    transform: rotate(180deg);
-}
-
 .content {
     padding: var(--space-2) var(--space-3);
     border-top: var(--border-width-sm) solid var(--color-border);

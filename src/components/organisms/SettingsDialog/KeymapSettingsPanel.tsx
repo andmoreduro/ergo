@@ -5,6 +5,9 @@ import type { KeymapProfile } from "../../../commands/types";
 import { m } from "../../../paraglide/messages.js";
 import { formatKeySequence } from "../../../settings/keymap";
 import { Button } from "../../atoms/Button/Button";
+import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
+import { TextInput } from "../../atoms/TextInput/TextInput";
+import { FormField } from "../../molecules/FormField/FormField";
 import styles from "./SettingsDialog.module.css";
 import {
     removeKeymapOverride,
@@ -32,9 +35,10 @@ export const KeymapSettingsPanel = ({
 
     return (
         <>
-            <label className={styles.field}>
-                <span>{m.settings_keymap_profile()}</span>
-                <input
+            <FormField label={m.settings_keymap_profile()}>
+                <TextInput
+                    aria-label={m.settings_keymap_profile()}
+                    fullWidth
                     value={settings.keymap_profile ?? "Default"}
                     onChange={(event) =>
                         onChange({
@@ -44,7 +48,7 @@ export const KeymapSettingsPanel = ({
                         })
                     }
                 />
-            </label>
+            </FormField>
             <h3 className={styles.sectionTitle}>
                 {m.settings_keymap_bindings()}
             </h3>
@@ -77,12 +81,11 @@ export const KeymapSettingsPanel = ({
                             <span className={styles.scope}>
                                 {binding.context}
                             </span>
-                            <button
+                            <MenuItemButton
+                                variant="keymap"
                                 aria-label={m.settings_keymap_shortcut_for({
                                     action: binding.commandId,
                                 })}
-                                className={styles.shortcutButton}
-                                type="button"
                                 onClick={() => {
                                     setRecordingBindingKey(bindingKey);
                                     setRecordingSequence([]);
@@ -124,7 +127,7 @@ export const KeymapSettingsPanel = ({
                                 }}
                             >
                                 {displayedShortcut}
-                            </button>
+                            </MenuItemButton>
                             <div className={styles.keymapActions}>
                                 <Button
                                     aria-label={m.settings_keymap_clear_for({
