@@ -71,18 +71,12 @@ mod tests {
     use crate::test_fixtures::basic_document_ast;
 
     #[test]
-    fn required_font_families_reads_project_settings() {
-        let ast = basic_document_ast("Test", "");
-        let families = required_font_families(&ast);
-        assert!(families.contains("Libertinus Serif"));
-        assert!(families.contains("Libertinus Math"));
-        assert!(families.contains("DejaVu Sans Mono"));
-    }
-
-    #[test]
-    fn default_template_fonts_mostly_bundled() {
+    fn default_document_font_requirements() {
         let ast = basic_document_ast("Test", "");
         let required = required_font_families(&ast);
+        assert!(required.contains("Libertinus Serif"));
+        assert!(required.contains("Libertinus Math"));
+        assert!(required.contains("DejaVu Sans Mono"));
         let missing = families_missing_from_bundled(&required);
         assert!(family_is_bundled("Libertinus Serif"));
         assert!(family_is_bundled("DejaVu Sans Mono"));

@@ -475,7 +475,7 @@ mod tests {
         use crate::template_spec::load_bundled_template;
 
         let ast = basic_document_ast("Title", "");
-        let template = load_bundled_template("versatile-apa").unwrap();
+        let template = load_bundled_template("apa7").unwrap();
         let vfs = VirtualFileSystem::new();
         let lib = crate::document_resources::resource_preview_lib_source(&ast, &template);
 
@@ -529,7 +529,7 @@ mod tests {
                 extra_fields: std::collections::HashMap::new(),
             })));
 
-        let template = load_bundled_template("versatile-apa").unwrap();
+        let template = load_bundled_template("apa7").unwrap();
         let seeds = assign_preview_pages(resource_seeds(&ast, &template));
         let file_seed = seeds
             .iter()

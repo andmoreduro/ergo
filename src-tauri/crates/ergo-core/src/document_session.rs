@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::ast::{DocumentAST, DocumentElement, DocumentSection};
-use crate::core_errors::DocumentSessionError;
 use crate::document_session_events::apply_document_event;
 use crate::document_session_generation::{default_layout, generate_project_sources_incremental};
 pub use crate::document_session_types::{
@@ -421,18 +420,6 @@ fn write_source_if_changed(vfs: &VirtualFileSystem, path: &str, source: &str) ->
     } else {
         vfs.write_source(path, source.to_string())
     }
-}
-
-pub fn read_preview_svg_from_vfs(
-    vfs: &VirtualFileSystem,
-    path: &str,
-) -> Result<String, DocumentSessionError> {
-    if !path.starts_with(".ergproj/preview/svg/") {
-        return Err(DocumentSessionError::InvalidPreviewPath);
-    }
-
-    let bytes = vfs.read_file(path).map_err(DocumentSessionError::Vfs)?;
-    String::from_utf8(bytes).map_err(|error| DocumentSessionError::InvalidUtf8(error.to_string()))
 }
 
 #[cfg(test)]

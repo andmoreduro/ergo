@@ -425,35 +425,6 @@ fn tables_and_figures_use_template_wrapper() {
 }
 
 #[test]
-fn apa_figure_with_image_emits_direct_image_not_nested_typst_figure() {
-    let template = template_with_figure_wrapper("apa-figure");
-    let mut ast = ast_with_table_and_figure();
-    ast.assets.push(AssetEntry {
-        id: "asset-1".to_string(),
-        path: "assets/photo.webp".to_string(),
-        kind: "image".to_string(),
-        caption: None,
-    });
-    if let DocumentSection::Content(section) = &mut ast.sections[0] {
-        if let DocumentElement::Figure(figure) = &mut section.elements[1] {
-            figure.asset_id = Some("asset-1".to_string());
-        }
-    }
-
-    let generated =
-        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
-    let figure_source = &generated.fragments["figure-1"].source;
-
-    assert!(figure_source.contains("#apa-figure("));
-    assert!(
-        figure_source.contains("image(\"../assets/photo.webp\")"),
-        "image path must be relative to elements/ dir; got:\n{figure_source}"
-    );
-    assert!(!figure_source.contains("#image("));
-    assert!(!figure_source.contains("#figure("));
-}
-
-#[test]
 fn figure_image_path_is_relative_to_element_file_location() {
     let template = template_with_figure_wrapper("apa-figure");
     let mut ast = ast_with_table_and_figure();
@@ -484,24 +455,22 @@ fn figure_image_path_is_relative_to_element_file_location() {
         element_file_path.starts_with("elements/"),
         "element file should be in elements/ directory: {element_file_path}"
     );
+    assert!(figure_fragment.source.contains("#apa-figure("));
     assert!(
-        figure_fragment
-            .source
-            .contains("image(\"../assets/photo.webp\")"),
+        figure_fragment.source.contains("image(\"../assets/photo.webp\")"),
         "image() path must climb out of elements/ to reach assets/; got:\n{}",
         figure_fragment.source
     );
+    assert!(!figure_fragment.source.contains("#image("));
+    assert!(!figure_fragment.source.contains("#figure("));
 
     let main_source = &generated.main_source;
     assert!(
         main_source.contains(&format!("#include \"{}\"", element_file_path)),
         "main.typ must include the element file; got:\n{main_source}"
     );
-}
 
-#[test]
-fn standard_figure_wrapper_also_uses_relative_image_path() {
-    let template = custom_element_template(ParamSpec {
+    let standard_template = custom_element_template(ParamSpec {
         key: "body".to_string(),
         param_type: ParamType::Content,
         source: None,
@@ -510,26 +479,28 @@ fn standard_figure_wrapper_also_uses_relative_image_path() {
         required: false,
         variants: None,
     });
-    let mut ast = ast_with_table_and_figure();
-    ast.assets.push(AssetEntry {
-        id: "asset-1".to_string(),
+    let mut standard_ast = ast_with_table_and_figure();
+    standard_ast.assets.push(AssetEntry {
+        id: "asset-2".to_string(),
         path: "assets/diagram.png".to_string(),
         kind: "image".to_string(),
         caption: None,
     });
-    if let DocumentSection::Content(section) = &mut ast.sections[0] {
+    if let DocumentSection::Content(section) = &mut standard_ast.sections[0] {
         if let DocumentElement::Figure(figure) = &mut section.elements[1] {
-            figure.asset_id = Some("asset-1".to_string());
+            figure.asset_id = Some("asset-2".to_string());
         }
     }
-
-    let generated =
-        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
-    let figure_source = &generated.fragments["figure-1"].source;
-
+    let standard_generated = generate_project_sources_incremental(
+        &standard_ast,
+        &standard_template,
+        &HashMap::new(),
+        &HashMap::new(),
+    );
+    let standard_figure = &standard_generated.fragments["figure-1"].source;
     assert!(
-        figure_source.contains("image(\"../assets/diagram.png\")"),
-        "standard figure wrapper must also use relative path; got:\n{figure_source}"
+        standard_figure.contains("image(\"../assets/diagram.png\")"),
+        "standard figure wrapper must also use relative path; got:\n{standard_figure}"
     );
 }
 
@@ -602,7 +573,7 @@ fn apa_figure_note_without_caption_avoids_double_comma() {
 }
 
 #[test]
-fn versatile_apa_main_typ_includes_front_matter_outlines_and_appendix_rule() {
+fn apa7_main_typ_includes_front_matter_outlines_and_appendix_rule() {
     use crate::template_spec::load_bundled_template;
 
     let mut ast = ast_with_table_and_figure();
@@ -612,7 +583,7 @@ fn versatile_apa_main_typ_includes_front_matter_outlines_and_appendix_rule() {
         elements: vec![],
     })];
 
-    let template = load_bundled_template("versatile-apa").expect("versatile-apa template");
+    let template = load_bundled_template("apa7").expect("apa7 template");
     let generated =
         generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
 
@@ -634,7 +605,7 @@ fn versatile_apa_main_typ_includes_front_matter_outlines_and_appendix_rule() {
 }
 
 #[test]
-fn versatile_apa_outline_titles_use_project_template_overrides() {
+fn apa7_outline_titles_use_project_template_overrides() {
     use crate::ast::TemplateOverride;
     use crate::template_spec::load_bundled_template;
 
@@ -649,7 +620,7 @@ fn versatile_apa_outline_titles_use_project_template_overrides() {
         value: "Tablas del documento".to_string(),
     }];
 
-    let template = load_bundled_template("versatile-apa").expect("versatile-apa template");
+    let template = load_bundled_template("apa7").expect("apa7 template");
     let generated =
         generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
 

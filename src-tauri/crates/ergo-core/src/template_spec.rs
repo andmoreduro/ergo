@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-const VERSATILE_APA_TEMPLATE: &str =
-    include_str!("../../../resources/templates/versatile-apa/template.json");
+const APA7_TEMPLATE: &str =
+    include_str!("../../../resources/templates/apa7/template.json");
 
 // ─── Template Spec Root ────────────────────────────────────────────
 
@@ -406,11 +406,11 @@ pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> 
 
     static TEMPLATE_CACHE: std::sync::OnceLock<TemplateSpec> = std::sync::OnceLock::new();
     let spec = TEMPLATE_CACHE.get_or_init(|| {
-        serde_json::from_str(VERSATILE_APA_TEMPLATE).expect("failed to parse bundled template spec")
+        serde_json::from_str(APA7_TEMPLATE).expect("failed to parse bundled template spec")
     });
 
     match template_id {
-        "versatile-apa" | "apa7" => Ok(spec.clone()),
+        "apa7" => Ok(spec.clone()),
         _ => Err(format!("unknown template: {template_id}")),
     }
 }
@@ -551,23 +551,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_bundled_versatile_apa_template() {
-        let spec = load_bundled_template("versatile-apa").expect("should parse");
-        assert_eq!(spec.template.id, "versatile-apa");
+    fn parses_apa7_template_spec() {
+        let spec = load_bundled_template("apa7").expect("should parse");
+        assert_eq!(spec.template.id, "apa7");
         assert_eq!(spec.template.name, "APA 7th Edition");
         assert_eq!(spec.package.name, "@preview/versatile-apa");
         assert_eq!(spec.package.version, "7.2.0");
         assert_eq!(spec.variants.len(), 3);
         assert_eq!(spec.sections.len(), 6);
-        assert!(spec.show_rule.is_some());
         assert!(!spec.inputs.is_empty());
         assert!(!spec.groups.is_empty());
         assert!(spec.defaults.is_some());
+
+        let show_rule = spec.show_rule.as_ref().expect("show rule");
+        assert_eq!(show_rule.function, "apa-style");
+        assert_eq!(show_rule.params.len(), 2);
+        assert_eq!(show_rule.params[0].key, "font-size");
+        assert_eq!(show_rule.params[0].param_type, ParamType::Length);
+
+        assert_eq!(spec.sections[0].kind, SectionKind::FunctionCall);
+        assert_eq!(spec.sections[0].function.as_deref(), Some("title-page"));
+        assert_eq!(spec.sections[2].kind, SectionKind::Literal);
+        let outline_source = spec.sections[2]
+            .source
+            .as_deref()
+            .expect("front matter outline literal");
+        assert!(outline_source.starts_with("#outline()\n#pagebreak()\n"));
+        assert!(outline_source.contains("figure.where(kind: table)"));
+        assert!(outline_source.contains("appendix-outline"));
+        assert_eq!(spec.sections[3].kind, SectionKind::Content);
+        assert_eq!(spec.sections[4].kind, SectionKind::Bibliography);
+        assert_eq!(spec.sections[5].kind, SectionKind::Appendix);
     }
 
     #[test]
     fn template_variants_filter_inputs_and_show_rule_params() {
-        let spec = load_bundled_template("versatile-apa").unwrap();
+        let spec = load_bundled_template("apa7").unwrap();
 
         let student = resolve_template_variant(&spec, Some("student"));
         let student_inputs: Vec<_> = student
@@ -613,12 +632,6 @@ mod tests {
     }
 
     #[test]
-    fn apa7_alias_loads_same_template() {
-        let spec = load_bundled_template("apa7").expect("should parse");
-        assert_eq!(spec.template.id, "versatile-apa");
-    }
-
-    #[test]
     fn plain_template_has_no_package_imports() {
         let spec = load_bundled_template("none").unwrap();
         assert_eq!(spec.template.id, "none");
@@ -634,38 +647,11 @@ mod tests {
 
     #[test]
     fn generates_import_line() {
-        let spec = load_bundled_template("versatile-apa").unwrap();
+        let spec = load_bundled_template("apa7").unwrap();
         let line = spec.package.to_typst_import_line();
         assert!(line.starts_with("#import \"@preview/versatile-apa:7.2.0\": "));
         assert!(line.contains("title-page"));
         assert!(line.contains("versatile-apa as apa-style"));
     }
 
-    #[test]
-    fn parses_show_rule_params() {
-        let spec = load_bundled_template("versatile-apa").unwrap();
-        let show_rule = spec.show_rule.unwrap();
-        assert_eq!(show_rule.function, "apa-style");
-        assert_eq!(show_rule.params.len(), 2);
-        assert_eq!(show_rule.params[0].key, "font-size");
-        assert_eq!(show_rule.params[0].param_type, ParamType::Length);
-    }
-
-    #[test]
-    fn parses_section_kinds() {
-        let spec = load_bundled_template("versatile-apa").unwrap();
-        assert_eq!(spec.sections[0].kind, SectionKind::FunctionCall);
-        assert_eq!(spec.sections[0].function.as_deref(), Some("title-page"));
-        assert_eq!(spec.sections[2].kind, SectionKind::Literal);
-        let outline_source = spec.sections[2]
-            .source
-            .as_deref()
-            .expect("front matter outline literal");
-        assert!(outline_source.starts_with("#outline()\n#pagebreak()\n"));
-        assert!(outline_source.contains("figure.where(kind: table)"));
-        assert!(outline_source.contains("appendix-outline"));
-        assert_eq!(spec.sections[3].kind, SectionKind::Content);
-        assert_eq!(spec.sections[4].kind, SectionKind::Bibliography);
-        assert_eq!(spec.sections[5].kind, SectionKind::Appendix);
-    }
 }
