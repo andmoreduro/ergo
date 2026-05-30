@@ -54,43 +54,11 @@ export interface UseDocumentCompilerSyncParams {
     preview: CompilerPreviewSetters;
 }
 
-const richTextUsesLatex = (
-    content: Array<{ kind: string | null; equation_syntax?: string }>,
-): boolean =>
-    content.some(
-        (span) =>
-            span.kind === "inlineEquation" && span.equation_syntax === "latex",
-    );
-
-const astUsesLatexEquations = (ast: DocumentAST): boolean =>
-    ast.sections.some((section) => {
-        if (section.type !== "Content") {
-            return false;
-        }
-
-        return section.elements.some((element) => {
-            switch (element.type) {
-                case "Heading":
-                case "Paragraph":
-                case "Quote":
-                    return richTextUsesLatex(element.content);
-                case "List":
-                case "Enumeration":
-                    return element.items.some(richTextUsesLatex);
-                case "Equation":
-                    return element.syntax === "latex";
-                case "Figure":
-                    return element.content.type === "Paragraph"
-                        ? richTextUsesLatex(element.content.content)
-                        : false;
-                default:
-                    return false;
-            }
-        });
-    });
-
-const requiredPackagesForAst = (ast: DocumentAST): PackageDependency[] =>
-    astUsesLatexEquations(ast) ? [MITEX_PACKAGE] : [];
+// The only optional Typst package is `mitex` (LaTeX-syntax equations). Its files
+// are loaded unconditionally at bootstrap: present-but-unimported packages cost
+// nothing to compile (the `#import` is only emitted when a LaTeX equation
+// exists), and loading them once removes a per-keystroke whole-document scan from
+// the sync hot path.
 
 export function useDocumentCompilerSync({
     ast,
@@ -230,16 +198,14 @@ export function useDocumentCompilerSync({
                                 ...projectFilesToVfsEntries(templatePackageFiles),
                             );
                         }
-                        for (const dependency of requiredPackagesForAst(currentAst)) {
-                            const packageFiles = await TauriApi.loadPackageFiles(
-                                dependency.name,
-                                dependency.version,
-                            );
-                            vfsFiles.push(...projectFilesToVfsEntries(packageFiles));
-                            loadedDependencyPackagesRef.current.add(
-                                `${dependency.name}:${dependency.version}`,
-                            );
-                        }
+                        const mitexFiles = await TauriApi.loadPackageFiles(
+                            MITEX_PACKAGE.name,
+                            MITEX_PACKAGE.version,
+                        );
+                        vfsFiles.push(...projectFilesToVfsEntries(mitexFiles));
+                        loadedDependencyPackagesRef.current.add(
+                            `${MITEX_PACKAGE.name}:${MITEX_PACKAGE.version}`,
+                        );
                     } catch (loadError) {
                         console.error("Failed to load template package files:", loadError);
                     }
@@ -277,30 +243,6 @@ export function useDocumentCompilerSync({
 
                     await mirrorToBackend(currentAst, [], true);
                     continue;
-                }
-
-                const missingDependencies = requiredPackagesForAst(currentAst).filter(
-                    (dependency) =>
-                        !loadedDependencyPackagesRef.current.has(
-                            `${dependency.name}:${dependency.version}`,
-                        ),
-                );
-                if (missingDependencies.length > 0) {
-                    const dependencyFiles: ProjectFile[] = [];
-                    for (const dependency of missingDependencies) {
-                        dependencyFiles.push(
-                            ...(await TauriApi.loadPackageFiles(
-                                dependency.name,
-                                dependency.version,
-                            )),
-                        );
-                        loadedDependencyPackagesRef.current.add(
-                            `${dependency.name}:${dependency.version}`,
-                        );
-                    }
-                    await CompilerClient.writeFiles(
-                        projectFilesToVfsEntries(dependencyFiles),
-                    );
                 }
 
                 const pendingEvents = desiredEventsRef.current.filter(
