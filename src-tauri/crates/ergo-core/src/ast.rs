@@ -202,6 +202,24 @@ pub enum ActionId {
     EditorConvertToFigure,
     #[serde(rename = "editor::FocusField")]
     EditorFocusField,
+    #[serde(rename = "editor::MoveTableCellLeft")]
+    EditorMoveTableCellLeft,
+    #[serde(rename = "editor::MoveTableCellRight")]
+    EditorMoveTableCellRight,
+    #[serde(rename = "editor::MoveTableCellUp")]
+    EditorMoveTableCellUp,
+    #[serde(rename = "editor::MoveTableCellDown")]
+    EditorMoveTableCellDown,
+    #[serde(rename = "editor::EnterTable")]
+    EditorEnterTable,
+    #[serde(rename = "editor::BodyNavigateLeft")]
+    EditorBodyNavigateLeft,
+    #[serde(rename = "editor::BodyNavigateRight")]
+    EditorBodyNavigateRight,
+    #[serde(rename = "editor::BodyNavigateUp")]
+    EditorBodyNavigateUp,
+    #[serde(rename = "editor::BodyNavigateDown")]
+    EditorBodyNavigateDown,
     #[serde(rename = "bibliography::CreateEntry")]
     BibliographyCreateEntry,
     #[serde(rename = "bibliography::OpenEntry")]
@@ -289,6 +307,15 @@ impl ActionId {
             ActionId::EditorConvertToEquation => "editor::ConvertToEquation",
             ActionId::EditorConvertToFigure => "editor::ConvertToFigure",
             ActionId::EditorFocusField => "editor::FocusField",
+            ActionId::EditorMoveTableCellLeft => "editor::MoveTableCellLeft",
+            ActionId::EditorMoveTableCellRight => "editor::MoveTableCellRight",
+            ActionId::EditorMoveTableCellUp => "editor::MoveTableCellUp",
+            ActionId::EditorMoveTableCellDown => "editor::MoveTableCellDown",
+            ActionId::EditorEnterTable => "editor::EnterTable",
+            ActionId::EditorBodyNavigateLeft => "editor::BodyNavigateLeft",
+            ActionId::EditorBodyNavigateRight => "editor::BodyNavigateRight",
+            ActionId::EditorBodyNavigateUp => "editor::BodyNavigateUp",
+            ActionId::EditorBodyNavigateDown => "editor::BodyNavigateDown",
             ActionId::BibliographyCreateEntry => "bibliography::CreateEntry",
             ActionId::BibliographyOpenEntry => "bibliography::OpenEntry",
             ActionId::BibliographySaveEntry => "bibliography::SaveEntry",
@@ -363,6 +390,15 @@ impl FromStr for ActionId {
             "editor::ConvertToEquation" => Ok(ActionId::EditorConvertToEquation),
             "editor::ConvertToFigure" => Ok(ActionId::EditorConvertToFigure),
             "editor::FocusField" => Ok(ActionId::EditorFocusField),
+            "editor::MoveTableCellLeft" => Ok(ActionId::EditorMoveTableCellLeft),
+            "editor::MoveTableCellRight" => Ok(ActionId::EditorMoveTableCellRight),
+            "editor::MoveTableCellUp" => Ok(ActionId::EditorMoveTableCellUp),
+            "editor::MoveTableCellDown" => Ok(ActionId::EditorMoveTableCellDown),
+            "editor::EnterTable" => Ok(ActionId::EditorEnterTable),
+            "editor::BodyNavigateLeft" => Ok(ActionId::EditorBodyNavigateLeft),
+            "editor::BodyNavigateRight" => Ok(ActionId::EditorBodyNavigateRight),
+            "editor::BodyNavigateUp" => Ok(ActionId::EditorBodyNavigateUp),
+            "editor::BodyNavigateDown" => Ok(ActionId::EditorBodyNavigateDown),
             "bibliography::CreateEntry" => Ok(ActionId::BibliographyCreateEntry),
             "bibliography::OpenEntry" => Ok(ActionId::BibliographyOpenEntry),
             "bibliography::SaveEntry" => Ok(ActionId::BibliographySaveEntry),

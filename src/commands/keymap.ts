@@ -67,12 +67,17 @@ export const DEFAULT_KEYMAP: KeymapProfile = {
         ),
         defaultBinding("view::ZoomIn", "Ctrl+=", "global", "workspace"),
         defaultBinding("view::ZoomOut", "Ctrl+-", "global", "workspace"),
-        defaultBinding("edit::Undo", "Ctrl+Z", "project", "workspace && !input"),
+        defaultBinding(
+            "edit::Undo",
+            "Ctrl+Z",
+            "project",
+            "workspace || editor || body",
+        ),
         defaultBinding(
             "edit::Redo",
             "Ctrl+Shift+Z",
             "project",
-            "workspace && !input",
+            "workspace || editor || body",
         ),
         defaultBinding(
             "editor::InsertParagraph",

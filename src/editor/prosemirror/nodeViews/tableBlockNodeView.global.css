@@ -1,0 +1,16 @@
+/* Applied via node decorations from tableBlockFocusPlugin */
+.ergo-table-block--locked {
+    user-select: none;
+}
+
+.ergo-table-block-focus {
+    outline: 2px solid var(--color-accent, #2563eb);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm, 4px);
+    background: color-mix(in srgb, var(--color-accent, #2563eb) 8%, transparent);
+}
+
+.ergo-table-block--editing {
+    outline: none;
+    background: transparent;
+}

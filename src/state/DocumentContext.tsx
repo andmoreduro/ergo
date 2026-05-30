@@ -58,6 +58,11 @@ interface DocumentSessionState {
 
 type DocumentSessionAction =
     | { type: "APPLY_AST_ACTION"; action: ASTAction }
+    | {
+          type: "COMMIT_EVENTS";
+          forward: BackendDocumentEvent[];
+          inverse: BackendDocumentEvent[];
+      }
     | { type: "UNDO" }
     | { type: "REDO" }
     | { type: "MARK_SAVED" }
@@ -67,6 +72,15 @@ type DocumentSessionAction =
 interface DocumentAstContextType {
     state: DocumentAST;
     dispatch: Dispatch<ASTAction>;
+    /**
+     * Commit a pre-computed forward/inverse `DocumentEvent` pair as a single
+     * history entry. Used by the ProseMirror body editor so one transaction maps
+     * to one undo step while reusing the same sync/mirror pipeline.
+     */
+    commitDocumentEvents: (
+        forward: BackendDocumentEvent[],
+        inverse: BackendDocumentEvent[],
+    ) => void;
     isDirty: boolean;
     canUndo: boolean;
     canRedo: boolean;
@@ -193,6 +207,36 @@ const createSessionReducer =
             };
         }
 
+        if (action.type === "COMMIT_EVENTS") {
+            if (action.forward.length === 0) {
+                return state;
+            }
+
+            const nextAst = applyDocumentEvents(state.ast, action.forward);
+            const historyEntry: DocumentEventHistoryEntry = {
+                forwardEvents: action.forward,
+                inverseEvents: action.inverse,
+                timestamp: Date.now(),
+            };
+
+            return {
+                ...state,
+                ast: nextAst,
+                past: [...state.past, historyEntry].slice(-historyLimit),
+                future: [],
+                events: [
+                    ...state.events,
+                    ...queueDocumentEvents(
+                        action.forward,
+                        state.nextEventId,
+                        historyEntry.timestamp,
+                    ),
+                ],
+                nextEventId: state.nextEventId + action.forward.length,
+                isDirty: true,
+            };
+        }
+
         if (action.type === "MARK_SAVED") {
             return {
                 ...state,
@@ -286,6 +330,11 @@ export const DocumentProvider = ({
             sessionDispatch({ type: "APPLY_AST_ACTION", action }),
         [],
     );
+    const commitDocumentEvents = useCallback(
+        (forward: BackendDocumentEvent[], inverse: BackendDocumentEvent[]) =>
+            sessionDispatch({ type: "COMMIT_EVENTS", forward, inverse }),
+        [],
+    );
     const undo = useCallback(() => sessionDispatch({ type: "UNDO" }), []);
     const redo = useCallback(() => sessionDispatch({ type: "REDO" }), []);
     const markSaved = useCallback(
@@ -310,6 +359,7 @@ export const DocumentProvider = ({
         () => ({
             state: sessionState.ast,
             dispatch,
+            commitDocumentEvents,
             isDirty: sessionState.isDirty,
             canUndo: sessionState.past.length > 0,
             canRedo: sessionState.future.length > 0,
@@ -320,6 +370,7 @@ export const DocumentProvider = ({
         [
             sessionState.ast,
             dispatch,
+            commitDocumentEvents,
             sessionState.isDirty,
             sessionState.past.length,
             sessionState.future.length,

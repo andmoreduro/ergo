@@ -36,6 +36,8 @@ import { editCommands } from "./commands/editCommands";
 import { settingsCommands } from "./commands/settingsCommands";
 import { helpCommands } from "./commands/helpCommands";
 import { applyRichTextMarkToFocusedField } from "./editor/richTextMarks";
+import { applyBodyMark } from "./editor/prosemirror/activeView";
+import { insertBodyInlineEquation } from "./editor/prosemirror/bodyInsert";
 import {
     insertInlineEquationAtOffset,
     richTextPlainLength,
@@ -162,6 +164,10 @@ const AppShellContent = () => {
     }, []);
 
     const insertInlineEquation = useCallback(() => {
+        if (insertBodyInlineEquation()) {
+            return true;
+        }
+
         const elementId = documentFocus.elementId;
         const fieldId = documentFocus.fieldId;
         if (!elementId || !fieldId) {
@@ -280,6 +286,11 @@ const AppShellContent = () => {
 
     const applyRichTextMark = useCallback(
         (mark: "bold" | "italic" | "underline") => {
+            // Body editing lives in ProseMirror (marks need the selection range);
+            // fall back to the metadata-form contentEditable fields otherwise.
+            if (applyBodyMark(mark)) {
+                return;
+            }
             applyRichTextMarkToFocusedField(mark, documentFocus.fieldId);
         },
         [documentFocus.fieldId],

@@ -19,6 +19,7 @@ import { ColumnResizeHandle } from "./ColumnResizeHandle";
 import { useWorkspaceColumns } from "./useWorkspaceColumns";
 import type { PreviewZoomMode } from "../../../preview/previewZoom";
 import { Toast } from "../../molecules/Toast/Toast";
+import { m } from "../../../paraglide/messages.js";
 import styles from "./Workspace.module.css";
 
 export interface WorkspaceProps {

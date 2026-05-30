@@ -421,12 +421,6 @@ const SimpleListContentField = ({
         pendingFocusComposerRef.current = true;
     }, []);
 
-    const focusEntry = useCallback((index: number) => {
-        requestAnimationFrame(() => {
-            focusBootstrappedEntry(entryRefs.current[index] ?? null);
-        });
-    }, []);
-
     useLayoutEffect(() => {
         if (pendingFocusComposerRef.current) {
             pendingFocusComposerRef.current = false;

@@ -92,7 +92,7 @@ export const buildTargetedOutlineEntries = (options: {
         }
 
         const match = headingTargets.find(
-            ({ element, level, text }) =>
+            ({ level, text }) =>
                 level === entry.level &&
                 headingMatchesOutline(text, entry.text),
         );

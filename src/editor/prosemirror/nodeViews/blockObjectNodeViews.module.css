@@ -1,0 +1,12 @@
+.host {
+    margin-block: var(--space-3);
+    min-height: var(--size-control);
+}
+
+.host :global([data-element-id]) {
+    margin: 0;
+}
+
+.placeholder {
+    min-height: var(--size-control);
+}

@@ -39,12 +39,12 @@
     },
     {
       "action_id": "edit::Undo",
-      "context": "workspace && !input",
+      "context": "workspace || editor || body",
       "sequence": [{ "key": "z", "modifiers": ["Control"] }]
     },
     {
       "action_id": "edit::Redo",
-      "context": "workspace && !input",
+      "context": "workspace || editor || body",
       "sequence": [{ "key": "z", "modifiers": ["Control", "Shift"] }]
     },
     {
@@ -96,7 +96,47 @@
       "action_id": "editor::ConvertToFigure",
       "context": "element && !input",
       "sequence": [{ "key": "5", "modifiers": ["Control", "Alt"] }]
-    }
+    },
+    {
+      "action_id": "editor::Bold",
+      "context": "input",
+      "sequence": [{ "key": "b", "modifiers": ["Control"] }]
+    },
+    {
+      "action_id": "editor::Italic",
+      "context": "input",
+      "sequence": [{ "key": "i", "modifiers": ["Control"] }]
+    },
+    {
+      "action_id": "editor::Underline",
+      "context": "input",
+      "sequence": [{ "key": "u", "modifiers": ["Control"] }]
+    },
+    {
+      "action_id": "editor::MoveTableCellLeft",
+      "context": "body && input",
+      "sequence": [{ "key": "arrowleft", "modifiers": ["Alt"] }]
+    },
+    {
+      "action_id": "editor::MoveTableCellRight",
+      "context": "body && input",
+      "sequence": [{ "key": "arrowright", "modifiers": ["Alt"] }]
+    },
+    {
+      "action_id": "editor::MoveTableCellUp",
+      "context": "body && input",
+      "sequence": [{ "key": "arrowup", "modifiers": ["Alt"] }]
+    },
+    {
+      "action_id": "editor::MoveTableCellDown",
+      "context": "body && input",
+      "sequence": [{ "key": "arrowdown", "modifiers": ["Alt"] }]
+    },
+    {
+      "action_id": "editor::EnterTable",
+      "context": "body",
+      "sequence": [{ "key": "enter", "modifiers": ["Control"] }]
+    },
   ],
   "keymap_overrides": []
 }
