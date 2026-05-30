@@ -6,7 +6,7 @@ High-level runtime containers, responsibilities, and IPC boundaries for the Reac
 
 Érgo is a local-first desktop application:
 
-1. **Frontend (React / TypeScript / Vite):** UI, action context tree, local `DocumentAST` with undo/redo, settings UI, preview page rendering, and orchestration hooks.
+1. **Frontend (React / TypeScript / Vite):** UI, action context tree, local `DocumentAST` with undo/redo, template metadata form fields, a ProseMirror-controlled content-body editor (one view per content section), preview page rendering, and orchestration hooks.
 2. **WASM Compiler Worker:** Hot-path `DocumentSession`, VFS, main and resource preview compiles, `PreviewSyncState`, page rendering, and export rendering (`ergo-engine-wasm` + `ergo-core`).
 3. **Backend (Tauri / Rust):** Typed actions and keymap resolution, mirrored `DocumentSession` and VFS for archive I/O, settings persistence, and host file/dialog I/O.
 4. **Host OS:** WebView, `.ergproj` archives, app config under `Ergo`, and Typst package cache.

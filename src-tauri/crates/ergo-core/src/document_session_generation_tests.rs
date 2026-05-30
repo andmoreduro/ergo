@@ -406,6 +406,41 @@ fn tables_and_figures_default_to_standard_figure_wrapper() {
 }
 
 #[test]
+fn table_cell_spans_emit_table_cell_delimiters() {
+    let template = custom_element_template(ParamSpec {
+        key: "body".to_string(),
+        param_type: ParamType::Content,
+        source: None,
+        label: None,
+        default: None,
+        required: false,
+        variants: None,
+    });
+    let mut ast = ast_with_table_and_figure();
+    if let DocumentSection::Content(section) = &mut ast.sections[0] {
+        if let DocumentElement::Table(table) = &mut section.elements[0] {
+            table.rows = 1;
+            table.cols = 2;
+            table.cells = vec![vec![TableCell {
+                content: "Merged".to_string(),
+                col_span: Some(2),
+                row_span: None,
+            }]];
+            table.column_sizes = vec!["1fr".to_string(), "1fr".to_string()];
+        }
+    }
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+    let table_source = &generated.fragments["table-1"].source;
+    assert!(
+        table_source.contains("table.cell(colspan: 2)["),
+        "expected merged cell span in:\n{table_source}"
+    );
+    assert!(table_source.contains("Merged"));
+}
+
+#[test]
 fn tables_and_figures_use_template_wrapper() {
     let template = template_with_figure_wrapper("apa-figure");
     let ast = ast_with_table_and_figure();

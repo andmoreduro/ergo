@@ -1,0 +1,42 @@
+.surface {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 0.5rem);
+}
+
+.surface :global(.ProseMirror) {
+    outline: none;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    min-height: 1.5em;
+}
+
+.surface :global(.ProseMirror) p,
+.surface :global(.ProseMirror) blockquote,
+.surface :global(.ProseMirror) ul,
+.surface :global(.ProseMirror) ol {
+    margin: 0;
+}
+
+.surface :global(.ProseMirror) blockquote {
+    border-inline-start: 3px solid var(--color-border, #cbd5e1);
+    padding-inline-start: var(--space-3, 0.75rem);
+    color: var(--color-text-muted, #64748b);
+}
+
+.surface :global(.ProseMirror) ul,
+.surface :global(.ProseMirror) ol {
+    padding-inline-start: var(--space-5, 1.25rem);
+}
+
+.surface :global(.ProseMirror) td,
+.surface :global(.ProseMirror) th {
+    border: 1px solid var(--color-border, #cbd5e1);
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    vertical-align: top;
+}
+
+.surface :global(.ergo-ref-chip) {
+    color: var(--color-accent, #2563eb);
+    cursor: default;
+}

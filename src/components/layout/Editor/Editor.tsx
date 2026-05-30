@@ -1,16 +1,13 @@
 import {
-    memo,
     useCallback,
     useMemo,
     useRef,
     useState,
-    type MouseEventHandler,
 } from "react";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import { useDocument, useDocumentAst } from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
-import type { DocumentSection } from "../../../bindings/DocumentSection";
 import {
     ActionContextProvider,
     useActionDispatcher,
@@ -22,7 +19,7 @@ import {
 } from "../../../editor/insertReference";
 import { InsertReferenceDialog } from "../../organisms/InsertReferenceDialog/InsertReferenceDialog";
 import type { TargetedOutlineEntry } from "../Sidebar/SidebarOutline";
-import { ElementEditor } from "../../organisms/ElementEditor/ElementEditor";
+import { ProseMirrorBodyEditor } from "../../organisms/ProseMirrorBodyEditor/ProseMirrorBodyEditor";
 import { Button } from "../../atoms/Button/Button";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
@@ -48,11 +45,8 @@ import {
     useEditorNavigation,
 } from "../../../editor/EditorNavigationContext";
 import { useFieldNavigation } from "../../../editor/useFieldNavigation";
-import {
-    focusClosestContentField,
-    isContentSectionFocusDelegationTarget,
-} from "../../../editor/contentSectionFocus";
-type ContentSection = Extract<DocumentSection, { type: "Content" }>;
+import type { ConvertibleElementKind } from "../../../state/ast/convertElement";
+import { insertBodyReference } from "../../../editor/prosemirror/bodyInsert";
 
 const getValueAtPath = (obj: any, path: string): any => {
     const parts = path.split("/").filter(Boolean);
@@ -98,12 +92,17 @@ export interface EditorProps {
 
 export const Editor = ({ resources, outlineEntries }: EditorProps) => {
     const { state, dispatch: dispatchAst } = useDocumentAst();
-    const { documentFocus, dispatch } = useDocument();
+    const { documentFocus } = useDocument();
     const dispatchAction = useActionDispatcher();
     const [referenceDialogOpen, setReferenceDialogOpen] = useState(false);
 
     const applyReferenceInsert = useCallback(
         (pick: { referenceId: string; label: string }) => {
+            if (insertBodyReference(pick.referenceId, pick.label)) {
+                setReferenceDialogOpen(false);
+                return;
+            }
+
             const selection =
                 documentFocus.elementId && documentFocus.fieldId
                     ? {
@@ -122,17 +121,46 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
                 documentFocus.caretUtf16Offset,
             );
             if (action) {
-                dispatch(action);
+                dispatchAst(action);
             }
             setReferenceDialogOpen(false);
         },
         [
-            dispatch,
+            dispatchAst,
             documentFocus.caretUtf16Offset,
             documentFocus.elementId,
             documentFocus.fieldId,
             state,
         ],
+    );
+
+    const focusedContentElement = useMemo(() => {
+        const elementId = documentFocus.elementId;
+        if (!elementId || elementId === "project" || elementId === "inputs") {
+            return null;
+        }
+        const section = state.sections.find((entry) => entry.type === "Content");
+        if (!section || section.type !== "Content") {
+            return null;
+        }
+        return section.elements.find((entry) => entry.id === elementId) ?? null;
+    }, [documentFocus.elementId, state.sections]);
+
+    const convertFocusedElement = useCallback(
+        (targetKind: ConvertibleElementKind) => {
+            if (!focusedContentElement || focusedContentElement.type === targetKind) {
+                return false;
+            }
+            dispatchAst({
+                type: "CONVERT_ELEMENT",
+                payload: {
+                    elementId: focusedContentElement.id,
+                    targetKind,
+                },
+            });
+            return true;
+        },
+        [dispatchAst, focusedContentElement],
     );
 
     const editorHandlers = useMemo<ActionHandlerMap>(
@@ -201,8 +229,81 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
         () => ({
             ...editorHandlers,
             "editor::DeleteElement": () => deleteFocusedElement(),
+            "editor::ConvertToParagraph": () => convertFocusedElement("Paragraph"),
+            "editor::ConvertToHeading": () => convertFocusedElement("Heading"),
+            "editor::ConvertToTable": () => convertFocusedElement("Table"),
+            "editor::ConvertToEquation": () => convertFocusedElement("Equation"),
+            "editor::ConvertToFigure": () => convertFocusedElement("Figure"),
+            "editor::AddTableRow": () => {
+                if (focusedContentElement?.type !== "Table") {
+                    return false;
+                }
+                dispatchAst({
+                    type: "ADD_TABLE_ROW",
+                    payload: { tableId: focusedContentElement.id },
+                });
+                return true;
+            },
+            "editor::AddTableColumn": () => {
+                if (focusedContentElement?.type !== "Table") {
+                    return false;
+                }
+                dispatchAst({
+                    type: "ADD_TABLE_COLUMN",
+                    payload: { tableId: focusedContentElement.id },
+                });
+                return true;
+            },
+            "editor::RemoveTableRow": (invocation) => {
+                if (focusedContentElement?.type !== "Table") {
+                    return false;
+                }
+                const payload = invocation.payload;
+                const rowIndex =
+                    typeof payload === "object" &&
+                    payload !== null &&
+                    "rowIndex" in payload &&
+                    typeof payload.rowIndex === "number"
+                        ? payload.rowIndex
+                        : focusedContentElement.rows - 1;
+                dispatchAst({
+                    type: "REMOVE_TABLE_ROW",
+                    payload: {
+                        tableId: focusedContentElement.id,
+                        rowIndex,
+                    },
+                });
+                return true;
+            },
+            "editor::RemoveTableColumn": (invocation) => {
+                if (focusedContentElement?.type !== "Table") {
+                    return false;
+                }
+                const payload = invocation.payload;
+                const colIndex =
+                    typeof payload === "object" &&
+                    payload !== null &&
+                    "colIndex" in payload &&
+                    typeof payload.colIndex === "number"
+                        ? payload.colIndex
+                        : focusedContentElement.cols - 1;
+                dispatchAst({
+                    type: "REMOVE_TABLE_COLUMN",
+                    payload: {
+                        tableId: focusedContentElement.id,
+                        colIndex,
+                    },
+                });
+                return true;
+            },
         }),
-        [deleteFocusedElement, editorHandlers],
+        [
+            convertFocusedElement,
+            deleteFocusedElement,
+            dispatchAst,
+            editorHandlers,
+            focusedContentElement,
+        ],
     );
 
     return (
@@ -340,7 +441,7 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
 
                 {state.sections.map((section) =>
                     section.type === "Content" ? (
-                        <ContentSectionEditor key={section.id} section={section} />
+                        <ProseMirrorBodyEditor key={section.id} section={section} />
                     ) : null,
                 )}
                 </div>
@@ -774,42 +875,3 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
     );
 };
 
-const ContentSectionEditor = memo(function ContentSectionEditor({ section }: { section: ContentSection }) {
-    const handleContentSectionPointerDown = useCallback<
-        MouseEventHandler<HTMLDivElement>
-    >(
-        (event) => {
-            if (event.button !== 0) {
-                return;
-            }
-
-            const target = event.target;
-            if (!isContentSectionFocusDelegationTarget(target)) {
-                return;
-            }
-
-            const focused = focusClosestContentField(
-                event.currentTarget,
-                target,
-                event.clientX,
-                event.clientY,
-            );
-            if (focused) {
-                event.preventDefault();
-            }
-        },
-        [],
-    );
-
-    return (
-        <div
-            className={styles.contentSection}
-            data-content-section
-            onPointerDown={handleContentSectionPointerDown}
-        >
-            {section.elements.map((element) => (
-                <ElementEditor key={element.id} element={element} />
-            ))}
-        </div>
-    );
-});

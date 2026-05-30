@@ -27,7 +27,7 @@ stateDiagram-v2
     ActiveProject --> Welcome : close project
 ```
 
-React updates immediately during `Editing`. WASM sync runs asynchronously without blocking further input. Undo and redo replay the history entry's ordered event list through the same sync transition used by normal edits.
+React updates immediately during `Editing`. The content body is a controlled ProseMirror view: each local transaction maps to a forward/inverse `DocumentEvent` pair (one undo step), and AST changes from undo, preview focus, or toolbar actions reconcile back into the document without a separate PM history. WASM sync runs asynchronously without blocking further input. Undo and redo replay the history entry's ordered event list through the same sync transition used by normal edits.
 
 ## 2. Backend DocumentSession Lifecycle
 

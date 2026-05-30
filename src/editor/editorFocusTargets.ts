@@ -7,7 +7,7 @@ export const isEditorFieldTarget = (target: EventTarget | null): boolean => {
 
     return Boolean(
         target.closest(
-            "[data-editor-field-id], input, textarea, select, button, [role='dialog'], [role='menu']",
+            "[data-editor-field-id], [contenteditable='true'], input, textarea, select, button, [role='dialog'], [role='menu']",
         ),
     );
 };

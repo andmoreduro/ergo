@@ -90,6 +90,7 @@ flowchart TB
 
 ## Package Notes
 
+- `editor/prosemirror/` owns the content-body ProseMirror schema, AST bridge, section diff → `DocumentEvent` translation, plugins, and React NodeViews for block objects. It depends on `state/` and `bindings/` but not on layout components except through NodeView adapters.
 - `api/tauri` is the only frontend module that calls Tauri `invoke`.
 - `workers/compiler.worker` loads `ergo-engine-wasm`; preview compiles never go through Tauri IPC.
 - `document_session_commands` mirrors AST to the backend session; architecture tests forbid `compile_document` on that path.

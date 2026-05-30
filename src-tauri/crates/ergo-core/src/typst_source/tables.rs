@@ -26,3 +26,21 @@ pub(crate) fn table_placement_value(table: &crate::ast::Table) -> &str {
         .and_then(|value| value.as_str())
         .unwrap_or("here")
 }
+
+/// Opening delimiter for a Typst table cell, including `table.cell` when spans apply.
+pub(crate) fn table_cell_open(col_span: Option<i32>, row_span: Option<i32>) -> String {
+    let colspan = col_span.unwrap_or(1).max(1);
+    let rowspan = row_span.unwrap_or(1).max(1);
+    let mut attrs = Vec::new();
+    if colspan > 1 {
+        attrs.push(format!("colspan: {colspan}"));
+    }
+    if rowspan > 1 {
+        attrs.push(format!("rowspan: {rowspan}"));
+    }
+    if attrs.is_empty() {
+        "[".to_string()
+    } else {
+        format!("table.cell({})[", attrs.join(", "))
+    }
+}
