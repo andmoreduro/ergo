@@ -191,6 +191,12 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
                 return;
             }
 
+            // ProseMirror body navigation handles arrows/enter synchronously and calls
+            // preventDefault; skip async action dispatch so we do not run the same command twice.
+            if (event.defaultPrevented) {
+                return;
+            }
+
             const snapshot = getSnapshot({
                 includeInputContext: targetIsEditable,
             });
@@ -198,22 +204,31 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
             void TauriApi.resolveKeyEvent(logicalEvent, snapshot)
                 .then((resolution) => {
                     if (resolution.status === "matched") {
-                        event.preventDefault();
-                        void dispatchAction(resolution.invocation);
+                        void dispatchAction(resolution.invocation).then((handled) => {
+                            if (handled) {
+                                event.preventDefault();
+                            }
+                        });
                         return;
                     }
 
                     if (resolution.status === "pendingSequence") {
-                        event.preventDefault();
-
                         if (resolution.fallback) {
                             pendingFallbackTimeoutRef.current = window.setTimeout(
                                 () => {
                                     void TauriApi.resetKeySequence("main");
-                                    void dispatchAction(resolution.fallback!);
+                                    void dispatchAction(resolution.fallback!).then(
+                                        (handled) => {
+                                            if (handled) {
+                                                event.preventDefault();
+                                            }
+                                        },
+                                    );
                                 },
                                 resolution.timeout_ms,
                             );
+                        } else {
+                            event.preventDefault();
                         }
                     }
                 })

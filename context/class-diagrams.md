@@ -114,6 +114,12 @@ classDiagram
             +EquationSyntax equation_syntax
         }
 
+        class TableCell {
+            +String content
+            +Int? row_span
+            +Int? col_span
+        }
+
         class Table {
             +Int rows
             +Int cols
