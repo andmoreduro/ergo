@@ -1,8 +1,8 @@
-import { useRef, type RefObject } from "react";
+import { memo, useRef, type RefObject } from "react";
 import type { DocumentOutline } from "../../../bindings/DocumentOutline";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
-import { useDocument } from "../../../state/DocumentContext";
+import { useDocumentAstSelector } from "../../../state/DocumentContext";
 import { Accordion } from "../../molecules/Accordion/Accordion";
 import { m } from "../../../paraglide/messages.js";
 import { SidebarBibliographyPanel } from "./SidebarBibliography";
@@ -19,7 +19,7 @@ export interface SidebarProps {
     previewScrollRef?: RefObject<HTMLElement | null>;
 }
 
-export const Sidebar = ({
+const SidebarComponent = ({
     outline = null,
     resources = null,
     previewRevision = null,
@@ -30,7 +30,10 @@ export const Sidebar = ({
     const fallbackPreviewScrollRef = useRef<HTMLElement>(null);
     const previewScrollRef =
         previewScrollRefFromParent ?? fallbackPreviewScrollRef;
-    const { state } = useDocument();
+    // Only the bibliography needs the AST, and only its references slice — which
+    // is preserved by reference across body edits — so the sidebar no longer
+    // re-renders on every keystroke.
+    const references = useDocumentAstSelector((ast) => ast.references);
 
     return (
         <aside
@@ -46,7 +49,7 @@ export const Sidebar = ({
                 />
             </Accordion>
             <Accordion title={m.sidebar_bibliography()} defaultOpen>
-                <SidebarBibliographyPanel references={state.references} />
+                <SidebarBibliographyPanel references={references} />
             </Accordion>
             <Accordion title={m.sidebar_resources()} defaultOpen>
                 <SidebarResourcesPanel
@@ -58,3 +61,10 @@ export const Sidebar = ({
         </aside>
     );
 };
+
+/**
+ * Memoized so a workspace re-render (every keystroke) doesn't re-render the
+ * sidebar; its props come from the memoized compiler result + a stable ref, so
+ * it only re-renders when a compile completes or the references slice changes.
+ */
+export const Sidebar = memo(SidebarComponent);

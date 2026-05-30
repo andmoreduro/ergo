@@ -313,6 +313,21 @@ const richTextOf = (element: DocumentElement): RichText[] | null => {
     }
 };
 
+const elementSignificantlyEqual = (
+    a: DocumentElement,
+    b: DocumentElement,
+): boolean => {
+    if (a.id !== b.id || a.type !== b.type) {
+        return false;
+    }
+    const aText = richTextOf(a);
+    const bText = richTextOf(b);
+    if (aText && bText) {
+        return richTextSignificantlyEqual(aText, bText);
+    }
+    return deepEqual(a, b);
+};
+
 /**
  * Whether two element lists differ only insignificantly (e.g. trailing
  * whitespace in a text field). Mirrors the reducer's `commitPolicy` so the body
@@ -327,24 +342,91 @@ export const sectionSignificantlyEqual = (
         return false;
     }
     for (let i = 0; i < prev.length; i += 1) {
-        const a = prev[i];
-        const b = next[i];
-        if (a.id !== b.id || a.type !== b.type) {
-            return false;
-        }
-        const aText = richTextOf(a);
-        const bText = richTextOf(b);
-        if (aText && bText) {
-            if (!richTextSignificantlyEqual(aText, bText)) {
-                return false;
-            }
-            continue;
-        }
-        if (!deepEqual(a, b)) {
+        if (!elementSignificantlyEqual(prev[i], next[i])) {
             return false;
         }
     }
     return true;
+};
+
+/**
+ * Significance check scoped to a top-level index range — the hot-path variant
+ * used when a transaction only touched a few blocks, so typing cost stays
+ * proportional to the edit rather than the whole section.
+ */
+export const rangeSignificantlyEqual = (
+    prev: DocumentElement[],
+    next: DocumentElement[],
+    fromIndex: number,
+    toIndex: number,
+): boolean => {
+    if (prev.length !== next.length) {
+        return false;
+    }
+    for (let i = fromIndex; i <= toIndex; i += 1) {
+        if (!prev[i] || !next[i] || !elementSignificantlyEqual(prev[i], next[i])) {
+            return false;
+        }
+    }
+    return true;
+};
+
+/**
+ * Index-aligned diff over a contiguous range of top-level blocks, for the common
+ * case where a transaction edited blocks in place without changing their count
+ * or order (so prev[i] and next[i] are the same element id). Returns null — so
+ * the caller falls back to the full id-matched `diffSectionElements` — on any
+ * shape it can't express granularly (id mismatch, un-diffable table change).
+ */
+export const diffChangedBlocks = (
+    sectionId: string,
+    prev: DocumentElement[],
+    next: DocumentElement[],
+    fromIndex: number,
+    toIndex: number,
+): SectionEventDelta | null => {
+    if (prev.length !== next.length) {
+        return null;
+    }
+    const forward: DocumentEvent[] = [];
+    const inverse: DocumentEvent[] = [];
+    const pushPair = (fwd: DocumentEvent, inv: DocumentEvent) => {
+        forward.push(fwd);
+        inverse.unshift(inv);
+    };
+
+    for (let index = fromIndex; index <= toIndex; index += 1) {
+        const prevEl = prev[index];
+        const nextEl = next[index];
+        if (!prevEl || !nextEl || prevEl.id !== nextEl.id) {
+            return null;
+        }
+        if (deepEqual(prevEl, nextEl)) {
+            continue;
+        }
+        if (prevEl.type === nextEl.type) {
+            if (prevEl.type === "Table" && nextEl.type === "Table") {
+                const tableDelta = diffTableElement(prevEl, nextEl);
+                if (!tableDelta) {
+                    return null;
+                }
+                for (let i = 0; i < tableDelta.forward.length; i += 1) {
+                    pushPair(tableDelta.forward[i]!, tableDelta.inverse[i]!);
+                }
+                continue;
+            }
+            const specialized = contentUpdate(prevEl, nextEl);
+            if (specialized) {
+                pushPair(specialized.forward, specialized.inverse);
+                continue;
+            }
+        }
+        // Same id but type change / no dedicated content event: replace in place.
+        pushPair(remove(nextEl.id), restore(sectionId, index, prevEl));
+        pushPair(insert(sectionId, index, nextEl), remove(nextEl.id));
+    }
+
+    return { forward, inverse };
 };
 
 export const diffSectionElements = (

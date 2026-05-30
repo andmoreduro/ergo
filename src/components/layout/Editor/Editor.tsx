@@ -1,11 +1,17 @@
 import {
+    memo,
     useCallback,
     useMemo,
     useRef,
     useState,
 } from "react";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
-import { useDocument, useDocumentAst } from "../../../state/DocumentContext";
+import {
+    useDocument,
+    useDocumentActions,
+    useDocumentAst,
+    useDocumentAstSelector,
+} from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import {
@@ -47,6 +53,9 @@ import {
 import { useFieldNavigation } from "../../../editor/useFieldNavigation";
 import type { ConvertibleElementKind } from "../../../state/ast/convertElement";
 import { insertBodyReference } from "../../../editor/prosemirror/bodyInsert";
+
+/** Shared stable empty array so selectors don't return a fresh `[]` each call. */
+const EMPTY_ARRAY: readonly unknown[] = [];
 
 const getValueAtPath = (obj: any, path: string): any => {
     const parts = path.split("/").filter(Boolean);
@@ -468,7 +477,15 @@ const getFieldPlaceholder = (schema: InputSchema, label?: string) => {
     return getFieldLabel(schema, label);
 };
 
-const DynamicField = ({ schema, path, label }: DynamicFieldProps) => {
+// Memoized: a body keystroke re-renders the top-level Editor, but the form
+// fields' props (schema/path/label) are stable, so each field skips that
+// cascade and re-renders only when its own input slice changes (via the
+// per-field `useDocumentAstSelector`).
+const DynamicField = memo(function DynamicField({
+    schema,
+    path,
+    label,
+}: DynamicFieldProps) {
     if (schema.type === "simple_list") {
         return <DynamicFieldSimpleList schema={schema} path={path} label={label} />;
     }
@@ -486,12 +503,12 @@ const DynamicField = ({ schema, path, label }: DynamicFieldProps) => {
     }
 
     return <DynamicFieldString schema={schema} path={path} label={label} />;
-};
+});
 
 const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
-    const { state, dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const { handleFieldAdvance } = useEditorNavigation();
-    const rawItems = getValueAtPath(state.inputs, path);
+    const rawItems = useDocumentAstSelector((s) => getValueAtPath(s.inputs, path));
     const itemKind =
         schema.items?.type === "content" ? "content" : "string";
 
@@ -537,12 +554,14 @@ const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
 };
 
 const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
-    const { state } = useDocumentAst();
-    const authors = (getValueAtPath(state.inputs, path) ?? []) as Array<{
+    const authors = (useDocumentAstSelector((s) => getValueAtPath(s.inputs, path)) ??
+        []) as Array<{
         name?: string;
         affiliations?: string[];
     }>;
-    const affiliations = getValueAtPath(state.inputs, "/affiliations");
+    const affiliations = useDocumentAstSelector((s) =>
+        getValueAtPath(s.inputs, "/affiliations"),
+    );
 
     return (
         <AuthorsField
@@ -555,9 +574,10 @@ const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
 };
 
 const DynamicFieldContent = ({ schema, path, label }: DynamicFieldProps) => {
-    const { state, dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const { handleAdvanceKeyDown } = useEditorNavigation();
-    const committed = parseInputRichText(getValueAtPath(state.inputs, path));
+    const rawValue = useDocumentAstSelector((s) => getValueAtPath(s.inputs, path));
+    const committed = parseInputRichText(rawValue);
     const { content, setDraft, shouldCommit } = useDeferredRichTextCommit(
         projectInputFieldId(path),
         committed,
@@ -594,9 +614,10 @@ const DynamicFieldContent = ({ schema, path, label }: DynamicFieldProps) => {
 };
 
 const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
-    const { state, dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const { handleAdvanceKeyDown } = useEditorNavigation();
-    const committed = String(getValueAtPath(state.inputs, path) ?? "");
+    const rawValue = useDocumentAstSelector((s) => getValueAtPath(s.inputs, path));
+    const committed = String(rawValue ?? "");
     const { draft, setDraft, shouldCommit } = useDeferredTextCommit(committed);
     const fieldId = projectInputFieldId(path);
     const fieldBinding = useEditorFieldBinding<HTMLTextAreaElement>({
@@ -672,11 +693,13 @@ const ReferenceArrayField = ({
     path: string;
     selectedReferences: string[];
 }) => {
-    const { state, dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const targetPath = schema.items?.target
         ? normalizeReferenceTargetPath(schema.items.target)
         : null;
-    const targetItems = targetPath ? getValueAtPath(state.inputs, targetPath) : [];
+    const targetItems = useDocumentAstSelector((s) =>
+        targetPath ? getValueAtPath(s.inputs, targetPath) : EMPTY_ARRAY,
+    );
     const fieldLabel = getFieldLabel(schema);
 
     const handleToggleReference = (referenceValue: string, checked: boolean) => {
@@ -761,8 +784,9 @@ const ReferenceCheckbox = ({
 };
 
 const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
-    const { state, dispatch } = useDocumentAst();
-    const items = getValueAtPath(state.inputs, path) ?? [];
+    const { dispatch } = useDocumentActions();
+    const items =
+        useDocumentAstSelector((s) => getValueAtPath(s.inputs, path)) ?? EMPTY_ARRAY;
 
     if (schema.items?.type === "reference" && schema.items.target) {
         return (
