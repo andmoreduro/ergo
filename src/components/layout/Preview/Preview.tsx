@@ -1,4 +1,5 @@
 import {
+    memo,
     useCallback,
     useEffect,
     useLayoutEffect,
@@ -21,6 +22,12 @@ import {
     type PreviewPageMetrics,
 } from "../../../preview/previewPageMetrics";
 import { useInViewport } from "../../../hooks/useInViewport";
+import {
+    afterNextPaint,
+    elapsedMs,
+    nowMs,
+    type PagePaintInfo,
+} from "../../../hooks/previewTelemetry";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { isDebugMenuEnabled } from "../../../config/debug";
 import { useDocumentFocus } from "../../../state/DocumentContext";
@@ -75,19 +82,22 @@ export const Preview = ({
 }: PreviewProps) => {
     const { documentFocus } = useDocumentFocus();
     const dispatchAction = useActionDispatcher();
-    const { previewPages, sourceMap, previewRevision } = compiler;
-    const latencyRevisionRef = useRef<number | null>(null);
+    const { previewPages, sourceMap, previewRevision, markMainPreviewPainted } =
+        compiler;
 
-    const onFirstPagePainted = useCallback(() => {
-        if (previewRevision === null) {
-            return;
-        }
-        if (latencyRevisionRef.current === previewRevision) {
-            return;
-        }
-        latencyRevisionRef.current = previewRevision;
-        compiler.markMainPreviewPainted(previewRevision);
-    }, [compiler, previewRevision]);
+    // Depend on the stable `markMainPreviewPainted`, NOT the whole `compiler`
+    // object: `compiler` changes identity whenever telemetry updates, which would
+    // churn this callback → re-run the page effect → re-finalize telemetry in a
+    // loop. `markMainPreviewPainted` is itself idempotent per revision.
+    const onFirstPagePainted = useCallback(
+        (paintInfo: PagePaintInfo) => {
+            if (previewRevision === null) {
+                return;
+            }
+            markMainPreviewPainted(previewRevision, paintInfo);
+        },
+        [markMainPreviewPainted, previewRevision],
+    );
     const showTelemetry =
         isDebugMenuEnabled() && compiler.previewTelemetry !== null;
     const fallbackScrollRef = useRef<HTMLDivElement>(null);
@@ -115,6 +125,51 @@ export const Preview = ({
         previewRevision,
         dispatchAction,
     });
+
+    // Stable per-page callbacks so memoized `PreviewPageSvg` instances aren't
+    // re-rendered just because the parent re-rendered (e.g. on every caret move).
+    // The page passes its own number back, and the focus-dependent
+    // `scrollCaretAfterPageRender` is reached through a ref so its identity churn
+    // doesn't leak into the props.
+    const scrollCaretRef = useRef(scrollCaretAfterPageRender);
+    scrollCaretRef.current = scrollCaretAfterPageRender;
+    const handlePageRendered = useCallback(
+        (pageNumber: number) => scrollCaretRef.current(pageNumber),
+        [],
+    );
+    const handlePageMetrics = useCallback(
+        (pageNumber: number, metrics: PagePtMetrics) =>
+            setRenderedPageMetrics((current) => ({
+                ...current,
+                [pageNumber]: metrics,
+            })),
+        [],
+    );
+    const handlePageSvg = useCallback(
+        (pageNumber: number, renderedPage: RenderedSvgPage) => {
+            renderedSvgPagesRef.current = {
+                ...renderedSvgPagesRef.current,
+                [pageNumber]: renderedPage,
+            };
+            setRenderedSvgPages((current) => ({
+                ...current,
+                [pageNumber]: renderedPage,
+            }));
+        },
+        [],
+    );
+    // Stable per-page initial metrics so the prop identity is preserved between
+    // keystrokes (recomputed only when pages or measured metrics change).
+    const initialMetricsByPage = useMemo(() => {
+        const map: Record<number, PagePtMetrics | null> = {};
+        for (const page of previewPages) {
+            map[page.page_number] =
+                page.width_pt && page.height_pt
+                    ? { widthPt: page.width_pt, heightPt: page.height_pt }
+                    : renderedPageMetrics[page.page_number] ?? null;
+        }
+        return map;
+    }, [previewPages, renderedPageMetrics]);
 
     useLayoutEffect(() => {
         const element = previewScrollRef.current;
@@ -221,6 +276,7 @@ export const Preview = ({
     }, [syncCaretScrollToLayout, effectiveZoom]);
 
     const [isZoomMenuOpen, setZoomMenuOpen] = useState(false);
+    const zoomMenuRootRef = useRef<HTMLDivElement>(null);
     const [isEditingZoom, setEditingZoom] = useState(false);
     const [zoomDraft, setZoomDraft] = useState(String(zoomPercent));
     const zoomOptions = useMemo(
@@ -240,6 +296,21 @@ export const Preview = ({
         },
         [onZoomChange, onZoomModeChange],
     );
+
+    useEffect(() => {
+        if (!isZoomMenuOpen) {
+            return;
+        }
+
+        const handlePointerDown = (event: MouseEvent) => {
+            if (!zoomMenuRootRef.current?.contains(event.target as Node)) {
+                setZoomMenuOpen(false);
+            }
+        };
+
+        window.addEventListener("mousedown", handlePointerDown);
+        return () => window.removeEventListener("mousedown", handlePointerDown);
+    }, [isZoomMenuOpen]);
 
     const commitZoomDraft = useCallback(() => {
         const percent = Number(zoomDraft);
@@ -280,7 +351,7 @@ export const Preview = ({
                 >
                     <ZoomOut24Regular />
                 </IconButton>
-                <div className={styles.zoomMenuRoot}>
+                <div className={styles.zoomMenuRoot} ref={zoomMenuRootRef}>
                     {isEditingZoom ? (
                         <TextInput
                             autoFocus
@@ -322,6 +393,7 @@ export const Preview = ({
                         <div
                             aria-label={m.preview_zoom_options()}
                             className={styles.zoomMenu}
+                            data-scroll-region
                             role="menu"
                         >
                             <MenuItemButton
@@ -390,13 +462,6 @@ export const Preview = ({
                         {previewPages.length > 0 && previewRevision !== null ? (
                             previewPages.map((page, index) => {
                                 const pageNumber = page.page_number;
-                                const initialMetrics =
-                                    page.width_pt && page.height_pt
-                                        ? {
-                                              widthPt: page.width_pt,
-                                              heightPt: page.height_pt,
-                                          }
-                                        : renderedPageMetrics[pageNumber] ?? null;
                                 return (
                                     <PreviewPageSvg
                                         key={pageNumber}
@@ -406,31 +471,24 @@ export const Preview = ({
                                             renderedSvgPagesRef.current[pageNumber] ??
                                             null
                                         }
-                                        initialMetrics={initialMetrics}
+                                        initialMetrics={
+                                            initialMetricsByPage[pageNumber] ?? null
+                                        }
                                         pageIndex={index}
                                         pageNumber={pageNumber}
                                         previewRevision={previewRevision}
-                                        highlightedPosition={highlightedPosition}
+                                        highlightedPosition={
+                                            highlightedPosition?.pageNumber ===
+                                            pageNumber
+                                                ? highlightedPosition
+                                                : null
+                                        }
                                         zoom={effectiveZoom}
                                         previewScrollRef={previewScrollRef}
-                                        onPageRendered={scrollCaretAfterPageRender}
+                                        onPageRendered={handlePageRendered}
                                         onPagePainted={onFirstPagePainted}
-                                        onPageMetrics={(metrics) =>
-                                            setRenderedPageMetrics((current) => ({
-                                                ...current,
-                                                [pageNumber]: metrics,
-                                            }))
-                                        }
-                                        onPageSvg={(renderedPage) => {
-                                            renderedSvgPagesRef.current = {
-                                                ...renderedSvgPagesRef.current,
-                                                [pageNumber]: renderedPage,
-                                            };
-                                            setRenderedSvgPages((current) => ({
-                                                ...current,
-                                                [pageNumber]: renderedPage,
-                                            }));
-                                        }}
+                                        onPageMetrics={handlePageMetrics}
+                                        onPageSvg={handlePageSvg}
                                     />
                                 );
                             })
@@ -449,7 +507,10 @@ export const Preview = ({
                             queue: compiler.previewTelemetry.queuedToSyncMs,
                             sync: compiler.previewTelemetry.workerSyncMs,
                             compile: compiler.previewTelemetry.compileMs,
-                            paint: compiler.previewTelemetry.paintMs,
+                            render: compiler.previewTelemetry.svgRenderMs,
+                            worker: compiler.previewTelemetry.workerRenderMs,
+                            dom: compiler.previewTelemetry.domWriteMs,
+                            raster: compiler.previewTelemetry.rasterMs,
                         })}
                     </div>
                 )}
@@ -469,9 +530,9 @@ interface PreviewPageSvgProps {
     previewScrollRef: RefObject<HTMLElement | null>;
     highlightedPosition: PreviewElementPosition | null;
     onPageRendered: (pageNumber: number) => void;
-    onPagePainted: () => void;
-    onPageMetrics: (metrics: PagePtMetrics) => void;
-    onPageSvg: (renderedPage: RenderedSvgPage) => void;
+    onPagePainted: (paintInfo: PagePaintInfo) => void;
+    onPageMetrics: (pageNumber: number, metrics: PagePtMetrics) => void;
+    onPageSvg: (pageNumber: number, renderedPage: RenderedSvgPage) => void;
 }
 
 interface RenderedSvgPage {
@@ -480,7 +541,7 @@ interface RenderedSvgPage {
     metrics: PreviewPageMetrics;
 }
 
-const PreviewPageSvg = ({
+const PreviewPageSvgComponent = ({
     changed,
     cachedPage,
     initialMetrics,
@@ -500,6 +561,14 @@ const PreviewPageSvg = ({
     const renderRequestIdRef = useRef(0);
     const hasRenderedRef = useRef(false);
     const lastRenderedRevisionRef = useRef<number | null>(null);
+    // Timing of the last fresh SVG render, keyed by revision. Paint reports read
+    // this so the real worker/dom timing survives even when the page's own cache
+    // update re-runs the effect into the no-render branch before the report fires.
+    const lastRenderRef = useRef<{
+        revision: number;
+        workerRenderMs: number;
+        domWriteMs: number;
+    } | null>(null);
     const [pageMetrics, setPageMetrics] = useState<PagePtMetrics | null>(
         initialMetrics,
     );
@@ -524,6 +593,29 @@ const PreviewPageSvg = ({
             return;
         }
 
+        // Report paint after the browser has actually rendered that frame
+        // (double-rAF) so the latency total includes real rasterization. The
+        // render timing is read from `lastRenderRef` keyed by revision, so a
+        // page's own cache-update re-render (which cancels the in-flight report
+        // and re-enters the no-render branch) still reports the real worker/dom
+        // numbers instead of 0.
+        let cancelPaint: (() => void) | undefined;
+        const reportPaint = () => {
+            const domWrittenAt = nowMs();
+            const lastRender = lastRenderRef.current;
+            const renderedThisRevision = lastRender?.revision === previewRevision;
+            cancelPaint = afterNextPaint(() =>
+                onPagePainted({
+                    domWrittenAt,
+                    workerRenderMs: renderedThisRevision
+                        ? lastRender!.workerRenderMs
+                        : 0,
+                    domWriteMs: renderedThisRevision ? lastRender!.domWriteMs : 0,
+                    renderedThisRevision,
+                }),
+            );
+        };
+
         const needsRender =
             (!hasRenderedRef.current && !cachedPage) ||
             (changed && lastRenderedRevisionRef.current !== previewRevision);
@@ -532,18 +624,19 @@ const PreviewPageSvg = ({
                 element.innerHTML = cachedPage.svg;
                 setPreviewPageMetrics(element, cachedPage.metrics);
                 setPageMetrics(cachedPage.metrics);
-                onPageMetrics(cachedPage.metrics);
+                onPageMetrics(pageNumber, cachedPage.metrics);
                 hasRenderedRef.current = true;
                 lastRenderedRevisionRef.current = cachedPage.revision;
             }
             onPageRendered(pageNumber);
-            onPagePainted();
-            return;
+            reportPaint();
+            return () => cancelPaint?.();
         }
 
         const requestId = renderRequestIdRef.current + 1;
         renderRequestIdRef.current = requestId;
         let cancelled = false;
+        const workerStart = nowMs();
 
         void CompilerClient.renderSvgPage(pageIndex, requestId)
             .then((result) => {
@@ -551,16 +644,24 @@ const PreviewPageSvg = ({
                     return;
                 }
 
+                const workerRenderMs = elapsedMs(workerStart, nowMs());
                 const metrics = {
                     widthPt: result.widthPt,
                     heightPt: result.heightPt,
                     pixelPerPt: 1,
                 };
+                const writeStart = nowMs();
                 element.innerHTML = result.svg;
+                const domWriteMs = elapsedMs(writeStart, nowMs());
+                lastRenderRef.current = {
+                    revision: previewRevision,
+                    workerRenderMs,
+                    domWriteMs,
+                };
                 setPreviewPageMetrics(element, metrics);
                 setPageMetrics(metrics);
-                onPageMetrics(metrics);
-                onPageSvg({
+                onPageMetrics(pageNumber, metrics);
+                onPageSvg(pageNumber, {
                     revision: previewRevision,
                     svg: result.svg,
                     metrics,
@@ -568,7 +669,7 @@ const PreviewPageSvg = ({
                 hasRenderedRef.current = true;
                 lastRenderedRevisionRef.current = previewRevision;
                 onPageRendered(pageNumber);
-                onPagePainted();
+                reportPaint();
             })
             .catch((err) => {
                 console.error("Failed to render page to SVG:", err);
@@ -576,6 +677,7 @@ const PreviewPageSvg = ({
 
         return () => {
             cancelled = true;
+            cancelPaint?.();
         };
     }, [
         changed,
@@ -643,3 +745,10 @@ const PreviewPageSvg = ({
         </div>
     );
 };
+
+/**
+ * Memoized so the page list (one instance per page) doesn't re-render on every
+ * parent render. With stable callbacks and a per-page `highlightedPosition`,
+ * only the page under the caret re-renders when the caret moves — not all pages.
+ */
+const PreviewPageSvg = memo(PreviewPageSvgComponent);

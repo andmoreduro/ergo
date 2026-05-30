@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { EditorState } from "prosemirror-state";
+import type { ContentSection } from "../../bindings/ContentSection";
+import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
 import { createRichText, createTable } from "../../state/ast/defaults";
 import { bodySchema } from "./schema";
 import {
+    changedTopLevelRange,
     docToElements,
     elementToNode,
     fieldCaretOffsetFromNode,
@@ -278,5 +282,52 @@ describe("ContentSection ↔ PM document round-trip", () => {
         });
         expect(doc.childCount).toBe(1);
         expect(doc.child(0).type.name).toBe("paragraph");
+    });
+});
+
+describe("changedTopLevelRange", () => {
+    const para = (id: string, text: string): DocumentElement => ({
+        type: "Paragraph",
+        id,
+        content: [createRichText(text)],
+    });
+
+    const threeParagraphState = () => {
+        const section = {
+            id: "s1",
+            is_optional: false,
+            elements: [para("a", "AAA"), para("b", "BBB"), para("c", "CCC")],
+        } as unknown as ContentSection;
+        const doc = sectionToDoc(bodySchema, section);
+        return EditorState.create({ doc });
+    };
+
+    const contentStartOf = (state: EditorState, index: number): number => {
+        let pos = 0;
+        for (let i = 0; i < index; i += 1) {
+            pos += state.doc.child(i).nodeSize;
+        }
+        return pos + 1; // inside the block's content
+    };
+
+    it("reports the single block an in-place edit touched", () => {
+        const state = threeParagraphState();
+        const tr = state.tr.insertText("x", contentStartOf(state, 1) + 1);
+        expect(changedTopLevelRange(tr)).toEqual([1, 1]);
+    });
+
+    it("reports the first block when edited at the front", () => {
+        const state = threeParagraphState();
+        const tr = state.tr.insertText("x", contentStartOf(state, 0) + 1);
+        expect(changedTopLevelRange(tr)).toEqual([0, 0]);
+    });
+
+    it("returns null for multi-step transactions (caller re-derives all)", () => {
+        const state = threeParagraphState();
+        const tr = state.tr
+            .insertText("x", contentStartOf(state, 2) + 1)
+            .insertText("y", contentStartOf(state, 0) + 1);
+        expect(tr.steps.length).toBeGreaterThan(1);
+        expect(changedTopLevelRange(tr)).toBeNull();
     });
 });

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import { createRichText, createTable } from "../../state/ast/defaults";
-import { applyElementEvents, diffSectionElements } from "./sectionDiff";
+import {
+    applyElementEvents,
+    diffChangedBlocks,
+    diffSectionElements,
+    rangeSignificantlyEqual,
+} from "./sectionDiff";
 
 const SECTION = "sec-1";
 
@@ -143,5 +148,87 @@ describe("diffSectionElements", () => {
         const delta = expectRoundTrip(prev, [nextTable]);
         expect(delta.forward).toHaveLength(1);
         expect(delta.forward[0].type).toBe("updateTableCell");
+    });
+});
+
+describe("diffChangedBlocks (scoped hot path)", () => {
+    /** A scoped delta must reproduce the target and restore the source. */
+    const expectScopedRoundTrip = (
+        prev: DocumentElement[],
+        next: DocumentElement[],
+        from: number,
+        to: number,
+    ) => {
+        const delta = diffChangedBlocks(SECTION, prev, next, from, to);
+        expect(delta).not.toBeNull();
+        expect(applyElementEvents(prev, delta!.forward)).toEqual(next);
+        expect(applyElementEvents(next, delta!.inverse)).toEqual(prev);
+        return delta!;
+    };
+
+    it("only emits events for the changed block in the range", () => {
+        const prev = [
+            paragraph("a", "A"),
+            paragraph("b", "B"),
+            paragraph("c", "C"),
+        ];
+        const next = [paragraph("a", "A"), paragraph("b", "B!"), paragraph("c", "C")];
+        const delta = expectScopedRoundTrip(prev, next, 1, 1);
+        expect(delta.forward).toHaveLength(1);
+        expect(delta.forward[0]).toMatchObject({
+            type: "updateParagraphContent",
+            element_id: "b",
+        });
+    });
+
+    it("matches the full diff for an in-place edit", () => {
+        const prev = [paragraph("a", "A"), paragraph("b", "B")];
+        const next = [paragraph("a", "A"), paragraph("b", "B B")];
+        const scoped = diffChangedBlocks(SECTION, prev, next, 1, 1);
+        const full = diffSectionElements(SECTION, prev, next);
+        expect(scoped).toEqual(full);
+    });
+
+    it("handles an in-place type change within the range (keeps id)", () => {
+        const prev = [paragraph("a", "A"), paragraph("b", "Title")];
+        const next = [paragraph("a", "A"), heading("b", 2, "Title")];
+        const delta = expectScopedRoundTrip(prev, next, 1, 1);
+        expect(delta.forward.map((e) => e.type)).toEqual([
+            "removeElement",
+            "insertElement",
+        ]);
+    });
+
+    it("returns null when block identity shifts (caller falls back)", () => {
+        const prev = [paragraph("a", "A"), paragraph("b", "B")];
+        const next = [paragraph("a", "A"), paragraph("c", "C")];
+        expect(diffChangedBlocks(SECTION, prev, next, 1, 1)).toBeNull();
+    });
+
+    it("returns null when lengths differ (structural change)", () => {
+        const prev = [paragraph("a", "A")];
+        const next = [paragraph("a", "A"), paragraph("b", "B")];
+        expect(diffChangedBlocks(SECTION, prev, next, 0, 0)).toBeNull();
+    });
+});
+
+describe("rangeSignificantlyEqual", () => {
+    it("ignores blocks outside the range", () => {
+        const prev = [paragraph("a", "A"), paragraph("b", "B")];
+        const next = [paragraph("a", "CHANGED"), paragraph("b", "B")];
+        // Only block 1 is in range and it is unchanged → equal.
+        expect(rangeSignificantlyEqual(prev, next, 1, 1)).toBe(true);
+    });
+
+    it("detects a significant change inside the range", () => {
+        const prev = [paragraph("a", "A"), paragraph("b", "B")];
+        const next = [paragraph("a", "A"), paragraph("b", "different")];
+        expect(rangeSignificantlyEqual(prev, next, 1, 1)).toBe(false);
+    });
+
+    it("treats trailing-whitespace-only edits as insignificant", () => {
+        const prev = [paragraph("a", "hello")];
+        const next = [paragraph("a", "hello ")];
+        expect(rangeSignificantlyEqual(prev, next, 0, 0)).toBe(true);
     });
 });

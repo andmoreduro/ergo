@@ -1,12 +1,14 @@
 import {
     createContext,
     useContext,
+    useEffect,
     useReducer,
     ReactNode,
     Dispatch,
     useCallback,
     useMemo,
     useRef,
+    useSyncExternalStore,
 } from "react";
 import { astReducer } from "./ast/reducer";
 import { shouldCommitAstAction } from "./ast/commitPolicy";
@@ -112,6 +114,45 @@ const DocumentSyncContext = createContext<DocumentSyncContextType | undefined>(
 const DocumentFocusContext = createContext<DocumentFocusContextType | undefined>(
     undefined,
 );
+
+/**
+ * A selector-capable view of the AST. React context re-renders every consumer
+ * when its value changes, so reading the whole AST through `useDocumentAst`
+ * re-renders on every keystroke. This store lets a component subscribe to just
+ * the slice it reads (via `useDocumentAstSelector`) and re-render only when that
+ * slice changes — keeping the per-keystroke commit from re-rendering the whole
+ * workspace, with no debouncing of the live caret sync.
+ */
+interface DocumentAstStore {
+    subscribe: (listener: () => void) => () => void;
+    getSnapshot: () => DocumentAST;
+}
+
+const DocumentAstStoreContext = createContext<DocumentAstStore | undefined>(
+    undefined,
+);
+
+/**
+ * Stable document mutators, separated from `DocumentAstContext` (whose value
+ * changes on every commit). A component that only needs to dispatch — e.g. a
+ * metadata form field that reads its own slice via `useDocumentAstSelector` —
+ * gets `dispatch` here without subscribing to the changing AST value, so it
+ * doesn't re-render on every keystroke elsewhere.
+ */
+interface DocumentActionsContextType {
+    dispatch: Dispatch<ASTAction>;
+    commitDocumentEvents: (
+        forward: BackendDocumentEvent[],
+        inverse: BackendDocumentEvent[],
+    ) => void;
+    undo: () => void;
+    redo: () => void;
+    markSaved: () => void;
+}
+
+const DocumentActionsContext = createContext<
+    DocumentActionsContextType | undefined
+>(undefined);
 
 interface DocumentProviderProps {
     children: ReactNode;
@@ -325,6 +366,27 @@ export const DocumentProvider = ({
     );
     const eventsVersionRef = useRef(0);
 
+    // External store for slice subscriptions. `astRef` mirrors the latest AST so
+    // selectors read fresh data during render (no tearing); listeners are flushed
+    // after commit when the AST identity changes.
+    const astRef = useRef(sessionState.ast);
+    astRef.current = sessionState.ast;
+    const astListenersRef = useRef(new Set<() => void>());
+    useEffect(() => {
+        for (const listener of astListenersRef.current) {
+            listener();
+        }
+    }, [sessionState.ast]);
+    const astStore = useRef<DocumentAstStore>({
+        subscribe: (listener) => {
+            astListenersRef.current.add(listener);
+            return () => {
+                astListenersRef.current.delete(listener);
+            };
+        },
+        getSnapshot: () => astRef.current,
+    }).current;
+
     const dispatch = useCallback(
         (action: ASTAction) =>
             sessionDispatch({ type: "APPLY_AST_ACTION", action }),
@@ -380,6 +442,13 @@ export const DocumentProvider = ({
         ],
     );
 
+    // Stable across the whole session (every callback is a stable useCallback),
+    // so action-only consumers never re-render from AST changes.
+    const actionsValue = useMemo(
+        () => ({ dispatch, commitDocumentEvents, undo, redo, markSaved }),
+        [dispatch, commitDocumentEvents, undo, redo, markSaved],
+    );
+
     const syncValue = useMemo(() => {
         eventsVersionRef.current += 1;
         const lastEventId =
@@ -408,13 +477,17 @@ export const DocumentProvider = ({
     );
 
     return (
-        <DocumentAstContext.Provider value={astValue}>
-            <DocumentSyncContext.Provider value={syncValue}>
-                <DocumentFocusContext.Provider value={focusValue}>
-                    {children}
-                </DocumentFocusContext.Provider>
-            </DocumentSyncContext.Provider>
-        </DocumentAstContext.Provider>
+        <DocumentAstStoreContext.Provider value={astStore}>
+            <DocumentActionsContext.Provider value={actionsValue}>
+                <DocumentAstContext.Provider value={astValue}>
+                    <DocumentSyncContext.Provider value={syncValue}>
+                        <DocumentFocusContext.Provider value={focusValue}>
+                            {children}
+                        </DocumentFocusContext.Provider>
+                    </DocumentSyncContext.Provider>
+                </DocumentAstContext.Provider>
+            </DocumentActionsContext.Provider>
+        </DocumentAstStoreContext.Provider>
     );
 };
 
@@ -422,6 +495,52 @@ export const useDocumentAst = (): DocumentAstContextType => {
     const context = useContext(DocumentAstContext);
     if (context === undefined) {
         throw new Error("useDocumentAst must be used within a DocumentProvider");
+    }
+    return context;
+};
+
+/**
+ * Subscribe to a slice of the AST. The component re-renders only when the
+ * selected value changes (per `isEqual`, default `Object.is`), instead of on
+ * every AST commit. Use for read-only consumers of stable-ish slices (e.g. the
+ * sidebar's references) so typing in the body doesn't re-render them.
+ */
+export function useDocumentAstSelector<T>(
+    selector: (ast: DocumentAST) => T,
+    isEqual: (a: T, b: T) => boolean = Object.is,
+): T {
+    const store = useContext(DocumentAstStoreContext);
+    if (store === undefined) {
+        throw new Error(
+            "useDocumentAstSelector must be used within a DocumentProvider",
+        );
+    }
+    const selectorRef = useRef(selector);
+    selectorRef.current = selector;
+    const isEqualRef = useRef(isEqual);
+    isEqualRef.current = isEqual;
+    const cacheRef = useRef<{ value: T } | null>(null);
+
+    const getSelection = useCallback(() => {
+        const next = selectorRef.current(store.getSnapshot());
+        const cache = cacheRef.current;
+        if (cache && isEqualRef.current(cache.value, next)) {
+            return cache.value;
+        }
+        cacheRef.current = { value: next };
+        return next;
+    }, [store]);
+
+    return useSyncExternalStore(store.subscribe, getSelection, getSelection);
+}
+
+/** Stable document mutators that never change identity across the session. */
+export const useDocumentActions = (): DocumentActionsContextType => {
+    const context = useContext(DocumentActionsContext);
+    if (context === undefined) {
+        throw new Error(
+            "useDocumentActions must be used within a DocumentProvider",
+        );
     }
     return context;
 };

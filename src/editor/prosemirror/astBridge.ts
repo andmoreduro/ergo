@@ -1,4 +1,5 @@
 import { Fragment, type Node as PMNode } from "prosemirror-model";
+import type { Transaction } from "prosemirror-state";
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
@@ -395,4 +396,45 @@ export const docToElements = (doc: PMNode): DocumentElement[] => {
     const elements: DocumentElement[] = [];
     doc.content.forEach((node) => elements.push(nodeToElement(node)));
     return elements;
+};
+
+/**
+ * The inclusive range of top-level block indices a transaction modified, in the
+ * resulting document's coordinates — or null when it can't be derived safely as
+ * an in-place edit. Restricted to single-step transactions so the step map's
+ * positions are already in the final doc's coordinate space (multi-step
+ * transactions, e.g. paste, return null and the caller re-derives the whole
+ * section). Lets the body editor convert/diff only the blocks that changed.
+ */
+export const changedTopLevelRange = (
+    tr: Transaction,
+): [number, number] | null => {
+    if (tr.steps.length !== 1) {
+        return null;
+    }
+    const doc = tr.doc;
+    const map = tr.mapping.maps[0];
+    if (!map) {
+        return null;
+    }
+    let from = Infinity;
+    let to = -Infinity;
+    map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+        if (newStart < from) from = newStart;
+        if (newEnd > to) to = newEnd;
+    });
+    if (from === Infinity) {
+        return null;
+    }
+    const size = doc.content.size;
+    const lastIndex = Math.max(0, doc.childCount - 1);
+    const fromIndex = Math.min(
+        doc.resolve(Math.max(0, Math.min(from, size))).index(0),
+        lastIndex,
+    );
+    const toIndex = Math.min(
+        doc.resolve(Math.max(0, Math.min(to, size))).index(0),
+        lastIndex,
+    );
+    return [Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex)];
 };

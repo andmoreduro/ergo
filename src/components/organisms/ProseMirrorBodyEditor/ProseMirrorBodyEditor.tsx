@@ -15,10 +15,18 @@ import "prosemirror-tables/style/tables.css";
 import "../../../editor/prosemirror/nodeViews/tableBlockNodeView.global.css";
 import type { ContentSection } from "../../../bindings/ContentSection";
 import { useDocumentAst, useDocumentFocus } from "../../../state/DocumentContext";
-import { docToElements, sectionToDoc } from "../../../editor/prosemirror/astBridge";
 import {
+    changedTopLevelRange,
+    docToElements,
+    nodeToElement,
+    sectionToDoc,
+} from "../../../editor/prosemirror/astBridge";
+import {
+    diffChangedBlocks,
     diffSectionElements,
+    rangeSignificantlyEqual,
     sectionSignificantlyEqual,
+    type SectionEventDelta,
 } from "../../../editor/prosemirror/sectionDiff";
 import {
     focusTargetFromState,
@@ -85,6 +93,10 @@ export const ProseMirrorBodyEditor = ({
     // Suppresses AST/focus echo while we apply an externally-driven doc/selection.
     const applyingExternalRef = useRef(false);
     const lastFocusRequestRef = useRef<number | null>(null);
+    // Set when this view originated the pending commit. The resulting section
+    // change is already reflected in the doc, so the reconciliation effect can
+    // skip re-deriving and deep-comparing the whole section on that pass.
+    const pmOriginCommitRef = useRef(false);
 
     const canUndoRef = useRef(canUndo);
     const canRedoRef = useRef(canRedo);
@@ -140,13 +152,59 @@ export const ProseMirrorBodyEditor = ({
 
             if (tr.docChanged) {
                 const current = sectionRef.current;
-                const nextElements = docToElements(nextState.doc);
-                if (!sectionSignificantlyEqual(current.elements, nextElements)) {
-                    const delta = diffSectionElements(
-                        current.id,
-                        current.elements,
-                        nextElements,
-                    );
+                // Fast path: a single-step, same-block-count edit (ordinary
+                // typing) only touched a few top-level blocks, so convert and
+                // diff just those instead of re-deriving the whole section.
+                const scopedRange =
+                    tr.before.childCount === nextState.doc.childCount &&
+                    nextState.doc.childCount === current.elements.length
+                        ? changedTopLevelRange(tr)
+                        : null;
+
+                let delta: SectionEventDelta | null = null;
+                if (scopedRange) {
+                    const [fromIndex, toIndex] = scopedRange;
+                    const nextElements = current.elements.slice();
+                    for (let i = fromIndex; i <= toIndex; i += 1) {
+                        nextElements[i] = nodeToElement(nextState.doc.child(i));
+                    }
+                    if (
+                        !rangeSignificantlyEqual(
+                            current.elements,
+                            nextElements,
+                            fromIndex,
+                            toIndex,
+                        )
+                    ) {
+                        delta =
+                            diffChangedBlocks(
+                                current.id,
+                                current.elements,
+                                nextElements,
+                                fromIndex,
+                                toIndex,
+                            ) ??
+                            diffSectionElements(
+                                current.id,
+                                current.elements,
+                                nextElements,
+                            );
+                    }
+                } else {
+                    const nextElements = docToElements(nextState.doc);
+                    if (
+                        !sectionSignificantlyEqual(current.elements, nextElements)
+                    ) {
+                        delta = diffSectionElements(
+                            current.id,
+                            current.elements,
+                            nextElements,
+                        );
+                    }
+                }
+
+                if (delta && delta.forward.length > 0) {
+                    pmOriginCommitRef.current = true;
                     commitRef.current(delta.forward, delta.inverse);
                 }
             }
@@ -199,6 +257,13 @@ export const ProseMirrorBodyEditor = ({
     useEffect(() => {
         const view = viewRef.current;
         if (!view) {
+            return;
+        }
+        // This section change is the echo of our own commit; the doc already
+        // matches it (diffSectionElements verified the round-trip), so skip the
+        // full docToElements re-derive + deep compare on the typing hot path.
+        if (pmOriginCommitRef.current) {
+            pmOriginCommitRef.current = false;
             return;
         }
         if (deepEqual(docToElements(view.state.doc), section.elements)) {
