@@ -407,6 +407,8 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
             <ElementExtrasCollapse
 
+                elementId={element.id}
+
                 showToggle={annotationFields.length > 0}
 
                 primary={
