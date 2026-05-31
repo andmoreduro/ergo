@@ -4,6 +4,7 @@ import type { EditorView, NodeView } from "prosemirror-view";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import { ATOM_BLOCK_NODES } from "../schema";
 import { isBlockEditing, setBlockEditing } from "../blockEditMode";
+import { clearBlockUiState, setBlockUiState } from "../blockUiState";
 import { BlockObjectNodeViewHost } from "./BlockObjectNodeViewHost";
 import type { NodeViewPortalRegistry } from "./nodeViewPortals";
 import styles from "./blockObjectNodeViews.module.css";
@@ -64,6 +65,22 @@ export const createBlockObjectNodeViews = (
                 return (
                     selection instanceof NodeSelection && selection.from === pos
                 );
+            };
+
+            // Publish selected/editing across the portal boundary so the React
+            // editor can keep its extras revealed while the block is focused.
+            const pushBlockUi = () => {
+                const id = elementId();
+                // `view` (or its state) is absent in unit tests that construct
+                // the NodeView with a stub view; nothing to publish then.
+                if (!id || !view?.state) {
+                    return;
+                }
+                const pos = getPos();
+                setBlockUiState(id, {
+                    selected: pos !== undefined && isWholeSelected(pos),
+                    editing: isBlockEditing(view.state, id),
+                });
             };
 
             const onMouseDown = (event: MouseEvent) => {
@@ -149,6 +166,8 @@ export const createBlockObjectNodeViews = (
             dom.addEventListener("mousedown", onMouseDown);
             dom.addEventListener("keydown", onKeyDown, true);
 
+            pushBlockUi();
+
             return {
                 dom,
                 update(updated: PMNode) {
@@ -157,11 +176,15 @@ export const createBlockObjectNodeViews = (
                     }
                     currentNode = updated;
                     registry.update(key, renderThunk(updated));
+                    // Selection / edit-mode changes reach this node as decoration
+                    // updates, so recompute the bridged UI state here.
+                    pushBlockUi();
                     return true;
                 },
                 destroy() {
                     dom.removeEventListener("mousedown", onMouseDown);
                     dom.removeEventListener("keydown", onKeyDown, true);
+                    clearBlockUiState(elementId());
                     registry.unregister(key);
                 },
                 stopEvent(event: Event) {

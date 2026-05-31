@@ -121,6 +121,7 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
 
     return (
         <ElementExtrasCollapse
+            elementId={element.id}
             primary={
                 <div className={styles.elementPrimary}>
                     <Textarea
