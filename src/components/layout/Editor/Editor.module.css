@@ -20,12 +20,6 @@
     background-color: var(--color-bg-secondary);
 }
 
-.variantToolbarLabel {
-    flex-shrink: 0;
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-}
-
 .variantToolbarSelect {
     height: var(--size-control-sm);
     max-width: var(--width-input-max-sm);

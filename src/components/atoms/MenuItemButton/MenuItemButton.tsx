@@ -2,10 +2,8 @@ import { ButtonHTMLAttributes, forwardRef, memo } from "react";
 import styles from "./MenuItemButton.module.css";
 
 export type MenuItemButtonVariant =
-    | "contextMenu"
-    | "menubarDropdown"
+    | "dropdown"
     | "commandPalette"
-    | "export"
     | "listPicker"
     | "keymap";
 
@@ -15,7 +13,7 @@ export interface MenuItemButtonProps extends ButtonHTMLAttributes<HTMLButtonElem
 
 export const MenuItemButton = memo(
     forwardRef<HTMLButtonElement, MenuItemButtonProps>(
-        ({ variant = "contextMenu", className = "", ...props }, ref) => {
+        ({ variant = "dropdown", className = "", ...props }, ref) => {
             const classNames = [styles.button, styles[variant], className]
                 .filter(Boolean)
                 .join(" ");

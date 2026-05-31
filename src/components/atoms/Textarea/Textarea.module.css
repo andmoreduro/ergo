@@ -30,6 +30,10 @@
   min-height: var(--size-field);
 }
 
+.monospace {
+  font-family: var(--font-family-mono);
+}
+
 .textarea::placeholder {
   color: var(--color-text-tertiary);
 }

@@ -8,6 +8,7 @@ import {
 import { createPortal } from "react-dom";
 import { ActionContextProvider } from "../../../actions/runtime";
 import { EditorState, type Selection, type Transaction } from "prosemirror-state";
+import type { Node as PMNode } from "prosemirror-model";
 import { EditorView } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
 import "prosemirror-gapcursor/style/gapcursor.css";
@@ -45,10 +46,60 @@ import {
     setBodyParagraphInsert,
 } from "../../../editor/prosemirror/activeView";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
+import { enterTableBlockById } from "../../../editor/prosemirror/bodyTableCommands";
+import { takePendingBlockEditIfMatches } from "../../../editor/prosemirror/pendingBlockEdit";
 import { ProseMirrorSurface } from "../../atoms/ProseMirrorSurface/ProseMirrorSurface";
 
 const deepEqual = (a: unknown, b: unknown): boolean =>
     JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Reconcile an externally-changed section into the live doc with a single
+ * transaction instead of rebuilding the whole EditorState, so ProseMirror reuses
+ * the existing NodeViews. Crucially, an atom block edited through its own React
+ * editor (e.g. the equation source textarea) changes the AST but not the PM doc;
+ * a full rebuild would remount that NodeView on every keystroke and steal its DOM
+ * focus/caret. Patching in place (setNodeMarkup for an attr-only change) keeps the
+ * node — and its focused field — alive. Returns false when the top-level block
+ * count changed and the caller must fall back to a full rebuild.
+ */
+const reconcileDocInPlace = (view: EditorView, target: PMNode): boolean => {
+    const current = view.state.doc;
+    if (current.childCount !== target.childCount) {
+        return false;
+    }
+    const starts: number[] = [];
+    let offset = 0;
+    for (let i = 0; i < current.childCount; i += 1) {
+        starts.push(offset);
+        offset += current.child(i).nodeSize;
+    }
+    let tr = view.state.tr;
+    let changed = false;
+    for (let i = 0; i < current.childCount; i += 1) {
+        const before = current.child(i);
+        const after = target.child(i);
+        if (before.eq(after)) {
+            continue;
+        }
+        const from = tr.mapping.map(starts[i]);
+        if (before.type === after.type && before.content.eq(after.content)) {
+            // Same node, only attrs differ (an atom's `element` payload): keeps
+            // the node size and triggers NodeView.update() rather than a remount.
+            tr = tr.setNodeMarkup(from, undefined, after.attrs, after.marks);
+        } else {
+            const to = tr.mapping.map(starts[i] + before.nodeSize);
+            tr = tr.replaceWith(from, to, after);
+        }
+        changed = true;
+    }
+    if (!changed) {
+        return true;
+    }
+    tr.setMeta("addToHistory", false);
+    view.dispatch(tr);
+    return true;
+};
 
 /**
  * Controlled ProseMirror view over one content section. The AST event history
@@ -273,6 +324,11 @@ export const ProseMirrorBodyEditor = ({
         applyingExternalRef.current = true;
         try {
             const doc = sectionToDoc(bodySchema, section);
+            // Prefer an in-place patch (keeps Nodeviews/focus); fall back to a
+            // full rebuild only when the block structure changed.
+            if (reconcileDocInPlace(view, doc)) {
+                return;
+            }
             const prevTarget = focusTargetFromState(view.state);
             const selection: Selection | null = prevTarget
                 ? selectionForFocusTarget(doc, prevTarget)
@@ -300,6 +356,19 @@ export const ProseMirrorBodyEditor = ({
             !documentFocus.elementId ||
             lastFocusRequestRef.current === documentFocus.requestId
         ) {
+            return;
+        }
+
+        // A freshly-inserted table opens directly in fine-grained mode with the
+        // caret in its first cell, so the user can type immediately.
+        if (takePendingBlockEditIfMatches(documentFocus.elementId)) {
+            lastFocusRequestRef.current = documentFocus.requestId;
+            applyingExternalRef.current = true;
+            try {
+                enterTableBlockById(view, documentFocus.elementId);
+            } finally {
+                applyingExternalRef.current = false;
+            }
             return;
         }
 

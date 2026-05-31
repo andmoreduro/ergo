@@ -12,7 +12,6 @@ import {
     diagramSourceFieldId,
     equationSourceFieldId,
     figureBodyFieldId,
-    projectInputElementId,
     quoteContentFieldId,
     richTextFieldId,
 } from "./fieldIds";
@@ -32,9 +31,6 @@ export type ContentElementRemovalPlan = {
     actions: ASTAction[];
     focus: ContentFocusTarget;
 };
-
-export const isProjectInputFocus = (elementId: string | null): boolean =>
-    elementId === projectInputElementId;
 
 const focusTargetForElement = (element: DocumentElement): ContentFocusTarget => ({
     elementId: element.id,

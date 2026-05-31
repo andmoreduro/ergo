@@ -9,6 +9,7 @@ import {
     DEFAULT_PROJECT_TEMPLATE_ID,
     NO_TEMPLATE_ID,
 } from "../../../state/ast/defaults";
+import { Dialog } from "../../molecules/Dialog/Dialog";
 import styles from "./NewProjectDialog.module.css";
 
 export interface NewProjectDialogValues {
@@ -100,22 +101,32 @@ export const NewProjectDialog = ({
     };
 
     return (
-        <div className={styles.backdrop}>
-            <form
-                aria-labelledby="new-project-dialog-title"
-                aria-modal="true"
-                className={styles.dialog}
-                role="dialog"
-                onSubmit={handleSubmit}
-            >
-                <header className={styles.header}>
-                    <h2 id="new-project-dialog-title">
-                        {m.project_new_dialog_title()}
-                    </h2>
-                </header>
-
-                <div className={styles.content}>
-                    <TextInput
+        <Dialog
+            as="form"
+            panelProps={{ onSubmit: handleSubmit }}
+            scrollable={false}
+            size="md"
+            title={m.project_new_dialog_title()}
+            titleId="new-project-dialog-title"
+            footer={
+                <>
+                    <Button type="button" variant="secondary" onClick={onCancel}>
+                        {m.project_new_cancel()}
+                    </Button>
+                    <Button
+                        disabled={
+                            !!projectNameError ||
+                            !!projectLocationError ||
+                            !!projectFileNameError
+                        }
+                        type="submit"
+                    >
+                        {m.project_new_create()}
+                    </Button>
+                </>
+            }
+        >
+            <TextInput
                         autoFocus
                         error={projectNameError}
                         fullWidth
@@ -171,24 +182,6 @@ export const NewProjectDialog = ({
                             onChange={handleDefaultFileNameChange}
                         />
                     </div>
-                </div>
-
-                <footer className={styles.actions}>
-                    <Button type="button" variant="secondary" onClick={onCancel}>
-                        {m.project_new_cancel()}
-                    </Button>
-                    <Button
-                        disabled={
-                            !!projectNameError ||
-                            !!projectLocationError ||
-                            !!projectFileNameError
-                        }
-                        type="submit"
-                    >
-                        {m.project_new_create()}
-                    </Button>
-                </footer>
-            </form>
-        </div>
+        </Dialog>
     );
 };

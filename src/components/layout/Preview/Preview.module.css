@@ -81,41 +81,6 @@
     align-items: center;
 }
 
-.zoomMenu {
-    position: absolute;
-    top: calc(100% + var(--space-1));
-    left: 50%;
-    z-index: 20;
-    display: flex;
-    width: var(--width-menu);
-    flex-direction: column;
-    max-height: var(--height-scroll-md);
-    overflow-y: auto;
-    padding: var(--space-1);
-    border: var(--border-width-sm) solid var(--color-border);
-    border-radius: var(--border-radius-sm);
-    background: var(--color-bg-primary);
-    box-shadow: var(--shadow-md);
-    transform: translateX(-50%);
-}
-
-.zoomMenu button {
-    min-height: var(--size-control);
-    border: 0;
-    border-radius: var(--border-radius-sm);
-    background: transparent;
-    color: var(--color-text-primary);
-    cursor: pointer;
-    font-size: var(--font-size-sm);
-    text-align: left;
-}
-
-.zoomMenu button:hover,
-.zoomMenu button:focus-visible {
-    outline: none;
-    background: var(--color-bg-tertiary);
-}
-
 .svgPageContent {
     display: block;
     overflow: hidden;

@@ -9,7 +9,12 @@ import { tableKeymap } from "./keymap";
 import { bodyKeyboardPlugin } from "./bodyKeyboardPlugin";
 import { ATOM_BLOCK_NODES } from "./schema";
 import { tableBlockFocusPlugin } from "./tableBlockFocus";
-import { tableEditModePlugin } from "./tableEditMode";
+import { blockEditModePlugin } from "./blockEditMode";
+import {
+    blockOutsidePointerPlugin,
+    blockSelectionGuardPlugin,
+    clickBelowLastBlockPlugin,
+} from "./blockSelectionGuard";
 import { tableSelectionGuardPlugin } from "./tableSelectionGuard";
 
 /**
@@ -118,8 +123,14 @@ const typingKeymap = keymap(
 );
 
 export const bodyPlugins = () => [
-    tableEditModePlugin(),
+    blockEditModePlugin(),
+    // Must run before `tableEditing()` so a click outside an editing block is
+    // turned into a sanctioned exit (edit-mode off + caret at the click) before
+    // the table plugin claims the mousedown and the guards re-clamp inward.
+    blockOutsidePointerPlugin(),
+    clickBelowLastBlockPlugin(),
     tableSelectionGuardPlugin(),
+    blockSelectionGuardPlugin(),
     tableBlockFocusPlugin(),
     typingKeymap,
     tableKeymap,

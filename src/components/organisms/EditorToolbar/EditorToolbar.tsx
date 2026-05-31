@@ -21,7 +21,7 @@ import { Select } from "../../atoms/Select/Select";
 import { Toolbar, ToolbarGroup, ToolbarSpacer } from "../../molecules/Toolbar/Toolbar";
 import { TextParagraph24Regular } from "../../icons/TextParagraph24Regular";
 import { m } from "../../../paraglide/messages.js";
-import editorStyles from "../../layout/Editor/Editor.module.css";
+import styles from "./EditorToolbar.module.css";
 
 export interface EditorToolbarProps {
     canDeleteFocusedTarget: boolean;
@@ -67,7 +67,7 @@ export const EditorToolbar = memo(
         onInsertReference,
         onVariantChange,
     }: EditorToolbarProps) => (
-        <Toolbar>
+        <Toolbar scrollable>
             <ToolbarGroup>
                 <IconButton
                     title={m.element_delete()}
@@ -191,7 +191,7 @@ export const EditorToolbar = memo(
                     <ToolbarSpacer />
                     <FieldLabel
                         htmlFor="template-variant"
-                        className={editorStyles.variantToolbarLabel}
+                        className={styles.variantToolbarLabel}
                     >
                         {m.settings_template_variant()}
                     </FieldLabel>

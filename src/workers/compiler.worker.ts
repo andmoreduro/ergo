@@ -58,7 +58,9 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             }
             case "compile": {
                 if (!compiler) return;
-                const result = compiler.compile_preview();
+                const result = compiler.compile_preview(
+                    message.payload.svgPageIndices,
+                );
                 reply({ type: "compile_done", result, id });
                 break;
             }

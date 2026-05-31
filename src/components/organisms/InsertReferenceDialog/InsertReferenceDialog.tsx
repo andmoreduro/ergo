@@ -2,9 +2,9 @@ import { useMemo } from "react";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { ReferenceEntry } from "../../../bindings/ReferenceEntry";
 import { formatReferenceCitation } from "../../../bibliography/biblatex";
-import type { TargetedOutlineEntry } from "../../layout/Sidebar/SidebarOutline";
-import { Button } from "../../atoms/Button/Button";
+import type { TargetedOutlineEntry } from "../../../editor/outlineMatching";
 import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
+import { Dialog } from "../../molecules/Dialog/Dialog";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./InsertReferenceDialog.module.css";
 
@@ -103,55 +103,41 @@ export const InsertReferenceDialog = ({
     }
 
     return (
-        <div
-            className={styles.overlay}
-            role="presentation"
-            onClick={onClose}
+        <Dialog
+            closeLabel={m.insert_reference_dialog_close()}
+            closeVariant="ghost"
+            size="sm"
+            title={m.insert_reference_dialog_title()}
+            titleId="insert-reference-title"
+            zIndex={40}
+            onBackdropClick={onClose}
+            onClose={onClose}
         >
-            <div
-                className={styles.dialog}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="insert-reference-title"
-                onClick={(event) => event.stopPropagation()}
-            >
-                <header className={styles.header}>
-                    <h2 className={styles.title} id="insert-reference-title">
-                        {m.insert_reference_dialog_title()}
-                    </h2>
-                    <Button type="button" size="small" variant="ghost" onClick={onClose}>
-                        {m.insert_reference_dialog_close()}
-                    </Button>
-                </header>
-
-                <div className={styles.body}>
-                    {!hasAnyItems ? (
-                        <p className={styles.empty}>{m.insert_reference_dialog_empty()}</p>
-                    ) : (
-                        <>
-                            {resourceItems.length > 0 && (
-                                <ReferenceSection
-                                    title={m.insert_reference_tab_resources()}
-                                    items={resourceItems}
-                                />
-                            )}
-                            {bibliographyItems.length > 0 && (
-                                <ReferenceSection
-                                    title={m.insert_reference_tab_bibliography()}
-                                    items={bibliographyItems}
-                                />
-                            )}
-                            {outlineItems.length > 0 && (
-                                <ReferenceSection
-                                    title={m.insert_reference_tab_outline()}
-                                    items={outlineItems}
-                                />
-                            )}
-                        </>
+            {!hasAnyItems ? (
+                <p className={styles.empty}>{m.insert_reference_dialog_empty()}</p>
+            ) : (
+                <>
+                    {resourceItems.length > 0 && (
+                        <ReferenceSection
+                            title={m.insert_reference_tab_resources()}
+                            items={resourceItems}
+                        />
                     )}
-                </div>
-            </div>
-        </div>
+                    {bibliographyItems.length > 0 && (
+                        <ReferenceSection
+                            title={m.insert_reference_tab_bibliography()}
+                            items={bibliographyItems}
+                        />
+                    )}
+                    {outlineItems.length > 0 && (
+                        <ReferenceSection
+                            title={m.insert_reference_tab_outline()}
+                            items={outlineItems}
+                        />
+                    )}
+                </>
+            )}
+        </Dialog>
     );
 };
 

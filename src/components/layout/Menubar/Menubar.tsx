@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { MenubarMenuButton } from "../../atoms/MenubarMenuButton/MenubarMenuButton";
 import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
 import { WindowControlButton } from "../../atoms/WindowControlButton/WindowControlButton";
+import { DropdownMenu } from "../../molecules/DropdownMenu/DropdownMenu";
 import { m } from "../../../paraglide/messages.js";
 import type { ActionId } from "../../../commands/types";
 import styles from "./Menubar.module.css";
@@ -36,27 +37,6 @@ export const Menubar = ({
     isCommandEnabled,
 }: MenubarProps) => {
     const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
-    const menubarRef = useRef<HTMLElement>(null);
-
-    useEffect(() => {
-        if (openMenuIndex === null) {
-            return;
-        }
-
-        const handlePointerDown = (event: PointerEvent) => {
-            const target = event.target;
-            if (!(target instanceof Node)) {
-                return;
-            }
-            if (menubarRef.current?.contains(target)) {
-                return;
-            }
-            setOpenMenuIndex(null);
-        };
-
-        document.addEventListener("pointerdown", handlePointerDown);
-        return () => document.removeEventListener("pointerdown", handlePointerDown);
-    }, [openMenuIndex]);
 
     const menuGroups: MenuGroup[] = [
         {
@@ -178,7 +158,6 @@ export const Menubar = ({
 
     return (
         <nav
-            ref={menubarRef}
             className={styles.menubar}
             aria-label="Application menu"
             data-tauri-drag-region=""
@@ -198,45 +177,40 @@ export const Menubar = ({
                                 }
                             }}
                         >
-                            <MenubarMenuButton
-                                aria-controls={menuId}
-                                aria-expanded={isOpen}
-                                aria-haspopup="menu"
+                            <DropdownMenu
+                                align="start"
+                                menuId={menuId}
+                                menuLabel={group.title}
                                 open={isOpen}
-                                onClick={() =>
-                                    setOpenMenuIndex(isOpen ? null : index)
+                                onOpenChange={(open) =>
+                                    setOpenMenuIndex(open ? index : null)
+                                }
+                                trigger={
+                                    <MenubarMenuButton open={isOpen}>
+                                        {group.title}
+                                    </MenubarMenuButton>
                                 }
                             >
-                                {group.title}
-                            </MenubarMenuButton>
-                            {isOpen && (
-                                <div
-                                    aria-label={group.title}
-                                    className={styles.dropdown}
-                                    id={menuId}
-                                    role="menu"
-                                >
-                                    {group.actions.map((action) => (
-                                        <MenuItemButton
-                                            variant="menubarDropdown"
-                                            disabled={
-                                                !action.commandId ||
-                                                !isCommandEnabled(action.commandId)
+                                {group.actions.map((action) => (
+                                    <MenuItemButton
+                                        disabled={
+                                            !action.commandId ||
+                                            !isCommandEnabled(action.commandId)
+                                        }
+                                        key={action.label}
+                                        role="menuitem"
+                                        variant="dropdown"
+                                        onClick={() => {
+                                            setOpenMenuIndex(null);
+                                            if (action.commandId) {
+                                                onCommand(action.commandId);
                                             }
-                                            role="menuitem"
-                                            key={action.label}
-                                            onClick={() => {
-                                                setOpenMenuIndex(null);
-                                                if (action.commandId) {
-                                                    onCommand(action.commandId);
-                                                }
-                                            }}
-                                        >
-                                            {action.label}
-                                        </MenuItemButton>
-                                    ))}
-                                </div>
-                            )}
+                                        }}
+                                    >
+                                        {action.label}
+                                    </MenuItemButton>
+                                ))}
+                            </DropdownMenu>
                         </div>
                     );
                 })}
