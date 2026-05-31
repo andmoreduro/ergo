@@ -1,14 +1,27 @@
 .surface {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2, 0.5rem);
+    flex: 1;
+    min-height: 0;
 }
 
+/*
+ * The editable itself is the "paper": a tall, padded sheet that fills the
+ * editor pane. Because the contenteditable covers the whole sheet, a click on
+ * any empty area lands inside it and ProseMirror places the caret at the
+ * nearest position — no separate empty-space focus handling needed.
+ */
 .surface :global(.ProseMirror) {
+    flex: 1;
+    box-sizing: border-box;
+    min-height: 100vh;
+    padding: var(--space-8) var(--space-6);
+    background-color: var(--color-bg-primary);
+    box-shadow: var(--shadow-content-paper);
+    cursor: text;
     outline: none;
     white-space: pre-wrap;
     word-wrap: break-word;
-    min-height: 1.5em;
 }
 
 .surface :global(.ProseMirror) p,

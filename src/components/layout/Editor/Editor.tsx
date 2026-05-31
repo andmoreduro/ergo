@@ -24,7 +24,7 @@ import {
     parseReferenceInsertPayload,
 } from "../../../editor/insertReference";
 import { InsertReferenceDialog } from "../../organisms/InsertReferenceDialog/InsertReferenceDialog";
-import type { TargetedOutlineEntry } from "../Sidebar/SidebarOutline";
+import type { TargetedOutlineEntry } from "../../../editor/outlineMatching";
 import { ProseMirrorBodyEditor } from "../../organisms/ProseMirrorBodyEditor/ProseMirrorBodyEditor";
 import { Button } from "../../atoms/Button/Button";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";

@@ -180,8 +180,14 @@ impl ErgoWasmCompiler {
     }
 
     #[wasm_bindgen]
-    pub fn compile_preview(&mut self) -> Result<JsValue, JsValue> {
-        let result = self.engine.compile_preview();
+    pub fn compile_preview(&mut self, svg_page_indices: JsValue) -> Result<JsValue, JsValue> {
+        let indices: Vec<usize> = if svg_page_indices.is_undefined() || svg_page_indices.is_null() {
+            Vec::new()
+        } else {
+            serde_wasm_bindgen::from_value(svg_page_indices)
+                .map_err(|error| JsValue::from_str(&error.to_string()))?
+        };
+        let result = self.engine.compile_preview_with_svg(&indices);
         serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 

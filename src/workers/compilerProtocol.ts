@@ -24,7 +24,7 @@ export type WorkerRequest =
     | { type: "load_fonts"; payload: number[][] }
     | { type: "sync_snapshot"; payload: DocumentAST }
     | { type: "sync_events"; payload: DocumentEvent[] }
-    | { type: "compile" }
+    | { type: "compile"; payload: { svgPageIndices: number[] } }
     | { type: "bootstrap"; payload: BootstrapPreviewPayload }
     | {
           type: "render_page";

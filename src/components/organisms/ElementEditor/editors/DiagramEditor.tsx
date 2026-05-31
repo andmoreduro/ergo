@@ -126,6 +126,7 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
                     <Textarea
                         {...sourceField}
                         fullWidth
+                        monospace
                         label={m.editor_diagram_source()}
                         value={sourceDraft}
                         onChange={(event) => {

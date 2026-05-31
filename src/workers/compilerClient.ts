@@ -41,9 +41,15 @@ export const CompilerClient = {
         return reply.status;
     },
 
-    async compile(ast: DocumentAST): Promise<CompilationResult> {
+    async compile(
+        ast: DocumentAST,
+        svgPageIndices: number[] = [],
+    ): Promise<CompilationResult> {
         void loadDocumentFontsLazy(ast);
-        const reply = await callWorker({ type: "compile" }, "compile_done");
+        const reply = await callWorker(
+            { type: "compile", payload: { svgPageIndices } },
+            "compile_done",
+        );
         return reply.result;
     },
 

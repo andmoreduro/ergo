@@ -5,7 +5,11 @@ export interface PreviewTelemetry {
     compileMs: number;
     /** Compile result → first visible page's SVG written into the DOM. */
     svgRenderMs: number;
-    /** Of svgRenderMs: the `renderSvgPage` worker round-trip (Typst → SVG). */
+    /**
+     * Of svgRenderMs: the `renderSvgPage` worker round-trip (Typst → SVG). Zero
+     * for a page whose SVG the compile trip already inlined (the common case for
+     * the visible page) — that render cost is folded into `compileMs` instead.
+     */
     workerRenderMs: number;
     /** Of svgRenderMs: the `innerHTML =` parse of that SVG string. */
     domWriteMs: number;

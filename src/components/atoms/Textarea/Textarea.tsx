@@ -17,6 +17,11 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
    * @default false
    */
   fullWidth?: boolean;
+  /**
+   * If true, render the textarea in a monospace font (for source/code input).
+   * @default false
+   */
+  monospace?: boolean;
 }
 
 export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
@@ -26,6 +31,7 @@ export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
       importance,
       error,
       fullWidth = false,
+      monospace = false,
       className = '',
       id,
       disabled,
@@ -69,6 +75,7 @@ export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
 
     const textareaClassNames = [
       styles.textarea,
+      monospace ? styles.monospace : '',
       error ? styles.textareaError : '',
       disabled ? styles.disabled : '',
     ]

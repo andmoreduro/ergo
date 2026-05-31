@@ -12,7 +12,7 @@ import {
     tableCellFieldId,
 } from "../fieldIds";
 import { fieldCaretOffsetFromNode, pmPosForFieldCaret } from "./astBridge";
-import { isTableEditing } from "./tableEditMode";
+import { isBlockEditing } from "./blockEditMode";
 import { ATOM_BLOCK_NODES, TABLE_BLOCK_NODE, TEXT_FIELD_NODES } from "./schema";
 
 export interface BodyFocusTarget {
@@ -72,7 +72,7 @@ export const focusTargetFromState = (
     if (selection instanceof NodeSelection) {
         if (selection.node.type.name === TABLE_BLOCK_NODE) {
             const elementId = selection.node.attrs.elementId as string;
-            if (!elementId || isTableEditing(state, elementId)) {
+            if (!elementId || isBlockEditing(state, elementId)) {
                 return null;
             }
             return { elementId, fieldId: null, caretUtf16Offset: null };

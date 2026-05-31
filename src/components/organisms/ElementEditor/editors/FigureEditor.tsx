@@ -8,17 +8,11 @@ import { TauriApi } from "../../../../api/tauri";
 
 import { CompilerClient } from "../../../../workers/compilerClient";
 
-import { figureBodyFieldId, figurePlacementFieldId } from "../../../../editor/fieldIds";
+import { figurePlacementFieldId } from "../../../../editor/fieldIds";
 
 import { getPlacementOptions } from "../../../../editor/placementOptions";
 
 import { usesStandardTypstFigureWrapper } from "../../../../editor/templateElementOverrides";
-
-import { useDeferredRichTextCommit } from "../../../../editor/useDeferredRichTextCommit";
-
-import { useElementEnterInsertsParagraph } from "../../../../editor/useInsertParagraphAfterElement";
-
-import { normalizeRichTextContent } from "../../../../editor/textInput";
 
 import {
 
@@ -43,8 +37,6 @@ import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { useTemplateSpecContext } from "../../../../state/TemplateSpecContext";
 
 import { m } from "../../../../paraglide/messages.js";
-
-import { RichTextField } from "../../../molecules/RichTextField/RichTextField";
 
 import { MediaPickerButton } from "../../../atoms/MediaPickerButton/MediaPickerButton";
 import { Select } from "../../../atoms/Select/Select";
@@ -73,8 +65,6 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
     const { state, dispatch } = useDocumentAst();
 
-    const handleEnterKey = useElementEnterInsertsParagraph(element.id);
-
     const { spec: templateSpec } = useTemplateSpecContext();
 
     const figureOverride = templateSpec?.element_overrides?.figure ?? null;
@@ -98,26 +88,6 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
         linkedAsset,
 
     );
-
-
-
-    const committedBody =
-
-        element.content.type === "Paragraph" ? element.content.content : [];
-
-    const bodyParagraphId =
-
-        element.content.type === "Paragraph" ? element.content.id : element.id;
-
-    const {
-
-        content: bodyContent,
-
-        setDraft: setBodyDraft,
-
-        shouldCommit: shouldCommitBody,
-
-    } = useDeferredRichTextCommit(bodyParagraphId, committedBody);
 
 
 
@@ -156,26 +126,6 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
                     figureId: element.id,
 
                     placement: draftPlacement,
-
-                },
-
-            });
-
-        }
-
-
-
-        if (shouldCommitBody(bodyContent)) {
-
-            dispatch({
-
-                type: "UPDATE_PARAGRAPH_CONTENT",
-
-                payload: {
-
-                    paragraphId: bodyParagraphId,
-
-                    content: normalizeRichTextContent(bodyContent),
 
                 },
 
@@ -247,10 +197,6 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
     }, [
 
-        bodyContent,
-
-        bodyParagraphId,
-
         dispatch,
 
         draftPlacement,
@@ -258,8 +204,6 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
         element,
 
         extraFields,
-
-        shouldCommitBody,
 
         showPlacement,
 
@@ -362,14 +306,6 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
     };
 
 
-
-    const bodyField = useEditorFieldBinding<HTMLDivElement>({
-
-        elementId: element.id,
-
-        fieldId: figureBodyFieldId(element.id),
-
-    });
 
     const placementField = useEditorFieldBinding<HTMLSelectElement>({
 
@@ -531,52 +467,8 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
             />
 
-            {!hasAsset && element.content.type === "Paragraph" ? (
-
-                <RichTextField
-
-                    label={m.editor_figure_body()}
-
-                    content={bodyContent}
-
-                    fieldBinding={bodyField}
-
-                    onChange={(next) => {
-
-                        const normalized = normalizeRichTextContent(next);
-
-                        setBodyDraft(normalized);
-
-                        if (shouldCommitBody(normalized)) {
-
-                            dispatch({
-
-                                type: "UPDATE_PARAGRAPH_CONTENT",
-
-                                payload: {
-
-                                    paragraphId: bodyParagraphId,
-
-                                    content: normalized,
-
-                                },
-
-                            });
-
-                        }
-
-                    }}
-
-                    onKeyDown={handleEnterKey}
-
-                />
-
-            ) : null}
-
         </>
 
     );
 
 };
-
-

@@ -45,6 +45,27 @@ export const normalizeThemeMode = (value: string | null): ThemeMode => {
     return "system";
 };
 
+/** Merges persisted and in-session recent lists (primary order wins). */
+export const mergeRecentProjectLists = (
+    primary: string[],
+    secondary: string[],
+    limit = 8,
+): string[] => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const path of [...primary, ...secondary]) {
+        if (seen.has(path)) {
+            continue;
+        }
+        seen.add(path);
+        merged.push(path);
+        if (merged.length >= limit) {
+            break;
+        }
+    }
+    return merged;
+};
+
 export const mergeGlobalSettings = (
     settings: Partial<GlobalSettings> | null | undefined,
 ): GlobalSettings => ({

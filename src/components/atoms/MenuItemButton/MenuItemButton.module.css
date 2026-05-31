@@ -19,13 +19,18 @@
     cursor: default;
 }
 
-.contextMenu,
-.menubarDropdown {
-    padding: var(--space-2) var(--space-4);
+.dropdown {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    border-radius: var(--border-radius-sm);
     white-space: nowrap;
 }
 
-.contextMenu:disabled {
+.dropdown:disabled {
     color: var(--color-text-secondary);
 }
 
@@ -33,11 +38,6 @@
     padding: var(--space-2) var(--space-3);
     color: var(--color-text-primary);
     border-radius: var(--border-radius-sm);
-}
-
-.export {
-    padding: var(--space-2) var(--space-3);
-    color: var(--color-text-primary);
 }
 
 .listPicker {

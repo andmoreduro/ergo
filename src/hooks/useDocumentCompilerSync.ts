@@ -42,6 +42,12 @@ export interface CompilerPreviewSetters {
     previewRevisionRef: MutableRefObject<SourceRevision | null>;
     latestRevisionRef: MutableRefObject<SourceRevision | null>;
     latencyStartRef: MutableRefObject<number | null>;
+    /**
+     * 0-based indices of the pages the preview currently shows. The compile
+     * trip inlines the SVG of the changed ones (see `compile_preview_with_svg`)
+     * so the visible page paints without a second `render_svg_page` round-trip.
+     */
+    previewSvgPageIndicesRef: MutableRefObject<number[]>;
 }
 
 export interface UseDocumentCompilerSyncParams {
@@ -83,6 +89,7 @@ export function useDocumentCompilerSync({
         previewRevisionRef,
         latestRevisionRef,
         latencyStartRef,
+        previewSvgPageIndicesRef,
     } = preview;
 
     const desiredAstRef = useRef<DocumentAST | null>(null);
@@ -277,7 +284,10 @@ export function useDocumentCompilerSync({
                 );
 
                 const compileStarted = nowMs();
-                const result = await CompilerClient.compile(currentAst);
+                const result = await CompilerClient.compile(
+                    currentAst,
+                    previewSvgPageIndicesRef.current,
+                );
                 const compileFinished = nowMs();
                 setPendingPreviewTelemetry({
                     revision: result.source_revision,

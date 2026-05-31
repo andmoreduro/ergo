@@ -31,8 +31,6 @@ const isAbstractEntry = (text: string): boolean => {
     );
 };
 
-export type { TargetedOutlineEntry } from "../../../editor/outlineMatching";
-
 export function useSidebarOutline(
     outline: DocumentOutline | null,
     previewRevision: number | null,
