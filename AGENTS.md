@@ -177,6 +177,22 @@ src/
 
 Atomic design is mandatory: `<button>`, `<input>`, `<select>`, `<textarea>`, and `contentEditable` may appear only under `src/components/atoms/`. Higher layers compose atoms and molecules.
 
+Layers under `src/components/`:
+
+| Layer | Role |
+|-------|------|
+| `atoms/` | Primitives and single-purpose controls |
+| `molecules/` | Reusable composites used in **two or more** places (e.g. `DropdownMenu`, `Dialog`, `MenuPanel`, `FormField`) |
+| `organisms/` | Feature-sized UI (settings, element editors, command palette) |
+| `layout/` | App chrome and region composition (menubar, workspace panes) |
+| `screens/` | Full-page views (welcome, error boundary) |
+
+Dependency direction: `screens` / `layout` → `organisms` → `molecules` → `atoms`. Organisms and molecules must not import from `layout/`.
+
+**Reuse rule:** Do not add a wrapper component for a single concrete use of another component. If the same composition is needed **multiple times within one feature area**, colocate it next to that feature (e.g. under the same `layout/` folder) rather than promoting it to `molecules/` unless a second unrelated consumer appears.
+
+**Shared UI molecules (current):** `DropdownMenu` (anchored menus), `MenuPanel` (menu surface styling), `Dialog` (modal shell), `Toolbar`, `FormField`, field molecules.
+
 ```
 Button/
   Button.tsx

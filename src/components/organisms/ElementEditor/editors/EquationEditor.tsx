@@ -6,7 +6,6 @@ import { useEditorNavigation } from "../../../../editor/EditorNavigationContext"
 import { useDocumentAst } from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
-import { Checkbox } from "../../../atoms/Checkbox/Checkbox";
 import { Select } from "../../../atoms/Select/Select";
 import { Textarea } from "../../../atoms/Textarea/Textarea";
 import type { EquationElement } from "../types";
@@ -29,6 +28,7 @@ export const EquationEditor = ({ element }: { element: EquationElement }) => {
             <Textarea
                 {...sourceField}
                 fullWidth
+                monospace
                 label={m.editor_equation_source()}
                 placeholder={m.editor_equation_source()}
                 value={draft}
@@ -51,19 +51,6 @@ export const EquationEditor = ({ element }: { element: EquationElement }) => {
                     }
                     handleEnterKey(event);
                 }}
-            />
-            <Checkbox
-                label={m.editor_equation_block()}
-                checked={element.is_block}
-                onChange={(event) =>
-                    dispatch({
-                        type: "UPDATE_EQUATION",
-                        payload: {
-                            equationId: element.id,
-                            isBlock: event.target.checked,
-                        },
-                    })
-                }
             />
             <Select
                 fullWidth

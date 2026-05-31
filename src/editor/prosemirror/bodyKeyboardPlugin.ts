@@ -1,10 +1,12 @@
 import { Plugin } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import { isInTable } from "prosemirror-tables";
+import { goToNextCell, isInTable } from "prosemirror-tables";
 import {
     canMoveBetweenTableCells,
+    enterAtomBlock,
     enterTableFirstCell,
     exitTable,
+    moveCellDirectional,
     runAltTableCellNavigate,
     runBodyNavigate,
     tableBlockFromSelection,
@@ -99,9 +101,42 @@ export const bodyKeyboardPlugin = () =>
                             event.stopPropagation();
                             return true;
                         }
+                        if (enterAtomBlock(view)) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            return true;
+                        }
                         return false;
                     }
                     if (isTableBlockFocused(view.state)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return true;
+                    }
+                    return false;
+                }
+
+                if (event.key === "Tab") {
+                    // While editing a table, Tab moves between cells and must
+                    // never let browser focus escape the block.
+                    if (canMoveBetweenTableCells(view.state)) {
+                        goToNextCell(event.shiftKey ? -1 : 1)(
+                            view.state,
+                            view.dispatch,
+                        );
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return true;
+                    }
+                    // Tab on a locked/selected block enters fine-grained mode,
+                    // mirroring Ctrl+Enter (both `enterTableFirstCell` and
+                    // `enterAtomBlock` are no-ops unless a block is selected).
+                    if (enterTableFirstCell(view.state, view.dispatch)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return true;
+                    }
+                    if (enterAtomBlock(view)) {
                         event.preventDefault();
                         event.stopPropagation();
                         return true;
@@ -120,6 +155,21 @@ export const bodyKeyboardPlugin = () =>
                         event.stopPropagation();
                         return true;
                     }
+                }
+
+                // Ctrl/Cmd+arrow: word/line motion inside the cell, hop to the
+                // adjacent cell only at the cell edge (in the arrow's direction).
+                if (mod && !event.shiftKey && !event.altKey) {
+                    if (canMoveBetweenTableCells(view.state)) {
+                        const cdir = NAV_DIR[event.key];
+                        if (cdir && view.endOfTextblock(cdir)) {
+                            moveCellDirectional(view, cdir);
+                            event.preventDefault();
+                            event.stopPropagation();
+                            return true;
+                        }
+                    }
+                    return false;
                 }
 
                 if (mod || event.shiftKey || event.altKey) {

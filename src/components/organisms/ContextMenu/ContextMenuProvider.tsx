@@ -23,7 +23,7 @@ import {
 } from "./definitions";
 import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
 import { MenuSeparator } from "../../atoms/MenuSeparator/MenuSeparator";
-import styles from "./ContextMenu.module.css";
+import { MenuPanel } from "../../molecules/MenuPanel/MenuPanel";
 
 type OpenMenuState = {
     x: number;
@@ -198,13 +198,13 @@ export const ContextMenuProvider = ({
             {openMenu &&
                 entries.length > 0 &&
                 createPortal(
-                    <div
+                    <MenuPanel
                         ref={menuRef}
-                        className={styles.menu}
-                        role="menu"
                         style={{
+                            position: "fixed",
                             left: openMenu.x,
                             top: openMenu.y,
+                            zIndex: 3000,
                         }}
                     >
                         {entries.map((entry, index) => {
@@ -216,7 +216,7 @@ export const ContextMenuProvider = ({
                                 return (
                                     <MenuItemButton
                                         key="inspect"
-                                        variant="contextMenu"
+                                        variant="dropdown"
                                         role="menuitem"
                                         onClick={() => void handleSelect(entry)}
                                     >
@@ -229,7 +229,7 @@ export const ContextMenuProvider = ({
                                 return (
                                     <MenuItemButton
                                         key={entry.label}
-                                        variant="contextMenu"
+                                        variant="dropdown"
                                         role="menuitem"
                                         disabled
                                     >
@@ -248,7 +248,7 @@ export const ContextMenuProvider = ({
                             return (
                                 <MenuItemButton
                                     key={entry.commandId}
-                                    variant="contextMenu"
+                                    variant="dropdown"
                                     role="menuitem"
                                     disabled={!enabled}
                                     onClick={() => void handleSelect(entry)}
@@ -257,7 +257,7 @@ export const ContextMenuProvider = ({
                                 </MenuItemButton>
                             );
                         })}
-                    </div>,
+                    </MenuPanel>,
                     document.body,
                 )}
         </ContextMenuContext.Provider>

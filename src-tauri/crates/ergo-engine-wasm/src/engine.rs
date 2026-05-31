@@ -288,6 +288,36 @@ impl ErgoPreviewEngine {
         self.run_compile_preview().1
     }
 
+    /// Compile, then inline the rendered SVG of the requested pages into their
+    /// `content` so the client can paint them without a second worker trip.
+    /// Only changed pages are rendered (an unchanged page is served from the
+    /// client-side cache), mirroring the page view's own re-render condition.
+    pub fn compile_preview_with_svg(&mut self, svg_page_indices: &[usize]) -> CompilationResult {
+        let mut result = self.run_compile_preview().1;
+        self.inline_svg_pages(&mut result, svg_page_indices);
+        result
+    }
+
+    fn inline_svg_pages(&self, result: &mut CompilationResult, svg_page_indices: &[usize]) {
+        if svg_page_indices.is_empty() || result.status != CompilationStatus::Succeeded {
+            return;
+        }
+        let Some(pages) = result.preview_pages.as_mut() else {
+            return;
+        };
+        for &index in svg_page_indices {
+            let Some(page) = pages.get_mut(index) else {
+                continue;
+            };
+            if !page.changed {
+                continue;
+            }
+            if let Ok(svg) = Self::render_document_svg_page(self.document.as_deref(), index) {
+                page.content = Some(svg.svg);
+            }
+        }
+    }
+
     pub fn bootstrap_preview(
         &mut self,
         ast: DocumentAST,
@@ -295,7 +325,8 @@ impl ErgoPreviewEngine {
     ) -> Result<BootstrapPreviewOutput, String> {
         self.write_vfs_files(files);
         let status = self.sync_snapshot(ast)?;
-        let result = self.compile_preview();
+        // Inline the first page so the initial open paints in a single trip.
+        let result = self.compile_preview_with_svg(&[0]);
         Ok(BootstrapPreviewOutput { status, result })
     }
 
@@ -519,6 +550,56 @@ mod tests {
             page.height_pt
         );
         assert!(page.svg.starts_with("<svg"));
+    }
+
+    #[test]
+    fn compile_preview_with_svg_inlines_requested_changed_pages() {
+        let ast = basic_document_ast("Inline page", "");
+
+        let mut engine = ErgoPreviewEngine::new();
+        engine
+            .sync_snapshot(ast)
+            .expect("snapshot sync should succeed");
+
+        // First compile: page 0 is changed, so requesting it inlines its SVG.
+        let first = engine.compile_preview_with_svg(&[0]);
+        assert_eq!(first.status, CompilationStatus::Succeeded);
+        let pages = first
+            .preview_pages
+            .as_ref()
+            .expect("compile should return pages");
+        let svg = pages[0]
+            .content
+            .as_ref()
+            .expect("requested changed page should carry inline SVG");
+        assert!(svg.starts_with("<svg"));
+
+        // Second compile with no edits: the page is unchanged, so even when
+        // requested it is left for the client cache rather than re-rendered.
+        let second = engine.compile_preview_with_svg(&[0]);
+        let pages = second
+            .preview_pages
+            .as_ref()
+            .expect("compile should return pages");
+        assert!(!pages[0].changed);
+        assert!(pages[0].content.is_none());
+    }
+
+    #[test]
+    fn compile_preview_without_indices_omits_inline_svg() {
+        let ast = basic_document_ast("No inline", "");
+
+        let mut engine = ErgoPreviewEngine::new();
+        engine
+            .sync_snapshot(ast)
+            .expect("snapshot sync should succeed");
+
+        let result = engine.compile_preview_with_svg(&[]);
+        let pages = result
+            .preview_pages
+            .as_ref()
+            .expect("compile should return pages");
+        assert!(pages.iter().all(|page| page.content.is_none()));
     }
 
     #[test]

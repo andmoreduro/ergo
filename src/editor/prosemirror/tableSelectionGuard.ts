@@ -2,7 +2,7 @@ import { Plugin } from "prosemirror-state";
 import { NodeSelection } from "prosemirror-state";
 import { CellSelection, isInTable } from "prosemirror-tables";
 import { TABLE_BLOCK_NODE } from "./schema";
-import { isTableEditing } from "./tableEditMode";
+import { isBlockEditing } from "./blockEditMode";
 
 /**
  * `prosemirror-tables` may pull a nearby selection into a cell. While the table
@@ -17,7 +17,7 @@ export const tableSelectionGuardPlugin = () =>
                 selection.node.type.name === TABLE_BLOCK_NODE
             ) {
                 const elementId = selection.node.attrs.elementId as string;
-                if (!isTableEditing(newState, elementId)) {
+                if (!isBlockEditing(newState, elementId)) {
                     return null;
                 }
             }
@@ -32,7 +32,7 @@ export const tableSelectionGuardPlugin = () =>
                     continue;
                 }
                 const elementId = $head.node(depth).attrs.elementId as string;
-                if (isTableEditing(newState, elementId)) {
+                if (isBlockEditing(newState, elementId)) {
                     return null;
                 }
                 return newState.tr.setSelection(

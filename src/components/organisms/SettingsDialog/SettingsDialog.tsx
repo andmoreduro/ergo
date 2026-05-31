@@ -4,8 +4,7 @@ import type { ProjectSettings } from "../../../bindings/ProjectSettings";
 import type { TemplateVariantSpec } from "../../../bindings/TemplateVariantSpec";
 import type { KeymapProfile } from "../../../commands/types";
 import { m } from "../../../paraglide/messages.js";
-import { Button } from "../../atoms/Button/Button";
-import styles from "./SettingsDialog.module.css";
+import { Dialog } from "../../molecules/Dialog/Dialog";
 import { GlobalSettingsPanel } from "./GlobalSettingsPanel";
 import { ProjectSettingsPanel } from "./ProjectSettingsPanel";
 import { KeymapSettingsPanel } from "./KeymapSettingsPanel";
@@ -51,48 +50,39 @@ export const SettingsDialog = ({
               : m.settings_global_title();
 
     return (
-        <div className={styles.backdrop}>
-            <section
-                aria-modal="true"
-                aria-labelledby="settings-title"
-                className={styles.dialog}
-                data-scroll-region
-                role="dialog"
-            >
-                <div className={styles.header}>
-                    <h2 id="settings-title">{title}</h2>
-                    <Button type="button" size="small" onClick={onClose}>
-                        {m.command_palette_close()}
-                    </Button>
-                </div>
-                <div className={styles.content}>
-                    {panel === "global" && (
-                        <GlobalSettingsPanel
-                            settings={globalSettings}
-                            onChange={onGlobalSettingsChange}
-                        />
-                    )}
+        <Dialog
+            closeLabel={m.command_palette_close()}
+            size="xl"
+            title={title}
+            titleId="settings-title"
+            zIndex={20}
+            onClose={onClose}
+        >
+            {panel === "global" && (
+                <GlobalSettingsPanel
+                    settings={globalSettings}
+                    onChange={onGlobalSettingsChange}
+                />
+            )}
 
-                    {panel === "project" && (
-                        <ProjectSettingsPanel
-                            settings={projectSettings}
-                            onChange={onProjectSettingsChange}
-                            templateVariants={templateVariants}
-                            templateVariantId={templateVariantId}
-                            onTemplateVariantChange={onTemplateVariantChange}
-                        />
-                    )}
+            {panel === "project" && (
+                <ProjectSettingsPanel
+                    settings={projectSettings}
+                    onChange={onProjectSettingsChange}
+                    templateVariants={templateVariants}
+                    templateVariantId={templateVariantId}
+                    onTemplateVariantChange={onTemplateVariantChange}
+                />
+            )}
 
-                    {panel === "keymap" && (
-                        <KeymapSettingsPanel
-                            settings={keymapSettings}
-                            keymap={keymap}
-                            conflicts={conflicts}
-                            onChange={onKeymapSettingsChange}
-                        />
-                    )}
-                </div>
-            </section>
-        </div>
+            {panel === "keymap" && (
+                <KeymapSettingsPanel
+                    settings={keymapSettings}
+                    keymap={keymap}
+                    conflicts={conflicts}
+                    onChange={onKeymapSettingsChange}
+                />
+            )}
+        </Dialog>
     );
 };

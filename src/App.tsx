@@ -38,6 +38,7 @@ import { helpCommands } from "./commands/helpCommands";
 import { applyRichTextMarkToFocusedField } from "./editor/richTextMarks";
 import { applyBodyMark } from "./editor/prosemirror/activeView";
 import { insertBodyInlineEquation } from "./editor/prosemirror/bodyInsert";
+import { setPendingBlockEdit } from "./editor/prosemirror/pendingBlockEdit";
 import {
     insertInlineEquationAtOffset,
     richTextPlainLength,
@@ -315,7 +316,26 @@ const AppShellContent = () => {
                 ? documentFocus.elementId
                 : undefined;
 
-        const focusInsertedElement = (
+        // If the caret sits on an empty text line, the inserted element replaces
+        // it rather than stacking after it. We only treat empty paragraphs,
+        // headings, and quotes as "empty lines" — block objects, tables, and
+        // lists are not lines and are always inserted after.
+        const replaceTarget =
+            afterElementId === undefined
+                ? undefined
+                : contentSection.elements.find(
+                      (element) => element.id === afterElementId,
+                  );
+        const replaceTargetId =
+            replaceTarget &&
+            (replaceTarget.type === "Paragraph" ||
+                replaceTarget.type === "Heading" ||
+                replaceTarget.type === "Quote") &&
+            richTextPlainLength(replaceTarget.content) === 0
+                ? replaceTarget.id
+                : null;
+
+        const finishInsert = (
             rustElementType:
                 | "Heading"
                 | "Paragraph"
@@ -327,6 +347,15 @@ const AppShellContent = () => {
                 | "Enumeration"
                 | "Figure",
         ) => {
+            // The new element was inserted right after the empty current line;
+            // drop that now-redundant empty block so the insert reads as a
+            // replacement.
+            if (replaceTargetId) {
+                dispatch({
+                    type: "REMOVE_ELEMENT",
+                    payload: { elementId: replaceTargetId },
+                });
+            }
             setDocumentFocus({
                 elementId: id,
                 fieldId: defaultFieldIdForElement({
@@ -346,7 +375,7 @@ const AppShellContent = () => {
                 type: "ADD_HEADING",
                 payload: { sectionId, headingId: id, afterElementId },
             });
-            focusInsertedElement("Heading");
+            finishInsert("Heading");
             return;
         }
 
@@ -355,7 +384,7 @@ const AppShellContent = () => {
                 type: "ADD_PARAGRAPH",
                 payload: { sectionId, paragraphId: id, afterElementId },
             });
-            focusInsertedElement("Paragraph");
+            finishInsert("Paragraph");
             return;
         }
 
@@ -364,7 +393,11 @@ const AppShellContent = () => {
                 type: "ADD_TABLE",
                 payload: { sectionId, tableId: id, afterElementId },
             });
-            focusInsertedElement("Table");
+            // Open the new table directly in fine-grained mode so the user can
+            // type in the first cell immediately (consumed by the body editor
+            // once the table reconciles into the doc).
+            setPendingBlockEdit(id);
+            finishInsert("Table");
             return;
         }
 
@@ -373,7 +406,7 @@ const AppShellContent = () => {
                 type: "ADD_EQUATION",
                 payload: { sectionId, equationId: id, afterElementId },
             });
-            focusInsertedElement("Equation");
+            finishInsert("Equation");
             return;
         }
 
@@ -389,7 +422,7 @@ const AppShellContent = () => {
                 type: "UPDATE_EQUATION",
                 payload: { equationId: id, isBlock: false },
             });
-            focusInsertedElement("Equation");
+            finishInsert("Equation");
             return;
         }
 
@@ -398,7 +431,7 @@ const AppShellContent = () => {
                 type: "ADD_QUOTE",
                 payload: { sectionId, quoteId: id, afterElementId },
             });
-            focusInsertedElement("Quote");
+            finishInsert("Quote");
             return;
         }
 
@@ -407,7 +440,7 @@ const AppShellContent = () => {
                 type: "ADD_DIAGRAM",
                 payload: { sectionId, diagramId: id, afterElementId },
             });
-            focusInsertedElement("Diagram");
+            finishInsert("Diagram");
             return;
         }
 
@@ -416,7 +449,7 @@ const AppShellContent = () => {
                 type: "ADD_LIST",
                 payload: { sectionId, listId: id, afterElementId },
             });
-            focusInsertedElement("List");
+            finishInsert("List");
             return;
         }
 
@@ -425,7 +458,7 @@ const AppShellContent = () => {
                 type: "ADD_ENUMERATION",
                 payload: { sectionId, enumerationId: id, afterElementId },
             });
-            focusInsertedElement("Enumeration");
+            finishInsert("Enumeration");
             return;
         }
 
@@ -433,7 +466,7 @@ const AppShellContent = () => {
             type: "ADD_FIGURE",
             payload: { sectionId, figureId: id, afterElementId },
         });
-        focusInsertedElement("Figure");
+        finishInsert("Figure");
     }, [dispatch, documentFocus.elementId, ensureActiveProject, insertInlineEquation, setDocumentFocus, state.sections]);
 
     const exportDocument = useCallback(

@@ -17,7 +17,6 @@ import {
     isEditorFieldTarget,
     isEditorFocusLoseExempt,
 } from "../editor/editorFocusTargets";
-import { isContentSectionPointerFocusTarget } from "../editor/contentSectionFocus";
 import { isUiOnlyComposerFieldId } from "../editor/fieldIds";
 import { caretPlainOffsetFromSelection } from "../richText/richText";
 import { useDocument } from "./DocumentContext";
@@ -134,12 +133,21 @@ export const EditorFieldRegistryProvider = ({
                 return;
             }
 
-            if (isContentSectionPointerFocusTarget(target)) {
+            const activeFieldId = activeFieldIdRef.current;
+            if (!activeFieldId || isEditorFieldTarget(target)) {
                 return;
             }
 
-            const activeFieldId = activeFieldIdRef.current;
-            if (!activeFieldId || isEditorFieldTarget(target)) {
+            // The body is a ProseMirror `contenteditable` that owns its own focus
+            // and is not a registered field. When it is the active surface, a
+            // click on neutral editor chrome must keep the body focused instead of
+            // snapping focus back to the stale last-used metadata field.
+            const activeElement = document.activeElement;
+            if (
+                activeElement instanceof HTMLElement &&
+                activeElement.isContentEditable
+            ) {
+                event.preventDefault();
                 return;
             }
 
@@ -264,7 +272,13 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
             !node ||
             documentFocus.fieldId !== fieldId ||
             documentFocus.focusSource === "native" ||
-            lastAppliedRequestRef.current === documentFocus.requestId
+            lastAppliedRequestRef.current === documentFocus.requestId ||
+            // The field is already focused — this is the echo of our own edit
+            // round-tripping back through the AST (a deferred-draft field like the
+            // equation source would otherwise have its caret yanked to the mapped
+            // offset on every keystroke). External focus only needs applying when
+            // the field is not the active element (preview click, nav, insert).
+            document.activeElement === node
         ) {
             return;
         }

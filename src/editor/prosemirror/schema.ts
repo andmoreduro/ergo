@@ -274,3 +274,13 @@ export const ATOM_BLOCK_NODES = new Set(["equation", "figure", "diagram", "custo
 
 /** Isolating wrapper; the inner `table` is edited only in table edit mode. */
 export const TABLE_BLOCK_NODE = "table_block";
+
+/**
+ * Every node type that behaves as a self-contained block element: atom editors
+ * plus the table wrapper. These share the locked ↔ fine-grained edit model
+ * (see `blockEditMode.ts`).
+ */
+export const BLOCK_ELEMENT_NODES = new Set([
+    ...ATOM_BLOCK_NODES,
+    TABLE_BLOCK_NODE,
+]);

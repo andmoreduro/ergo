@@ -34,7 +34,7 @@ import { useDocumentFocus } from "../../../state/DocumentContext";
 import type { useCompiler } from "../../../hooks/useCompiler";
 import type { PreviewElementPosition } from "../../../bindings/PreviewElementPosition";
 import { useActionDispatcher } from "../../../actions/runtime";
-import { ExportMenu } from "./ExportMenu";
+import type { ExportFormat } from "../../../bindings/ExportFormat";
 import { m } from "../../../paraglide/messages.js";
 import {
     formatPreviewZoomPercent,
@@ -54,10 +54,26 @@ import { TextInput } from "../../atoms/TextInput/TextInput";
 import { ToolbarTextButton } from "../../atoms/ToolbarTextButton/ToolbarTextButton";
 import { Toolbar, ToolbarSpacer } from "../../molecules/Toolbar/Toolbar";
 import styles from "./Preview.module.css";
+import { DropdownMenu } from "../../molecules/DropdownMenu/DropdownMenu";
 import {
+    ArrowDownload24Regular,
+    ChevronDown24Regular,
     ZoomIn24Regular,
     ZoomOut24Regular,
 } from "@fluentui/react-icons";
+
+const EXPORT_FORMATS: ExportFormat[] = ["pdf", "png", "svg"];
+
+const exportFormatLabel = (format: ExportFormat): string => {
+    switch (format) {
+        case "pdf":
+            return m.export_format_pdf();
+        case "png":
+            return m.export_format_png();
+        case "svg":
+            return m.export_format_svg();
+    }
+};
 
 export type PreviewCompilerState = ReturnType<typeof useCompiler>;
 
@@ -82,8 +98,13 @@ export const Preview = ({
 }: PreviewProps) => {
     const { documentFocus } = useDocumentFocus();
     const dispatchAction = useActionDispatcher();
-    const { previewPages, sourceMap, previewRevision, markMainPreviewPainted } =
-        compiler;
+    const {
+        previewPages,
+        sourceMap,
+        previewRevision,
+        markMainPreviewPainted,
+        previewSvgPageIndicesRef,
+    } = compiler;
 
     // Depend on the stable `markMainPreviewPainted`, NOT the whole `compiler`
     // object: `compiler` changes identity whenever telemetry updates, which would
@@ -158,6 +179,53 @@ export const Preview = ({
         },
         [],
     );
+    // Track which pages are on screen so the next compile can inline their SVG
+    // (see `previewSvgPageIndicesRef`), collapsing the separate render trip for
+    // the page the user is actually looking at. Capped so a zoomed-out viewport
+    // showing many pages can't balloon the compile result.
+    const visiblePageIndicesRef = useRef<Set<number>>(new Set());
+    const MAX_INLINE_SVG_PAGES = 4;
+    const handlePageVisibilityChange = useCallback(
+        (pageIndex: number, visible: boolean) => {
+            const set = visiblePageIndicesRef.current;
+            if (visible) {
+                set.add(pageIndex);
+            } else {
+                set.delete(pageIndex);
+            }
+            const indices = [...set]
+                .sort((a, b) => a - b)
+                .slice(0, MAX_INLINE_SVG_PAGES);
+            previewSvgPageIndicesRef.current =
+                indices.length > 0 ? indices : [0];
+        },
+        [previewSvgPageIndicesRef],
+    );
+
+    // SVG inlined into the compile result for the visible changed pages. Keyed
+    // by page number; consumed by the page view in place of a `renderSvgPage`
+    // round-trip. Identity changes only when a new compile arrives.
+    const inlineSvgByPage = useMemo(() => {
+        const map: Record<number, RenderedSvgPage | null> = {};
+        if (previewRevision === null) {
+            return map;
+        }
+        for (const page of previewPages) {
+            map[page.page_number] = page.content
+                ? {
+                      revision: previewRevision,
+                      svg: page.content,
+                      metrics: {
+                          widthPt: page.width_pt ?? 0,
+                          heightPt: page.height_pt ?? 0,
+                          pixelPerPt: 1,
+                      },
+                  }
+                : null;
+        }
+        return map;
+    }, [previewPages, previewRevision]);
+
     // Stable per-page initial metrics so the prop identity is preserved between
     // keystrokes (recomputed only when pages or measured metrics change).
     const initialMetricsByPage = useMemo(() => {
@@ -276,7 +344,7 @@ export const Preview = ({
     }, [syncCaretScrollToLayout, effectiveZoom]);
 
     const [isZoomMenuOpen, setZoomMenuOpen] = useState(false);
-    const zoomMenuRootRef = useRef<HTMLDivElement>(null);
+    const [isExportMenuOpen, setExportMenuOpen] = useState(false);
     const [isEditingZoom, setEditingZoom] = useState(false);
     const [zoomDraft, setZoomDraft] = useState(String(zoomPercent));
     const zoomOptions = useMemo(
@@ -296,21 +364,6 @@ export const Preview = ({
         },
         [onZoomChange, onZoomModeChange],
     );
-
-    useEffect(() => {
-        if (!isZoomMenuOpen) {
-            return;
-        }
-
-        const handlePointerDown = (event: MouseEvent) => {
-            if (!zoomMenuRootRef.current?.contains(event.target as Node)) {
-                setZoomMenuOpen(false);
-            }
-        };
-
-        window.addEventListener("mousedown", handlePointerDown);
-        return () => window.removeEventListener("mousedown", handlePointerDown);
-    }, [isZoomMenuOpen]);
 
     const commitZoomDraft = useCallback(() => {
         const percent = Number(zoomDraft);
@@ -351,7 +404,7 @@ export const Preview = ({
                 >
                     <ZoomOut24Regular />
                 </IconButton>
-                <div className={styles.zoomMenuRoot} ref={zoomMenuRootRef}>
+                <div className={styles.zoomMenuRoot}>
                     {isEditingZoom ? (
                         <TextInput
                             autoFocus
@@ -372,33 +425,31 @@ export const Preview = ({
                             }}
                         />
                     ) : (
-                        <ToolbarTextButton
-                            tabIndex={-1}
-                            variant="zoom"
-                            title={m.preview_zoom_options()}
-                            aria-label={m.preview_zoom_options()}
-                            aria-haspopup="menu"
-                            aria-expanded={isZoomMenuOpen}
-                            onClick={() => setZoomMenuOpen((open) => !open)}
-                            onDoubleClick={() => {
-                                setZoomDraft(String(zoomPercent));
-                                setZoomMenuOpen(false);
-                                setEditingZoom(true);
-                            }}
-                        >
-                            {zoomLabel}
-                        </ToolbarTextButton>
-                    )}
-                    {isZoomMenuOpen && (
-                        <div
-                            aria-label={m.preview_zoom_options()}
-                            className={styles.zoomMenu}
-                            data-scroll-region
-                            role="menu"
+                        <DropdownMenu
+                            align="center"
+                            menuLabel={m.preview_zoom_options()}
+                            open={isZoomMenuOpen}
+                            scrollable
+                            onOpenChange={setZoomMenuOpen}
+                            trigger={
+                                <ToolbarTextButton
+                                    tabIndex={-1}
+                                    variant="zoom"
+                                    title={m.preview_zoom_options()}
+                                    aria-label={m.preview_zoom_options()}
+                                    onDoubleClick={() => {
+                                        setZoomDraft(String(zoomPercent));
+                                        setZoomMenuOpen(false);
+                                        setEditingZoom(true);
+                                    }}
+                                >
+                                    {zoomLabel}
+                                </ToolbarTextButton>
+                            }
                         >
                             <MenuItemButton
                                 role="menuitem"
-                                variant="export"
+                                variant="dropdown"
                                 onClick={() => {
                                     onZoomModeChange("fit-width");
                                     setZoomMenuOpen(false);
@@ -408,7 +459,7 @@ export const Preview = ({
                             </MenuItemButton>
                             <MenuItemButton
                                 role="menuitem"
-                                variant="export"
+                                variant="dropdown"
                                 onClick={() => {
                                     onZoomModeChange("fit-height");
                                     setZoomMenuOpen(false);
@@ -420,7 +471,7 @@ export const Preview = ({
                                 <MenuItemButton
                                     key={option.percent}
                                     role="menuitem"
-                                    variant="export"
+                                    variant="dropdown"
                                     onClick={() => applyManualZoom(option.value)}
                                 >
                                     {m.preview_zoom_level({
@@ -428,7 +479,7 @@ export const Preview = ({
                                     })}
                                 </MenuItemButton>
                             ))}
-                        </div>
+                        </DropdownMenu>
                     )}
                 </div>
                 <IconButton
@@ -446,7 +497,32 @@ export const Preview = ({
                     <ZoomIn24Regular />
                 </IconButton>
                 <ToolbarSpacer />
-                <ExportMenu onExport={onExport} />
+                <DropdownMenu
+                    align="end"
+                    open={isExportMenuOpen}
+                    onOpenChange={setExportMenuOpen}
+                    trigger={
+                        <ToolbarTextButton>
+                            <ArrowDownload24Regular aria-hidden />
+                            {m.menubar_export()}
+                            <ChevronDown24Regular />
+                        </ToolbarTextButton>
+                    }
+                >
+                    {EXPORT_FORMATS.map((format) => (
+                        <MenuItemButton
+                            key={format}
+                            role="menuitem"
+                            variant="dropdown"
+                            onClick={() => {
+                                setExportMenuOpen(false);
+                                void onExport(format);
+                            }}
+                        >
+                            {exportFormatLabel(format)}
+                        </MenuItemButton>
+                    ))}
+                </DropdownMenu>
             </Toolbar>
             <div className={styles.viewport}>
                 <div
@@ -471,6 +547,9 @@ export const Preview = ({
                                             renderedSvgPagesRef.current[pageNumber] ??
                                             null
                                         }
+                                        inlineSvg={
+                                            inlineSvgByPage[pageNumber] ?? null
+                                        }
                                         initialMetrics={
                                             initialMetricsByPage[pageNumber] ?? null
                                         }
@@ -489,6 +568,9 @@ export const Preview = ({
                                         onPagePainted={onFirstPagePainted}
                                         onPageMetrics={handlePageMetrics}
                                         onPageSvg={handlePageSvg}
+                                        onPageVisibilityChange={
+                                            handlePageVisibilityChange
+                                        }
                                     />
                                 );
                             })
@@ -522,6 +604,7 @@ export const Preview = ({
 interface PreviewPageSvgProps {
     changed: boolean;
     cachedPage: RenderedSvgPage | null;
+    inlineSvg: RenderedSvgPage | null;
     initialMetrics: PagePtMetrics | null;
     pageIndex: number;
     pageNumber: number;
@@ -533,6 +616,7 @@ interface PreviewPageSvgProps {
     onPagePainted: (paintInfo: PagePaintInfo) => void;
     onPageMetrics: (pageNumber: number, metrics: PagePtMetrics) => void;
     onPageSvg: (pageNumber: number, renderedPage: RenderedSvgPage) => void;
+    onPageVisibilityChange: (pageIndex: number, visible: boolean) => void;
 }
 
 interface RenderedSvgPage {
@@ -544,6 +628,7 @@ interface RenderedSvgPage {
 const PreviewPageSvgComponent = ({
     changed,
     cachedPage,
+    inlineSvg,
     initialMetrics,
     pageIndex,
     pageNumber,
@@ -555,6 +640,7 @@ const PreviewPageSvgComponent = ({
     onPagePainted,
     onPageMetrics,
     onPageSvg,
+    onPageVisibilityChange,
 }: PreviewPageSvgProps) => {
     const pageRef = useRef<HTMLDivElement>(null);
     const svgRef = useRef<HTMLDivElement>(null);
@@ -586,6 +672,13 @@ const PreviewPageSvgComponent = ({
         rootRef: previewScrollRef,
         forceVisible: needsCaretRender,
     });
+
+    // Report visibility so the next compile inlines this page's SVG while it's
+    // on screen (see `previewSvgPageIndicesRef`).
+    useEffect(() => {
+        onPageVisibilityChange(pageIndex, isInViewport);
+        return () => onPageVisibilityChange(pageIndex, false);
+    }, [isInViewport, onPageVisibilityChange, pageIndex]);
 
     useEffect(() => {
         const element = svgRef.current;
@@ -628,6 +721,33 @@ const PreviewPageSvgComponent = ({
                 hasRenderedRef.current = true;
                 lastRenderedRevisionRef.current = cachedPage.revision;
             }
+            onPageRendered(pageNumber);
+            reportPaint();
+            return () => cancelPaint?.();
+        }
+
+        // Fast path: the compile trip already inlined this page's SVG, so paint
+        // it synchronously instead of making a second `renderSvgPage` trip.
+        if (inlineSvg && inlineSvg.revision === previewRevision) {
+            const metrics = inlineSvg.metrics;
+            const writeStart = nowMs();
+            element.innerHTML = inlineSvg.svg;
+            const domWriteMs = elapsedMs(writeStart, nowMs());
+            lastRenderRef.current = {
+                revision: previewRevision,
+                workerRenderMs: 0,
+                domWriteMs,
+            };
+            setPreviewPageMetrics(element, metrics);
+            setPageMetrics(metrics);
+            onPageMetrics(pageNumber, metrics);
+            onPageSvg(pageNumber, {
+                revision: previewRevision,
+                svg: inlineSvg.svg,
+                metrics,
+            });
+            hasRenderedRef.current = true;
+            lastRenderedRevisionRef.current = previewRevision;
             onPageRendered(pageNumber);
             reportPaint();
             return () => cancelPaint?.();
@@ -682,6 +802,7 @@ const PreviewPageSvgComponent = ({
     }, [
         changed,
         cachedPage,
+        inlineSvg,
         isInViewport,
         onPageMetrics,
         onPagePainted,

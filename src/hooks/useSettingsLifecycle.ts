@@ -10,6 +10,7 @@ import {
     DEFAULT_KEYMAP_SETTINGS,
     mergeGlobalSettings,
     mergeKeymapSettings,
+    mergeRecentProjectLists,
     normalizeThemeMode,
     type ThemeMode,
 } from "../settings/defaults";
@@ -34,37 +35,44 @@ export const useSettingsLifecycle = () => {
     useEffect(() => {
         let isMounted = true;
 
-        void Promise.all([
+        void Promise.allSettled([
             TauriApi.loadGlobalSettings(),
             TauriApi.loadKeymapSettings(),
-        ])
-            .then(([loadedSettings, loadedKeymapSettings]) => {
-                if (!isMounted) {
-                    return;
-                }
+        ]).then(([globalResult, keymapResult]) => {
+            if (!isMounted) {
+                return;
+            }
 
-                const nextSettings = mergeGlobalSettings(loadedSettings);
-                const nextKeymapSettings =
-                    mergeKeymapSettings(loadedKeymapSettings);
-                setGlobalSettings(nextSettings);
-                setKeymapSettings(nextKeymapSettings);
+            if (globalResult.status === "fulfilled") {
+                const loaded = mergeGlobalSettings(globalResult.value);
+                setGlobalSettings((current) => ({
+                    ...loaded,
+                    recent_projects: mergeRecentProjectLists(
+                        current.recent_projects,
+                        loaded.recent_projects,
+                    ),
+                }));
 
-                if (isLocale(nextSettings.locale)) {
-                    setLocale(nextSettings.locale, { reload: false });
-                    setActiveLocale(nextSettings.locale);
+                if (isLocale(loaded.locale)) {
+                    setLocale(loaded.locale, { reload: false });
+                    setActiveLocale(loaded.locale);
                 }
-            })
-            .catch(() => {
-                if (isMounted) {
-                    setGlobalSettings(DEFAULT_GLOBAL_SETTINGS);
-                    setKeymapSettings(DEFAULT_KEYMAP_SETTINGS);
-                }
-            })
-            .finally(() => {
-                if (isMounted) {
-                    setSettingsLoaded(true);
-                }
-            });
+            } else {
+                setGlobalSettings((current) =>
+                    current.recent_projects.length > 0
+                        ? current
+                        : DEFAULT_GLOBAL_SETTINGS,
+                );
+            }
+
+            if (keymapResult.status === "fulfilled") {
+                setKeymapSettings(mergeKeymapSettings(keymapResult.value));
+            } else {
+                setKeymapSettings(DEFAULT_KEYMAP_SETTINGS);
+            }
+
+            setSettingsLoaded(true);
+        });
 
         return () => {
             isMounted = false;
