@@ -4,69 +4,16 @@ import {
     NodeSelection,
     TextSelection,
     type Command,
-    type Selection,
 } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import {
-    TableMap,
-    isInTable,
-    moveCellForward,
-    selectedRect,
-    selectionCell,
-} from "prosemirror-tables";
 import { ATOM_BLOCK_NODES, TABLE_BLOCK_NODE } from "./schema";
-import {
-    isTableBlockFocused,
-    tableBlockGapFocus,
-} from "./tableBlockFocus";
+import { isTableBlockFocused, tableBlockGapFocus } from "./tableBlockFocus";
 import { isBlockEditing, setBlockEditing } from "./blockEditMode";
 
-const TABLE_NODE = "table";
 const BLOCK_SELECTABLE = new Set([TABLE_BLOCK_NODE, ...ATOM_BLOCK_NODES]);
 
-const tableElementIdAt = (
-    state: import("prosemirror-state").EditorState,
-): string | null => {
-    if (!isInTable(state)) {
-        return null;
-    }
-    const $cell = selectionCell(state);
-    for (let depth = $cell.depth; depth > 0; depth -= 1) {
-        if ($cell.node(depth).type.name === TABLE_BLOCK_NODE) {
-            return $cell.node(depth).attrs.elementId as string;
-        }
-    }
-    return null;
-};
-
-/** True when the caret is in a table that is in fine-grained (cell) edit mode. */
-export const canMoveBetweenTableCells = (
-    state: import("prosemirror-state").EditorState,
-): boolean => {
-    const elementId = tableElementIdAt(state);
-    return elementId !== null && isBlockEditing(state, elementId);
-};
-
-export type TableArrowKey = "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown";
-
-/** Caret at the near edge of a cell (start, or end when entering from right/top). */
-const cellCaretSelection = (
-    doc: PMNode,
-    cellPos: number,
-    atEnd: boolean,
-): Selection | null => {
-    const cell = doc.nodeAt(cellPos);
-    if (!cell) {
-        return null;
-    }
-    const inner = atEnd ? cellPos + 1 + cell.content.size : cellPos + 1;
-    return TextSelection.near(doc.resolve(inner), atEnd ? -1 : 1);
-};
-
 /**
- * Open the table identified by `elementId` directly in fine-grained mode with a
- * collapsed caret in its first cell. Used after a fresh table insert so the user
- * can start typing immediately instead of first selecting then entering the block.
+ * Open the table identified by `elementId` in fine-grained mode (caret in first cell).
  */
 export const enterTableBlockById = (
     view: EditorView,
@@ -97,129 +44,9 @@ export const enterTableBlockById = (
     return true;
 };
 
-/**
- * Move a collapsed caret to the adjacent cell in `direction`, wrapping within the
- * same column (up/down) or row (left/right). The caret lands at the near edge of
- * the target cell instead of selecting its contents.
- */
-export const moveCellDirectional = (
-    view: EditorView,
-    direction: "up" | "down" | "left" | "right",
-): boolean => {
-    const { state } = view;
-    if (!isInTable(state)) {
-        return false;
-    }
-    const { map, table, tableStart } = selectedRect(state);
-    const $cell = selectionCell(state);
-    const here = map.findCell($cell.pos - tableStart);
-    const rows = map.height;
-    const cols = map.width;
-    let row = here.top;
-    let col = here.left;
-    if (direction === "up") {
-        row = (here.top - 1 + rows) % rows;
-    } else if (direction === "down") {
-        row = (here.top + 1) % rows;
-    } else if (direction === "left") {
-        col = (here.left - 1 + cols) % cols;
-    } else {
-        col = (here.left + 1) % cols;
-    }
-    const cellPos = tableStart + map.positionAt(row, col, table);
-    const atEnd = direction === "left" || direction === "up";
-    const selection = cellCaretSelection(state.doc, cellPos, atEnd);
-    if (!selection) {
-        return false;
-    }
-    view.dispatch(state.tr.setSelection(selection).scrollIntoView());
-    return true;
-};
-
-/** Plain arrow keys while editing table cells: caret within the cell, then hop. */
-export const runInTableArrow = (
-    view: EditorView,
-    direction: "left" | "right" | "up" | "down",
-): boolean => {
-    const { state } = view;
-    if (!canMoveBetweenTableCells(state)) {
-        return false;
-    }
-    if (!(state.selection instanceof TextSelection)) {
-        return false;
-    }
-    if (!view.endOfTextblock(direction)) {
-        const key =
-            direction === "left"
-                ? "ArrowLeft"
-                : direction === "right"
-                  ? "ArrowRight"
-                  : direction === "up"
-                    ? "ArrowUp"
-                    : "ArrowDown";
-        const cmd = baseKeymap[key];
-        if (cmd && cmd(state, view.dispatch, view)) {
-            return true;
-        }
-    }
-    return moveCellDirectional(view, direction);
-};
-
-const ARROW_TO_DIR: Record<TableArrowKey, "up" | "down" | "left" | "right"> = {
-    ArrowLeft: "left",
-    ArrowRight: "right",
-    ArrowUp: "up",
-    ArrowDown: "down",
-};
-
-/** Alt+arrow: hop to the adjacent cell (collapsed caret, wraps within row/column). */
-export const runAltTableCellNavigate = (
-    view: EditorView,
-    key: TableArrowKey,
-): boolean => {
-    if (!canMoveBetweenTableCells(view.state)) {
-        return false;
-    }
-    return moveCellDirectional(view, ARROW_TO_DIR[key]);
-};
-
-/** Leave cell editing and return to table block focus (gap before wrapper). */
-export const exitTable: Command = (state, dispatch) => {
-    if (!isInTable(state)) {
-        return false;
-    }
-    const $head = state.selection.$head;
-    for (let depth = $head.depth; depth > 0; depth -= 1) {
-        if ($head.node(depth).type.name !== TABLE_BLOCK_NODE) {
-            continue;
-        }
-        const elementId = $head.node(depth).attrs.elementId as string;
-        const blockPos = $head.before(depth);
-        if (!dispatch) {
-            return true;
-        }
-        let tr = state.tr.setSelection(NodeSelection.create(state.doc, blockPos));
-        tr = setBlockEditing(tr, elementId, false);
-        dispatch(tr.scrollIntoView());
-        return true;
-    }
-    return false;
-};
-
 export const tableBlockFromSelection = (
     state: import("prosemirror-state").EditorState,
-): { block: PMNode; tablePos: number; elementId: string } | null => {
-    const { selection } = state;
-    if (selection instanceof NodeSelection) {
-        if (selection.node.type.name !== TABLE_BLOCK_NODE) {
-            return null;
-        }
-        return {
-            block: selection.node,
-            tablePos: selection.from,
-            elementId: selection.node.attrs.elementId as string,
-        };
-    }
+): { tablePos: number; elementId: string } | null => {
     const gap = tableBlockGapFocus(state);
     if (!gap) {
         return null;
@@ -228,7 +55,7 @@ export const tableBlockFromSelection = (
     if (!block || block.type.name !== TABLE_BLOCK_NODE) {
         return null;
     }
-    return { block, tablePos: gap.tablePos, elementId: gap.elementId };
+    return { tablePos: gap.tablePos, elementId: gap.elementId };
 };
 
 export const enterTableFirstCell: Command = (state, dispatch) => {
@@ -263,6 +90,11 @@ export const enterAtomBlock = (view: EditorView): boolean => {
     if (!elementId || isBlockEditing(view.state, elementId)) {
         return false;
     }
+    if (node.type.name === TABLE_BLOCK_NODE) {
+        view.dispatch(setBlockEditing(view.state.tr, elementId, true));
+        view.focus();
+        return true;
+    }
     view.dispatch(setBlockEditing(view.state.tr, elementId, true));
     requestAnimationFrame(() => {
         const dom = view.nodeDOM(pos);
@@ -277,7 +109,6 @@ export const enterAtomBlock = (view: EditorView): boolean => {
     return true;
 };
 
-/** Index and start position of the top-level block containing the selection. */
 const topLevelBlockAt = (
     $from: import("prosemirror-model").ResolvedPos,
 ): { index: number; start: number } | null => {
@@ -331,9 +162,6 @@ const textBlockStart = (doc: PMNode, pos: number): number => {
 
 export const arrowTowardNextBlock = (direction: 1 | -1): Command => {
     return (state, dispatch, view) => {
-        if (isInTable(state)) {
-            return false;
-        }
         if (
             state.selection instanceof NodeSelection &&
             state.selection.node.type.name === TABLE_BLOCK_NODE
@@ -423,7 +251,6 @@ export const arrowTowardNextBlock = (direction: 1 | -1): Command => {
     };
 };
 
-/** Move between top-level blocks when a block (e.g. table) is selected as a whole. */
 export const navigateAdjacentBlock = (direction: 1 | -1): Command => {
     return (state, dispatch) => {
         const selection = state.selection;
@@ -476,7 +303,7 @@ export const navigateAdjacentBlock = (direction: 1 | -1): Command => {
 const crossToBlockHorizontally = (view: EditorView, dir: 1 | -1): boolean => {
     const { state } = view;
     const sel = state.selection;
-    if (!(sel instanceof TextSelection) || !sel.empty || isInTable(state)) {
+    if (!(sel instanceof TextSelection) || !sel.empty) {
         return false;
     }
     if (!view.endOfTextblock(dir > 0 ? "right" : "left")) {
@@ -532,12 +359,6 @@ export const runBodyNavigate = (
         }
         const blockDir = direction === "right" ? 1 : -1;
         return navigateAdjacentBlock(blockDir)(state, view.dispatch);
-    }
-
-    if (isInTable(state) && canMoveBetweenTableCells(state)) {
-        if (runInTableArrow(view, direction)) {
-            return true;
-        }
     }
 
     if (direction === "up" || direction === "down") {

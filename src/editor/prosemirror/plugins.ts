@@ -13,8 +13,6 @@ import {
     blockSelectionGuardPlugin,
     clickBelowLastBlockPlugin,
 } from "./blockSelectionGuard";
-import { tableSelectionGuardPlugin } from "./tableSelectionGuard";
-
 /**
  * Top-level block nodes whose `elementId` must be unique and non-empty. Splits
  * and pastes can produce blocks that share an id (the split copies attrs) or
@@ -127,7 +125,6 @@ export const bodyPlugins = () => [
     // the table plugin claims the mousedown and the guards re-clamp inward.
     blockOutsidePointerPlugin(),
     clickBelowLastBlockPlugin(),
-    tableSelectionGuardPlugin(),
     blockSelectionGuardPlugin(),
     tableBlockFocusPlugin(),
     typingKeymap,

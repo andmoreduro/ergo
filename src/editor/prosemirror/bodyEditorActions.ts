@@ -1,11 +1,7 @@
 import type { ActionHandlerMap } from "../../actions/runtime";
 import { getActiveBodyView } from "./activeView";
 import { isTableBlockFocused } from "./tableBlockFocus";
-import {
-    enterTableFirstCell,
-    runAltTableCellNavigate,
-    runBodyNavigate,
-} from "./bodyTableCommands";
+import { enterTableFirstCell, runBodyNavigate } from "./bodyTableCommands";
 
 const withBodyView = (
     run: (
@@ -25,25 +21,12 @@ const withBodyView = (
 };
 
 export const bodyEditorActionHandlers = (): ActionHandlerMap => ({
-    "editor::MoveTableCellLeft": withBodyView((view) =>
-        runAltTableCellNavigate(view, "ArrowLeft"),
-    ),
-    "editor::MoveTableCellRight": withBodyView((view) =>
-        runAltTableCellNavigate(view, "ArrowRight"),
-    ),
-    "editor::MoveTableCellUp": withBodyView((view) =>
-        runAltTableCellNavigate(view, "ArrowUp"),
-    ),
-    "editor::MoveTableCellDown": withBodyView((view) =>
-        runAltTableCellNavigate(view, "ArrowDown"),
-    ),
     "editor::EnterTable": withBodyView((view) => {
         if (isTableBlockFocused(view.state)) {
             return enterTableFirstCell(view.state, view.dispatch);
         }
         return false;
     }),
-    // Arrow keys are handled synchronously in `bodyKeyboardPlugin` (not keymap-bound).
     "editor::BodyNavigateLeft": withBodyView((view) => runBodyNavigate(view, "left")),
     "editor::BodyNavigateRight": withBodyView((view) =>
         runBodyNavigate(view, "right"),
