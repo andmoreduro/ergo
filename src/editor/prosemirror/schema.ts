@@ -1,5 +1,4 @@
 import { Schema, type NodeSpec, type MarkSpec } from "prosemirror-model";
-import { tableNodes } from "prosemirror-tables";
 
 /**
  * ProseMirror schema for the document body editor.
@@ -8,7 +7,7 @@ import { tableNodes } from "prosemirror-tables";
  * heading, quote, list/enumeration) hold inline content, while block objects
  * (equation, figure, diagram, custom) are atoms whose full `DocumentElement` is
  * carried in the `element` attr and edited through an embedded NodeView. Tables
- * use the official `prosemirror-tables` nodes so cells can be merged/selected.
+ * are block atoms with an isolated nested ProseMirror view (`tableBlockNodeView`).
  *
  * Inline content carries marks (strong/em/underline) plus two inline atoms:
  * `reference` (a citation chip, zero width in field-offset terms) and
@@ -16,15 +15,6 @@ import { tableNodes } from "prosemirror-tables";
  * with the Rust source map is what preserves preview caret sync — see
  * `astBridge.ts` `fieldCaretOffsetFromNode`.
  */
-
-// Native PM table cells use plain `text*` until the nested table view (Stage 2+).
-// The AST stores `RichText[]`; `astBridge` maps cells lossily via `richTextPlainText`
-// until then. Marks or inline atoms here would drop on commit and break field offsets.
-const tNodes = tableNodes({
-    tableGroup: "block",
-    cellContent: "text*",
-    cellAttributes: {},
-});
 
 const baseNodes: Record<string, NodeSpec> = {
     doc: { content: "block+" },
@@ -186,6 +176,7 @@ const blockObjectNodes: Record<string, NodeSpec> = {
     figure: atomBlock("Figure"),
     diagram: atomBlock("Diagram"),
     custom: atomBlock("Custom"),
+    table_block: atomBlock("Table"),
 };
 
 const marks: Record<string, MarkSpec> = {
@@ -220,34 +211,6 @@ export const bodySchema = new Schema({
     nodes: {
         ...baseNodes,
         ...blockObjectNodes,
-        table_block: {
-            group: "block",
-            content: "table",
-            isolating: true,
-            attrs: {
-                elementId: { default: "" },
-                columnSizes: { default: [] },
-                extraFields: { default: {} },
-            },
-            parseDOM: [{ tag: "div.ergo-table-block" }],
-            toDOM: (node) => [
-                "div",
-                {
-                    class: "ergo-table-block",
-                    "data-element-id": node.attrs.elementId,
-                },
-                0,
-            ],
-        },
-        table: {
-            ...tNodes.table,
-            attrs: {
-                ...(tNodes.table.attrs ?? {}),
-            },
-        },
-        table_row: tNodes.table_row,
-        table_cell: tNodes.table_cell,
-        table_header: tNodes.table_header,
     },
     marks,
 });
@@ -264,15 +227,19 @@ export const TEXT_FIELD_NODES = new Set([
     "heading",
     "quote",
     "list_item",
-    "table_cell",
-    "table_header",
 ]);
 
 /** Block atom node type names backed by an embedded element editor. */
-export const ATOM_BLOCK_NODES = new Set(["equation", "figure", "diagram", "custom"]);
-
-/** Isolating wrapper; the inner `table` is edited only in table edit mode. */
+/** Isolating table block atom; edited via nested ProseMirror view. */
 export const TABLE_BLOCK_NODE = "table_block";
+
+export const ATOM_BLOCK_NODES = new Set([
+    "equation",
+    "figure",
+    "diagram",
+    "custom",
+    TABLE_BLOCK_NODE,
+]);
 
 /**
  * Every node type that behaves as a self-contained block element: atom editors

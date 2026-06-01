@@ -1,19 +1,25 @@
 import type { Node as PMNode } from "prosemirror-model";
-import { NodeSelection, TextSelection } from "prosemirror-state";
-import type { EditorView, NodeView } from "prosemirror-view";
+import { EditorState, NodeSelection, TextSelection } from "prosemirror-state";
+import { EditorView, type NodeView } from "prosemirror-view";
+import type { DocumentElement } from "../../../bindings/DocumentElement";
 import { isBlockEditing, setBlockEditing } from "../blockEditMode";
+import { clearBlockUiState, setBlockUiState } from "../blockUiState";
+import { tableSchema } from "../table/tableSchema";
+import { tableToSubDoc, type TableElement } from "../table/tableSubBridge";
 import styles from "./tableBlockNodeView.module.css";
 import "./tableBlockNodeView.global.css";
 
+const tableFromNode = (node: PMNode): TableElement => {
+    const element = node.attrs.element as DocumentElement | null;
+    if (!element || element.type !== "Table") {
+        throw new Error("table_block is missing Table element payload");
+    }
+    return element;
+};
+
 /**
- * Isolates the table from the outer prose flow. While not in edit mode, pointer
- * and keyboard events do not reach the inner table; the outer doc keeps a gap
- * selection and block highlight instead of a cell selection.
- *
- * Click behaves in two stages: a click on a locked table first selects it as a
- * whole (highlight); a second click — when it is already selected — enters
- * fine-grained mode with the caret at the clicked cell. Once editing, clicks
- * fall through to the native table for normal cell editing.
+ * Block-atom NodeView hosting a read-only (Stage 2) nested table editor.
+ * Isolation comes from a separate `contenteditable` tree in the child view.
  */
 export const createTableBlockNodeView = (
     node: PMNode,
@@ -24,39 +30,59 @@ export const createTableBlockNodeView = (
 
     const dom = document.createElement("div");
     dom.className = styles.block;
+    dom.setAttribute("data-pm-nodeview", "table_block");
 
-    const contentDOM = document.createElement("div");
-    contentDOM.className = styles.inner;
-    dom.appendChild(contentDOM);
+    const inner = document.createElement("div");
+    inner.className = styles.inner;
+    dom.appendChild(inner);
 
-    const elementId = () => currentNode.attrs.elementId as string;
+    const elementId = () =>
+        (currentNode.attrs.elementId as string) ||
+        tableFromNode(currentNode).id;
+
+    const childView = new EditorView(inner, {
+        state: EditorState.create({
+            doc: tableToSubDoc(tableSchema, tableFromNode(currentNode)),
+        }),
+        editable: () => false,
+    });
 
     const isWholeSelected = (blockPos: number): boolean => {
         const { selection } = view.state;
         return selection instanceof NodeSelection && selection.from === blockPos;
     };
 
-    const enterAtCoords = (blockPos: number, clientX: number, clientY: number) => {
-        const blockNode = view.state.doc.nodeAt(blockPos);
-        if (!blockNode) {
+    const pushBlockUi = () => {
+        const id = elementId();
+        if (!id || !view?.state) {
             return;
         }
-        const innerFrom = blockPos + 1;
-        const innerTo = blockPos + blockNode.nodeSize - 1;
-        const hit = view.posAtCoords({ left: clientX, top: clientY });
-        const caret = hit
-            ? Math.min(Math.max(hit.pos, innerFrom), innerTo)
-            : innerFrom;
-        let tr = view.state.tr.setSelection(
-            TextSelection.near(view.state.doc.resolve(caret), 1),
+        const pos = getPos();
+        setBlockUiState(id, {
+            selected: pos !== undefined && isWholeSelected(pos),
+            editing: isBlockEditing(view.state, id),
+        });
+    };
+
+    const focusChildAtCoords = (clientX: number, clientY: number) => {
+        const hit = childView.posAtCoords({ left: clientX, top: clientY });
+        const caret = hit?.pos ?? 1;
+        childView.dispatch(
+            childView.state.tr.setSelection(
+                TextSelection.near(childView.state.doc.resolve(caret), 1),
+            ),
         );
+        childView.focus();
+    };
+
+    const enterEditAtCoords = (blockPos: number, clientX: number, clientY: number) => {
+        let tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, blockPos));
         tr = setBlockEditing(tr, elementId(), true);
-        view.dispatch(tr.scrollIntoView());
-        view.focus();
+        view.dispatch(tr);
+        requestAnimationFrame(() => focusChildAtCoords(clientX, clientY));
     };
 
     const onMouseDown = (event: MouseEvent) => {
-        // Editing: let the native table handle the click for cell editing.
         if (isBlockEditing(view.state, elementId())) {
             return;
         }
@@ -66,7 +92,7 @@ export const createTableBlockNodeView = (
         }
         event.preventDefault();
         if (isWholeSelected(blockPos)) {
-            enterAtCoords(blockPos, event.clientX, event.clientY);
+            enterEditAtCoords(blockPos, event.clientX, event.clientY);
         } else {
             view.dispatch(
                 view.state.tr.setSelection(
@@ -75,34 +101,62 @@ export const createTableBlockNodeView = (
             );
             view.focus();
         }
+        pushBlockUi();
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+        if (!isBlockEditing(view.state, elementId())) {
+            return;
+        }
+        if (event.key === "Escape" || (event.key === "Enter" && event.ctrlKey)) {
+            event.preventDefault();
+            event.stopPropagation();
+            const pos = getPos();
+            if (pos === undefined) {
+                return;
+            }
+            let tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos));
+            tr = setBlockEditing(tr, elementId(), false);
+            view.dispatch(tr);
+            view.focus();
+            pushBlockUi();
+        }
     };
 
     dom.addEventListener("mousedown", onMouseDown);
+    dom.addEventListener("keydown", onKeyDown, true);
 
     return {
         dom,
-        contentDOM,
         update(updated: PMNode) {
             if (updated.type.name !== "table_block") {
                 return false;
             }
             currentNode = updated;
+            const nextDoc = tableToSubDoc(tableSchema, tableFromNode(updated));
+            childView.updateState(
+                EditorState.create({
+                    doc: nextDoc,
+                    selection: childView.state.selection,
+                }),
+            );
+            pushBlockUi();
             return true;
         },
         stopEvent(event: Event) {
             if (isBlockEditing(view.state, elementId())) {
-                return false;
+                return inner.contains(event.target as globalThis.Node);
             }
             return dom.contains(event.target as globalThis.Node);
         },
-        ignoreMutation(record) {
-            if (record.type === "selection") {
-                return false;
-            }
-            return !contentDOM.contains(record.target);
+        ignoreMutation() {
+            return true;
         },
         destroy() {
             dom.removeEventListener("mousedown", onMouseDown);
+            dom.removeEventListener("keydown", onKeyDown, true);
+            childView.destroy();
+            clearBlockUiState(elementId());
         },
     };
 };
