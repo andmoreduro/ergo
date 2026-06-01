@@ -6,7 +6,6 @@ import { FigureEditor } from "./editors/FigureEditor";
 import { HeadingEditor } from "./editors/HeadingEditor";
 import { EnumerationEditor, ListEditor } from "./editors/ListEditors";
 import { ParagraphEditor } from "./editors/ParagraphEditor";
-import { TableEditor } from "./editors/TableEditor";
 import { QuoteEditor } from "./editors/QuoteEditor";
 
 export const ElementContent = ({ element }: { element: DocumentElement }) => {
@@ -32,10 +31,6 @@ export const ElementContent = ({ element }: { element: DocumentElement }) => {
 
     if (element.type === "Enumeration") {
         return <EnumerationEditor element={element} />;
-    }
-
-    if (element.type === "Table") {
-        return <TableEditor element={element} />;
     }
 
     if (element.type === "Custom") {
