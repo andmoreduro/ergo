@@ -1,16 +1,10 @@
 import { Plugin } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import { goToNextCell, isInTable } from "prosemirror-tables";
 import {
-    canMoveBetweenTableCells,
     enterAtomBlock,
     enterTableFirstCell,
-    exitTable,
-    moveCellDirectional,
-    runAltTableCellNavigate,
     runBodyNavigate,
     tableBlockFromSelection,
-    type TableArrowKey,
 } from "./bodyTableCommands";
 import {
     getActiveBodyView,
@@ -44,9 +38,7 @@ const TABLE_ARROWS = new Set<string>([
 ]);
 
 /**
- * Synchronous body shortcuts before `prosemirror-tables` keymaps run. The action
- * runtime resolves keys asynchronously; table block highlight, Alt+arrow cell
- * jumps, and plain-arrow caret rules are handled here.
+ * Synchronous body shortcuts before nested table keymaps run in the table NodeView.
  */
 export const bodyKeyboardPlugin = () =>
     new Plugin({
@@ -68,17 +60,6 @@ export const bodyKeyboardPlugin = () =>
                         event.stopPropagation();
                         return true;
                     }
-                }
-
-                if (event.key === "Escape") {
-                    if (isInTable(view.state)) {
-                        if (exitTable(view.state, view.dispatch)) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            return true;
-                        }
-                    }
-                    return false;
                 }
 
                 if (event.key === "Enter") {
@@ -117,7 +98,6 @@ export const bodyKeyboardPlugin = () =>
                 }
 
                 if (event.key === "Tab") {
-                    // Tab on a locked/selected table or atom block enters fine-grained mode.
                     if (enterTableFirstCell(view.state, view.dispatch)) {
                         event.preventDefault();
                         event.stopPropagation();
@@ -132,30 +112,6 @@ export const bodyKeyboardPlugin = () =>
                 }
 
                 if (!TABLE_ARROWS.has(event.key)) {
-                    return false;
-                }
-
-                if (event.altKey && !mod && !event.shiftKey) {
-                    if (canMoveBetweenTableCells(view.state)) {
-                        runAltTableCellNavigate(view, event.key as TableArrowKey);
-                        event.preventDefault();
-                        event.stopPropagation();
-                        return true;
-                    }
-                }
-
-                // Ctrl/Cmd+arrow: word/line motion inside the cell, hop to the
-                // adjacent cell only at the cell edge (in the arrow's direction).
-                if (mod && !event.shiftKey && !event.altKey) {
-                    if (canMoveBetweenTableCells(view.state)) {
-                        const cdir = NAV_DIR[event.key];
-                        if (cdir && view.endOfTextblock(cdir)) {
-                            moveCellDirectional(view, cdir);
-                            event.preventDefault();
-                            event.stopPropagation();
-                            return true;
-                        }
-                    }
                     return false;
                 }
 

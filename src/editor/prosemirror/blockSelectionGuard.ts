@@ -49,8 +49,7 @@ const selectionInside = (selection: Selection, range: EditingRange): boolean => 
  * While a block element is in fine-grained mode, keep the selection inside it.
  * Any transaction whose selection lands outside — Ctrl+Arrow word motion,
  * Ctrl+Home/End, PageUp/Down, Ctrl+A, edge arrows, native caret drift — is
- * corrected back in. This is the mirror of `tableSelectionGuard`, which forces
- * the selection ONTO the wrapper while the block is locked. The only sanctioned
+ * corrected back in. The only sanctioned
  * exits flip edit mode off in the same transaction, so they are not clamped.
  */
 export const blockSelectionGuardPlugin = () =>
