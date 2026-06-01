@@ -343,7 +343,7 @@ fn generate_element_typst(
                     &figure.id,
                     figure_override,
                     &figure.extra_fields,
-                    &["caption", "width"],
+                    &["caption", "width", "height"],
                 );
                 builder.push_literal(&format!("\n) <{label}>\n\n"));
             } else {
@@ -358,7 +358,7 @@ fn generate_element_typst(
                     caption,
                     placement,
                     &figure.extra_fields,
-                    &["caption", "width"],
+                    &["caption", "width", "height"],
                 );
                 builder.push_literal(&format!("<{label}>\n\n"));
             }
@@ -419,7 +419,7 @@ fn generate_element_typst(
                     &diagram.id,
                     figure_override,
                     &diagram.extra_fields,
-                    &["caption", "width"],
+                    &["caption", "width", "height"],
                 );
                 builder.push_literal(&format!("\n) <{label}>\n\n"));
             } else {
@@ -444,7 +444,7 @@ fn generate_element_typst(
                     caption,
                     placement,
                     &diagram.extra_fields,
-                    &["caption", "width"],
+                    &["caption", "width", "height"],
                 );
                 builder.push_literal(&format!("<{label}>\n\n"));
             }
