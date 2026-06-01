@@ -36,7 +36,10 @@ import {
 import { bodyPlugins } from "../../../editor/prosemirror/plugins";
 import { createBlockObjectNodeViews } from "../../../editor/prosemirror/nodeViews/blockObjectNodeViews";
 import { NodeViewPortalRegistry } from "../../../editor/prosemirror/nodeViews/nodeViewPortals";
-import { createTableBlockNodeView } from "../../../editor/prosemirror/nodeViews/tableBlockNodeView";
+import {
+    createTableBlockNodeView,
+    TABLE_ATTR_SYNC_META,
+} from "../../../editor/prosemirror/nodeViews/tableBlockNodeView";
 import { bodySchema } from "../../../editor/prosemirror/schema";
 import { insertParagraphBeforeElement } from "../../../editor/insertParagraphBeforeElement";
 import {
@@ -44,7 +47,9 @@ import {
     setActiveBodyView,
     setBodyHistoryActions,
     setBodyParagraphInsert,
+    setBodyTableCommit,
 } from "../../../editor/prosemirror/activeView";
+import { elementIdOf } from "../../../state/documentEvents/helpers";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
 import { enterTableBlockById } from "../../../editor/prosemirror/bodyTableCommands";
 import { takePendingBlockEditIfMatches } from "../../../editor/prosemirror/pendingBlockEdit";
@@ -184,6 +189,21 @@ export const ProseMirrorBodyEditor = ({
     }, []);
 
     useLayoutEffect(() => {
+        setBodyTableCommit({
+            sectionId: section.id,
+            commit: (forward, inverse) => {
+                pmOriginCommitRef.current = true;
+                commitRef.current(forward, inverse);
+            },
+            elementIndex: (tableId) =>
+                sectionRef.current.elements.findIndex(
+                    (element) => elementIdOf(element) === tableId,
+                ),
+        });
+        return () => setBodyTableCommit(null);
+    }, [section.id]);
+
+    useLayoutEffect(() => {
         const mount = mountRef.current;
         if (!mount) {
             return;
@@ -202,6 +222,9 @@ export const ProseMirrorBodyEditor = ({
             }
 
             if (tr.docChanged) {
+                if (tr.getMeta(TABLE_ATTR_SYNC_META)) {
+                    return;
+                }
                 const current = sectionRef.current;
                 // Fast path: a single-step, same-block-count edit (ordinary
                 // typing) only touched a few top-level blocks, so convert and
