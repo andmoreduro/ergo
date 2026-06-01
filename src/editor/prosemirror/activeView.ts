@@ -1,5 +1,6 @@
 import { toggleMark } from "prosemirror-commands";
 import type { EditorView } from "prosemirror-view";
+import type { DocumentEvent } from "../../bindings/DocumentEvent";
 import { bodySchema } from "./schema";
 
 /**
@@ -31,6 +32,20 @@ export interface BodyParagraphInsert {
 }
 
 let bodyParagraphInsert: BodyParagraphInsert | null = null;
+
+export interface BodyTableCommit {
+    sectionId: string;
+    commit: (forward: DocumentEvent[], inverse: DocumentEvent[]) => void;
+    elementIndex: (tableId: string) => number;
+}
+
+let bodyTableCommit: BodyTableCommit | null = null;
+
+export const setBodyTableCommit = (bridge: BodyTableCommit | null) => {
+    bodyTableCommit = bridge;
+};
+
+export const getBodyTableCommit = (): BodyTableCommit | null => bodyTableCommit;
 
 export const setBodyParagraphInsert = (actions: BodyParagraphInsert | null) => {
     bodyParagraphInsert = actions;

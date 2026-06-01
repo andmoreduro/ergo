@@ -90,10 +90,7 @@ export const enterTableBlockById = (
     if (blockPos === -1) {
         return false;
     }
-    // `blockPos + 1` is just inside the block (before the inner table); biasing
-    // forward lands the caret in the first cell's text.
-    const caret = TextSelection.near(doc.resolve(blockPos + 1), 1);
-    let tr = view.state.tr.setSelection(caret);
+    let tr = view.state.tr.setSelection(NodeSelection.create(doc, blockPos));
     tr = setBlockEditing(tr, elementId, true);
     view.dispatch(tr.scrollIntoView());
     view.focus();
@@ -239,18 +236,9 @@ export const enterTableFirstCell: Command = (state, dispatch) => {
     if (!located || !isTableBlockFocused(state)) {
         return false;
     }
-    const { block, tablePos, elementId } = located;
-    const table = block.firstChild;
-    if (!table || table.type.name !== TABLE_NODE) {
-        return false;
-    }
-    const map = TableMap.get(table);
-    const tableStart = tablePos + 1;
-    const $cell = state.doc.resolve(tableStart + map.positionAt(0, 0, table));
+    const { tablePos, elementId } = located;
     if (dispatch) {
-        let tr = state.tr.setSelection(
-            TextSelection.between($cell, moveCellForward($cell)),
-        );
+        let tr = state.tr.setSelection(NodeSelection.create(state.doc, tablePos));
         tr = setBlockEditing(tr, elementId, true);
         dispatch(tr.scrollIntoView());
     }

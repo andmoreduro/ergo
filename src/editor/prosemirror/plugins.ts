@@ -3,9 +3,7 @@ import { baseKeymap } from "prosemirror-commands";
 import { Plugin, type EditorState, type Transaction } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
 import { dropCursor } from "prosemirror-dropcursor";
-import { columnResizing, tableEditing } from "prosemirror-tables";
 import { createId } from "../../state/ast/defaults";
-import { tableKeymap } from "./keymap";
 import { bodyKeyboardPlugin } from "./bodyKeyboardPlugin";
 import { ATOM_BLOCK_NODES } from "./schema";
 import { tableBlockFocusPlugin } from "./tableBlockFocus";
@@ -133,9 +131,6 @@ export const bodyPlugins = () => [
     blockSelectionGuardPlugin(),
     tableBlockFocusPlugin(),
     typingKeymap,
-    tableKeymap,
-    columnResizing({ defaultCellMinWidth: 96 }),
-    tableEditing(),
     dropCursor(),
     atomElementPreserver,
     idNormalizer,
