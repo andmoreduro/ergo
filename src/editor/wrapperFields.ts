@@ -3,14 +3,21 @@ import type { ExtraFieldSpec } from "../bindings/ExtraFieldSpec";
 
 type FigureElement = Extract<DocumentElement, { type: "Figure" }>;
 type TableElement = Extract<DocumentElement, { type: "Table" }>;
-export type WrapperHostElement = FigureElement | TableElement;
+type DiagramElement = Extract<DocumentElement, { type: "Diagram" }>;
+export type WrapperHostElement =
+    | FigureElement
+    | TableElement
+    | DiagramElement;
 
-/** Figure captions live on `Figure.caption`; tables use `extra_fields.caption`. */
+/** Figure/diagram captions live on the element; tables use `extra_fields.caption`. */
 export const wrapperFieldValue = (
     element: WrapperHostElement,
     key: string,
 ): unknown => {
-    if (element.type === "Figure" && key === "caption") {
+    if (
+        (element.type === "Figure" || element.type === "Diagram") &&
+        key === "caption"
+    ) {
         return element.caption;
     }
     return element.extra_fields?.[key] ?? "";

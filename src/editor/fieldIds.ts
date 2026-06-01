@@ -61,6 +61,9 @@ const projectInputFieldPrefix = "project-input-";
 export const projectInputFieldId = (path: string) =>
     `${projectInputFieldPrefix}${path}`;
 
+export const isTemplateFormFieldId = (fieldId: string): boolean =>
+    fieldId.startsWith(projectInputFieldPrefix);
+
 export const simpleListComposerFieldId = (path: string) =>
     projectInputFieldId(`${path}/composer`);
 

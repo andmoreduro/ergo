@@ -137,6 +137,26 @@
       "context": "body",
       "sequence": [{ "key": "enter", "modifiers": ["Control"] }]
     },
+    {
+      "action_id": "editor::Tab",
+      "context": "body",
+      "sequence": [{ "key": "tab", "modifiers": [] }]
+    },
+    {
+      "action_id": "editor::Tab",
+      "context": "body",
+      "sequence": [{ "key": "tab", "modifiers": ["Control", "Shift"] }]
+    },
+    {
+      "action_id": "editor::Tab",
+      "context": "editor",
+      "sequence": [{ "key": "tab", "modifiers": ["Control", "Shift"] }]
+    },
+    {
+      "action_id": "editor::Tab",
+      "context": "editor && input",
+      "sequence": [{ "key": "tab", "modifiers": ["Control"] }]
+    }
   ],
   "keymap_overrides": []
 }

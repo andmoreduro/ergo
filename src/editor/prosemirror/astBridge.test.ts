@@ -5,6 +5,7 @@ import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
 import { createRichText, createTable } from "../../state/ast/defaults";
 import { bodySchema } from "./schema";
+import { tableSchema } from "./table/tableSchema";
 import {
     changedTopLevelRange,
     docToElements,
@@ -89,6 +90,18 @@ describe("RichText ↔ PM fragment round-trip", () => {
             createRichText(" hold"),
         ];
         expect(roundTrip(content)).toEqual(content);
+    });
+
+    it("collects hard breaks and inline content from table cells", () => {
+        const cell = tableSchema.nodes.table_cell.create(null, [
+            tableSchema.text("line one"),
+            tableSchema.nodes.hard_break.create(),
+            tableSchema.text("line two"),
+        ]);
+        const spans = fragmentToRichText(cell.content);
+        expect(spans).toHaveLength(1);
+        expect(spans[0]?.text).toContain("line one");
+        expect(spans[0]?.text).toContain("line two");
     });
 });
 

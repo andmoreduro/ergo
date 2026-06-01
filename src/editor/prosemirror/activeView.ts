@@ -10,6 +10,42 @@ import { bodySchema } from "./schema";
  */
 let activeView: EditorView | null = null;
 
+export interface BodyTabModifiers {
+    shiftKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+}
+
+const defaultBodyTabModifiers = (): BodyTabModifiers => ({
+    shiftKey: false,
+    ctrlKey: false,
+    metaKey: false,
+});
+
+let pendingBodyTab: BodyTabModifiers = defaultBodyTabModifiers();
+
+/** Modifier state for Tab currently being resolved by the action runtime. */
+export const captureBodyTabKey = (
+    event: Pick<KeyboardEvent, "shiftKey" | "ctrlKey" | "metaKey">,
+): void => {
+    pendingBodyTab = {
+        shiftKey: event.shiftKey,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+    };
+};
+
+export const peekBodyTabModifiers = (): Readonly<BodyTabModifiers> =>
+    pendingBodyTab;
+
+export const peekBodyTabShiftKey = (): boolean => peekBodyTabModifiers().shiftKey;
+
+export const consumeBodyTabShiftKey = (): boolean => {
+    const shift = pendingBodyTab.shiftKey;
+    pendingBodyTab = defaultBodyTabModifiers();
+    return shift;
+};
+
 /** AST undo/redo for the focused body editor (not ProseMirror's history). */
 export interface BodyHistoryActions {
     undo: () => void;
@@ -29,6 +65,7 @@ export const getBodyHistoryActions = (): BodyHistoryActions | null => bodyHistor
 /** AST paragraph insert from the focused body editor (table block shortcuts). */
 export interface BodyParagraphInsert {
     insertBeforeElement: (beforeElementId: string) => void;
+    insertAfterElement: (afterElementId: string) => void;
 }
 
 let bodyParagraphInsert: BodyParagraphInsert | null = null;

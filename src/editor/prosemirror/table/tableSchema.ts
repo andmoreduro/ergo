@@ -10,6 +10,14 @@ const tNodes = tableNodes({
 const inlineNodes: Record<string, NodeSpec> = {
     text: { group: "inline" },
 
+    hard_break: {
+        inline: true,
+        group: "inline",
+        selectable: false,
+        parseDOM: [{ tag: "br" }],
+        toDOM: () => ["br"],
+    },
+
     reference: {
         group: "inline",
         inline: true,

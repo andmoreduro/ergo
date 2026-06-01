@@ -6,11 +6,67 @@ import {
     type Command,
 } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
+import { focusWrapperPrimary } from "../wrapperTabCycle";
 import { ATOM_BLOCK_NODES, TABLE_BLOCK_NODE } from "./schema";
 import { isTableBlockFocused, tableBlockGapFocus } from "./tableBlockFocus";
 import { isBlockEditing, setBlockEditing } from "./blockEditMode";
 
 const BLOCK_SELECTABLE = new Set([TABLE_BLOCK_NODE, ...ATOM_BLOCK_NODES]);
+
+export const elementIdFromBlockNode = (node: PMNode): string =>
+    ((node.attrs.element as { id?: string } | null)?.id ??
+        (node.attrs.elementId as string)) ||
+    "";
+
+/** Whole block selected in locked mode (not fine-grained editing). */
+export const isLockedWholeBlockSelected = (
+    state: import("prosemirror-state").EditorState,
+): boolean => {
+    if (isTableBlockFocused(state)) {
+        return true;
+    }
+    const { selection } = state;
+    if (!(selection instanceof NodeSelection)) {
+        return false;
+    }
+    if (!BLOCK_SELECTABLE.has(selection.node.type.name)) {
+        return false;
+    }
+    const elementId = elementIdFromBlockNode(selection.node);
+    return Boolean(elementId && !isBlockEditing(state, elementId));
+};
+
+/** Element id when a block is whole-selected in locked mode, for Enter → new paragraph. */
+export const lockedWholeBlockElementId = (
+    state: import("prosemirror-state").EditorState,
+): string | null => {
+    if (!isLockedWholeBlockSelected(state)) {
+        return null;
+    }
+    const { selection } = state;
+    if (selection instanceof NodeSelection) {
+        return elementIdFromBlockNode(selection.node) || null;
+    }
+    return tableBlockGapFocus(state)?.elementId ?? null;
+};
+
+/** Tab / Ctrl+Enter from locked whole-block selection → fine-grained mode. */
+export const enterLockedWholeBlock = (view: EditorView): boolean => {
+    const { selection } = view.state;
+    if (selection instanceof NodeSelection) {
+        const name = selection.node.type.name;
+        if (name === TABLE_BLOCK_NODE) {
+            const elementId = elementIdFromBlockNode(selection.node);
+            if (elementId && !isBlockEditing(view.state, elementId)) {
+                return enterTableBlockById(view, elementId);
+            }
+        }
+    }
+    if (enterTableFirstCell(view.state, view.dispatch)) {
+        return true;
+    }
+    return enterAtomBlock(view);
+};
 
 /**
  * Open the table identified by `elementId` in fine-grained mode (caret in first cell).
@@ -83,29 +139,20 @@ export const enterAtomBlock = (view: EditorView): boolean => {
         return false;
     }
     const pos = selection.from;
-    const elementId =
-        ((node.attrs.element as { id?: string } | null)?.id ??
-            (node.attrs.elementId as string)) ||
-        "";
+    const elementId = elementIdFromBlockNode(node);
     if (!elementId || isBlockEditing(view.state, elementId)) {
         return false;
     }
     if (node.type.name === TABLE_BLOCK_NODE) {
-        view.dispatch(setBlockEditing(view.state.tr, elementId, true));
+        view.dispatch(setBlockEditing(view.state.tr, elementId, true).scrollIntoView());
         view.focus();
         return true;
     }
-    view.dispatch(setBlockEditing(view.state.tr, elementId, true));
-    requestAnimationFrame(() => {
-        const dom = view.nodeDOM(pos);
-        if (dom instanceof HTMLElement) {
-            dom
-                .querySelector<HTMLElement>(
-                    "input, textarea, select, button, [contenteditable]",
-                )
-                ?.focus();
-        }
-    });
+    view.dispatch(setBlockEditing(view.state.tr, elementId, true).scrollIntoView());
+    const dom = view.nodeDOM(pos);
+    if (dom instanceof HTMLElement) {
+        focusWrapperPrimary(dom);
+    }
     return true;
 };
 

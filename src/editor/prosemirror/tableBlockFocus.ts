@@ -76,7 +76,7 @@ export const tableBlockFocusPlugin = () =>
                                 : "ergo-table-block--locked",
                         );
                         if (selected && !editing) {
-                            classes.push("ergo-table-block-focus");
+                            classes.push("ergo-block-object--selected");
                         }
                     } else {
                         classes.push(

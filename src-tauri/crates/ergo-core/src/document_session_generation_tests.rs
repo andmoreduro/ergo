@@ -459,6 +459,68 @@ fn table_cell_spans_emit_table_cell_delimiters() {
 }
 
 #[test]
+fn table_cell_multiline_rich_text_emits_linebreak() {
+    let template = template_with_apa_wrapper_fields();
+    let mut ast = ast_with_table_and_figure();
+    if let DocumentSection::Content(section) = &mut ast.sections[0] {
+        if let DocumentElement::Table(table) = &mut section.elements[0] {
+            table.rows = 1;
+            table.cols = 1;
+            table.cells = vec![vec![TableCell {
+                content: vec![
+                    RichText {
+                        text: "Then happens what needs to happen.".to_string(),
+                        bold: None,
+                        italic: None,
+                        underline: None,
+                        kind: None,
+                        reference_id: None,
+                        equation_source: None,
+                        equation_syntax: EquationSyntax::Typst,
+                    },
+                    RichText {
+                        text: "\n".to_string(),
+                        bold: None,
+                        italic: None,
+                        underline: None,
+                        kind: None,
+                        reference_id: None,
+                        equation_source: None,
+                        equation_syntax: EquationSyntax::Typst,
+                    },
+                    RichText {
+                        text: "Finalmente.".to_string(),
+                        bold: None,
+                        italic: None,
+                        underline: None,
+                        kind: None,
+                        reference_id: None,
+                        equation_source: None,
+                        equation_syntax: EquationSyntax::Typst,
+                    },
+                ],
+                col_span: None,
+                row_span: None,
+            }]];
+            table.column_sizes = vec!["1fr".to_string()];
+        }
+    }
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+    let table_source = &generated.fragments["table-1"].source;
+    assert!(
+        table_source.contains("#linebreak()"),
+        "expected line break in:\n{table_source}"
+    );
+    assert_eq!(
+        table_source.matches('[').count(),
+        table_source.matches(']').count(),
+        "unbalanced brackets in:\n{table_source}"
+    );
+}
+
+#[test]
 fn table_width_wraps_table_in_sized_block() {
     let template = custom_element_template(ParamSpec {
         key: "body".to_string(),

@@ -1,8 +1,8 @@
 .app {
     display: flex;
     flex-direction: column;
-    width: var(--layout-viewport-w);
-    height: var(--layout-viewport-h);
+    width: var(--layout-full);
+    height: var(--layout-full);
     overflow: hidden;
     background: var(--color-bg-primary);
 }
