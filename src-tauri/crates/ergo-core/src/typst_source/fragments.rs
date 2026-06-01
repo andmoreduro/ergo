@@ -225,8 +225,22 @@ fn generate_element_typst(
             let wrapper = element_figure_wrapper_name(table_override);
             push_wrapper_symbol_import(template, wrapper, &mut builder);
 
+            // An explicit table width (anything but the "auto" default) wraps the
+            // `table(...)` in a sized `block` so it spans that width; columns then
+            // distribute within it.
+            let table_width = table
+                .extra_fields
+                .get("width")
+                .and_then(|value| value.as_str())
+                .filter(|value| value.trim() != "auto")
+                .and_then(super::format_typst_length);
+
             // Same `apa-figure` wrapper as figures: `table(...)` is a direct argument.
-            builder.push_literal(&format!("#{wrapper}(\n  table(\n    columns: ({columns})"));
+            builder.push_literal(&format!("#{wrapper}(\n  "));
+            if let Some(width) = &table_width {
+                builder.push_literal(&format!("block(width: {width})[#"));
+            }
+            builder.push_literal(&format!("table(\n    columns: ({columns})"));
 
             for (row_index, row) in table.cells.iter().enumerate() {
                 for (col_index, cell) in row.iter().enumerate() {
@@ -243,6 +257,9 @@ fn generate_element_typst(
             }
 
             builder.push_literal("\n  )");
+            if table_width.is_some() {
+                builder.push_literal("]");
+            }
 
             if let Some(placement) = typst_placement_arg(table_placement_value(table)) {
                 builder.push_literal(&format!(",\n  placement: {placement}"));
@@ -253,7 +270,7 @@ fn generate_element_typst(
                 &table.id,
                 table_override,
                 &table.extra_fields,
-                &["placement"],
+                &["placement", "width"],
             );
 
             builder.push_literal(&format!("\n) <{label}>\n\n"));

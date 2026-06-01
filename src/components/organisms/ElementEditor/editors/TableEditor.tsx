@@ -18,6 +18,8 @@ import { EditorAddButton } from "../../../atoms/EditorAddButton/EditorAddButton"
 
 import { Select } from "../../../atoms/Select/Select";
 
+import { TextInput } from "../../../atoms/TextInput/TextInput";
+
 import { ElementExtrasCollapse } from "../ElementExtrasCollapse";
 
 import { ElementSettingsButton } from "../ElementSettingsButton";
@@ -48,7 +50,14 @@ export const TableEditor = ({ element }: { element: TableElement }) => {
 
     const committedPlacement = tablePlacementValue(element.extra_fields);
 
+    const committedWidth =
+        typeof element.extra_fields?.width === "string"
+            ? (element.extra_fields.width as string)
+            : "";
+
     const [draftPlacement, setDraftPlacement] = useState(committedPlacement);
+
+    const [draftWidth, setDraftWidth] = useState(committedWidth);
 
     const placementField = useEditorFieldBinding<HTMLSelectElement>({
 
@@ -65,6 +74,36 @@ export const TableEditor = ({ element }: { element: TableElement }) => {
         setDraftPlacement(committedPlacement);
 
     }, [committedPlacement, element.id]);
+
+
+
+    useEffect(() => {
+
+        setDraftWidth(committedWidth);
+
+    }, [committedWidth, element.id]);
+
+
+
+    const commitWidth = (next: string) => {
+
+        dispatch({
+
+            type: "UPDATE_ELEMENT_EXTRA_FIELD",
+
+            payload: {
+
+                elementId: element.id,
+
+                fieldKey: "width",
+
+                fieldValue: next.trim().length > 0 ? next.trim() : null,
+
+            },
+
+        });
+
+    };
 
 
 
@@ -96,7 +135,9 @@ export const TableEditor = ({ element }: { element: TableElement }) => {
 
 
 
-    const hasSettings = showPlacement || element.column_sizes.length > 0;
+    // Tables always expose the settings modal (placement, table width, and per-
+    // column widths).
+    const hasSettings = true;
 
 
 
@@ -149,6 +190,22 @@ export const TableEditor = ({ element }: { element: TableElement }) => {
                         />
 
                     ) : null}
+
+                    <TextInput
+
+                        fullWidth
+
+                        label={m.editor_element_width()}
+
+                        placeholder={m.editor_element_dimension_hint()}
+
+                        value={draftWidth}
+
+                        onChange={(event) => setDraftWidth(event.target.value)}
+
+                        onBlur={() => commitWidth(draftWidth)}
+
+                    />
 
                     <div className={styles.columnSizes}>
 
