@@ -645,7 +645,7 @@ pub struct Enumeration {
     pub items: Vec<Vec<RichText>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct RichText {
     pub text: String,
@@ -679,11 +679,83 @@ pub struct Table {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct TableCell {
-    pub content: String,
+    #[serde(deserialize_with = "deserialize_cell_content")]
+    pub content: Vec<RichText>,
     #[serde(default)]
     pub row_span: Option<i32>,
     #[serde(default)]
     pub col_span: Option<i32>,
+}
+
+fn cell_content_from_string(text: String) -> Vec<RichText> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+
+    vec![RichText {
+        text,
+        bold: None,
+        italic: None,
+        underline: None,
+        kind: None,
+        reference_id: None,
+        equation_source: None,
+        equation_syntax: EquationSyntax::Typst,
+    }]
+}
+
+fn deserialize_cell_content<'de, D>(deserializer: D) -> Result<Vec<RichText>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum CellContentSerde {
+        String(String),
+        Rich(Vec<RichText>),
+    }
+
+    match CellContentSerde::deserialize(deserializer)? {
+        CellContentSerde::String(text) => Ok(cell_content_from_string(text)),
+        CellContentSerde::Rich(content) => Ok(content),
+    }
+}
+
+#[cfg(test)]
+mod table_cell_tests {
+    use super::{TableCell, deserialize_cell_content};
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    struct TableCellFixture {
+        #[serde(deserialize_with = "deserialize_cell_content")]
+        content: Vec<super::RichText>,
+    }
+
+    #[test]
+    fn deserializes_legacy_string_cell_content() {
+        let cell: TableCellFixture =
+            serde_json::from_str(r#"{"content":"hello"}"#).expect("legacy string");
+        assert_eq!(cell.content.len(), 1);
+        assert_eq!(cell.content[0].text, "hello");
+    }
+
+    #[test]
+    fn deserializes_rich_text_array_cell_content() {
+        let cell: TableCell =
+            serde_json::from_str(r#"{"content":[{"text":"a","bold":true}]}"#)
+                .expect("rich array");
+        assert_eq!(cell.content.len(), 1);
+        assert_eq!(cell.content[0].text, "a");
+        assert_eq!(cell.content[0].bold, Some(true));
+    }
+
+    #[test]
+    fn deserializes_empty_string_cell_content_as_empty_vec() {
+        let cell: TableCellFixture =
+            serde_json::from_str(r#"{"content":""}"#).expect("empty string");
+        assert!(cell.content.is_empty());
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

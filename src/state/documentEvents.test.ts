@@ -3,7 +3,7 @@ import {
     applyDocumentEvents,
     createDocumentEventHistoryEntry,
 } from "./documentEvents";
-import { createDefaultDocumentAST } from "./ast/defaults";
+import { createDefaultDocumentAST, createRichText } from "./ast/defaults";
 import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
 import type { DocumentAST } from "../bindings/DocumentAST";
@@ -271,7 +271,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
                             tableId: "table-1",
                             rowIndex: 0,
                             colIndex: 0,
-                            text: "Nueva celda",
+                            content: [createRichText("Nueva celda")],
                         },
                     },
                 };

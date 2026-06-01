@@ -115,7 +115,7 @@ classDiagram
         }
 
         class TableCell {
-            +String content
+            +RichText[] content
             +Int? row_span
             +Int? col_span
         }

@@ -17,10 +17,9 @@ import { tableNodes } from "prosemirror-tables";
  * `astBridge.ts` `fieldCaretOffsetFromNode`.
  */
 
-// Cells are plain text: the `TableCell` AST stores a `String`, so allowing marks
-// or inline atoms (reference / inline equation) here would silently drop them on
-// commit and break the field-offset contract. Rich cells need a `TableCell` AST
-// change first — see `astBridge.ts` `nodeToTable`.
+// Native PM table cells use plain `text*` until the nested table view (Stage 2+).
+// The AST stores `RichText[]`; `astBridge` maps cells lossily via `richTextPlainText`
+// until then. Marks or inline atoms here would drop on commit and break field offsets.
 const tNodes = tableNodes({
     tableGroup: "block",
     cellContent: "text*",

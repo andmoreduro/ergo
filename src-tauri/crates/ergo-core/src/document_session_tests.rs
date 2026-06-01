@@ -344,7 +344,7 @@ fn applies_document_event_variants_to_backend_ast() {
                 rows: 1,
                 cols: 1,
                 cells: vec![vec![TableCell {
-                    content: "A".to_string(),
+                    content: rich_text("A"),
                     row_span: None,
                     col_span: None,
                 }]],
@@ -358,7 +358,7 @@ fn applies_document_event_variants_to_backend_ast() {
             table_id: "table-1".to_string(),
             row_index: 1,
             cells: vec![TableCell {
-                content: "B".to_string(),
+                content: rich_text("B"),
                 row_span: None,
                 col_span: None,
             }],
@@ -369,7 +369,7 @@ fn applies_document_event_variants_to_backend_ast() {
             table_id: "table-1".to_string(),
             row_index: 1,
             col_index: 0,
-            text: "Celda".to_string(),
+            content: rich_text("Celda"),
         })
         .unwrap();
     session
@@ -378,12 +378,12 @@ fn applies_document_event_variants_to_backend_ast() {
             col_index: 1,
             cells: vec![
                 TableCell {
-                    content: "C".to_string(),
+                    content: rich_text("C"),
                     row_span: None,
                     col_span: None,
                 },
                 TableCell {
-                    content: "D".to_string(),
+                    content: rich_text("D"),
                     row_span: None,
                     col_span: None,
                 },
@@ -404,12 +404,12 @@ fn applies_document_event_variants_to_backend_ast() {
             row_index: 2,
             cells: vec![
                 TableCell {
-                    content: "E".to_string(),
+                    content: rich_text("E"),
                     row_span: None,
                     col_span: None,
                 },
                 TableCell {
-                    content: "F".to_string(),
+                    content: rich_text("F"),
                     row_span: None,
                     col_span: None,
                 },
@@ -428,12 +428,12 @@ fn applies_document_event_variants_to_backend_ast() {
             col_index: 2,
             cells: vec![
                 TableCell {
-                    content: "G".to_string(),
+                    content: rich_text("G"),
                     row_span: None,
                     col_span: None,
                 },
                 TableCell {
-                    content: "H".to_string(),
+                    content: rich_text("H"),
                     row_span: None,
                     col_span: None,
                 },
@@ -522,7 +522,7 @@ fn applies_document_event_variants_to_backend_ast() {
                 DocumentElement::Table(table) => {
                     assert_eq!(table.rows, 2);
                     assert_eq!(table.cols, 2);
-                    assert_eq!(table.cells[1][0].content, "Celda");
+                    assert_eq!(table.cells[1][0].content, rich_text("Celda"));
                     assert_eq!(table.column_sizes[1], "3fr");
                 }
                 _ => panic!("table missing"),

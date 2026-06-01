@@ -267,7 +267,7 @@ export const applyDocumentEventToAst = (
                               rowIndex === event.row_index
                                   ? row.map((cell, colIndex) =>
                                         colIndex === event.col_index
-                                            ? { ...cell, content: event.text }
+                                            ? { ...cell, content: event.content }
                                             : cell,
                                     )
                                   : row,
@@ -560,7 +560,7 @@ const documentEventFromAction = (
                 table_id: action.payload.tableId,
                 row_index: action.payload.rowIndex,
                 col_index: action.payload.colIndex,
-                text: action.payload.text,
+                content: action.payload.content,
             };
 
         case "ADD_TABLE_ROW": {
@@ -874,7 +874,7 @@ const inverseDocumentEventFromAction = (
                 table_id: action.payload.tableId,
                 row_index: action.payload.rowIndex,
                 col_index: action.payload.colIndex,
-                text: tableCell(table, action.payload.rowIndex, action.payload.colIndex).content,
+                content: tableCell(table, action.payload.rowIndex, action.payload.colIndex).content,
             };
         }
 

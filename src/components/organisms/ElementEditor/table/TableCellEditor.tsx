@@ -3,6 +3,8 @@ import { useDeferredTextCommit } from "../../../../editor/useDeferredTextCommit"
 import { useElementEnterInsertsParagraph } from "../../../../editor/useInsertParagraphAfterElement";
 import { normalizeEditableText } from "../../../../editor/textInput";
 import { useEditorNavigation } from "../../../../editor/EditorNavigationContext";
+import { createRichText } from "../../../../state/ast/defaults";
+import { richTextPlainText } from "../../../../state/documentEvents/helpers";
 import { useDocumentAst } from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
@@ -16,7 +18,7 @@ export const TableCellEditor = ({
     element,
     rowIndex,
 }: {
-    cellContent: string;
+    cellContent: import("../../../../bindings/RichText").RichText[];
     colIndex: number;
     element: TableElement;
     rowIndex: number;
@@ -24,7 +26,9 @@ export const TableCellEditor = ({
     const { dispatch } = useDocumentAst();
     const handleEnterKey = useElementEnterInsertsParagraph(element.id);
     const { handleAdvanceKeyDown } = useEditorNavigation();
-    const { draft, setDraft, shouldCommit } = useDeferredTextCommit(cellContent);
+    const { draft, setDraft, shouldCommit } = useDeferredTextCommit(
+        richTextPlainText(cellContent),
+    );
     const fieldId = tableCellFieldId(element.id, rowIndex, colIndex);
     const cellField = useEditorFieldBinding<HTMLInputElement>({
         elementId: element.id,
@@ -56,7 +60,7 @@ export const TableCellEditor = ({
                             tableId: element.id,
                             rowIndex,
                             colIndex,
-                            text: next,
+                            content: next.length > 0 ? [createRichText(next)] : [],
                         },
                     });
                 }
