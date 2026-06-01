@@ -6,14 +6,11 @@ import {
 } from "prosemirror-state";
 import type { Node as PMNode, ResolvedPos } from "prosemirror-model";
 import type { DocumentElement } from "../../bindings/DocumentElement";
-import {
-    listItemFieldId,
-    richTextFieldId,
-    tableCellFieldId,
-} from "../fieldIds";
+import { listItemFieldId, richTextFieldId } from "../fieldIds";
 import { fieldCaretOffsetFromNode, pmPosForFieldCaret } from "./astBridge";
 import { isBlockEditing } from "./blockEditMode";
 import { ATOM_BLOCK_NODES, TABLE_BLOCK_NODE, TEXT_FIELD_NODES } from "./schema";
+import { isTableCellFieldId } from "./table/tableCellFocus";
 
 export interface BodyFocusTarget {
     elementId: string;
@@ -39,24 +36,6 @@ const fieldIdentityAtHead = (
         const elementId = list.attrs.elementId;
         return elementId
             ? { elementId, fieldId: listItemFieldId(elementId, itemIndex) }
-            : null;
-    }
-
-    if (name === "table_cell" || name === "table_header") {
-        const rowIndex = $head.index($head.depth - 2);
-        const colIndex = $head.index($head.depth - 1);
-        let elementId = "";
-        for (let depth = $head.depth; depth > 0; depth -= 1) {
-            if ($head.node(depth).type.name === TABLE_BLOCK_NODE) {
-                elementId = $head.node(depth).attrs.elementId as string;
-                break;
-            }
-        }
-        return elementId
-            ? {
-                  elementId,
-                  fieldId: tableCellFieldId(elementId, rowIndex, colIndex),
-              }
             : null;
     }
 
@@ -126,7 +105,6 @@ const locateField = (
     elementId: string,
 ): FieldLocation | null => {
     if (fieldId === null || fieldId === richTextFieldId(elementId)) {
-        // Text-flow block (or element-level focus → start of the block).
         return { fieldNode: blockNode, contentStart: blockPos + 1 };
     }
 
@@ -145,31 +123,6 @@ const locateField = (
         };
     }
 
-    if (parts[0] === "cell") {
-        const rowIndex = Number(parts[1]);
-        const colIndex = Number(parts[2]);
-        let cellContainer = blockNode;
-        let cellBase = blockPos;
-        if (blockNode.type.name === TABLE_BLOCK_NODE) {
-            const table = blockNode.firstChild;
-            if (!table) {
-                return null;
-            }
-            cellContainer = table;
-            cellBase = blockPos + 1;
-        }
-        if (rowIndex >= cellContainer.childCount) {
-            return null;
-        }
-        const row = cellContainer.child(rowIndex);
-        if (colIndex >= row.childCount) {
-            return null;
-        }
-        const rowPos = childPosition(cellContainer, cellBase + 1, rowIndex);
-        const cellPos = childPosition(row, rowPos + 1, colIndex);
-        return { fieldNode: row.child(colIndex), contentStart: cellPos + 1 };
-    }
-
     return null;
 };
 
@@ -178,6 +131,10 @@ export const selectionForFocusTarget = (
     doc: PMNode,
     target: BodyFocusTarget,
 ): Selection | null => {
+    if (isTableCellFieldId(target.fieldId, target.elementId)) {
+        return null;
+    }
+
     let result: Selection | null = null;
 
     doc.descendants((node, pos) => {
@@ -226,7 +183,6 @@ export const selectionForFocusTarget = (
             return false;
         }
 
-        // Only block-level nodes carry elementId / atoms; don't descend into text.
         return node.isBlock;
     });
 
