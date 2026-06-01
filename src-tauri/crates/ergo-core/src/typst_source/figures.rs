@@ -34,12 +34,20 @@ pub(crate) fn figure_image_typst_source(
     extra_fields: &std::collections::HashMap<String, serde_json::Value>,
 ) -> String {
     let escaped = escape_typst_string(path);
-    if let Some(serde_json::Value::String(width)) = extra_fields.get("width") {
-        if let Some(length) = format_typst_length(width) {
-            return format!("image(\"{escaped}\", width: {length})");
+    let dimension = |key: &str| -> Option<String> {
+        match extra_fields.get(key) {
+            Some(serde_json::Value::String(value)) => format_typst_length(value),
+            _ => None,
         }
+    };
+    let mut args = String::new();
+    if let Some(width) = dimension("width") {
+        args.push_str(&format!(", width: {width}"));
     }
-    format!("image(\"{escaped}\")")
+    if let Some(height) = dimension("height") {
+        args.push_str(&format!(", height: {height}"));
+    }
+    format!("image(\"{escaped}\"{args})")
 }
 
 /// The body (`#image`, `table(...)`, or rich text) is a direct argument — never wrapped
@@ -107,4 +115,40 @@ pub(crate) fn push_custom_wrapper_figure_element(
     );
 
     builder.push_literal(")\n");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::figure_image_typst_source;
+    use std::collections::HashMap;
+
+    fn fields(pairs: &[(&str, &str)]) -> HashMap<String, serde_json::Value> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), serde_json::Value::String(v.to_string())))
+            .collect()
+    }
+
+    #[test]
+    fn emits_width_and_height_when_set() {
+        let source = figure_image_typst_source(
+            "assets/a.png",
+            &fields(&[("width", "80%"), ("height", "6cm")]),
+        );
+        assert_eq!(source, "image(\"assets/a.png\", width: 80%, height: 6cm)");
+    }
+
+    #[test]
+    fn emits_height_only() {
+        let source =
+            figure_image_typst_source("assets/a.png", &fields(&[("height", "auto")]));
+        assert_eq!(source, "image(\"assets/a.png\", height: auto)");
+    }
+
+    #[test]
+    fn ignores_invalid_dimension() {
+        let source =
+            figure_image_typst_source("assets/a.png", &fields(&[("width", "not-a-length")]));
+        assert_eq!(source, "image(\"assets/a.png\")");
+    }
 }

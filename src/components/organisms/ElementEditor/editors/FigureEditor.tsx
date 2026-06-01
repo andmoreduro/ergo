@@ -8,10 +8,6 @@ import { TauriApi } from "../../../../api/tauri";
 
 import { CompilerClient } from "../../../../workers/compilerClient";
 
-import { figurePlacementFieldId } from "../../../../editor/fieldIds";
-
-import { getPlacementOptions } from "../../../../editor/placementOptions";
-
 import { usesStandardTypstFigureWrapper } from "../../../../editor/templateElementOverrides";
 
 import {
@@ -32,20 +28,19 @@ import {
 
 import { useDocumentAst } from "../../../../state/DocumentContext";
 
-import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
-
 import { useTemplateSpecContext } from "../../../../state/TemplateSpecContext";
 
 import { m } from "../../../../paraglide/messages.js";
 
 import { MediaPickerButton } from "../../../atoms/MediaPickerButton/MediaPickerButton";
-import { Select } from "../../../atoms/Select/Select";
 
 import { ElementExtrasCollapse } from "../ElementExtrasCollapse";
 
 import { ElementSettingsButton } from "../ElementSettingsButton";
 
-import { AnnotationFieldInput } from "../fields/AnnotationFieldInput";
+import { ElementDimensionFields } from "../ElementDimensionFields";
+
+import { useElementSettingsShortcut } from "../useElementSettingsShortcut";
 
 import { ElementAnnotationFields } from "../fields/ElementAnnotationFields";
 
@@ -307,16 +302,6 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
 
 
-    const placementField = useEditorFieldBinding<HTMLSelectElement>({
-
-        elementId: element.id,
-
-        fieldId: figurePlacementFieldId(element.id),
-
-    });
-
-
-
     const settingsFields = extraFields.filter((field) =>
 
         FIGURE_SETTINGS_KEYS.has(field.key),
@@ -329,7 +314,10 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
     );
 
-    const hasSettings = settingsFields.length > 0 || showPlacement;
+    // Figures always expose the placement/width/height settings modal.
+    const hasSettings = true;
+    void settingsFields;
+    const settings = useElementSettingsShortcut(element.id);
 
 
 
@@ -339,67 +327,12 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
             {hasSettings ? (
 
-                <ElementSettingsButton>
+                <ElementSettingsButton
+                    open={settings.open}
+                    onOpenChange={settings.setOpen}
+                >
 
-                    {settingsFields.map((field) => (
-
-                        <AnnotationFieldInput
-
-                            draftRef={wrapperDraftRef}
-
-                            element={element}
-
-                            field={field}
-
-                            key={field.key}
-
-                        />
-
-                    ))}
-
-                    {showPlacement ? (
-
-                        <Select
-
-                            {...placementField}
-
-                            fullWidth
-
-                            label={m.editor_figure_placement()}
-
-                            value={draftPlacement}
-
-                            options={getPlacementOptions()}
-
-                            onChange={(event) => {
-
-                                const next = event.target.value;
-
-                                setDraftPlacement(next);
-
-                                if (next !== element.placement) {
-
-                                    dispatch({
-
-                                        type: "UPDATE_FIGURE",
-
-                                        payload: {
-
-                                            figureId: element.id,
-
-                                            placement: next,
-
-                                        },
-
-                                    });
-
-                                }
-
-                            }}
-
-                        />
-
-                    ) : null}
+                    <ElementDimensionFields element={element} />
 
                 </ElementSettingsButton>
 

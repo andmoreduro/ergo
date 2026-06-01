@@ -1,13 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { AssetEntry } from "../../../../bindings/AssetEntry";
 import { TauriApi } from "../../../../api/tauri";
 import { CompilerClient } from "../../../../workers/compilerClient";
 import {
     diagramCaptionFieldId,
     diagramSourceFieldId,
-    figurePlacementFieldId,
 } from "../../../../editor/fieldIds";
-import { getPlacementOptions } from "../../../../editor/placementOptions";
 import { useDeferredTextCommit } from "../../../../editor/useDeferredTextCommit";
 import { useElementEnterInsertsParagraph } from "../../../../editor/useInsertParagraphAfterElement";
 import { normalizeEditableText } from "../../../../editor/textInput";
@@ -15,9 +13,11 @@ import { useEditorNavigation } from "../../../../editor/EditorNavigationContext"
 import { useDocumentAst } from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
-import { Select } from "../../../atoms/Select/Select";
 import { Textarea } from "../../../atoms/Textarea/Textarea";
 import { ElementExtrasCollapse } from "../ElementExtrasCollapse";
+import { ElementSettingsButton } from "../ElementSettingsButton";
+import { ElementDimensionFields } from "../ElementDimensionFields";
+import { useElementSettingsShortcut } from "../useElementSettingsShortcut";
 import styles from "../ElementEditor.module.css";
 import type { DiagramElement } from "../types";
 
@@ -38,7 +38,6 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
     const { handleAdvanceKeyDown } = useEditorNavigation();
     const sourceFieldId = diagramSourceFieldId(element.id);
     const captionFieldId = diagramCaptionFieldId(element.id);
-    const placementFieldId = figurePlacementFieldId(element.id);
     const sourceField = useEditorFieldBinding<HTMLTextAreaElement>({
         elementId: element.id,
         fieldId: sourceFieldId,
@@ -47,10 +46,6 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
         elementId: element.id,
         fieldId: captionFieldId,
     });
-    const placementField = useEditorFieldBinding<HTMLSelectElement>({
-        elementId: element.id,
-        fieldId: placementFieldId,
-    });
     const { draft: sourceDraft, setDraft: setSourceDraft } =
         useDeferredTextCommit(element.mermaid_source);
     const {
@@ -58,13 +53,9 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
         setDraft: setCaptionDraft,
         shouldCommit: shouldCommitCaption,
     } = useDeferredTextCommit(element.caption);
-    const [placementDraft, setPlacementDraft] = useState(element.placement);
     const sourceEditedRef = useRef(false);
     const renderRequestRef = useRef(0);
-
-    useEffect(() => {
-        setPlacementDraft(element.placement);
-    }, [element.placement]);
+    const settings = useElementSettingsShortcut(element.id);
 
     useEffect(() => {
         if (!sourceEditedRef.current) {
@@ -120,6 +111,13 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
     }, [dispatch, element.caption, element.id, sourceDraft, state.assets]);
 
     return (
+        <>
+        <ElementSettingsButton
+            open={settings.open}
+            onOpenChange={settings.setOpen}
+        >
+            <ElementDimensionFields element={element} />
+        </ElementSettingsButton>
         <ElementExtrasCollapse
             elementId={element.id}
             primary={
@@ -178,26 +176,9 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
                             handleEnterKey(event);
                         }}
                     />
-                    <Select
-                        {...placementField}
-                        fullWidth
-                        label={m.editor_figure_placement()}
-                        value={placementDraft}
-                        options={getPlacementOptions()}
-                        onChange={(event) => {
-                            const next = event.target.value;
-                            setPlacementDraft(next);
-                            dispatch({
-                                type: "UPDATE_DIAGRAM",
-                                payload: {
-                                    diagramId: element.id,
-                                    placement: next,
-                                },
-                            });
-                        }}
-                    />
                 </>
             }
         />
+        </>
     );
 };
