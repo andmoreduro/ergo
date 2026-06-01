@@ -245,12 +245,13 @@ fn generate_element_typst(
             for (row_index, row) in table.cells.iter().enumerate() {
                 for (col_index, cell) in row.iter().enumerate() {
                     let open = super::tables::table_cell_open(cell.col_span, cell.row_span);
-                    builder.push_literal(&format!(",\n  {open}"));
-                    builder.push_escaped_field(
+                    builder.push_literal(&format!(",\n  {open}["));
+                    super::rich_text::push_rich_text_field(
+                        &mut builder,
                         &table.id,
                         &table_cell_field_id(&table.id, row_index, col_index),
                         &cell.content,
-                        0,
+                        bibliography_keys,
                     );
                     builder.push_literal("]");
                 }

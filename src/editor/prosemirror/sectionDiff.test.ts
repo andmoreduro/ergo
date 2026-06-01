@@ -143,7 +143,10 @@ describe("diffSectionElements", () => {
         const prev = [createTable(2, 2, "t1")];
         const nextTable = createTable(2, 2, "t1");
         if (nextTable.type === "Table") {
-            nextTable.cells[0][0] = { ...nextTable.cells[0][0], content: "changed" };
+            nextTable.cells[0][0] = {
+                ...nextTable.cells[0][0],
+                content: [createRichText("changed")],
+            };
         }
         const delta = expectRoundTrip(prev, [nextTable]);
         expect(delta.forward).toHaveLength(1);

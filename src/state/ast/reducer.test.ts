@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { astReducer } from "./reducer";
 import type { DocumentAST } from "../../bindings/DocumentAST";
 import type { ASTAction } from "./actions";
-import { createDefaultDocumentAST } from "./defaults";
+import { createDefaultDocumentAST, createRichText } from "./defaults";
 
 const getContentSection = (state: DocumentAST) => {
     const section = state.sections.find((item) => item.type === "Content");
@@ -157,7 +157,7 @@ describe("astReducer", () => {
                 tableId: "table-1",
                 rowIndex: 0,
                 colIndex: 1,
-                text: "Cell B",
+                content: [createRichText("Cell B")],
             },
         });
         const withColumn = astReducer(withCell, {
@@ -169,7 +169,7 @@ describe("astReducer", () => {
         expect(table?.type).toBe("Table");
         if (table?.type === "Table") {
             expect(table.cols).toBe(3);
-            expect(table.cells[0][1].content).toBe("Cell B");
+            expect(table.cells[0][1].content).toEqual([createRichText("Cell B")]);
             expect(table.column_sizes).toHaveLength(3);
         }
     });

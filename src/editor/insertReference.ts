@@ -168,15 +168,19 @@ export const buildReferenceInsertAction = (
             return null;
         }
 
-        const token = `@${labelForReferenceId(target.referenceId)}`;
-        const { nextValue } = insertTextAtCaret(cell.content, caretOffset, token);
+        const nextContent = insertReferenceAtOffset(
+            cell.content,
+            caretOffset ?? richTextPlainLength(cell.content),
+            target.referenceId,
+            target.label,
+        );
         return {
             type: "UPDATE_TABLE_CELL",
             payload: {
                 tableId: element.id,
                 rowIndex,
                 colIndex,
-                text: nextValue,
+                content: nextContent,
             },
         };
     }

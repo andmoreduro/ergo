@@ -379,6 +379,10 @@ fn file_seed(asset: &AssetEntry) -> ResourceSeed {
     }
 }
 
+fn rich_text_plain_text(content: &[crate::ast::RichText]) -> String {
+    content.iter().map(|span| span.text.as_str()).collect()
+}
+
 fn legacy_table_preview_body(table: &crate::ast::Table) -> String {
     let columns = if table.column_sizes.is_empty() {
         "1fr".to_string()
@@ -389,7 +393,7 @@ fn legacy_table_preview_body(table: &crate::ast::Table) -> String {
     for row in &table.cells {
         for cell in row {
             body.push_str(",\n  [");
-            body.push_str(&escape_typst(&cell.content));
+            body.push_str(&escape_typst(&rich_text_plain_text(&cell.content)));
             body.push(']');
         }
     }

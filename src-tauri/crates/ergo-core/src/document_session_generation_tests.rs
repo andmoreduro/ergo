@@ -348,7 +348,16 @@ fn ast_with_table_and_figure() -> DocumentAST {
                     rows: 1,
                     cols: 1,
                     cells: vec![vec![TableCell {
-                        content: "Cell".to_string(),
+                        content: vec![RichText {
+                            text: "Cell".to_string(),
+                            bold: None,
+                            italic: None,
+                            underline: None,
+                            kind: None,
+                            reference_id: None,
+                            equation_source: None,
+                            equation_syntax: EquationSyntax::Typst,
+                        }],
                         row_span: None,
                         col_span: None,
                     }]],
@@ -422,7 +431,16 @@ fn table_cell_spans_emit_table_cell_delimiters() {
             table.rows = 1;
             table.cols = 2;
             table.cells = vec![vec![TableCell {
-                content: "Merged".to_string(),
+                content: vec![RichText {
+                    text: "Merged".to_string(),
+                    bold: None,
+                    italic: None,
+                    underline: None,
+                    kind: None,
+                    reference_id: None,
+                    equation_source: None,
+                    equation_syntax: EquationSyntax::Typst,
+                }],
                 col_span: Some(2),
                 row_span: None,
             }]];

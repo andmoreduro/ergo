@@ -144,7 +144,7 @@ pub enum DocumentEvent {
         table_id: String,
         row_index: usize,
         col_index: usize,
-        text: String,
+        content: Vec<crate::ast::RichText>,
     },
     InsertTableRow {
         table_id: String,
