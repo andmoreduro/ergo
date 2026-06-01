@@ -135,7 +135,7 @@ export const applyElementEvents = (
                                   rowIndex === event.row_index
                                       ? row.map((cell, colIndex) =>
                                             colIndex === event.col_index
-                                                ? { ...cell, content: event.text }
+                                                ? { ...cell, content: event.content }
                                                 : cell,
                                         )
                                       : row,
@@ -186,7 +186,7 @@ export const applyElementEvents = (
                             nextRow.splice(
                                 event.col_index,
                                 0,
-                                event.cells[rowIndex] ?? { content: "", row_span: null, col_span: null },
+                                event.cells[rowIndex] ?? { content: [], row_span: null, col_span: null },
                             );
                             return nextRow;
                         }),

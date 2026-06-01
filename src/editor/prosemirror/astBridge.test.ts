@@ -223,7 +223,7 @@ describe("DocumentElement ↔ PM node round-trip", () => {
         const table = createTable(2, 2, "t1");
         if (table.type === "Table") {
             table.cells[0][0] = {
-                content: "wide",
+                content: [createRichText("wide")],
                 col_span: 2,
                 row_span: null,
             };

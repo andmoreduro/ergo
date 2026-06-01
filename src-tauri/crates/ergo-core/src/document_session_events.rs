@@ -132,7 +132,7 @@ pub(crate) fn apply_document_event(
             table_id,
             row_index,
             col_index,
-            text,
+            content,
         } => {
             let cell = table_mut(ast, &table_id)?
                 .cells
@@ -141,7 +141,7 @@ pub(crate) fn apply_document_event(
                 .ok_or_else(|| {
                     format!("Table cell {row_index},{col_index} was not found in {table_id}")
                 })?;
-            cell.content = text;
+            cell.content = content;
             Ok(())
         }
         DocumentEvent::InsertTableRow {
@@ -705,7 +705,7 @@ fn remove_asset(ast: &mut DocumentAST, asset_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn rich_text_from_string(text: String) -> Vec<RichText> {
+pub(crate) fn rich_text_from_string(text: String) -> Vec<RichText> {
     if text.is_empty() {
         return Vec::new();
     }

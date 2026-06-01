@@ -84,7 +84,7 @@ export const caretOffsetAtEndForField = (
         const colIndex = Number(parts[1]);
         const cell = element.cells[rowIndex]?.[colIndex];
         if (cell) {
-            return cell.content.length;
+            return richTextPlainLength(cell.content);
         }
     }
 

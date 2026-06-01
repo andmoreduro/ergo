@@ -72,7 +72,7 @@ export const createEnumeration = (
 });
 
 const createEmptyCell = (): TableCell => ({
-    content: "",
+    content: [],
     row_span: null,
     col_span: null,
 });

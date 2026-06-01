@@ -531,7 +531,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         }
 
         case "UPDATE_TABLE_CELL": {
-            const { tableId, rowIndex, colIndex, text } = action.payload;
+            const { tableId, rowIndex, colIndex, content } = action.payload;
 
             return mapContentElements(state, (element) => {
                 if (element.type !== "Table" || element.id !== tableId) {
@@ -544,7 +544,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                         currentRowIndex === rowIndex
                             ? row.map((cell, currentColIndex) =>
                                   currentColIndex === colIndex
-                                      ? { ...cell, content: text }
+                                      ? { ...cell, content }
                                       : cell,
                               )
                             : row,
@@ -563,7 +563,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
 
                 const insertAt = rowIndex ?? element.cells.length;
                 const newRow = Array.from({ length: element.cols }, () => ({
-                    content: "",
+                    content: [],
                     row_span: null,
                     col_span: null,
                 }));
@@ -610,7 +610,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
 
                 const insertAt = colIndex ?? element.column_sizes.length;
                 const emptyCell = {
-                    content: "",
+                    content: [],
                     row_span: null,
                     col_span: null,
                 };

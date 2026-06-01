@@ -5,6 +5,7 @@ import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
 import type { TableCell } from "../../bindings/TableCell";
 import { createRichText } from "../../state/ast/defaults";
+import { richTextPlainText } from "../../state/documentEvents/helpers";
 import {
     ATOM_BLOCK_NODES,
     INLINE_EQUATION_NODE,
@@ -226,7 +227,8 @@ const tableToNode = (
     const rows = table.cells.map((row) => {
         const cells = row.map((cell) => {
             const colspan = cell.col_span ?? 1;
-            const content = cell.content ? [schema.text(cell.content)] : [];
+            const plain = richTextPlainText(cell.content);
+            const content = plain ? [schema.text(plain)] : [];
             return schema.nodes.table_cell.create(
                 {
                     colspan,
@@ -293,7 +295,9 @@ const nodeToTable = (tableNode: PMNode): DocumentElement => {
             const rowspan = cell.attrs.rowspan ?? 1;
             const colspan = cell.attrs.colspan ?? 1;
             rowCells.push({
-                content: cell.textContent,
+                content: cell.textContent
+                    ? [createRichText(cell.textContent)]
+                    : [],
                 row_span: rowspan !== 1 ? rowspan : null,
                 col_span: colspan !== 1 ? colspan : null,
             });
