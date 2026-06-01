@@ -1,8 +1,16 @@
 .block {
+    position: relative;
     display: block;
     width: 100%;
     margin-block: var(--space-2, 0.5rem);
     box-sizing: border-box;
+}
+
+.chrome {
+    position: absolute;
+    top: var(--space-1, 0.25rem);
+    right: var(--space-1, 0.25rem);
+    z-index: 2;
 }
 
 .inner {

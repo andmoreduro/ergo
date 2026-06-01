@@ -53,6 +53,9 @@ import { elementIdOf } from "../../../state/documentEvents/helpers";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
 import { enterTableBlockById } from "../../../editor/prosemirror/bodyTableCommands";
 import { takePendingBlockEditIfMatches } from "../../../editor/prosemirror/pendingBlockEdit";
+import { setTableFocusPush } from "../../../editor/prosemirror/table/tableFocusBridge";
+import { applyTableCellFocus } from "../../../editor/prosemirror/table/tableFocusRegistry";
+import { isTableCellFieldId } from "../../../editor/prosemirror/table/tableCellFocus";
 import { ProseMirrorSurface } from "../../atoms/ProseMirrorSurface/ProseMirrorSurface";
 
 const deepEqual = (a: unknown, b: unknown): boolean =>
@@ -130,7 +133,17 @@ export const ProseMirrorBodyEditor = ({
     );
     const nodeViewsRef = useRef({
         ...createBlockObjectNodeViews(portalRegistryRef.current),
-        table_block: createTableBlockNodeView,
+        table_block: (
+            node: PMNode,
+            view: EditorView,
+            getPos: () => number | undefined,
+        ) =>
+            createTableBlockNodeView(
+                node,
+                view,
+                getPos,
+                portalRegistryRef.current,
+            ),
     });
     const portals = useSyncExternalStore(
         portalRegistryRef.current.subscribe,
@@ -202,6 +215,22 @@ export const ProseMirrorBodyEditor = ({
         });
         return () => setBodyTableCommit(null);
     }, [section.id]);
+
+    useLayoutEffect(() => {
+        setTableFocusPush((focus) => {
+            if (applyingExternalRef.current) {
+                return;
+            }
+            setFocusRef.current({
+                ...focus,
+                sourceRevision: null,
+                anchorPageNumber: null,
+                forcePreviewScroll: false,
+                focusSource: "native",
+            });
+        });
+        return () => setTableFocusPush(null);
+    }, []);
 
     useLayoutEffect(() => {
         const mount = mountRef.current;
@@ -395,18 +424,26 @@ export const ProseMirrorBodyEditor = ({
             return;
         }
 
-        const selection = selectionForFocusTarget(view.state.doc, {
+        const target = {
             elementId: documentFocus.elementId,
             fieldId: documentFocus.fieldId,
             caretUtf16Offset: documentFocus.caretUtf16Offset,
-        });
-        if (!selection) {
-            return;
-        }
+        };
 
         lastFocusRequestRef.current = documentFocus.requestId;
         applyingExternalRef.current = true;
         try {
+            if (
+                isTableCellFieldId(target.fieldId, target.elementId) &&
+                applyTableCellFocus(target)
+            ) {
+                return;
+            }
+
+            const selection = selectionForFocusTarget(view.state.doc, target);
+            if (!selection) {
+                return;
+            }
             view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
             view.focus();
         } finally {
