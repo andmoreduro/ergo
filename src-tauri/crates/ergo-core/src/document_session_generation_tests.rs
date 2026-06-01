@@ -441,6 +441,66 @@ fn table_cell_spans_emit_table_cell_delimiters() {
 }
 
 #[test]
+fn table_width_wraps_table_in_sized_block() {
+    let template = custom_element_template(ParamSpec {
+        key: "body".to_string(),
+        param_type: ParamType::Content,
+        source: None,
+        label: None,
+        default: None,
+        required: false,
+        variants: None,
+    });
+    let mut ast = ast_with_table_and_figure();
+    if let DocumentSection::Content(section) = &mut ast.sections[0] {
+        if let DocumentElement::Table(table) = &mut section.elements[0] {
+            table.extra_fields.insert(
+                "width".to_string(),
+                serde_json::Value::String("80%".to_string()),
+            );
+        }
+    }
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+    let table_source = &generated.fragments["table-1"].source;
+    assert!(
+        table_source.contains("block(width: 80%)["),
+        "expected table wrapped in a sized block:\n{table_source}"
+    );
+}
+
+#[test]
+fn table_width_auto_does_not_wrap() {
+    let template = custom_element_template(ParamSpec {
+        key: "body".to_string(),
+        param_type: ParamType::Content,
+        source: None,
+        label: None,
+        default: None,
+        required: false,
+        variants: None,
+    });
+    let mut ast = ast_with_table_and_figure();
+    if let DocumentSection::Content(section) = &mut ast.sections[0] {
+        if let DocumentElement::Table(table) = &mut section.elements[0] {
+            table.extra_fields.insert(
+                "width".to_string(),
+                serde_json::Value::String("auto".to_string()),
+            );
+        }
+    }
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+    let table_source = &generated.fragments["table-1"].source;
+    assert!(
+        !table_source.contains("block(width:"),
+        "auto width must not wrap the table:\n{table_source}"
+    );
+}
+
+#[test]
 fn tables_and_figures_use_template_wrapper() {
     let template = template_with_figure_wrapper("apa-figure");
     let ast = ast_with_table_and_figure();
