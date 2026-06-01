@@ -105,6 +105,41 @@ const columnRemovedAt = (prev: TableElement, next: TableElement): number | null 
  * merges and other multi-cell edits return null so the caller replaces the
  * whole table element.
  */
+/** Whole-table replace when `diffTableElement` returns null (span merges, etc.). */
+export const replaceTableElementEvents = (
+    sectionId: string,
+    elementIndex: number,
+    prev: TableElement,
+    next: TableElement,
+): { forward: DocumentEvent[]; inverse: DocumentEvent[] } => ({
+    forward: [
+        { type: "removeElement", element_id: prev.id },
+        {
+            type: "restoreElement",
+            section_id: sectionId,
+            index: elementIndex,
+            element: next,
+        },
+    ],
+    inverse: [
+        { type: "removeElement", element_id: next.id },
+        {
+            type: "restoreElement",
+            section_id: sectionId,
+            index: elementIndex,
+            element: prev,
+        },
+    ],
+});
+
+export const tableStructurallySynced = (
+    derived: TableElement,
+    target: TableElement,
+): boolean => {
+    const delta = diffTableElement(derived, target);
+    return delta !== null && delta.forward.length === 0;
+};
+
 export const diffTableElement = (
     prev: TableElement,
     next: TableElement,

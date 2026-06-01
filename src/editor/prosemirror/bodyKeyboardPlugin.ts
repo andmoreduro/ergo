@@ -117,20 +117,7 @@ export const bodyKeyboardPlugin = () =>
                 }
 
                 if (event.key === "Tab") {
-                    // While editing a table, Tab moves between cells and must
-                    // never let browser focus escape the block.
-                    if (canMoveBetweenTableCells(view.state)) {
-                        goToNextCell(event.shiftKey ? -1 : 1)(
-                            view.state,
-                            view.dispatch,
-                        );
-                        event.preventDefault();
-                        event.stopPropagation();
-                        return true;
-                    }
-                    // Tab on a locked/selected block enters fine-grained mode,
-                    // mirroring Ctrl+Enter (both `enterTableFirstCell` and
-                    // `enterAtomBlock` are no-ops unless a block is selected).
+                    // Tab on a locked/selected table or atom block enters fine-grained mode.
                     if (enterTableFirstCell(view.state, view.dispatch)) {
                         event.preventDefault();
                         event.stopPropagation();
