@@ -3,9 +3,7 @@ import type { Transaction } from "prosemirror-state";
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
-import type { TableCell } from "../../bindings/TableCell";
 import { createRichText } from "../../state/ast/defaults";
-import { richTextPlainText } from "../../state/documentEvents/helpers";
 import {
     ATOM_BLOCK_NODES,
     INLINE_EQUATION_NODE,
@@ -222,36 +220,6 @@ const listNode = (
     return schema.nodes.list.create({ elementId: id, ordered }, listItems);
 };
 
-const tableToNode = (
-    schema: BodySchema,
-    table: Extract<DocumentElement, { type: "Table" }>,
-): PMNode => {
-    const rows = table.cells.map((row) => {
-        const cells = row.map((cell) => {
-            const colspan = cell.col_span ?? 1;
-            const plain = richTextPlainText(cell.content);
-            const content = plain ? [schema.text(plain)] : [];
-            return schema.nodes.table_cell.create(
-                {
-                    colspan,
-                    rowspan: cell.row_span ?? 1,
-                },
-                content,
-            );
-        });
-        return schema.nodes.table_row.create(null, cells);
-    });
-    const inner = schema.nodes.table.create(null, rows);
-    return schema.nodes.table_block.create(
-        {
-            elementId: table.id,
-            columnSizes: table.column_sizes,
-            extraFields: table.extra_fields,
-        },
-        [inner],
-    );
-};
-
 export const elementToNode = (
     schema: BodySchema,
     element: DocumentElement,
@@ -277,7 +245,10 @@ export const elementToNode = (
         case "Enumeration":
             return listNode(schema, element.id, true, element.items);
         case "Table":
-            return tableToNode(schema, element);
+            return schema.nodes.table_block.create({
+                element,
+                elementId: element.id,
+            });
         case "Equation":
         case "Figure":
         case "Diagram":
@@ -287,38 +258,6 @@ export const elementToNode = (
                 elementId: element.id,
             });
     }
-};
-
-const nodeToTable = (tableNode: PMNode): DocumentElement => {
-    const cells: TableCell[][] = [];
-    tableNode.content.forEach((row) => {
-        const rowCells: TableCell[] = [];
-        row.content.forEach((cell) => {
-            const rowspan = cell.attrs.rowspan ?? 1;
-            const colspan = cell.attrs.colspan ?? 1;
-            rowCells.push({
-                content: cell.textContent
-                    ? [createRichText(cell.textContent)]
-                    : [],
-                row_span: rowspan !== 1 ? rowspan : null,
-                col_span: colspan !== 1 ? colspan : null,
-            });
-        });
-        cells.push(rowCells);
-    });
-    // Logical column count: row 0 is never covered by a rowspan from above, so
-    // summing its colspans is the full grid width even when cells are merged.
-    const cols =
-        cells[0]?.reduce((total, cell) => total + (cell.col_span ?? 1), 0) ?? 0;
-    return {
-        type: "Table",
-        id: tableNode.attrs.elementId ?? "",
-        rows: cells.length,
-        cols,
-        cells,
-        column_sizes: tableNode.attrs.columnSizes ?? [],
-        extra_fields: tableNode.attrs.extraFields ?? {},
-    };
 };
 
 export const nodeToElement = (node: PMNode): DocumentElement => {
@@ -349,26 +288,6 @@ export const nodeToElement = (node: PMNode): DocumentElement => {
                 ? { type: "Enumeration", id: node.attrs.elementId, items }
                 : { type: "List", id: node.attrs.elementId, items };
         }
-        case "table_block": {
-            const inner = node.firstChild;
-            if (!inner || inner.type.name !== "table") {
-                throw new Error("table_block missing inner table");
-            }
-            const table = nodeToTable(inner);
-            if (table.type !== "Table") {
-                throw new Error("table_block inner node is not a table");
-            }
-            return {
-                ...table,
-                id: node.attrs.elementId as string,
-                column_sizes: (node.attrs.columnSizes as string[]) ?? table.column_sizes,
-                extra_fields:
-                    (node.attrs.extraFields as Record<string, string>) ??
-                    table.extra_fields,
-            };
-        }
-        case "table":
-            return nodeToTable(node);
         default:
             if (ATOM_BLOCK_NODES.has(node.type.name)) {
                 const element = node.attrs.element as DocumentElement | null;
