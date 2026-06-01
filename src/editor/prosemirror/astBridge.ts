@@ -1,4 +1,4 @@
-import { Fragment, type Node as PMNode } from "prosemirror-model";
+import { Fragment, type Node as PMNode, type Schema } from "prosemirror-model";
 import type { Transaction } from "prosemirror-state";
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentElement } from "../../bindings/DocumentElement";
@@ -47,8 +47,10 @@ const atomNodeWidth = (node: PMNode): number => {
 // RichText[] ↔ ProseMirror inline fragment
 // ---------------------------------------------------------------------------
 
+type RichTextSchema = Pick<Schema, "text" | "nodes" | "marks">;
+
 export const richTextToInlineNodes = (
-    schema: BodySchema,
+    schema: RichTextSchema,
     content: readonly RichText[],
 ): PMNode[] => {
     const nodes: PMNode[] = [];
