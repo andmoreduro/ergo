@@ -1,7 +1,8 @@
 import type { ActionHandlerMap } from "../../actions/runtime";
 import { getActiveBodyView } from "./activeView";
-import { isTableBlockFocused } from "./tableBlockFocus";
-import { enterTableFirstCell, runBodyNavigate } from "./bodyTableCommands";
+import { runBodyTab } from "./bodyTabCommand";
+import { peekBodyTabModifiers } from "./activeView";
+import { enterLockedWholeBlock, runBodyNavigate } from "./bodyTableCommands";
 
 const withBodyView = (
     run: (
@@ -21,12 +22,25 @@ const withBodyView = (
 };
 
 export const bodyEditorActionHandlers = (): ActionHandlerMap => ({
-    "editor::EnterTable": withBodyView((view) => {
-        if (isTableBlockFocused(view.state)) {
-            return enterTableFirstCell(view.state, view.dispatch);
+    "editor::EnterTable": () => {
+        const view = getActiveBodyView();
+        if (!view) {
+            return false;
         }
-        return false;
-    }),
+        return enterLockedWholeBlock(view);
+    },
+    "editor::Tab": () => {
+        const view = getActiveBodyView();
+        if (!view) {
+            return false;
+        }
+        const tab = peekBodyTabModifiers();
+        return runBodyTab(view, {
+            shiftKey: tab.shiftKey,
+            ctrlKey: tab.ctrlKey,
+            metaKey: tab.metaKey,
+        });
+    },
     "editor::BodyNavigateLeft": withBodyView((view) => runBodyNavigate(view, "left")),
     "editor::BodyNavigateRight": withBodyView((view) =>
         runBodyNavigate(view, "right"),

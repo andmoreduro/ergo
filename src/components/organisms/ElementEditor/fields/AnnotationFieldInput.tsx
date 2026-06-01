@@ -55,6 +55,17 @@ export const AnnotationFieldInput = ({
             return;
         }
 
+        if (element.type === "Diagram" && field.key === "caption") {
+            dispatch({
+                type: "UPDATE_DIAGRAM",
+                payload: {
+                    diagramId: element.id,
+                    caption: text,
+                },
+            });
+            return;
+        }
+
         dispatch({
             type: "UPDATE_ELEMENT_EXTRA_FIELD",
             payload: {

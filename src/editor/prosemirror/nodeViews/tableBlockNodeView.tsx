@@ -3,8 +3,9 @@ import { EditorState, NodeSelection, TextSelection } from "prosemirror-state";
 import { EditorView, type NodeView } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
 import { baseKeymap } from "prosemirror-commands";
-import { columnResizing, goToNextCell, tableEditing } from "prosemirror-tables";
+import { columnResizing, tableEditing } from "prosemirror-tables";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
+import { runBodyTab } from "../bodyTabCommand";
 import { getBodyTableCommit } from "../activeView";
 import { isBlockEditing, setBlockEditing } from "../blockEditMode";
 import { clearBlockUiState, setBlockUiState } from "../blockUiState";
@@ -25,8 +26,9 @@ import {
     replaceTableElementEvents,
     tableStructurallySynced,
 } from "../tableDiff";
-import { TableBlockChrome } from "./TableBlockChrome";
+import { TableBlockChromeCoordinator } from "./TableBlockChrome";
 import type { NodeViewPortalRegistry } from "./nodeViewPortals";
+import elementStyles from "../../../components/organisms/ElementEditor/ElementEditor.module.css";
 import styles from "./tableBlockNodeView.module.css";
 import "./tableBlockNodeView.global.css";
 
@@ -43,8 +45,23 @@ const tableFromNode = (node: PMNode): TableElement => {
 };
 
 const tableCellKeymap = keymap({
-    Tab: goToNextCell(1),
-    "Shift-Tab": goToNextCell(-1),
+    "Shift-Enter": (state, dispatch) => {
+        const type = tableSchema.nodes.hard_break;
+        if (!type) {
+            return false;
+        }
+        if (dispatch) {
+            dispatch(
+                state.tr.replaceSelectionWith(type.create()).scrollIntoView(),
+            );
+        }
+        return true;
+    },
+});
+
+const swallowTabKeymap = keymap({
+    Tab: () => true,
+    "Shift-Tab": () => true,
 });
 
 const childPlugins = () => [
@@ -56,6 +73,7 @@ const childPlugins = () => [
     ),
     columnResizing({ defaultCellMinWidth: 96 }),
     tableEditing(),
+    swallowTabKeymap,
 ];
 
 export const createTableBlockNodeView = (
@@ -72,25 +90,48 @@ export const createTableBlockNodeView = (
     dom.className = styles.block;
     dom.setAttribute("data-pm-nodeview", "table_block");
 
+    const shell = document.createElement("div");
+    shell.className = elementStyles.extrasShell;
+
+    const primaryWrap = document.createElement("div");
+    primaryWrap.className = `${elementStyles.extrasPrimary} ${elementStyles.elementPrimary}`;
+    primaryWrap.setAttribute("data-wrapper-tab", "primary");
+
     const inner = document.createElement("div");
     inner.className = styles.inner;
-    dom.appendChild(inner);
+    inner.setAttribute("data-table-inner", "");
+
+    const chromeMount = document.createElement("div");
+    const coordinatorMount = document.createElement("div");
+    coordinatorMount.hidden = true;
+
+    primaryWrap.appendChild(inner);
+    shell.appendChild(primaryWrap);
+    shell.appendChild(chromeMount);
+    dom.appendChild(shell);
+    dom.appendChild(coordinatorMount);
+
+    const shellRef = { current: shell as HTMLDivElement };
 
     const elementId = () =>
         (currentNode.attrs.elementId as string) ||
         tableFromNode(currentNode).id;
 
     const portalKey = `table-block-${(tablePortalKeySeq += 1)}`;
+
+    const renderCoordinator = () => (
+        <TableBlockChromeCoordinator
+            elementFromNode={currentNode.attrs.element as TableElement | null}
+            elementId={elementId()}
+            chromeMount={chromeMount}
+            shellRef={shellRef}
+        />
+    );
+
     registry.register({
         key: portalKey,
-        dom,
-        render: () => (
-            <TableBlockChrome
-                elementFromNode={currentNode.attrs.element as TableElement | null}
-                elementId={elementId()}
-                editing={isBlockEditing(view.state, elementId())}
-            />
-        ),
+        dom: coordinatorMount,
+        render: renderCoordinator,
     });
 
     const syncOuterElementAttr = (nextTable: TableElement) => {
@@ -110,13 +151,7 @@ export const createTableBlockNodeView = (
         if (updated) {
             currentNode = updated;
         }
-        registry.update(portalKey, () => (
-            <TableBlockChrome
-                elementFromNode={nextTable}
-                elementId={nextTable.id}
-                editing={isBlockEditing(view.state, nextTable.id)}
-            />
-        ));
+        registry.update(portalKey, renderCoordinator);
     };
 
     const focusChildAtCoords = (clientX: number, clientY: number) => {
@@ -254,13 +289,7 @@ export const createTableBlockNodeView = (
             selected: pos !== undefined && isWholeSelected(pos),
             editing,
         });
-        registry.update(portalKey, () => (
-            <TableBlockChrome
-                elementFromNode={currentNode.attrs.element as TableElement | null}
-                elementId={id}
-                editing={editing}
-            />
-        ));
+        registry.update(portalKey, renderCoordinator);
     };
 
     const enterEditAtCoords = (blockPos: number, clientX: number, clientY: number) => {
@@ -274,6 +303,10 @@ export const createTableBlockNodeView = (
     };
 
     const onMouseDown = (event: MouseEvent) => {
+        const target = event.target as globalThis.Node | null;
+        if (target && chromeMount.contains(target)) {
+            return;
+        }
         if (isBlockEditing(view.state, elementId())) {
             return;
         }
@@ -296,6 +329,30 @@ export const createTableBlockNodeView = (
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Tab") {
+            event.preventDefault();
+            event.stopPropagation();
+            runBodyTab(view, {
+                shiftKey: event.shiftKey,
+                ctrlKey: event.ctrlKey,
+                metaKey: event.metaKey,
+            });
+            return;
+        }
+        const blockPos = getPos();
+        const mod = event.ctrlKey || event.metaKey;
+        if (
+            !isBlockEditing(view.state, elementId()) &&
+            mod &&
+            event.key === "Enter" &&
+            blockPos !== undefined &&
+            isWholeSelected(blockPos)
+        ) {
+            event.preventDefault();
+            event.stopPropagation();
+            enterEditAtCoords(blockPos, event.clientX, event.clientY);
+            return;
+        }
         if (!isBlockEditing(view.state, elementId())) {
             return;
         }
@@ -319,6 +376,8 @@ export const createTableBlockNodeView = (
 
     dom.addEventListener("mousedown", onMouseDown);
     dom.addEventListener("keydown", onKeyDown, true);
+
+    pushBlockUi();
 
     return {
         dom,
@@ -355,10 +414,14 @@ export const createTableBlockNodeView = (
             return true;
         },
         stopEvent(event: Event) {
-            if (isBlockEditing(view.state, elementId())) {
-                return inner.contains(event.target as globalThis.Node);
+            if (!isBlockEditing(view.state, elementId())) {
+                return false;
             }
-            return dom.contains(event.target as globalThis.Node);
+            const target = event.target as globalThis.Node | null;
+            if (target && chromeMount.contains(target)) {
+                return true;
+            }
+            return inner.contains(target);
         },
         ignoreMutation() {
             return true;

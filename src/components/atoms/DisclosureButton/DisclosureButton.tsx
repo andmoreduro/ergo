@@ -4,7 +4,7 @@ import styles from "./DisclosureButton.module.css";
 export interface DisclosureButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     title: string;
     open?: boolean;
-    variant?: "sidebar";
+    variant?: "sidebar" | "element";
 }
 
 export const DisclosureButton = memo(

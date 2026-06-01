@@ -212,6 +212,8 @@ pub enum ActionId {
     EditorMoveTableCellDown,
     #[serde(rename = "editor::EnterTable")]
     EditorEnterTable,
+    #[serde(rename = "editor::Tab")]
+    EditorTab,
     #[serde(rename = "editor::BodyNavigateLeft")]
     EditorBodyNavigateLeft,
     #[serde(rename = "editor::BodyNavigateRight")]
@@ -312,6 +314,7 @@ impl ActionId {
             ActionId::EditorMoveTableCellUp => "editor::MoveTableCellUp",
             ActionId::EditorMoveTableCellDown => "editor::MoveTableCellDown",
             ActionId::EditorEnterTable => "editor::EnterTable",
+            ActionId::EditorTab => "editor::Tab",
             ActionId::EditorBodyNavigateLeft => "editor::BodyNavigateLeft",
             ActionId::EditorBodyNavigateRight => "editor::BodyNavigateRight",
             ActionId::EditorBodyNavigateUp => "editor::BodyNavigateUp",
@@ -395,6 +398,7 @@ impl FromStr for ActionId {
             "editor::MoveTableCellUp" => Ok(ActionId::EditorMoveTableCellUp),
             "editor::MoveTableCellDown" => Ok(ActionId::EditorMoveTableCellDown),
             "editor::EnterTable" => Ok(ActionId::EditorEnterTable),
+            "editor::Tab" => Ok(ActionId::EditorTab),
             "editor::BodyNavigateLeft" => Ok(ActionId::EditorBodyNavigateLeft),
             "editor::BodyNavigateRight" => Ok(ActionId::EditorBodyNavigateRight),
             "editor::BodyNavigateUp" => Ok(ActionId::EditorBodyNavigateUp),

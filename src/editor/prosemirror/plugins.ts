@@ -120,6 +120,9 @@ const typingKeymap = keymap(
 
 export const bodyPlugins = () => [
     blockEditModePlugin(),
+    // Before `typingKeymap` (baseKeymap): locked-block Tab / Ctrl+Enter / Enter
+    // must run first or splitBlock and other defaults steal the keys.
+    bodyKeyboardPlugin(),
     // Must run before `tableEditing()` so a click outside an editing block is
     // turned into a sanctioned exit (edit-mode off + caret at the click) before
     // the table plugin claims the mousedown and the guards re-clamp inward.
@@ -131,5 +134,4 @@ export const bodyPlugins = () => [
     dropCursor(),
     atomElementPreserver,
     idNormalizer,
-    bodyKeyboardPlugin(),
 ];

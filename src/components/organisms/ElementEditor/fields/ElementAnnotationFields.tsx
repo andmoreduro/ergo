@@ -14,13 +14,18 @@ export const ElementAnnotationFields = ({
     draftRef?: MutableRefObject<Record<string, string>>;
 }) => (
     <div className={styles.annotationFields}>
-        {fields.map((field) => (
-            <AnnotationFieldInput
-                draftRef={draftRef}
-                element={element}
-                field={field}
+        {fields.map((field, index) => (
+            <div
+                data-wrapper-tab="extra"
+                data-wrapper-tab-index={index}
                 key={field.key}
-            />
+            >
+                <AnnotationFieldInput
+                    draftRef={draftRef}
+                    element={element}
+                    field={field}
+                />
+            </div>
         ))}
     </div>
 );

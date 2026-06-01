@@ -65,7 +65,9 @@ pub(crate) fn push_rich_text_field_with_emphasis(
                         EquationSyntax::Latex => {
                             format!("#mi(\"{}\")", escape_typst_string(&source))
                         }
-                        EquationSyntax::Typst => format!("${source}$"),
+                        EquationSyntax::Typst => {
+                            format!("#math.equation(block: [{source}])")
+                        }
                     };
                     builder.push_generated_field_marker(
                         element_id,
@@ -92,11 +94,36 @@ pub(crate) fn push_rich_text_field_with_emphasis(
             (false, false) => ("", ""),
         };
         builder.push_literal(prefix);
-        builder.push_escaped_field(element_id, field_id, &span.text, field_utf16_offset);
+        push_escaped_text_with_linebreaks(
+            builder,
+            element_id,
+            field_id,
+            &span.text,
+            &mut field_utf16_offset,
+        );
         builder.push_literal(suffix);
         if span.underline.unwrap_or(false) {
             builder.push_literal("]");
         }
-        field_utf16_offset += span.text.chars().map(char::len_utf16).sum::<usize>();
+    }
+}
+
+fn push_escaped_text_with_linebreaks(
+    builder: &mut SourceBuilder,
+    element_id: &str,
+    field_id: &str,
+    text: &str,
+    field_utf16_offset: &mut usize,
+) {
+    let mut parts = text.split('\n').peekable();
+    while let Some(part) = parts.next() {
+        if !part.is_empty() {
+            builder.push_escaped_field(element_id, field_id, part, *field_utf16_offset);
+            *field_utf16_offset += part.chars().map(char::len_utf16).sum::<usize>();
+        }
+        if parts.peek().is_some() {
+            builder.push_literal("#linebreak()");
+            *field_utf16_offset += 1;
+        }
     }
 }

@@ -17,7 +17,16 @@ import {
     isEditorFieldTarget,
     isEditorFocusLoseExempt,
 } from "../editor/editorFocusTargets";
-import { isUiOnlyComposerFieldId } from "../editor/fieldIds";
+import {
+    rememberBodyFocus,
+    rememberTemplateFieldFocus,
+} from "../editor/editorFocusMemory";
+import {
+    backendInputsElementId,
+    isTemplateFormFieldId,
+    isUiOnlyComposerFieldId,
+    projectInputElementId,
+} from "../editor/fieldIds";
 import { caretPlainOffsetFromSelection } from "../richText/richText";
 import { useDocument } from "./DocumentContext";
 
@@ -68,6 +77,9 @@ export const EditorFieldRegistryProvider = ({
     const recordFieldFocus = useCallback((fieldId: string) => {
         lastFocusedFieldIdRef.current = fieldId;
         activeFieldIdRef.current = fieldId;
+        if (isTemplateFormFieldId(fieldId)) {
+            rememberTemplateFieldFocus(fieldId);
+        }
     }, []);
 
     const focusRegisteredField = useCallback((fieldId: string | null) => {
@@ -226,6 +238,17 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
 
             if (isUiOnlyComposerFieldId(fieldId)) {
                 return;
+            }
+
+            if (
+                elementId !== projectInputElementId &&
+                elementId !== backendInputsElementId
+            ) {
+                rememberBodyFocus({
+                    elementId,
+                    fieldId,
+                    caretUtf16Offset: caretOffsetFromNode(node),
+                });
             }
 
             setDocumentFocus({

@@ -347,9 +347,7 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
                 primary={
 
                     <div
-
                         className={`${styles.figureWrap} ${styles.editorTableGridSize} ${styles.elementPrimary}`}
-
                     >
 
                         <MediaPickerButton

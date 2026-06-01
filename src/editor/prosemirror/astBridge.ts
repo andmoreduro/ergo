@@ -108,29 +108,46 @@ const mergeAdjacentText = (spans: RichText[]): RichText[] => {
     return merged;
 };
 
+const collectRichTextFromNode = (node: PMNode, spans: RichText[]): void => {
+    if (node.type.name === REFERENCE_NODE) {
+        spans.push({
+            ...createRichText(node.attrs.label),
+            kind: REFERENCE_KIND,
+            reference_id: node.attrs.referenceId,
+        });
+        return;
+    }
+    if (node.type.name === INLINE_EQUATION_NODE) {
+        spans.push({
+            ...createRichText(node.attrs.label),
+            kind: INLINE_EQUATION_KIND,
+            equation_source: node.attrs.source,
+            equation_syntax: node.attrs.syntax === "latex" ? "latex" : "typst",
+        });
+        return;
+    }
+    if (node.isText) {
+        spans.push(textSpanFromNode(node));
+        return;
+    }
+    if (node.type.name === "hard_break") {
+        spans.push(createRichText("\n"));
+        return;
+    }
+    if (node.childCount > 0) {
+        node.forEach((child) => collectRichTextFromNode(child, spans));
+    }
+};
+
 export const fragmentToRichText = (fragment: Fragment): RichText[] => {
     const spans: RichText[] = [];
+    let first = true;
     fragment.forEach((node) => {
-        if (node.type.name === REFERENCE_NODE) {
-            spans.push({
-                ...createRichText(node.attrs.label),
-                kind: REFERENCE_KIND,
-                reference_id: node.attrs.referenceId,
-            });
-            return;
+        if (!first && node.isBlock) {
+            spans.push(createRichText("\n"));
         }
-        if (node.type.name === INLINE_EQUATION_NODE) {
-            spans.push({
-                ...createRichText(node.attrs.label),
-                kind: INLINE_EQUATION_KIND,
-                equation_source: node.attrs.source,
-                equation_syntax: node.attrs.syntax === "latex" ? "latex" : "typst",
-            });
-            return;
-        }
-        if (node.isText) {
-            spans.push(textSpanFromNode(node));
-        }
+        first = false;
+        collectRichTextFromNode(node, spans);
     });
     return mergeAdjacentText(spans);
 };

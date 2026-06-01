@@ -198,6 +198,19 @@ export const buildEditorFieldOrder = (
     ...collectContentFieldTargets(ast),
 ];
 
+/** Last focusable field in the template form section (above the document body). */
+export const findLastTemplateFieldTarget = (
+    order: EditorFieldTarget[],
+): EditorFieldTarget | null => {
+    for (let index = order.length - 1; index >= 0; index -= 1) {
+        const entry = order[index];
+        if (entry.elementId === projectInputElementId) {
+            return entry;
+        }
+    }
+    return null;
+};
+
 export const findNextEditorField = (
     order: EditorFieldTarget[],
     currentFieldId: string | null,

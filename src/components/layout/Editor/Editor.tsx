@@ -53,6 +53,7 @@ import {
 import { useFieldNavigation } from "../../../editor/useFieldNavigation";
 import type { ConvertibleElementKind } from "../../../state/ast/convertElement";
 import { insertBodyReference } from "../../../editor/prosemirror/bodyInsert";
+import { peekBodyTabModifiers } from "../../../editor/prosemirror/activeView";
 
 /** Shared stable empty array so selectors don't return a fresh `[]` each call. */
 const EMPTY_ARRAY: readonly unknown[] = [];
@@ -237,6 +238,17 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
     const editorHandlersWithDelete = useMemo<ActionHandlerMap>(
         () => ({
             ...editorHandlers,
+            "editor::Tab": () => {
+                const tab = peekBodyTabModifiers();
+                const mod = tab.ctrlKey || tab.metaKey;
+                if (mod && tab.shiftKey) {
+                    return fieldNavigationRef.current.focusLastFocusedTemplateField();
+                }
+                if (mod && !tab.shiftKey) {
+                    return fieldNavigationRef.current.restoreLastBodyFocus();
+                }
+                return false;
+            },
             "editor::DeleteElement": () => deleteFocusedElement(),
             "editor::ConvertToParagraph": () => convertFocusedElement("Paragraph"),
             "editor::ConvertToHeading": () => convertFocusedElement("Heading"),
@@ -450,7 +462,15 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
 
                 {state.sections.map((section) =>
                     section.type === "Content" ? (
-                        <ProseMirrorBodyEditor key={section.id} section={section} />
+                        <ProseMirrorBodyEditor
+                            key={section.id}
+                            section={section}
+                            autoFocus={
+                                section.id ===
+                                state.sections.find((entry) => entry.type === "Content")
+                                    ?.id
+                            }
+                        />
                     ) : null,
                 )}
                 </div>

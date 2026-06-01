@@ -51,3 +51,21 @@
     width: var(--size-icon);
     height: var(--size-icon);
 }
+
+.element {
+    width: 100%;
+    min-height: var(--size-control);
+    padding: 0 var(--space-1);
+    background-color: transparent;
+}
+
+.element:hover,
+.element:focus-visible {
+    background-color: var(--color-bg-tertiary);
+}
+
+.element .title {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-regular);
+    color: var(--color-text-secondary);
+}
