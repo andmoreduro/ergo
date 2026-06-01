@@ -83,8 +83,9 @@ pub fn build_resource_catalog(
     let seeds = assign_preview_pages(resource_seeds(ast, template));
     let mut groups = Vec::new();
     for (kind, label) in [
+        // Diagrams are grouped under Figures (a diagram is a generated-SVG image),
+        // so there is no separate Diagrams group.
         (ResourceKind::Figure, "Figures"),
-        (ResourceKind::Diagram, "Diagrams"),
         (ResourceKind::Table, "Tables"),
         (ResourceKind::Equation, "Equations"),
         (ResourceKind::File, "Assets"),
@@ -258,6 +259,10 @@ fn collect_element_seeds(
             });
         }
         DocumentElement::Diagram(diagram) => {
+            // A diagram is an image whose asset is a generated SVG, so it belongs
+            // in the Figures group and shares the figure preview pipeline (same
+            // `image(...)` Typst body). Grouping it as `Figure` keeps it alongside
+            // other images instead of in a separate Diagrams section.
             let asset_ref = diagram
                 .asset_id
                 .as_deref()
@@ -272,7 +277,7 @@ fn collect_element_seeds(
                 resource_preview_typst_for_element(element, template, assets, references);
             seeds.push(ResourceSeed {
                 id: diagram.id.clone(),
-                kind: ResourceKind::Diagram,
+                kind: ResourceKind::Figure,
                 label,
                 subtitle: asset_ref.map(|a| a.path.clone()),
                 reference_token: reference_token(&diagram.id),
@@ -547,5 +552,43 @@ mod tests {
         assert_eq!(file_seed.preview_page, Some(1));
         assert_eq!(equation_seed.preview_page, Some(2));
         assert_eq!(figure_seed.preview_page, Some(3));
+    }
+
+    #[test]
+    fn diagrams_are_grouped_with_figures() {
+        use crate::ast::Diagram;
+
+        let mut ast = basic_document_ast("Title", "");
+        ast.assets.push(AssetEntry {
+            id: "diagram-1".to_string(),
+            path: "assets/diagrams/diagram-1.svg".to_string(),
+            kind: "image".to_string(),
+            caption: None,
+        });
+        let DocumentSection::Content(content) = &mut ast.sections[0];
+        content.elements.push(DocumentElement::Diagram(Diagram {
+            id: "diagram-1".to_string(),
+            mermaid_source: "flowchart TD\nA-->B".to_string(),
+            asset_id: Some("diagram-1".to_string()),
+            caption: "Flow".to_string(),
+            placement: "here".to_string(),
+            extra_fields: std::collections::HashMap::new(),
+        }));
+
+        let template = load_bundled_template("apa7").unwrap();
+        let vfs = VirtualFileSystem::new();
+        let catalog = build_resource_catalog(&ast, &template, &vfs);
+
+        // No standalone Diagrams group: the diagram seed is a Figure.
+        assert!(catalog
+            .groups
+            .iter()
+            .all(|group| group.kind != ResourceKind::Diagram));
+        let figures = catalog
+            .groups
+            .iter()
+            .find(|group| group.kind == ResourceKind::Figure)
+            .expect("figures group exists");
+        assert!(figures.entries.iter().any(|entry| entry.id == "diagram-1"));
     }
 }
