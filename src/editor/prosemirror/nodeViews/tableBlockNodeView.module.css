@@ -1,21 +1,56 @@
 .block {
     position: relative;
     display: block;
-    width: 100%;
+    width: fit-content;
+    max-width: 100%;
     margin-block: var(--space-2, 0.5rem);
     box-sizing: border-box;
 }
 
-.chrome {
-    position: absolute;
-    top: var(--space-1, 0.25rem);
-    right: var(--space-1, 0.25rem);
-    z-index: 2;
+.tableExtrasChrome {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.tableExtrasChrome :global(.settingsAnchor) {
+    position: static;
+    top: auto;
+    right: auto;
+}
+
+/* Match locked block-object extras: visible while selected, inert until edit mode. */
+.tableExtrasChromeLocked {
+    pointer-events: none;
+}
+
+.tableExtrasChrome :global(.annotationFields) {
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .inner {
-    width: 100%;
     overflow-x: auto;
+}
+
+/* Nested table EditorView: content-sized, not body paper (`.bodyPaper`). */
+.inner :global(.ProseMirror) {
+    flex: none;
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+    outline: none;
+    cursor: text;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.inner :global(.ProseMirror) td,
+.inner :global(.ProseMirror) th {
+    border: 1px solid var(--color-border, #cbd5e1);
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    vertical-align: top;
 }
 
 .inner :global(table) {
@@ -23,4 +58,3 @@
     table-layout: fixed;
     border-collapse: collapse;
 }
-

@@ -7,12 +7,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { ActionContextProvider } from "../../../actions/runtime";
-import { EditorState, type Selection, type Transaction } from "prosemirror-state";
+import { EditorState, TextSelection, type Selection, type Transaction } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
 import { EditorView } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
 import "prosemirror-gapcursor/style/gapcursor.css";
 import "prosemirror-tables/style/tables.css";
+import "../../../editor/prosemirror/nodeViews/blockObjectNodeViews.global.css";
 import "../../../editor/prosemirror/nodeViews/tableBlockNodeView.global.css";
 import type { ContentSection } from "../../../bindings/ContentSection";
 import { useDocumentAst, useDocumentFocus } from "../../../state/DocumentContext";
@@ -29,6 +30,7 @@ import {
     sectionSignificantlyEqual,
     type SectionEventDelta,
 } from "../../../editor/prosemirror/sectionDiff";
+import { rememberBodyFocus } from "../../../editor/editorFocusMemory";
 import {
     focusTargetFromState,
     selectionForFocusTarget,
@@ -41,6 +43,7 @@ import {
     TABLE_ATTR_SYNC_META,
 } from "../../../editor/prosemirror/nodeViews/tableBlockNodeView";
 import { bodySchema } from "../../../editor/prosemirror/schema";
+import { insertParagraphAfterElement } from "../../../editor/insertParagraphAfterElement";
 import { insertParagraphBeforeElement } from "../../../editor/insertParagraphBeforeElement";
 import {
     clearActiveBodyView,
@@ -57,6 +60,7 @@ import { setTableFocusPush } from "../../../editor/prosemirror/table/tableFocusB
 import { applyTableCellFocus } from "../../../editor/prosemirror/table/tableFocusRegistry";
 import { isTableCellFieldId } from "../../../editor/prosemirror/table/tableCellFocus";
 import { ProseMirrorSurface } from "../../atoms/ProseMirrorSurface/ProseMirrorSurface";
+import bodyPaperStyles from "../../atoms/ProseMirrorSurface/ProseMirrorSurface.module.css";
 
 const deepEqual = (a: unknown, b: unknown): boolean =>
     JSON.stringify(a) === JSON.stringify(b);
@@ -116,10 +120,25 @@ const reconcileDocInPlace = (view: EditorView, target: PMNode): boolean => {
  * originate here is reconciled back into the doc. Preview ↔ editor caret sync
  * flows through the unchanged `documentFocus` tuple.
  */
+const initialBodyTextSelection = (doc: PMNode): Selection | undefined => {
+    let selection: Selection | undefined;
+    doc.forEach((node, offset) => {
+        if (selection) {
+            return;
+        }
+        if (node.isTextblock) {
+            selection = TextSelection.create(doc, offset + 1);
+        }
+    });
+    return selection;
+};
+
 export const ProseMirrorBodyEditor = ({
     section,
+    autoFocus = false,
 }: {
     section: ContentSection;
+    autoFocus?: boolean;
 }) => {
     const { state: documentAst, dispatch, commitDocumentEvents, undo, redo, canUndo, canRedo } =
         useDocumentAst();
@@ -127,7 +146,7 @@ export const ProseMirrorBodyEditor = ({
 
     const mountRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
-    const pluginsRef = useRef(bodyPlugins());
+    const pluginsRef = useRef<ReturnType<typeof bodyPlugins> | null>(null);
     const portalRegistryRef = useRef<NodeViewPortalRegistry>(
         new NodeViewPortalRegistry(),
     );
@@ -195,6 +214,14 @@ export const ProseMirrorBodyEditor = ({
                     dispatchRef.current,
                     setFocusRef.current,
                     beforeElementId,
+                );
+            },
+            insertAfterElement: (afterElementId) => {
+                insertParagraphAfterElement(
+                    documentAstRef.current,
+                    dispatchRef.current,
+                    setFocusRef.current,
+                    afterElementId,
                 );
             },
         });
@@ -315,6 +342,11 @@ export const ProseMirrorBodyEditor = ({
             if ((tr.selectionSet || tr.docChanged) && view.hasFocus()) {
                 const target = focusTargetFromState(nextState);
                 if (target) {
+                    rememberBodyFocus({
+                        elementId: target.elementId,
+                        fieldId: target.fieldId,
+                        caretUtf16Offset: target.caretUtf16Offset,
+                    });
                     setFocusRef.current({
                         elementId: target.elementId,
                         fieldId: target.fieldId,
@@ -328,12 +360,15 @@ export const ProseMirrorBodyEditor = ({
             }
         };
 
+        const plugins = bodyPlugins();
+        pluginsRef.current = plugins;
         const view = new EditorView(mount, {
             state: EditorState.create({
                 doc: sectionToDoc(bodySchema, sectionRef.current),
-                plugins: pluginsRef.current,
+                plugins,
             }),
             attributes: {
+                class: bodyPaperStyles.bodyPaper,
                 spellcheck: "false",
             },
             nodeViews: nodeViewsRef.current,
@@ -346,6 +381,17 @@ export const ProseMirrorBodyEditor = ({
             },
         });
         viewRef.current = view;
+        setActiveBodyView(view);
+
+        if (autoFocus) {
+            requestAnimationFrame(() => {
+                view.focus();
+                const initial = initialBodyTextSelection(view.state.doc);
+                if (initial) {
+                    view.dispatch(view.state.tr.setSelection(initial));
+                }
+            });
+        }
 
         return () => {
             clearActiveBodyView(view);

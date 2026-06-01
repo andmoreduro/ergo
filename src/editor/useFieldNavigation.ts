@@ -8,9 +8,15 @@ import {
     applyAstActions,
     planContentElementRemoval,
 } from "./contentFocus";
+import { getActiveBodyView } from "./prosemirror/activeView";
+import {
+    getLastBodyFocus,
+    getLastTemplateFieldId,
+} from "./editorFocusMemory";
 import {
     buildEditorFieldOrder,
     contentSection,
+    findLastTemplateFieldTarget,
     findNextEditorField,
     findPreviousEditorField,
 } from "./fieldNavigation";
@@ -100,6 +106,43 @@ export const useFieldNavigation = (
         [fieldOrder, focusField, refocusField],
     );
 
+    const focusLastTemplateField = useCallback((): boolean => {
+        const last = findLastTemplateFieldTarget(fieldOrder);
+        if (!last) {
+            return false;
+        }
+        focusField(last.elementId, last.fieldId);
+        return true;
+    }, [fieldOrder, focusField]);
+
+    const focusLastFocusedTemplateField = useCallback((): boolean => {
+        const remembered = getLastTemplateFieldId();
+        if (remembered) {
+            const entry = fieldOrder.find((item) => item.fieldId === remembered);
+            if (entry) {
+                focusField(entry.elementId, entry.fieldId);
+                return true;
+            }
+        }
+        return focusLastTemplateField();
+    }, [fieldOrder, focusField, focusLastTemplateField]);
+
+    const restoreLastBodyFocus = useCallback((): boolean => {
+        const saved = getLastBodyFocus();
+        if (!saved) {
+            return false;
+        }
+        focusField(
+            saved.elementId,
+            saved.fieldId,
+            saved.caretUtf16Offset ?? 0,
+        );
+        queueMicrotask(() => {
+            getActiveBodyView()?.focus();
+        });
+        return true;
+    }, [focusField]);
+
     const removeContentElement = useCallback(
         (ast: DocumentAST, elementId: string) => {
             const plan = planContentElementRemoval(ast, elementId);
@@ -139,8 +182,18 @@ export const useFieldNavigation = (
         ) => {
             const isShiftTab = event.key === "Tab" && event.shiftKey;
             const isTab = event.key === "Tab" && !event.shiftKey;
+            const isCtrlTab =
+                event.key === "Tab" &&
+                (event.ctrlKey || event.metaKey) &&
+                !event.shiftKey;
             const isCtrlEnter =
                 event.key === "Enter" && event.ctrlKey && !event.shiftKey;
+
+            if (isCtrlTab) {
+                event.preventDefault();
+                restoreLastBodyFocus();
+                return true;
+            }
 
             if (isShiftTab) {
                 event.preventDefault();
@@ -162,7 +215,7 @@ export const useFieldNavigation = (
 
             return false;
         },
-        [focusNextField, focusPreviousField, handleFieldAdvance],
+        [focusNextField, focusPreviousField, handleFieldAdvance, restoreLastBodyFocus],
     );
 
     return {
@@ -170,6 +223,9 @@ export const useFieldNavigation = (
         focusField,
         focusNextField,
         focusPreviousField,
+        focusLastTemplateField,
+        focusLastFocusedTemplateField,
+        restoreLastBodyFocus,
         removeContentElement,
         handleFieldAdvance,
         handleAdvanceKeyDown,

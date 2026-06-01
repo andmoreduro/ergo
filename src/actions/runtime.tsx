@@ -10,6 +10,8 @@ import {
     useState,
 } from "react";
 import { TauriApi } from "../api/tauri";
+import { captureBodyTabKey, getActiveBodyView } from "../editor/prosemirror/activeView";
+import { runBodyTab } from "../editor/prosemirror/bodyTabCommand";
 import type { ActionContextNode } from "../bindings/ActionContextNode";
 import type { ActionContextSnapshot } from "../bindings/ActionContextSnapshot";
 import type { ActionId } from "../bindings/ActionId";
@@ -51,6 +53,13 @@ const isEditableTarget = (target: EventTarget | null): boolean => {
         ),
     );
 };
+
+/** Content column (`ActionContextProvider` id `editor`). Tab must not leave via browser focus navigation. */
+const EDITOR_COLUMN_SELECTOR = '[data-action-context-id="editor"]';
+
+const isInEditorColumn = (target: EventTarget | null): boolean =>
+    target instanceof HTMLElement &&
+    Boolean(target.closest(EDITOR_COLUMN_SELECTOR));
 
 const normalizeKey = (key: string): string => {
     if (key === " " || key === "Spacebar") {
@@ -174,6 +183,37 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
 
             clearPendingFallback();
 
+            const tabKey = normalizeKey(event.key) === "tab";
+            const inEditorColumn = isInEditorColumn(event.target);
+            if (tabKey) {
+                captureBodyTabKey(event);
+                if (inEditorColumn) {
+                    const view = getActiveBodyView();
+                    const targetNode =
+                        event.target instanceof Node ? event.target : null;
+                    const inBodySurface =
+                        view !== null &&
+                        targetNode !== null &&
+                        view.dom.contains(targetNode);
+                    // Run before preventDefault: in WebView, swallowing Tab in capture
+                    // can prevent ProseMirror from seeing the key at all (Ctrl+Enter
+                    // is not swallowed and worked).
+                    if (inBodySurface) {
+                        const handled = runBodyTab(view, {
+                            shiftKey: event.shiftKey,
+                            ctrlKey: event.ctrlKey,
+                            metaKey: event.metaKey,
+                        });
+                        if (handled) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            return;
+                        }
+                    }
+                    event.preventDefault();
+                }
+            }
+
             const logicalEvent = eventToLogicalKeyEvent(event);
             const targetIsEditable = isEditableTarget(event.target);
             if (!targetIsEditable && (event.ctrlKey || event.metaKey || event.altKey)) {
@@ -191,54 +231,60 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
                 return;
             }
 
-            // ProseMirror body navigation handles arrows/enter synchronously and calls
-            // preventDefault; skip async action dispatch so we do not run the same command twice.
-            if (event.defaultPrevented) {
-                return;
-            }
+            // Resolve keys after the target (ProseMirror, inputs, …) runs so synchronous
+            // handlers can call preventDefault first. The capture listener used to start
+            // async dispatch here, which raced Ctrl+Enter: PM entered edit mode, then
+            // `editor::EnterTable` called `view.focus()` and pulled focus off the block.
+            queueMicrotask(() => {
+                // Tab is always preventDefault'd in the editor column to trap focus;
+                // still resolve Shift+Tab (template field) via the action runtime.
+                if (event.defaultPrevented && !tabKey) {
+                    return;
+                }
 
-            const snapshot = getSnapshot({
-                includeInputContext: targetIsEditable,
-            });
+                const snapshot = getSnapshot({
+                    includeInputContext: targetIsEditable,
+                });
 
-            void TauriApi.resolveKeyEvent(logicalEvent, snapshot)
-                .then((resolution) => {
-                    if (resolution.status === "matched") {
-                        void dispatchAction(resolution.invocation).then((handled) => {
-                            if (handled) {
+                void TauriApi.resolveKeyEvent(logicalEvent, snapshot)
+                    .then((resolution) => {
+                        if (resolution.status === "matched") {
+                            void dispatchAction(resolution.invocation).then((handled) => {
+                                if (handled) {
+                                    event.preventDefault();
+                                }
+                            });
+                            return;
+                        }
+
+                        if (resolution.status === "pendingSequence") {
+                            if (resolution.fallback) {
+                                pendingFallbackTimeoutRef.current = window.setTimeout(
+                                    () => {
+                                        void TauriApi.resetKeySequence("main");
+                                        void dispatchAction(resolution.fallback!).then(
+                                            (handled) => {
+                                                if (handled) {
+                                                    event.preventDefault();
+                                                }
+                                            },
+                                        );
+                                    },
+                                    resolution.timeout_ms,
+                                );
+                            } else {
                                 event.preventDefault();
                             }
-                        });
-                        return;
-                    }
-
-                    if (resolution.status === "pendingSequence") {
-                        if (resolution.fallback) {
-                            pendingFallbackTimeoutRef.current = window.setTimeout(
-                                () => {
-                                    void TauriApi.resetKeySequence("main");
-                                    void dispatchAction(resolution.fallback!).then(
-                                        (handled) => {
-                                            if (handled) {
-                                                event.preventDefault();
-                                            }
-                                        },
-                                    );
-                                },
-                                resolution.timeout_ms,
-                            );
-                        } else {
-                            event.preventDefault();
                         }
-                    }
-                })
-                .catch(() => undefined);
+                    })
+                    .catch(() => undefined);
+            });
         };
 
-        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keydown", handleKeyDown, true);
         return () => {
             clearPendingFallback();
-            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keydown", handleKeyDown, true);
         };
     }, [dispatchAction, getSnapshot]);
 

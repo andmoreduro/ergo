@@ -34,8 +34,9 @@ export const ElementSettingsButton = ({
     };
 
     return (
-        <div className={styles.settingsAnchor}>
+        <div className={styles.settingsAnchor} data-wrapper-tab-ignore>
             <IconButton
+                data-wrapper-tab-ignore
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 aria-label={m.editor_element_settings()}

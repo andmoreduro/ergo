@@ -1,16 +1,17 @@
-/* Applied via node decorations from tableBlockFocusPlugin */
+/* Applied via node decorations from tableBlockFocusPlugin on the NodeView root. */
 .ergo-table-block--locked {
     user-select: none;
 }
 
-.ergo-table-block-focus {
-    outline: 2px solid var(--color-accent, #2563eb);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm, 4px);
-    background: color-mix(in srgb, var(--color-accent, #2563eb) 8%, transparent);
-}
+/* Selected (locked) outline: `.ergo-block-object--selected` in blockObjectNodeViews.global.css */
 
 .ergo-table-block--editing {
     outline: none;
     background: transparent;
+}
+
+[data-pm-nodeview="table_block"].ergo-table-block--editing > [data-table-inner] {
+    outline: 1px solid var(--color-border, #3e3e42);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm, 4px);
 }

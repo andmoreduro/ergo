@@ -5,6 +5,8 @@ import type { DocumentElement } from "../../../bindings/DocumentElement";
 import { ATOM_BLOCK_NODES, TABLE_BLOCK_NODE } from "../schema";
 import { isBlockEditing, setBlockEditing } from "../blockEditMode";
 import { clearBlockUiState, setBlockUiState } from "../blockUiState";
+import { blurFocusedInside, focusWrapperPrimary } from "../../wrapperTabCycle";
+import { runBodyTab } from "../bodyTabCommand";
 import { BlockObjectNodeViewHost } from "./BlockObjectNodeViewHost";
 import type { NodeViewPortalRegistry } from "./nodeViewPortals";
 import styles from "./blockObjectNodeViews.module.css";
@@ -102,14 +104,9 @@ export const createBlockObjectNodeViews = (
                     );
                     tr = setBlockEditing(tr, elementId(), true);
                     view.dispatch(tr);
-                    requestAnimationFrame(() => {
-                        dom
-                            .querySelector<HTMLElement>(
-                                "input, textarea, select, button, [contenteditable]",
-                            )
-                            ?.focus();
-                    });
+                    focusWrapperPrimary(dom);
                 } else {
+                    blurFocusedInside(dom);
                     view.dispatch(
                         view.state.tr.setSelection(
                             NodeSelection.create(view.state.doc, pos),
@@ -120,32 +117,36 @@ export const createBlockObjectNodeViews = (
             };
 
             const onKeyDown = (event: KeyboardEvent) => {
-                if (!isBlockEditing(view.state, elementId())) {
-                    return;
-                }
-                // Trap Tab inside the editor so focus never escapes to the
-                // ProseMirror view — where the whole block is node-selected and
-                // a keystroke would replace it.
                 if (event.key === "Tab") {
-                    const focusables = Array.from(
-                        dom.querySelectorAll<HTMLElement>(
-                            "input, textarea, select, button, [contenteditable]",
-                        ),
-                    ).filter((el) => !el.hasAttribute("disabled"));
-                    if (focusables.length > 0) {
-                        const active = document.activeElement as HTMLElement | null;
-                        const idx = active ? focusables.indexOf(active) : -1;
-                        let next = event.shiftKey ? idx - 1 : idx + 1;
-                        if (next < 0) {
-                            next = focusables.length - 1;
-                        }
-                        if (next >= focusables.length) {
-                            next = 0;
-                        }
-                        focusables[next].focus();
-                    }
                     event.preventDefault();
                     event.stopPropagation();
+                    runBodyTab(view, {
+                        shiftKey: event.shiftKey,
+                        ctrlKey: event.ctrlKey,
+                        metaKey: event.metaKey,
+                    });
+                    return;
+                }
+                const pos = getPos();
+                const mod = event.ctrlKey || event.metaKey;
+                if (
+                    !isBlockEditing(view.state, elementId()) &&
+                    mod &&
+                    event.key === "Enter" &&
+                    pos !== undefined &&
+                    isWholeSelected(pos)
+                ) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    let tr = view.state.tr.setSelection(
+                        NodeSelection.create(view.state.doc, pos),
+                    );
+                    tr = setBlockEditing(tr, elementId(), true);
+                    view.dispatch(tr);
+                    focusWrapperPrimary(dom);
+                    return;
+                }
+                if (!isBlockEditing(view.state, elementId())) {
                     return;
                 }
                 const exit =
@@ -154,15 +155,16 @@ export const createBlockObjectNodeViews = (
                 if (!exit) {
                     return;
                 }
-                const pos = getPos();
                 event.preventDefault();
                 event.stopPropagation();
+                const exitPos = getPos();
                 let tr = view.state.tr;
-                if (pos !== undefined) {
-                    tr = tr.setSelection(NodeSelection.create(view.state.doc, pos));
+                if (exitPos !== undefined) {
+                    tr = tr.setSelection(NodeSelection.create(view.state.doc, exitPos));
                 }
                 tr = setBlockEditing(tr, elementId(), false);
                 view.dispatch(tr);
+                blurFocusedInside(dom);
                 view.focus();
             };
 
@@ -191,6 +193,9 @@ export const createBlockObjectNodeViews = (
                     registry.unregister(key);
                 },
                 stopEvent(event: Event) {
+                    if (!isBlockEditing(view.state, elementId())) {
+                        return false;
+                    }
                     return dom.contains(event.target as globalThis.Node);
                 },
                 ignoreMutation() {

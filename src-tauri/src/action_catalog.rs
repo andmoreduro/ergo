@@ -324,6 +324,14 @@ pub fn action_catalog() -> Vec<ActionDescriptor> {
             false,
         ),
         descriptor(
+            ActionId::EditorTab,
+            "action_editor_tab",
+            "editor",
+            "body",
+            true,
+            false,
+        ),
+        descriptor(
             ActionId::EditorBodyNavigateLeft,
             "action_editor_body_navigate_left",
             "editor",

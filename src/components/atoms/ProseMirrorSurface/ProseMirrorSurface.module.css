@@ -1,22 +1,17 @@
-.surface {
+/*
+ * Body document "paper" — applied on the ProseMirror EditorView root via
+ * `attributes.class` in ProseMirrorBodyEditor (same DOM node as `.ProseMirror`).
+ * Do not put these rules on a wrapper around the mount.
+ */
+.bodyPaper {
     display: flex;
     flex-direction: column;
     /* `auto` basis sizes to content, so the paper grows past one viewport when
        the document is long; flex-grow still lets a short document fill the pane. */
     flex: 1 0 auto;
-    min-height: 0;
-}
-
-/*
- * The editable itself is the "paper": a tall, padded sheet that fills the
- * editor pane. Because the contenteditable covers the whole sheet, a click on
- * any empty area lands inside it and ProseMirror places the caret at the
- * nearest position — no separate empty-space focus handling needed.
- */
-.surface :global(.ProseMirror) {
-    flex: 1 0 auto;
+    /* Fill the editor scrollport when short; do not use 100vh (taller than the pane). */
+    min-height: 100%;
     box-sizing: border-box;
-    min-height: 100vh;
     padding: var(--space-8) var(--space-6);
     background-color: var(--color-bg-primary);
     box-shadow: var(--shadow-content-paper);
@@ -26,32 +21,25 @@
     word-wrap: break-word;
 }
 
-.surface :global(.ProseMirror) p,
-.surface :global(.ProseMirror) blockquote,
-.surface :global(.ProseMirror) ul,
-.surface :global(.ProseMirror) ol {
+.bodyPaper > :global(p),
+.bodyPaper > :global(blockquote),
+.bodyPaper > :global(ul),
+.bodyPaper > :global(ol) {
     margin: 0;
 }
 
-.surface :global(.ProseMirror) blockquote {
+.bodyPaper > :global(blockquote) {
     border-inline-start: 3px solid var(--color-border, #cbd5e1);
     padding-inline-start: var(--space-3, 0.75rem);
     color: var(--color-text-muted, #64748b);
 }
 
-.surface :global(.ProseMirror) ul,
-.surface :global(.ProseMirror) ol {
+.bodyPaper > :global(ul),
+.bodyPaper > :global(ol) {
     padding-inline-start: var(--space-5, 1.25rem);
 }
 
-.surface :global(.ProseMirror) td,
-.surface :global(.ProseMirror) th {
-    border: 1px solid var(--color-border, #cbd5e1);
-    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
-    vertical-align: top;
-}
-
-.surface :global(.ergo-ref-chip) {
+.bodyPaper :global(.ergo-ref-chip) {
     color: var(--color-accent, #2563eb);
     cursor: default;
 }

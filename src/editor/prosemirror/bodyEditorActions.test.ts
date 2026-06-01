@@ -5,6 +5,7 @@ describe("bodyEditorActionHandlers", () => {
     it("registers table and body navigation handlers", () => {
         const handlers = bodyEditorActionHandlers();
         expect(typeof handlers["editor::EnterTable"]).toBe("function");
+        expect(typeof handlers["editor::Tab"]).toBe("function");
         expect(typeof handlers["editor::BodyNavigateUp"]).toBe("function");
     });
 });

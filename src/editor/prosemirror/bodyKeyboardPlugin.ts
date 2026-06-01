@@ -1,11 +1,12 @@
 import { Plugin } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import {
-    enterAtomBlock,
-    enterTableFirstCell,
+    enterLockedWholeBlock,
+    lockedWholeBlockElementId,
     runBodyNavigate,
     tableBlockFromSelection,
 } from "./bodyTableCommands";
+import { runBodyTab } from "./bodyTabCommand";
 import {
     getActiveBodyView,
     getBodyHistoryActions,
@@ -62,6 +63,20 @@ export const bodyKeyboardPlugin = () =>
                     }
                 }
 
+                if (event.key === "Tab") {
+                    const handled = runBodyTab(view, {
+                        shiftKey: event.shiftKey,
+                        ctrlKey: event.ctrlKey,
+                        metaKey: event.metaKey,
+                    });
+                    if (handled) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return true;
+                    }
+                    return false;
+                }
+
                 if (event.key === "Enter") {
                     if (event.shiftKey && !mod) {
                         if (isTableBlockFocused(view.state)) {
@@ -77,33 +92,17 @@ export const bodyKeyboardPlugin = () =>
                         return false;
                     }
                     if (mod) {
-                        if (enterTableFirstCell(view.state, view.dispatch)) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            return true;
-                        }
-                        if (enterAtomBlock(view)) {
+                        if (enterLockedWholeBlock(view)) {
                             event.preventDefault();
                             event.stopPropagation();
                             return true;
                         }
                         return false;
                     }
-                    if (isTableBlockFocused(view.state)) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        return true;
-                    }
-                    return false;
-                }
-
-                if (event.key === "Tab") {
-                    if (enterTableFirstCell(view.state, view.dispatch)) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        return true;
-                    }
-                    if (enterAtomBlock(view)) {
+                    const lockedBlockId = lockedWholeBlockElementId(view.state);
+                    const insert = getBodyParagraphInsert();
+                    if (lockedBlockId && insert) {
+                        insert.insertAfterElement(lockedBlockId);
                         event.preventDefault();
                         event.stopPropagation();
                         return true;
