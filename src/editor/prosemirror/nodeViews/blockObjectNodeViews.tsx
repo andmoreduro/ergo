@@ -2,7 +2,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import { NodeSelection } from "prosemirror-state";
 import type { EditorView, NodeView } from "prosemirror-view";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
-import { ATOM_BLOCK_NODES } from "../schema";
+import { ATOM_BLOCK_NODES, TABLE_BLOCK_NODE } from "../schema";
 import { isBlockEditing, setBlockEditing } from "../blockEditMode";
 import { clearBlockUiState, setBlockUiState } from "../blockUiState";
 import { BlockObjectNodeViewHost } from "./BlockObjectNodeViewHost";
@@ -45,6 +45,9 @@ export const createBlockObjectNodeViews = (
     > = {};
 
     for (const name of ATOM_BLOCK_NODES) {
+        if (name === TABLE_BLOCK_NODE) {
+            continue;
+        }
         factories[name] = (node, view, getPos) => {
             let currentNode = node;
 

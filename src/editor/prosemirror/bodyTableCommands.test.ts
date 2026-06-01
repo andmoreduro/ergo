@@ -1,29 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { EditorState, NodeSelection, TextSelection } from "prosemirror-state";
+import { createRichText, createTable } from "../../state/ast/defaults";
 import { bodySchema } from "./schema";
-import { bodyPlugins } from "./plugins";
+import { blockEditModePlugin } from "./blockEditMode";
 import {
     arrowTowardNextBlock,
-    enterTableFirstCell,
     navigateAdjacentBlock,
 } from "./bodyTableCommands";
-const wrapTable = (table: ReturnType<typeof bodySchema.nodes.table.create>) =>
-    bodySchema.nodes.table_block.create(
-        { elementId: "t1", columnSizes: ["1fr", "1fr"], extraFields: {} },
-        [table],
-    );
 
-const tableOnly = (rows: ReturnType<typeof bodySchema.nodes.table_row.create>[]) =>
-    bodySchema.nodes.table.create(null, rows);
+const wrapTableElement = () => {
+    const table = createTable(1, 2, "t1");
+    if (table.type !== "Table") {
+        throw new Error("expected table element");
+    }
+    table.cells[0][0].content = [createRichText("in table")];
+    return bodySchema.nodes.table_block.create({
+        elementId: table.id,
+        element: table,
+    });
+};
 
 const docWithParagraphTableParagraph = () => {
-    const cell = (text: string) =>
-        bodySchema.nodes.table_cell.create(null, text ? [bodySchema.text(text)] : []);
-    const row = (cells: ReturnType<typeof cell>[]) =>
-        bodySchema.nodes.table_row.create(null, cells);
-    const table = wrapTable(
-        tableOnly([row([cell("in table"), cell("")])]),
-    );
+    const table = wrapTableElement();
     const above = bodySchema.nodes.paragraph.create(
         { elementId: "p1", extraFields: {} },
         [bodySchema.text("above")],
@@ -36,13 +34,7 @@ const docWithParagraphTableParagraph = () => {
 };
 
 const docWithParagraphAndTable = () => {
-    const cell = (text: string) =>
-        bodySchema.nodes.table_cell.create(null, text ? [bodySchema.text(text)] : []);
-    const row = (cells: ReturnType<typeof cell>[]) =>
-        bodySchema.nodes.table_row.create(null, cells);
-    const table = wrapTable(
-        tableOnly([row([cell("in table"), cell("")])]),
-    );
+    const table = wrapTableElement();
     const paragraph = bodySchema.nodes.paragraph.create(
         { elementId: "p1", extraFields: {} },
         [bodySchema.text("above")],
@@ -67,7 +59,7 @@ describe("table block navigation", () => {
         const paraEnd = tablePos - 2;
         let state = EditorState.create({
             doc,
-            plugins: bodyPlugins(),
+            plugins: [blockEditModePlugin()],
             selection: TextSelection.create(doc, paraEnd),
         });
         const view = {
@@ -90,7 +82,7 @@ describe("table block navigation", () => {
         const tablePos = tableBlockPos(doc);
         let state = EditorState.create({
             doc,
-            plugins: bodyPlugins(),
+            plugins: [blockEditModePlugin()],
             selection: NodeSelection.create(doc, tablePos),
         });
         navigateAdjacentBlock(1)(state, (tr) => {
@@ -111,7 +103,7 @@ describe("table block navigation", () => {
         });
         let state = EditorState.create({
             doc,
-            plugins: bodyPlugins(),
+            plugins: [blockEditModePlugin()],
             selection: TextSelection.create(doc, belowStart),
         });
         const view = { endOfTextblock: (dir: string) => dir === "up" };
@@ -122,18 +114,4 @@ describe("table block navigation", () => {
         expect(state.selection.from).toBe(tablePos);
     });
 
-    it("enters the first cell only when the table block is selected", () => {
-        const doc = docWithParagraphAndTable();
-        const tablePos = tableBlockPos(doc);
-        let state = EditorState.create({
-            doc,
-            plugins: bodyPlugins(),
-            selection: NodeSelection.create(doc, tablePos),
-        });
-        enterTableFirstCell(state, (tr) => {
-            state = state.apply(tr);
-        });
-        expect(state.selection).toBeInstanceOf(TextSelection);
-        expect(state.selection.$from.parent.textContent).toBe("in table");
-    });
 });
