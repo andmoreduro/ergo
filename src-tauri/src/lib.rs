@@ -1,3 +1,17 @@
+fn apply_window_icons(
+    app: &tauri::App,
+    window: &tauri::WebviewWindow,
+) {
+    let icon = app
+        .default_window_icon()
+        .cloned()
+        .unwrap_or_else(|| tauri::include_image!("icons/32x32.png"));
+
+    let _ = window.set_icon(icon.clone());
+    #[cfg(windows)]
+    let _ = window.set_overlay_icon(Some(icon));
+}
+
 #[cfg(windows)]
 fn disable_windows_default_context_menu(webview: tauri::webview::PlatformWebview) {
     let _ = unsafe {
@@ -55,8 +69,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
+                apply_window_icons(app, &window);
+                #[cfg(windows)]
                 let _ = window.with_webview(disable_windows_default_context_menu);
             }
             Ok(())

@@ -1,0 +1,21 @@
+/*
+ * Whole-element highlight for text blocks under a NodeSelection (select-current
+ * element) — mirrors the block-object outline in `blockObjectNodeViews.global.css`
+ * so reaching/selecting any element looks the same. Block-object atoms render
+ * their own outline through the React node views, so only text blocks are styled
+ * here.
+ */
+p.ProseMirror-selectednode,
+h1.ProseMirror-selectednode,
+h2.ProseMirror-selectednode,
+h3.ProseMirror-selectednode,
+h4.ProseMirror-selectednode,
+h5.ProseMirror-selectednode,
+h6.ProseMirror-selectednode,
+blockquote.ProseMirror-selectednode,
+ul.ProseMirror-selectednode,
+ol.ProseMirror-selectednode {
+    outline: 2px solid var(--color-accent, #2563eb);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm, 4px);
+}

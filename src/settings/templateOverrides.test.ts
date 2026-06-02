@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     getOutlineInclude,
+    OUTLINE_INCLUDE_OVERRIDE_KEYS,
     plainTemplateOutlineDisabledOverrides,
 } from "./templateOverrides";
 
@@ -17,8 +18,20 @@ describe("templateOverrides", () => {
             template_overrides: [],
         };
         const templateDefaults = plainTemplateOutlineDisabledOverrides();
-        expect(getOutlineInclude(settings, "contents", templateDefaults)).toBe(false);
-        expect(getOutlineInclude(settings, "figures", templateDefaults)).toBe(false);
+        expect(
+            getOutlineInclude(
+                settings,
+                OUTLINE_INCLUDE_OVERRIDE_KEYS.contents,
+                templateDefaults,
+            ),
+        ).toBe(false);
+        expect(
+            getOutlineInclude(
+                settings,
+                OUTLINE_INCLUDE_OVERRIDE_KEYS.figures,
+                templateDefaults,
+            ),
+        ).toBe(false);
     });
 
     it("project override true enables outline on plain template", () => {
@@ -35,7 +48,7 @@ describe("templateOverrides", () => {
         expect(
             getOutlineInclude(
                 settings,
-                "figures",
+                OUTLINE_INCLUDE_OVERRIDE_KEYS.figures,
                 plainTemplateOutlineDisabledOverrides(),
             ),
         ).toBe(true);

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { ErgoThemeLogo } from "../../atoms/ErgoThemeLogo/ErgoThemeLogo";
 import { MenubarMenuButton } from "../../atoms/MenubarMenuButton/MenubarMenuButton";
 import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
 import { WindowControlButton } from "../../atoms/WindowControlButton/WindowControlButton";
@@ -162,6 +163,13 @@ export const Menubar = ({
             aria-label="Application menu"
             data-tauri-drag-region=""
         >
+            <ErgoThemeLogo
+                className={styles.brandLogo}
+                alt={m.welcome_app_icon_label()}
+                width={32}
+                height={32}
+                draggable={false}
+            />
             <div className={styles.menuGroups}>
                 {menuGroups.map((group, index) => {
                     const isOpen = openMenuIndex === index;

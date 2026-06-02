@@ -443,6 +443,109 @@ mod tests {
     }
 
     #[test]
+    fn insert_heading_matches_editor_body_without_input_context() {
+        let settings = KeymapSettings {
+            keymap_profile: Some("Default".to_string()),
+            keymap_bindings: vec![binding(
+                ActionId::EditorInsertParagraph,
+                "editor",
+                "Ctrl+Alt+P",
+            )],
+            keymap_overrides: Vec::new(),
+        };
+        let state = ActionResolverState::default();
+        let resolution = resolve_key_event_with_settings(
+            &state,
+            &settings,
+            LogicalKeyEvent {
+                window_id: "main".to_string(),
+                key: "p".to_string(),
+                modifiers: vec![KeyModifier::Control, KeyModifier::Alt],
+            },
+            snapshot(
+                "body-section",
+                vec![
+                    node("app", None, &["app"], &[]),
+                    node("workspace", Some("app"), &["workspace"], &[]),
+                    node("editor", Some("workspace"), &["editor"], &[]),
+                    node(
+                        "body-section",
+                        Some("editor"),
+                        &["body", "editor"],
+                        &[],
+                    ),
+                ],
+            ),
+        );
+
+        assert!(matches!(
+            resolution,
+            ActionResolution::Matched {
+                invocation: ActionInvocation {
+                    id: ActionId::EditorInsertParagraph,
+                    ..
+                }
+            }
+        ));
+    }
+
+    #[test]
+    fn insert_heading_resolves_table_cell_binding_over_body_editor() {
+        let settings = KeymapSettings {
+            keymap_profile: Some("Default".to_string()),
+            keymap_bindings: vec![
+                binding(
+                    ActionId::EditorInsertHeading,
+                    "editor && !tableCell",
+                    "Ctrl+Alt+H",
+                ),
+                binding(ActionId::EditorInsertHeading, "tableCell", "Ctrl+Alt+H"),
+            ],
+            keymap_overrides: Vec::new(),
+        };
+        let state = ActionResolverState::default();
+        let resolution = resolve_key_event_with_settings(
+            &state,
+            &settings,
+            LogicalKeyEvent {
+                window_id: "main".to_string(),
+                key: "h".to_string(),
+                modifiers: vec![KeyModifier::Control, KeyModifier::Alt],
+            },
+            snapshot(
+                "active-table-cell",
+                vec![
+                    node("app", None, &["app"], &[]),
+                    node("workspace", Some("app"), &["workspace"], &[]),
+                    node("editor", Some("workspace"), &["editor"], &[]),
+                    node(
+                        "body-section",
+                        Some("editor"),
+                        &["body", "editor"],
+                        &[],
+                    ),
+                    node(
+                        "active-table-cell",
+                        Some("body-section"),
+                        &["tableCell"],
+                        &[],
+                    ),
+                ],
+            ),
+        );
+
+        assert!(matches!(
+            resolution,
+            ActionResolution::Matched {
+                invocation: ActionInvocation {
+                    id: ActionId::EditorInsertHeading,
+                    ..
+                }
+            }
+        ));
+    }
+
+    #[test]
     fn context_matching_prevents_editor_shortcuts_inside_inputs() {
         let settings = KeymapSettings {
             keymap_profile: Some("Default".to_string()),

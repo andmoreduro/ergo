@@ -733,9 +733,9 @@ mod tests {
         assert_eq!(spec.template.name, "UMB's APA template");
         assert_eq!(spec.package.name, "/umb-apa/lib.typ");
         assert_eq!(spec.package.version, "");
-        // Same authored API and structure as apa7.
-        assert_eq!(spec.variants.len(), 3);
-        assert_eq!(spec.sections.len(), 6);
+        
+        // Assert umb-apa has no variants
+        assert!(spec.variants.is_empty(), "umb-apa should have no variants");
 
         let line = spec.package.to_typst_import_line();
         assert!(
@@ -744,9 +744,52 @@ mod tests {
         );
         // A path import must not carry a `:version` coordinate.
         assert!(!line.contains("/umb-apa/lib.typ:"), "got: {line}");
-        assert!(line.contains("title-page"));
-        assert!(line.contains("apa-figure"));
-        assert!(line.contains("versatile-apa as apa-style"));
+        
+        // Assert imports
+        assert!(line.contains("front-matter"), "should import front-matter");
+        assert!(line.contains("versatile-apa as apa-style"), "should import versatile-apa as apa-style");
+        
+        // Assert exposed inputs
+        let input_ids: std::collections::HashSet<&str> = spec.inputs.iter().filter_map(|input| input.id.as_deref()).collect();
+        assert!(input_ids.contains("running_head"));
+        assert!(input_ids.contains("author_note"));
+        assert!(input_ids.contains("director"));
+        assert!(input_ids.contains("degree"));
+        assert!(input_ids.contains("city"));
+        assert!(input_ids.contains("year"));
+        assert!(input_ids.contains("authorities"));
+        assert!(input_ids.contains("acknowledgements"));
+        assert!(input_ids.contains("abstract_es"));
+        assert!(input_ids.contains("keywords_es"));
+        assert!(input_ids.contains("abstract_en"));
+        assert!(input_ids.contains("keywords_en"));
+        
+        // Assert unexposed inputs
+        assert!(!input_ids.contains("course"));
+        assert!(!input_ids.contains("instructor"));
+        assert!(!input_ids.contains("due_date"));
+        
+        // Assert groups
+        assert!(!spec.groups.is_empty());
+        assert_eq!(spec.groups[0].id, "front_matter");
+        
+        // Assert sections
+        assert!(!spec.sections.is_empty());
+        assert_eq!(spec.sections[0].id, "front-matter");
+        assert_eq!(spec.sections[0].kind, SectionKind::FunctionCall);
+        assert_eq!(spec.sections[0].function.as_deref(), Some("front-matter"));
+        
+        assert_eq!(spec.sections[1].id, "front-matter-outlines");
+        assert_eq!(spec.sections[1].kind, SectionKind::Outlines);
+        
+        assert_eq!(spec.sections[2].id, "body");
+        assert_eq!(spec.sections[2].kind, SectionKind::Content);
+        
+        assert_eq!(spec.sections[3].id, "references");
+        assert_eq!(spec.sections[3].kind, SectionKind::Bibliography);
+        
+        assert_eq!(spec.sections[4].id, "appendices");
+        assert_eq!(spec.sections[4].kind, SectionKind::Appendix);
     }
 
     #[test]

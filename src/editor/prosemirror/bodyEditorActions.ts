@@ -4,8 +4,13 @@ import {
     getBodyAstDispatch,
     peekBodyTabModifiers,
 } from "./activeView";
+import { selectCurrentElement } from "./bodySelection";
 import { runBodyTab } from "./bodyTabCommand";
 import { enterLockedWholeBlock, runBodyNavigate } from "./bodyTableCommands";
+import {
+    isActiveTableCellEditing,
+    TABLE_CELL_FORBIDDEN_ACTION_IDS,
+} from "./table/tableCellInsertPolicy";
 import { getActiveTableCellCoords } from "./table/tableStructureBridge";
 
 const withBodyView = (
@@ -25,7 +30,19 @@ const withBodyView = (
     };
 };
 
+const tableCellForbiddenHandlers = (): ActionHandlerMap => {
+    const handlers: ActionHandlerMap = {};
+    for (const id of TABLE_CELL_FORBIDDEN_ACTION_IDS) {
+        handlers[id] = () => isActiveTableCellEditing();
+    }
+    return handlers;
+};
+
 export const bodyEditorActionHandlers = (): ActionHandlerMap => ({
+    ...tableCellForbiddenHandlers(),
+    "editor::SelectCurrentElement": withBodyView((view) =>
+        selectCurrentElement(view.state, view.dispatch.bind(view)),
+    ),
     "editor::EnterTable": () => {
         const view = getActiveBodyView();
         if (!view) {

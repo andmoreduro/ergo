@@ -91,8 +91,9 @@
     --size-splitter: 0.3125rem;
     --size-scrollbar: 0.625rem;
 
-    /* Panel & column widths */
-    --width-panel-sm: 28rem;
+    /* Panel & column widths (30rem = 480px at default root font size) */
+    --width-dialog-min: 30rem;
+    --width-panel-sm: 30rem;
     --width-panel-md: 30rem;
     --width-panel-lg: 34rem;
     --width-panel-xl: 44rem;

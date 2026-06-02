@@ -6,32 +6,15 @@
     "version": "1.0.0",
     "description": "UMB's APA 7th Edition paper, based on a bundled fork of versatile-apa with a UMB-specific cover page."
   },
-  "variants": [
-    {
-      "id": "student",
-      "label": "Student paper",
-      "description": "For course assignments. Page numbers in the header; no running head or author note on the title page.",
-      "default": true
-    },
-    {
-      "id": "professional",
-      "label": "Professional paper",
-      "description": "For journal or publication manuscripts. Running head in the header and an author note on the title page."
-    },
-    {
-      "id": "complete",
-      "label": "Complete",
-      "description": "Shows every template field (student and professional) in the editor. Preview uses the student layout."
-    }
-  ],
+  "variants": [],
   "package": {
     "name": "/umb-apa/lib.typ",
     "version": "",
     "imports": [
-      "abstract-page",
+      "front-matter",
       "appendix",
       "appendix-outline",
-      "title-page",
+      "apa-figure",
       { "symbol": "versatile-apa", "alias": "apa-style" }
     ]
   },
@@ -104,8 +87,7 @@
       {
         "key": "running-head",
         "type": "content",
-        "source": "inputs.running_head",
-        "variants": ["professional"]
+        "source": "inputs.running_head"
       }
     ]
   },
@@ -121,34 +103,7 @@
       "id": "running_head",
       "type": "string",
       "label": "Running Head",
-      "importance": "recommended",
-      "variants": ["professional"]
-    },
-    {
-      "id": "abstract_text",
-      "type": "content",
-      "label": "Abstract",
       "importance": "recommended"
-    },
-    {
-      "id": "keywords",
-      "type": "simple_list",
-      "label": "Keywords",
-      "importance": "recommended",
-      "items": {
-        "type": "string",
-        "label": "Keyword"
-      }
-    },
-    {
-      "id": "affiliations",
-      "type": "simple_list",
-      "label": "Affiliations",
-      "importance": "recommended",
-      "items": {
-        "type": "content",
-        "label": "Affiliation"
-      }
     },
     {
       "id": "authors",
@@ -156,7 +111,9 @@
       "label": "Authors",
       "importance": "required",
       "items": {
+        "id": "author",
         "type": "object",
+        "label": "Author",
         "properties": [
           {
             "id": "name",
@@ -179,53 +136,144 @@
       }
     },
     {
-      "id": "course",
-      "type": "string",
-      "label": "Course",
+      "id": "affiliations",
+      "type": "simple_list",
+      "label": "Affiliations",
       "importance": "recommended",
-      "variants": ["student"]
+      "items": {
+        "type": "content",
+        "label": "Affiliation"
+      }
     },
     {
-      "id": "instructor",
-      "type": "string",
-      "label": "Instructor",
+      "id": "director",
+      "type": "object",
+      "label": "Director",
       "importance": "recommended",
-      "variants": ["student"]
+      "properties": [
+        {
+          "id": "name",
+          "type": "string",
+          "label": "Name",
+          "importance": "recommended"
+        },
+        {
+          "id": "title",
+          "type": "string",
+          "label": "Title",
+          "importance": "recommended"
+        }
+      ]
     },
     {
-      "id": "due_date",
+      "id": "degree",
       "type": "string",
-      "label": "Due Date",
+      "label": "Degree",
+      "importance": "recommended"
+    },
+    {
+      "id": "city",
+      "type": "string",
+      "label": "City",
+      "importance": "recommended"
+    },
+    {
+      "id": "year",
+      "type": "string",
+      "label": "Year",
+      "importance": "recommended"
+    },
+    {
+      "id": "authorities",
+      "type": "array",
+      "label": "Authorities",
       "importance": "recommended",
-      "variants": ["student"]
+      "items": {
+        "id": "authority",
+        "type": "object",
+        "label": "Authority",
+        "properties": [
+          {
+            "id": "name",
+            "type": "string",
+            "label": "Name",
+            "importance": "required"
+          },
+          {
+            "id": "role",
+            "type": "string",
+            "label": "Role",
+            "importance": "required"
+          }
+        ]
+      }
+    },
+    {
+      "id": "acknowledgements",
+      "type": "content",
+      "label": "Acknowledgements",
+      "importance": "recommended"
     },
     {
       "id": "author_note",
       "type": "content",
       "label": "Author Note",
+      "importance": "recommended"
+    },
+    {
+      "id": "abstract_es",
+      "type": "content",
+      "label": "Abstract (ES)",
+      "importance": "recommended"
+    },
+    {
+      "id": "keywords_es",
+      "type": "simple_list",
+      "label": "Keywords (ES)",
       "importance": "recommended",
-      "variants": ["professional"]
+      "items": {
+        "type": "string",
+        "label": "Keyword"
+      }
+    },
+    {
+      "id": "abstract_en",
+      "type": "content",
+      "label": "Abstract (EN)",
+      "importance": "recommended"
+    },
+    {
+      "id": "keywords_en",
+      "type": "simple_list",
+      "label": "Keywords (EN)",
+      "importance": "recommended",
+      "items": {
+        "type": "string",
+        "label": "Keyword"
+      }
     }
   ],
   "groups": [
     {
-      "id": "cover_page",
-      "label": "Cover Page",
+      "id": "front_matter",
+      "label": "Front Matter",
       "inputs": [
         "title",
         "running_head",
         "authors",
         "affiliations",
-        "course",
-        "instructor",
-        "due_date",
-        "author_note"
+        "director",
+        "degree",
+        "city",
+        "year",
+        "authorities",
+        "acknowledgements",
+        "author_note",
+        "abstract_es",
+        "keywords_es",
+        "abstract_en",
+        "keywords_en"
       ]
-    },
-    {
-      "id": "abstract",
-      "label": "Abstract & Keywords",
-      "inputs": ["abstract_text", "keywords"]
     }
   ],
   "resource_policy": {
@@ -240,11 +288,16 @@
   },
   "sections": [
     {
-      "id": "title-page",
+      "id": "front-matter",
       "kind": "function_call",
-      "function": "title-page",
-      "label": "Title Page",
+      "function": "front-matter",
+      "label": "Front Matter",
       "params": [
+        {
+          "key": "title",
+          "type": "content",
+          "source": "inputs.title"
+        },
         {
           "key": "authors",
           "type": "author_list",
@@ -256,46 +309,59 @@
           "source": "inputs.affiliations"
         },
         {
-          "key": "course",
-          "type": "content",
-          "source": "inputs.course",
-          "variants": ["student"]
+          "key": "director",
+          "type": "dictionary",
+          "source": "inputs.director"
         },
         {
-          "key": "instructor",
+          "key": "degree",
           "type": "content",
-          "source": "inputs.instructor",
-          "variants": ["student"]
+          "source": "inputs.degree"
         },
         {
-          "key": "due-date",
+          "key": "city",
           "type": "content",
-          "source": "inputs.due_date",
-          "variants": ["student"]
+          "source": "inputs.city"
+        },
+        {
+          "key": "year",
+          "type": "content",
+          "source": "inputs.year"
+        },
+        {
+          "key": "authorities",
+          "type": "dictionary",
+          "source": "inputs.authorities"
+        },
+        {
+          "key": "acknowledgements",
+          "type": "content",
+          "source": "inputs.acknowledgements"
         },
         {
           "key": "author-note",
           "type": "content",
-          "source": "inputs.author_note",
-          "variants": ["professional"]
-        }
-      ]
-    },
-    {
-      "id": "abstract-page",
-      "kind": "function_call",
-      "function": "abstract-page",
-      "label": "Abstract",
-      "params": [
-        {
-          "key": "_positional",
-          "type": "content",
-          "source": "inputs.abstract_text"
+          "source": "inputs.author_note"
         },
         {
-          "key": "keywords",
+          "key": "abstract-es",
+          "type": "content",
+          "source": "inputs.abstract_es"
+        },
+        {
+          "key": "keywords-es",
           "type": "string_array",
-          "source": "inputs.keywords"
+          "source": "inputs.keywords_es"
+        },
+        {
+          "key": "abstract-en",
+          "type": "content",
+          "source": "inputs.abstract_en"
+        },
+        {
+          "key": "keywords-en",
+          "type": "string_array",
+          "source": "inputs.keywords_en"
         }
       ]
     },

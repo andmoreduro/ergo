@@ -34,6 +34,18 @@
   font-family: var(--font-family-mono);
 }
 
+.borderless {
+  border: 0;
+  border-radius: var(--radius-none);
+  background: transparent;
+}
+
+.borderless:hover:not(:disabled),
+.borderless:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+}
+
 .textarea::placeholder {
   color: var(--color-text-tertiary);
 }

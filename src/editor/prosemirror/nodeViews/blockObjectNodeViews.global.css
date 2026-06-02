@@ -1,10 +1,19 @@
 .ergo-block-object--locked {
     cursor: pointer;
+    /* A locked block is a single unit: its inner content must never render a text
+       selection (e.g. under select-all) — only the whole-block outline. Mirrors
+       `.ergo-table-block--locked`. */
+    user-select: none;
 }
 
 /* While locked, the embedded editor is inert; clicks select/enter the block. */
 .ergo-block-object--locked > * {
     pointer-events: none;
+}
+
+/* Settings cog stays clickable above the locked surface. */
+.ergo-block-object--locked [data-element-settings-chrome] {
+    pointer-events: auto;
 }
 
 .ergo-block-object--selected {

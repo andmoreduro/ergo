@@ -35,10 +35,8 @@
 
 .appIcon {
     flex-shrink: 0;
-    width: var(--size-avatar);
-    height: var(--size-avatar);
-    border-radius: var(--border-radius-sm);
-    object-fit: cover;
+    width: calc(var(--size-avatar) * 2);
+    height: calc(var(--size-avatar) * 2);
 }
 
 .group + .group {

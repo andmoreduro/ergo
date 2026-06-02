@@ -22,6 +22,13 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
    * @default false
    */
   monospace?: boolean;
+  /**
+   * Visual variant. `borderless` drops the border/background so the textarea can
+   * be embedded inside a composed control (e.g. a bordered row with a trailing
+   * select).
+   * @default "default"
+   */
+  variant?: "default" | "borderless";
 }
 
 export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
@@ -32,6 +39,7 @@ export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
       error,
       fullWidth = false,
       monospace = false,
+      variant = "default",
       className = '',
       id,
       disabled,
@@ -76,6 +84,7 @@ export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
     const textareaClassNames = [
       styles.textarea,
       monospace ? styles.monospace : '',
+      variant === "borderless" ? styles.borderless : '',
       error ? styles.textareaError : '',
       disabled ? styles.disabled : '',
     ]

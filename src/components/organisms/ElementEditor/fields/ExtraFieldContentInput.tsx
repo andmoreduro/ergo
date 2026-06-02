@@ -1,6 +1,6 @@
 import type { KeyboardEventHandler } from "react";
 import type { ExtraFieldSpec } from "../../../../bindings/ExtraFieldSpec";
-import { elementExtraFieldFieldId } from "../../../../editor/fieldIds";
+import { elementAnnotationFieldId } from "../../../../editor/fieldIds";
 import { parseInputRichText } from "../../../../editor/richTextMarks";
 import { useElementEnterInsertsParagraph } from "../../../../editor/useInsertParagraphAfterElement";
 import { normalizeRichTextContent } from "../../../../editor/textInput";
@@ -24,7 +24,7 @@ export const ExtraFieldContentInput = ({
 }: ExtraFieldContentInputProps) => {
     const elementId = element.id;
     const handleEnterKey = useElementEnterInsertsParagraph(elementId);
-    const fieldId = elementExtraFieldFieldId(elementId, field.key);
+    const fieldId = elementAnnotationFieldId(elementId, element.type, field.key);
     const { handleAdvanceKeyDown } = useEditorNavigation();
     const committed = parseInputRichText(wrapperFieldValue(element, field.key));
     const { content, setDraft, shouldCommit } = useDeferredRichTextCommit(

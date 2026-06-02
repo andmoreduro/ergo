@@ -7,6 +7,10 @@ import { columnResizing, tableEditing } from "prosemirror-tables";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import { runBodyTab } from "../bodyTabCommand";
 import { getBodyTableCommit, setActiveTableCellEditor } from "../activeView";
+import {
+    absorbSettingsChromePointerDown,
+    isSettingsChromeTarget,
+} from "../blockWholeSelection";
 import { isBlockEditing, setBlockEditing } from "../blockEditMode";
 import { clearBlockUiState, setBlockUiState } from "../blockUiState";
 import {
@@ -27,7 +31,10 @@ import {
     replaceTableElementEvents,
     tableStructurallySynced,
 } from "../tableDiff";
-import { TableBlockChromeCoordinator } from "./TableBlockChrome";
+import {
+    TableBlockChromeCoordinator,
+    TableBlockSettingsCoordinator,
+} from "./TableBlockChrome";
 import type { NodeViewPortalRegistry } from "./nodeViewPortals";
 import elementStyles from "../../../components/organisms/ElementEditor/ElementEditor.module.css";
 import styles from "./tableBlockNodeView.module.css";
@@ -101,10 +108,22 @@ export const createTableBlockNodeView = (
     inner.className = styles.inner;
     inner.setAttribute("data-table-inner", "");
 
+    const settingsMount = document.createElement("div");
+    settingsMount.className = styles.settingsMount;
+    const shieldSettingsBubble = (event: Event) => {
+        if (!isSettingsChromeTarget(event.target)) {
+            return;
+        }
+        event.stopPropagation();
+    };
+    settingsMount.addEventListener("pointerdown", shieldSettingsBubble);
+    settingsMount.addEventListener("mousedown", shieldSettingsBubble);
+
     const chromeMount = document.createElement("div");
     const coordinatorMount = document.createElement("div");
     coordinatorMount.hidden = true;
 
+    primaryWrap.appendChild(settingsMount);
     primaryWrap.appendChild(inner);
     shell.appendChild(primaryWrap);
     shell.appendChild(chromeMount);
@@ -120,12 +139,19 @@ export const createTableBlockNodeView = (
     const portalKey = `table-block-${(tablePortalKeySeq += 1)}`;
 
     const renderCoordinator = () => (
-        <TableBlockChromeCoordinator
-            elementFromNode={currentNode.attrs.element as TableElement | null}
-            elementId={elementId()}
-            chromeMount={chromeMount}
-            shellRef={shellRef}
-        />
+        <>
+            <TableBlockSettingsCoordinator
+                elementFromNode={currentNode.attrs.element as TableElement | null}
+                elementId={elementId()}
+                settingsMount={settingsMount}
+            />
+            <TableBlockChromeCoordinator
+                elementFromNode={currentNode.attrs.element as TableElement | null}
+                elementId={elementId()}
+                chromeMount={chromeMount}
+                shellRef={shellRef}
+            />
+        </>
     );
 
     registry.register({
@@ -323,6 +349,13 @@ export const createTableBlockNodeView = (
     };
 
     const onMouseDown = (event: MouseEvent) => {
+        const blockPos = getPos();
+        if (
+            absorbSettingsChromePointerDown(view, event)
+        ) {
+            pushBlockUi();
+            return;
+        }
         const target = event.target as globalThis.Node | null;
         if (target && chromeMount.contains(target)) {
             return;
@@ -330,7 +363,6 @@ export const createTableBlockNodeView = (
         if (isBlockEditing(view.state, elementId())) {
             return;
         }
-        const blockPos = getPos();
         if (blockPos === undefined) {
             return;
         }
@@ -438,6 +470,9 @@ export const createTableBlockNodeView = (
             return true;
         },
         stopEvent(event: Event) {
+            if (isSettingsChromeTarget(event.target)) {
+                return true;
+            }
             if (!isBlockEditing(view.state, elementId())) {
                 return false;
             }
@@ -451,6 +486,8 @@ export const createTableBlockNodeView = (
             return true;
         },
         destroy() {
+            settingsMount.removeEventListener("pointerdown", shieldSettingsBubble);
+            settingsMount.removeEventListener("mousedown", shieldSettingsBubble);
             dom.removeEventListener("mousedown", onMouseDown);
             dom.removeEventListener("keydown", onKeyDown, true);
             unregisterTableFocusHandler(elementId());
