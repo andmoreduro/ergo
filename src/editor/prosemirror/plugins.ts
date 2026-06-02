@@ -4,7 +4,11 @@ import { Plugin, type EditorState, type Transaction } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
 import { dropCursor } from "prosemirror-dropcursor";
 import { createId } from "../../state/ast/defaults";
+import type { DocumentElement } from "../../bindings/DocumentElement";
 import { bodyKeyboardPlugin } from "./bodyKeyboardPlugin";
+import { selectCurrentOrAllElements } from "./bodySelection";
+import { elementPointerSelectPlugin } from "./elementPointerSelect";
+import { regenerateElementIds } from "./elementIds";
 import { ATOM_BLOCK_NODES } from "./schema";
 import { tableBlockFocusPlugin } from "./tableBlockFocus";
 import { blockEditModePlugin } from "./blockEditMode";
@@ -111,6 +115,50 @@ const idNormalizer = new Plugin({
     },
 });
 
+/**
+ * After `idNormalizer` reassigns a duplicated/pasted atom's `elementId`, its
+ * `element` payload still carries the old id (and old nested ids). Re-clone the
+ * payload with the new top-level id and fresh nested ids so a pasted figure/table
+ * never shares an identity — top-level or nested — with its source.
+ */
+const atomElementIdSync = new Plugin({
+    appendTransaction(transactions, _oldState, newState) {
+        if (!transactions.some((tr) => tr.docChanged)) {
+            return null;
+        }
+        let tr = newState.tr;
+        let changed = false;
+        newState.doc.descendants((node, pos) => {
+            if (!ATOM_BLOCK_NODES.has(node.type.name)) {
+                return;
+            }
+            const attrId = node.attrs.elementId as string;
+            const element = node.attrs.element as DocumentElement | null;
+            if (!attrId || !element || element.id === attrId) {
+                return;
+            }
+            tr = tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                element: regenerateElementIds(element, attrId),
+            });
+            changed = true;
+        });
+        if (!changed) {
+            return null;
+        }
+        tr.setMeta("addToHistory", false);
+        return tr;
+    },
+});
+
+/**
+ * Ctrl+A escalates current element → all elements. Registered before
+ * `typingKeymap` so it wins over `baseKeymap`'s `Mod-a` (`selectAll`), and runs
+ * synchronously so the browser never selects the whole page. Nested table-cell
+ * editing uses a separate view, so Ctrl+A there keeps its native behavior.
+ */
+const selectionKeymap = keymap({ "Mod-a": selectCurrentOrAllElements });
+
 /** Typing shortcuts without arrow keys — those go through the action runtime. */
 const typingKeymap = keymap(
     Object.fromEntries(
@@ -134,9 +182,12 @@ export const bodyPlugins = () => [
     blockOutsidePointerPlugin(),
     clickBelowLastBlockPlugin(),
     blockSelectionGuardPlugin(),
+    elementPointerSelectPlugin(),
     tableBlockFocusPlugin(),
+    selectionKeymap,
     typingKeymap,
     dropCursor(),
     atomElementPreserver,
     idNormalizer,
+    atomElementIdSync,
 ];

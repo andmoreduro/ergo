@@ -1,3 +1,4 @@
+import { ErgoThemeLogo } from "../../atoms/ErgoThemeLogo/ErgoThemeLogo";
 import { useContextMenuTrigger } from "../../organisms/ContextMenu/ContextMenuProvider";
 import { WelcomeActionButton } from "../../atoms/WelcomeActionButton/WelcomeActionButton";
 import { WelcomeRemoveButton } from "../../atoms/WelcomeRemoveButton/WelcomeRemoveButton";
@@ -27,12 +28,9 @@ export const WelcomeScreen = ({
         <main className={styles.screen} {...contextMenu}>
             <section className={styles.panel} aria-labelledby="welcome-title">
                 <header className={styles.header}>
-                    <img
+                    <ErgoThemeLogo
                         className={styles.appIcon}
-                        src="/app_logo.jpg"
                         alt={m.welcome_app_icon_label()}
-                        width={44}
-                        height={44}
                     />
                     <div>
                         <h1 id="welcome-title">{m.welcome_title()}</h1>

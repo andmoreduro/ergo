@@ -13,6 +13,15 @@
     user-select: none;
 }
 
+.brandLogo {
+    flex-shrink: 0;
+    width: var(--size-chrome);
+    height: var(--size-chrome);
+    margin-right: var(--space-1);
+    pointer-events: none;
+    user-select: none;
+}
+
 .menuGroups {
     display: flex;
     align-items: stretch;

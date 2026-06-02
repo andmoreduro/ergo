@@ -38,6 +38,40 @@ export const blurFocusedInside = (root: HTMLElement): void => {
     }
 };
 
+/** Focus the wrapper field under `(clientX, clientY)`, or the primary field when none match. */
+export const focusWrapperAtCoords = (
+    root: HTMLElement,
+    clientX: number,
+    clientY: number,
+): boolean => {
+    let best: HTMLElement | null = null;
+    let bestArea = Number.POSITIVE_INFINITY;
+
+    for (const stop of wrapperTabStops(root)) {
+        const rect = stop.getBoundingClientRect();
+        if (
+            clientX < rect.left ||
+            clientX > rect.right ||
+            clientY < rect.top ||
+            clientY > rect.bottom
+        ) {
+            continue;
+        }
+        const area = rect.width * rect.height;
+        if (area < bestArea) {
+            bestArea = area;
+            best = stop;
+        }
+    }
+
+    if (best) {
+        best.focus();
+        return true;
+    }
+
+    return focusWrapperPrimary(root);
+};
+
 /** Focus the main editable control in the block (prefers `textarea`). */
 export const focusWrapperPrimary = (root: HTMLElement): boolean => {
     for (const slot of root.querySelectorAll<HTMLElement>(PRIMARY_SELECTOR)) {

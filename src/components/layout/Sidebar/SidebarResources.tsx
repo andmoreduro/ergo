@@ -1,11 +1,4 @@
-import {
-    memo,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    type CSSProperties,
-} from "react";
+import { memo, useMemo, useState } from "react";
 import type { AssetEntry } from "../../../bindings/AssetEntry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
@@ -14,10 +7,10 @@ import type { ResourceKind } from "../../../bindings/ResourceKind";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
 import { useDocument } from "../../../state/DocumentContext";
 import { useActionDispatcher } from "../../../actions/runtime";
-import { CompilerClient } from "../../../workers/compilerClient";
 import { defaultFieldIdForElement } from "../../../editor/fieldIds";
 import { Button } from "../../atoms/Button/Button";
 import { NavItemButton } from "../../atoms/NavItemButton/NavItemButton";
+import { ResourcePreviewPanel } from "../../molecules/ResourcePreview/ResourcePreview";
 import { TextInput } from "../../atoms/TextInput/TextInput";
 import { m } from "../../../paraglide/messages.js";
 import { SidebarResourceDialog } from "./SidebarResourceDialog";
@@ -56,145 +49,6 @@ const findElementById = (
         }
         return false;
     }) ?? null;
-
-const parseCssLengthPx = (value: string): number | null => {
-    const trimmed = value.trim();
-    if (!trimmed || trimmed === "none") {
-        return null;
-    }
-
-    if (trimmed.endsWith("px")) {
-        const px = Number.parseFloat(trimmed);
-        return Number.isFinite(px) ? px : null;
-    }
-
-    if (trimmed.endsWith("rem")) {
-        const rem = Number.parseFloat(trimmed);
-        if (!Number.isFinite(rem)) {
-            return null;
-        }
-        const rootSize = Number.parseFloat(
-            getComputedStyle(document.documentElement).fontSize,
-        );
-        return rem * (Number.isFinite(rootSize) ? rootSize : 16);
-    }
-
-    if (trimmed.endsWith("vh")) {
-        const vh = Number.parseFloat(trimmed);
-        return Number.isFinite(vh) ? (window.innerHeight * vh) / 100 : null;
-    }
-
-    if (trimmed.endsWith("dvh")) {
-        const dvh = Number.parseFloat(trimmed);
-        return Number.isFinite(dvh) ? (window.innerHeight * dvh) / 100 : null;
-    }
-
-    return null;
-};
-
-const resourcePreviewMaxHeightPx = (element: HTMLElement): number => {
-    const maxHeight = getComputedStyle(element).maxHeight;
-    return parseCssLengthPx(maxHeight) ?? 120;
-};
-
-const svgPreviewStyle = (
-    widthPt: number,
-    heightPt: number,
-    fitSize: { width: number; height: number },
-): CSSProperties => {
-    const scale = Math.min(fitSize.width / widthPt, fitSize.height / heightPt);
-    const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-    return {
-        width: `${widthPt * safeScale}px`,
-        height: `${heightPt * safeScale}px`,
-    };
-};
-
-const ResourcePreviewSvg = ({
-    pageNumber,
-    revision,
-    canRender,
-}: {
-    pageNumber: number;
-    revision: number;
-    canRender: boolean;
-}) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const svgRef = useRef<HTMLDivElement>(null);
-    const requestIdRef = useRef(0);
-    const [fitSize, setFitSize] = useState({ width: 0, height: 0 });
-    const [svgStyle, setSvgStyle] = useState<CSSProperties | undefined>(
-        undefined,
-    );
-
-    useEffect(() => {
-        const container = containerRef.current;
-        if (!container) {
-            return;
-        }
-
-        const updateFitSize = () => {
-            setFitSize({
-                width: container.clientWidth,
-                height: resourcePreviewMaxHeightPx(container),
-            });
-        };
-
-        updateFitSize();
-
-        if (typeof ResizeObserver === "undefined") {
-            return;
-        }
-
-        const observer = new ResizeObserver(updateFitSize);
-        observer.observe(container);
-        return () => observer.disconnect();
-    }, []);
-
-    useEffect(() => {
-        const element = svgRef.current;
-        if (!element || !canRender || fitSize.width <= 0 || fitSize.height <= 0) {
-            return;
-        }
-
-        const requestId = requestIdRef.current + 1;
-        requestIdRef.current = requestId;
-        let cancelled = false;
-
-        void CompilerClient.renderResourceSvgPage(pageNumber, requestId)
-            .then((page) => {
-                if (cancelled || page.requestId !== requestIdRef.current) {
-                    return;
-                }
-                element.innerHTML = page.svg;
-                setSvgStyle(
-                    svgPreviewStyle(page.widthPt, page.heightPt, fitSize),
-                );
-            })
-            .catch((error) => {
-                console.error("Failed to render resource preview SVG:", error);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [canRender, fitSize, pageNumber, revision]);
-
-    return (
-        <div ref={containerRef} className={styles.resourcePreview}>
-            {fitSize.width > 0 ? (
-                <div
-                    ref={svgRef}
-                    aria-hidden="true"
-                    className={styles.resourcePreviewSvg}
-                    style={svgStyle}
-                />
-            ) : (
-                <span className={styles.resourcePreviewLoading} aria-hidden="true" />
-            )}
-        </div>
-    );
-};
 
 const resourceGroupLabel = (kind: ResourceKind): string => {
     switch (kind) {
@@ -319,25 +173,11 @@ export const SidebarResourcesPanel = memo(({
                                             variant="sidebar"
                                             onClick={() => openResource(entry)}
                                         >
-                                            {entry.preview.status === "ready" &&
-                                            entry.preview.page_number ? (
-                                                <ResourcePreviewSvg
-                                                    pageNumber={
-                                                        entry.preview.page_number
-                                                    }
-                                                    revision={resourceRevision}
-                                                    canRender={canRender}
-                                                />
-                                            ) : (
-                                                <span
-                                                    className={
-                                                        styles.resourcePreviewError
-                                                    }
-                                                >
-                                                    {entry.preview.diagnostic ??
-                                                        m.resources_preview_unavailable()}
-                                                </span>
-                                            )}
+                                            <ResourcePreviewPanel
+                                                preview={entry.preview}
+                                                revision={resourceRevision}
+                                                canRender={canRender}
+                                            />
                                             <span>{entry.label}</span>
                                             {entry.subtitle && (
                                                 <small>{entry.subtitle}</small>
@@ -353,7 +193,23 @@ export const SidebarResourcesPanel = memo(({
                 <p className={styles.empty}>{m.sidebar_empty_resources()}</p>
             )}
             {draft && (
-                <SidebarResourceDialog title={m.resources_edit()}>
+                <SidebarResourceDialog
+                    title={m.resources_edit()}
+                    cancelAction={{
+                        label: m.resources_cancel(),
+                        onClick: () => {
+                            void dispatchAction({
+                                id: "resources::Edit",
+                                payload: { resourceId: draft.id, cancelled: true },
+                            });
+                            setDraft(null);
+                        },
+                    }}
+                    confirmAction={{
+                        label: m.resources_save(),
+                        onClick: saveDraft,
+                    }}
+                >
                     <TextInput
                         fullWidth
                         disabled
@@ -382,38 +238,14 @@ export const SidebarResourcesPanel = memo(({
                             )
                         }
                     />
-                    <div className={styles.referenceActions}>
-                        <Button
-                            size="small"
-                            type="button"
-                            variant="primary"
-                            onClick={saveDraft}
-                        >
-                            {m.resources_save()}
-                        </Button>
-                        <Button
-                            size="small"
-                            type="button"
-                            variant="danger"
-                            onClick={removeDraft}
-                        >
-                            {m.resources_remove()}
-                        </Button>
-                        <Button
-                            size="small"
-                            type="button"
-                            variant="ghost"
-                            onClick={() => {
-                                void dispatchAction({
-                                    id: "resources::Edit",
-                                    payload: { resourceId: draft.id, cancelled: true },
-                                });
-                                setDraft(null);
-                            }}
-                        >
-                            {m.resources_cancel()}
-                        </Button>
-                    </div>
+                    <Button
+                        size="small"
+                        type="button"
+                        variant="danger"
+                        onClick={removeDraft}
+                    >
+                        {m.resources_remove()}
+                    </Button>
                 </SidebarResourceDialog>
             )}
         </div>

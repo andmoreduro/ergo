@@ -190,13 +190,34 @@ export const createDocumentAST = (
         };
     }
 
-    const ast = createDefaultDocumentAST();
     if (templateId === "umb-apa") {
-        // umb-apa shares versatile-apa's schema but is a locally-bundled package
-        // imported by path, so it declares no external @preview dependency.
+        const ast = createDefaultDocumentAST();
         ast.metadata.template_id = "umb-apa";
+        ast.metadata.template_variant_id = null;
         ast.dependencies = { packages: [] };
+        ast.inputs = {
+            title: "Untitled Document",
+            running_head: "",
+            authors: [{ name: "", affiliations: [] }],
+            affiliations: [],
+            author_note: "",
+            director: {
+                name: "",
+                title: "",
+            },
+            degree: "",
+            city: "",
+            year: new Date().getFullYear().toString(),
+            authorities: [],
+            acknowledgements: "",
+            abstract_es: "",
+            keywords_es: [],
+            abstract_en: "",
+            keywords_en: [],
+        };
+        return ast;
     }
+    const ast = createDefaultDocumentAST();
     return ast;
 };
 

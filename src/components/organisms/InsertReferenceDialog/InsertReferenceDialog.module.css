@@ -1,5 +1,30 @@
-.section + .section {
-    margin-top: var(--space-3);
+.shell {
+    display: grid;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.results {
+    display: grid;
+    gap: var(--space-4);
+    max-height: var(--height-scroll-lg);
+    min-width: 0;
+    overflow-y: auto;
+}
+
+.section {
+    display: grid;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.sectionTitle {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 .list {
@@ -8,9 +33,9 @@
     list-style: none;
 }
 
-.itemSubtitle {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
+.resourcePreviewSlot {
+    width: 100%;
+    min-width: 0;
 }
 
 .empty {
@@ -18,12 +43,5 @@
     padding: var(--space-3);
     color: var(--color-text-secondary);
     font-size: var(--font-size-sm);
-}
-
-.groupLabel {
-    margin: var(--space-2) 0 var(--space-1);
-    padding: 0 var(--space-1);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
+    text-align: center;
 }

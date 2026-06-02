@@ -1,5 +1,6 @@
-import { Plugin } from "prosemirror-state";
+import { Plugin, TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
+import { extendBlockSelection } from "./bodySelection";
 import {
     enterLockedWholeBlock,
     lockedWholeBlockElementId,
@@ -108,6 +109,41 @@ export const bodyKeyboardPlugin = () =>
                         return true;
                     }
                     return false;
+                }
+
+                // Shift+Up/Down selects whole elements. Inside a multi-line text
+                // block, defer to native line-by-line selection until the caret
+                // reaches the block edge; then extend element by element (the only
+                // way to span atoms, which native selection cannot enter).
+                if (
+                    (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+                    event.shiftKey &&
+                    !mod &&
+                    !event.altKey
+                ) {
+                    const dir = event.key === "ArrowDown" ? 1 : -1;
+                    const sel = view.state.selection;
+                    if (sel instanceof TextSelection && sel.empty) {
+                        const atEdge =
+                            dir > 0
+                                ? view.endOfTextblock("down")
+                                : view.endOfTextblock("up");
+                        if (!atEdge) {
+                            return false;
+                        }
+                    }
+                    const next = extendBlockSelection(view.state, dir);
+                    if (next) {
+                        view.dispatch(
+                            view.state.tr.setSelection(next).scrollIntoView(),
+                        );
+                    }
+                    // Even at the document edge (next === null), swallow the key:
+                    // the element selection is already maximal in this direction,
+                    // so letting native run would collapse/wrap it to the start.
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return true;
                 }
 
                 if (!TABLE_ARROWS.has(event.key)) {

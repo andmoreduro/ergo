@@ -54,12 +54,13 @@ export const SettingsDialog = ({
 
     return (
         <Dialog
-            closeLabel={m.command_palette_close()}
             size="xl"
             title={title}
             titleId="settings-title"
-            zIndex={20}
-            onClose={onClose}
+            cancelAction={{
+                label: m.command_palette_close(),
+                onClick: onClose,
+            }}
         >
             {panel === "global" && (
                 <GlobalSettingsPanel

@@ -1,11 +1,10 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useMemo } from "react";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import {
     ActionContextProvider,
     type ActionHandlerMap,
 } from "../../../actions/runtime";
 import { useDocumentAst } from "../../../state/DocumentContext";
-import type { ConvertibleElementKind } from "../../../state/ast/convertElement";
 import { ElementContent } from "./ElementContent";
 import styles from "./ElementEditor.module.css";
 
@@ -20,28 +19,8 @@ export const ElementEditor = memo(function ElementEditor({
     const tableRows = element.type === "Table" ? element.rows : 0;
     const tableCols = element.type === "Table" ? element.cols : 0;
 
-    const convertTo = useCallback(
-        (targetKind: ConvertibleElementKind) => {
-            if (element.type === targetKind) {
-                return false;
-            }
-
-            dispatch({
-                type: "CONVERT_ELEMENT",
-                payload: { elementId: element.id, targetKind },
-            });
-            return true;
-        },
-        [dispatch, element.id, element.type],
-    );
-
     const elementHandlers: ActionHandlerMap = useMemo(
         () => ({
-            "editor::ConvertToParagraph": () => convertTo("Paragraph"),
-            "editor::ConvertToHeading": () => convertTo("Heading"),
-            "editor::ConvertToTable": () => convertTo("Table"),
-            "editor::ConvertToEquation": () => convertTo("Equation"),
-            "editor::ConvertToFigure": () => convertTo("Figure"),
             "editor::AddTableRow": () => {
                 if (element.type !== "Table") {
                     return false;
@@ -111,7 +90,7 @@ export const ElementEditor = memo(function ElementEditor({
                 return true;
             },
         }),
-        [convertTo, dispatch, element.id, element.type, tableCols, tableRows],
+        [dispatch, element.id, element.type, tableCols, tableRows],
     );
 
     return (

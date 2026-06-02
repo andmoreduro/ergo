@@ -371,6 +371,65 @@ fn resolve_input_param(
             }
         }
         ParamType::StringArray => resolve_string_array_param(key, &val, builder),
+        ParamType::Dictionary => {
+            if val.is_object() {
+                let obj = val.as_object().unwrap();
+                builder.push_literal("(\n");
+                let mut first = true;
+                let mut sorted_keys: Vec<&String> = obj.keys().collect();
+                sorted_keys.sort();
+                for prop_key in sorted_keys {
+                    let prop_val = obj.get(prop_key).unwrap();
+                    let prop_str = prop_val.as_str().unwrap_or("");
+                    if !first {
+                        builder.push_literal(",\n");
+                    }
+                    first = false;
+                    builder.push_literal(&format!("    {prop_key}: ["));
+                    builder.push_escaped_field("inputs", &format!("/{key}/{prop_key}"), prop_str, 0);
+                    builder.push_literal("]");
+                }
+                builder.push_literal("\n  )");
+                true
+            } else if val.is_array() {
+                let arr = val.as_array().unwrap();
+                if arr.is_empty() {
+                    builder.push_literal("()");
+                    return true;
+                }
+                builder.push_literal("(\n");
+                for (idx, item) in arr.iter().enumerate() {
+                    if idx > 0 {
+                        builder.push_literal(",\n");
+                    }
+                    builder.push_literal("    (\n");
+                    if let Some(obj) = item.as_object() {
+                        let mut first = true;
+                        let mut sorted_keys: Vec<&String> = obj.keys().collect();
+                        sorted_keys.sort();
+                        for prop_key in sorted_keys {
+                            let prop_val = obj.get(prop_key).unwrap();
+                            let prop_str = prop_val.as_str().unwrap_or("");
+                            if !first {
+                                builder.push_literal(",\n");
+                            }
+                            first = false;
+                            builder.push_literal(&format!("      {prop_key}: ["));
+                            builder.push_escaped_field("inputs", &format!("/{key}/{idx}/{prop_key}"), prop_str, 0);
+                            builder.push_literal("]");
+                        }
+                    }
+                    builder.push_literal("\n    )");
+                }
+                if arr.len() == 1 {
+                    builder.push_literal(",");
+                }
+                builder.push_literal("\n  )");
+                true
+            } else {
+                false
+            }
+        }
         ParamType::AuthorList => {
             resolve_author_list_param(&val, raw.unwrap_or(&serde_json::Value::Null), builder)
         }

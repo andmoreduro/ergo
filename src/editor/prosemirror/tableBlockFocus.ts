@@ -4,6 +4,7 @@ import type { EditorState } from "prosemirror-state";
 import { NodeSelection, TextSelection } from "prosemirror-state";
 import { ATOM_BLOCK_NODES, TABLE_BLOCK_NODE } from "./schema";
 import { isBlockEditing } from "./blockEditMode";
+import { isBlockSelectionHighlighted } from "./bodySelection";
 
 export interface TableBlockGapFocus {
     elementId: string;
@@ -65,9 +66,13 @@ export const tableBlockFocusPlugin = () =>
                           (node.attrs.elementId as string))
                         : (node.attrs.elementId as string);
                     const editing = isBlockEditing(state, elementId);
-                    const selected =
-                        selection instanceof NodeSelection &&
-                        selection.from === pos;
+                    // A NodeSelection resting on the block, or a select-all /
+                    // covering range that fully spans it, draws the same outline.
+                    const selected = isBlockSelectionHighlighted(
+                        selection,
+                        pos,
+                        node.nodeSize,
+                    );
                     const classes: string[] = [];
                     if (isTable) {
                         classes.push(

@@ -3,9 +3,14 @@ import { NodeSelection } from "prosemirror-state";
 import type { EditorView, NodeView } from "prosemirror-view";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import { ATOM_BLOCK_NODES, TABLE_BLOCK_NODE } from "../schema";
+import { absorbSettingsChromePointerDown, isSettingsChromeTarget } from "../blockWholeSelection";
 import { isBlockEditing, setBlockEditing } from "../blockEditMode";
 import { clearBlockUiState, setBlockUiState } from "../blockUiState";
-import { blurFocusedInside, focusWrapperPrimary } from "../../wrapperTabCycle";
+import {
+    blurFocusedInside,
+    focusWrapperAtCoords,
+    focusWrapperPrimary,
+} from "../../wrapperTabCycle";
 import { runBodyTab } from "../bodyTabCommand";
 import { BlockObjectNodeViewHost } from "./BlockObjectNodeViewHost";
 import type { NodeViewPortalRegistry } from "./nodeViewPortals";
@@ -23,8 +28,9 @@ import "./blockObjectNodeViews.global.css";
  * Atoms share the block locked ↔ fine-grained model: while locked the inner
  * editor is inert (the `--locked` decoration class disables pointer events on the
  * portal content) and a first click selects the whole block, a second click
- * enters fine-grained mode. `Esc` / `Ctrl+Enter` while editing returns to the
- * locked state.
+ * enters fine-grained mode and focuses the field under the pointer (or the
+ * primary field when the click lands on empty chrome). `Esc` / `Ctrl+Enter`
+ * while editing returns to the locked state.
  */
 let portalKeySeq = 0;
 
@@ -88,23 +94,45 @@ export const createBlockObjectNodeViews = (
                 });
             };
 
+            const enterFineGrainedEdit = (
+                pos: number,
+                coords?: { clientX: number; clientY: number },
+            ) => {
+                let tr = view.state.tr.setSelection(
+                    NodeSelection.create(view.state.doc, pos),
+                );
+                tr = setBlockEditing(tr, elementId(), true);
+                view.dispatch(tr);
+                requestAnimationFrame(() => {
+                    if (coords) {
+                        focusWrapperAtCoords(dom, coords.clientX, coords.clientY);
+                    } else {
+                        focusWrapperPrimary(dom);
+                    }
+                });
+            };
+
             const onMouseDown = (event: MouseEvent) => {
+                const pos = getPos();
+                if (
+                    absorbSettingsChromePointerDown(view, event)
+                ) {
+                    pushBlockUi();
+                    return;
+                }
                 // Editing: let the embedded React editor handle the click.
                 if (isBlockEditing(view.state, elementId())) {
                     return;
                 }
-                const pos = getPos();
                 if (pos === undefined) {
                     return;
                 }
                 event.preventDefault();
                 if (isWholeSelected(pos)) {
-                    let tr = view.state.tr.setSelection(
-                        NodeSelection.create(view.state.doc, pos),
-                    );
-                    tr = setBlockEditing(tr, elementId(), true);
-                    view.dispatch(tr);
-                    focusWrapperPrimary(dom);
+                    enterFineGrainedEdit(pos, {
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                    });
                 } else {
                     blurFocusedInside(dom);
                     view.dispatch(
@@ -138,12 +166,7 @@ export const createBlockObjectNodeViews = (
                 ) {
                     event.preventDefault();
                     event.stopPropagation();
-                    let tr = view.state.tr.setSelection(
-                        NodeSelection.create(view.state.doc, pos),
-                    );
-                    tr = setBlockEditing(tr, elementId(), true);
-                    view.dispatch(tr);
-                    focusWrapperPrimary(dom);
+                    enterFineGrainedEdit(pos);
                     return;
                 }
                 if (!isBlockEditing(view.state, elementId())) {
@@ -193,6 +216,9 @@ export const createBlockObjectNodeViews = (
                     registry.unregister(key);
                 },
                 stopEvent(event: Event) {
+                    if (isSettingsChromeTarget(event.target)) {
+                        return true;
+                    }
                     if (!isBlockEditing(view.state, elementId())) {
                         return false;
                     }

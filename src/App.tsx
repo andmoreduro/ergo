@@ -21,10 +21,11 @@ import {
     createParagraph,
     createQuote,
 } from "./state/ast/defaults";
+import { buildInsertInTableCellAction } from "./editor/prosemirror/table/tableCellInsert";
 import {
-    buildInsertInTableCellAction,
-    getTableCellEditContext,
-} from "./editor/prosemirror/table/tableCellInsert";
+    isTableCellForbiddenInsert,
+    resolveTableCellEditContext,
+} from "./editor/prosemirror/table/tableCellInsertPolicy";
 import {
     defaultFieldIdForElement,
     equationSourceFieldId,
@@ -338,18 +339,15 @@ const AppShellContent = () => {
         const defaultEquationSyntax: EquationSyntax =
             globalSettings.default_equation_syntax ?? "typst";
 
-        const tableCellCtx = getTableCellEditContext(
+        const tableCellCtx = resolveTableCellEditContext(
             state,
             documentFocus.elementId,
             documentFocus.fieldId,
         );
-        if (
-            tableCellCtx &&
-            elementType !== "table" &&
-            elementType !== "heading" &&
-            elementType !== "figure" &&
-            elementType !== "diagram"
-        ) {
+        if (tableCellCtx) {
+            if (isTableCellForbiddenInsert(elementType)) {
+                return;
+            }
             const id = createId();
             let block = null as ReturnType<typeof createParagraph> | null;
             switch (elementType) {
@@ -399,6 +397,7 @@ const AppShellContent = () => {
                     return;
                 }
             }
+            return;
         }
 
         const sectionId = contentSection.id;
@@ -505,6 +504,10 @@ const AppShellContent = () => {
                     syntax: defaultEquationSyntax,
                 },
             });
+            // Open the new equation in fine-grained mode so the caret lands in its
+            // source field; otherwise the block stays node-selected and the first
+            // keystroke replaces it.
+            setPendingBlockEdit(id);
             finishInsert("Equation");
             return;
         }

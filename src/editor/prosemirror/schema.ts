@@ -158,6 +158,36 @@ const atomBlock = (kind: string): NodeSpec => ({
         element: { default: null },
         elementId: { default: "" },
     },
+    // The live DOM is owned by a React NodeView; `toDOM`/`parseDOM` exist for the
+    // clipboard. Serializing the full `element` payload (not just the kind label)
+    // is what lets a copied block paste back as itself instead of the bare word
+    // "Equation"/"Figure"/… — see `elementIds.ts` for the paste-time id refresh.
+    parseDOM: [
+        {
+            tag: `div[data-element-kind="${kind}"]`,
+            getAttrs: (dom) => {
+                const el = dom as HTMLElement;
+                const raw = el.getAttribute("data-ergo-element");
+                let element: unknown = null;
+                if (raw) {
+                    try {
+                        element = JSON.parse(raw);
+                    } catch {
+                        element = null;
+                    }
+                }
+                const elementId =
+                    el.getAttribute("data-element-id") ||
+                    (element &&
+                    typeof element === "object" &&
+                    "id" in element
+                        ? String((element as { id: unknown }).id)
+                        : "") ||
+                    "";
+                return { element, elementId };
+            },
+        },
+    ],
     toDOM: (node) => [
         "div",
         {
@@ -166,6 +196,9 @@ const atomBlock = (kind: string): NodeSpec => ({
                 (node.attrs.elementId as string) ||
                 node.attrs.element?.id ||
                 "",
+            ...(node.attrs.element
+                ? { "data-ergo-element": JSON.stringify(node.attrs.element) }
+                : {}),
         },
         kind,
     ],

@@ -49,14 +49,15 @@ const useTableAnnotationFields = (): ExtraFieldSpec[] => {
     );
 };
 
-const TableBlockSettingsChrome = ({
+/** Settings cog — always visible on the table block (not tied to selection). */
+export const TableBlockSettingsCoordinator = ({
     elementFromNode,
     elementId,
-    editing,
+    settingsMount,
 }: {
     elementFromNode: TableElement | null;
     elementId: string;
-    editing: boolean;
+    settingsMount: HTMLElement;
 }) => {
     const { state } = useDocumentAst();
     const settings = useElementSettingsShortcut(elementId);
@@ -66,16 +67,17 @@ const TableBlockSettingsChrome = ({
         state.sections,
     );
 
-    if (!element || !editing) {
+    if (!element) {
         return null;
     }
 
-    return (
+    return createPortal(
         <TableSettingsPanel
             element={element}
             open={settings.open}
             onOpenChange={settings.setOpen}
-        />
+        />,
+        settingsMount,
     );
 };
 
@@ -115,17 +117,7 @@ export const TableBlockChromeCoordinator = ({
         <div
             className={`${styles.tableExtrasChrome} ${locked ? styles.tableExtrasChromeLocked : ""}`}
         >
-            <ElementExtrasAccordion
-                elementId={elementId}
-                shellRef={shellRef}
-                headerAccessory={
-                    <TableBlockSettingsChrome
-                        elementFromNode={elementFromNode}
-                        elementId={elementId}
-                        editing={editing}
-                    />
-                }
-            >
+            <ElementExtrasAccordion elementId={elementId} shellRef={shellRef}>
                 <ElementAnnotationFields
                     draftRef={wrapperDraftRef}
                     element={element}

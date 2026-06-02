@@ -4,6 +4,7 @@ import {
     useMemo,
     useRef,
     useState,
+    useSyncExternalStore,
 } from "react";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import {
@@ -25,6 +26,7 @@ import {
 } from "../../../editor/insertReference";
 import { InsertReferenceDialog } from "../../organisms/InsertReferenceDialog/InsertReferenceDialog";
 import type { TargetedOutlineEntry } from "../../../editor/outlineMatching";
+import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
 import { ProseMirrorBodyEditor } from "../../organisms/ProseMirrorBodyEditor/ProseMirrorBodyEditor";
 import { Button } from "../../atoms/Button/Button";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
@@ -51,9 +53,9 @@ import {
     useEditorNavigation,
 } from "../../../editor/EditorNavigationContext";
 import { useFieldNavigation } from "../../../editor/useFieldNavigation";
-import type { ConvertibleElementKind } from "../../../state/ast/convertElement";
 import { insertBodyReference } from "../../../editor/prosemirror/bodyInsert";
-import { getTableCellEditContext } from "../../../editor/prosemirror/table/tableCellInsert";
+import { subscribeActiveTableCellSession } from "../../../editor/prosemirror/table/tableStructureBridge";
+import { isActiveTableCellEditing } from "../../../editor/prosemirror/table/tableCellInsertPolicy";
 import { peekBodyTabModifiers } from "../../../editor/prosemirror/activeView";
 
 /** Shared stable empty array so selectors don't return a fresh `[]` each call. */
@@ -99,9 +101,16 @@ const focusedAuthorIndex = (elementId: string | null, fieldId: string | null) =>
 export interface EditorProps {
     resources: DocumentResources | null;
     outlineEntries: TargetedOutlineEntry[];
+    resourcePreviewRevisions: ResourcePreviewRevisions;
+    mainPreviewPaintedRevision: number | null;
 }
 
-export const Editor = ({ resources, outlineEntries }: EditorProps) => {
+export const Editor = ({
+    resources,
+    outlineEntries,
+    resourcePreviewRevisions,
+    mainPreviewPaintedRevision,
+}: EditorProps) => {
     const { state, dispatch: dispatchAst } = useDocumentAst();
     const { documentFocus } = useDocument();
     const dispatchAction = useActionDispatcher();
@@ -156,23 +165,6 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
         }
         return section.elements.find((entry) => entry.id === elementId) ?? null;
     }, [documentFocus.elementId, state.sections]);
-
-    const convertFocusedElement = useCallback(
-        (targetKind: ConvertibleElementKind) => {
-            if (!focusedContentElement || focusedContentElement.type === targetKind) {
-                return false;
-            }
-            dispatchAst({
-                type: "CONVERT_ELEMENT",
-                payload: {
-                    elementId: focusedContentElement.id,
-                    targetKind,
-                },
-            });
-            return true;
-        },
-        [dispatchAst, focusedContentElement],
-    );
 
     const editorHandlers = useMemo<ActionHandlerMap>(
         () => ({
@@ -236,14 +228,10 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
         Boolean(documentFocus.elementId && documentFocus.elementId !== "project") ||
         focusedAuthorIndex(documentFocus.elementId, documentFocus.fieldId) !== null;
 
-    const tableCellEditing = useMemo(
-        () =>
-            getTableCellEditContext(
-                state,
-                documentFocus.elementId,
-                documentFocus.fieldId,
-            ) !== null,
-        [documentFocus.elementId, documentFocus.fieldId, state],
+    const tableCellEditing = useSyncExternalStore(
+        subscribeActiveTableCellSession,
+        isActiveTableCellEditing,
+        () => false,
     );
 
     const editorHandlersWithDelete = useMemo<ActionHandlerMap>(
@@ -261,11 +249,6 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
                 return false;
             },
             "editor::DeleteElement": () => deleteFocusedElement(),
-            "editor::ConvertToParagraph": () => convertFocusedElement("Paragraph"),
-            "editor::ConvertToHeading": () => convertFocusedElement("Heading"),
-            "editor::ConvertToTable": () => convertFocusedElement("Table"),
-            "editor::ConvertToEquation": () => convertFocusedElement("Equation"),
-            "editor::ConvertToFigure": () => convertFocusedElement("Figure"),
             "editor::AddTableRow": () => {
                 if (focusedContentElement?.type !== "Table") {
                     return false;
@@ -330,7 +313,6 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
             },
         }),
         [
-            convertFocusedElement,
             deleteFocusedElement,
             dispatchAst,
             editorHandlers,
@@ -447,6 +429,8 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
                     resources={resources}
                     references={state.references}
                     outlineEntries={outlineEntries}
+                    resourcePreviewRevisions={resourcePreviewRevisions}
+                    mainPreviewPaintedRevision={mainPreviewPaintedRevision}
                     onClose={() => setReferenceDialogOpen(false)}
                     onSelect={applyReferenceInsert}
                 />
@@ -528,6 +512,10 @@ const DynamicField = memo(function DynamicField({
 
     if (schema.type === "array") {
         return <DynamicFieldArray schema={schema} path={path} label={label} />;
+    }
+
+    if (schema.type === "object") {
+        return <DynamicFieldObject schema={schema} path={path} label={label} />;
     }
 
     if (schema.type === "content") {
@@ -681,6 +669,33 @@ const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
                 }
             }}
         />
+    );
+};
+
+const DynamicFieldObject = ({ schema, path, label }: DynamicFieldProps) => {
+    return (
+        <div className={styles.objectContainer}>
+            {getFieldLabel(schema, label) && (
+                <div className={styles.objectHeader}>
+                    <FieldLabel importance={schema.importance ?? undefined}>
+                        {getFieldLabel(schema, label)}
+                    </FieldLabel>
+                </div>
+            )}
+            <div className={styles.objectContent}>
+                {(schema.properties ?? []).map((prop) => {
+                    const propPath = `${path}/${prop.id}`;
+                    return (
+                        <DynamicField
+                            key={prop.id}
+                            schema={prop}
+                            path={propPath}
+                            label={prop.label ?? undefined}
+                        />
+                    );
+                })}
+            </div>
+        </div>
     );
 };
 

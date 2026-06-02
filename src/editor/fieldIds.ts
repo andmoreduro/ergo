@@ -88,6 +88,10 @@ export const backendFocusIdsForEditorField = (
         };
     }
 
+    if (fieldId === `${elementId}:extra:caption`) {
+        return { elementId, fieldId: figureCaptionFieldId(elementId) };
+    }
+
     return { elementId, fieldId };
 };
 
@@ -107,6 +111,21 @@ export const editorFocusIdsForBackendField = (
 
 export const elementExtraFieldFieldId = (elementId: string, fieldKey: string) =>
     `${elementId}:extra:${fieldKey}`;
+
+/** Source-map field id for figure/diagram annotation inputs (matches Rust `figure_caption_field_id`). */
+export const elementAnnotationFieldId = (
+    elementId: string,
+    elementType: string,
+    fieldKey: string,
+): string => {
+    if (
+        fieldKey === "caption" &&
+        (elementType === "Figure" || elementType === "Diagram")
+    ) {
+        return figureCaptionFieldId(elementId);
+    }
+    return elementExtraFieldFieldId(elementId, fieldKey);
+};
 
 export const defaultFieldIdForElement = (element: {
     id: string;

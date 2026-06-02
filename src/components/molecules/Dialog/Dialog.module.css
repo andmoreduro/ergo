@@ -10,15 +10,37 @@
     background: var(--color-overlay-backdrop);
 }
 
-.panel {
+.backdropShell {
     display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: var(--layout-dialog-max-w);
+    max-width: min(
+        var(--layout-dialog-max-w),
+        calc(var(--layout-viewport-w) - 2 * var(--space-4))
+    );
     max-height: min(
         var(--layout-dialog-max-h),
         calc(var(--layout-dialog-available-h) - 2 * var(--space-4))
     );
+    min-width: 0;
+    min-height: 0;
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: min(
+        var(--width-dialog-min),
+        calc(var(--layout-viewport-w) - 2 * var(--space-4))
+    );
+    max-width: min(
+        var(--layout-dialog-max-w),
+        calc(var(--layout-viewport-w) - 2 * var(--space-4))
+    );
+    max-height: min(
+        var(--layout-dialog-max-h),
+        calc(var(--layout-dialog-available-h) - 2 * var(--space-4))
+    );
+    overflow: hidden;
     border: var(--border-width-sm) solid var(--color-border);
     border-radius: var(--border-radius-lg);
     background: var(--color-bg-primary);
@@ -27,19 +49,35 @@
 }
 
 .sizeSm {
-    width: min(var(--width-panel-sm), var(--layout-dialog-max-w));
+    max-width: min(
+        var(--width-panel-sm),
+        var(--layout-dialog-max-w),
+        calc(var(--layout-viewport-w) - 2 * var(--space-4))
+    );
 }
 
 .sizeMd {
-    width: min(var(--width-panel-md), var(--layout-dialog-max-w));
+    max-width: min(
+        var(--width-panel-md),
+        var(--layout-dialog-max-w),
+        calc(var(--layout-viewport-w) - 2 * var(--space-4))
+    );
 }
 
 .sizeLg {
-    width: min(var(--width-panel-lg), var(--layout-dialog-max-w));
+    max-width: min(
+        var(--width-panel-lg),
+        var(--layout-dialog-max-w),
+        calc(var(--layout-viewport-w) - 2 * var(--space-4))
+    );
 }
 
 .sizeXl {
-    width: min(var(--width-panel-xl), var(--layout-dialog-max-w));
+    max-width: min(
+        var(--width-panel-xl),
+        var(--layout-dialog-max-w),
+        calc(var(--layout-viewport-w) - 2 * var(--space-4))
+    );
 }
 
 .header {
@@ -60,12 +98,15 @@
 .body {
     display: grid;
     flex: 1 1 auto;
+    align-self: stretch;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     min-height: 0;
     gap: var(--space-4);
     padding: var(--space-4);
-    overflow-y: auto;
-    overscroll-behavior: auto;
-    scrollbar-gutter: auto;
+    overflow: auto;
+    overscroll-behavior: contain;
 }
 
 .footer {
