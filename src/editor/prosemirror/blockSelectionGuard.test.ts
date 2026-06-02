@@ -13,7 +13,9 @@ const buildTableDoc = (): { doc: PMNode; blockSize: number } => {
     if (table.type !== "Table") {
         throw new Error("expected table");
     }
-    table.cells[0][0].content = [createRichText("hi")];
+    table.cells[0][0].elements = [
+        { type: "Paragraph", id: "cell-p", content: [createRichText("hi")] },
+    ];
     const block = n.table_block.create({
         elementId: "tbl1",
         element: table,

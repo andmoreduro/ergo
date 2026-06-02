@@ -56,7 +56,9 @@ fn hash_document_element(element: &DocumentElement, hasher: &mut impl Hasher) {
             for row in &t.cells {
                 row.len().hash(hasher);
                 for cell in row {
-                    hash_rich_text_slice(&cell.content, hasher);
+                    for element in &cell.elements {
+                        hash_document_element(element, hasher);
+                    }
                     cell.row_span.hash(hasher);
                     cell.col_span.hash(hasher);
                 }

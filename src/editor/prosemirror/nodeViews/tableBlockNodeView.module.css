@@ -46,6 +46,10 @@
     word-wrap: break-word;
 }
 
+.inner :global(.ProseMirror u) {
+    text-decoration: underline;
+}
+
 .inner :global(.ProseMirror) td,
 .inner :global(.ProseMirror) th {
     border: 1px solid var(--color-border, #cbd5e1);

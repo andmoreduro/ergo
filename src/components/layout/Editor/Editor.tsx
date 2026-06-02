@@ -53,6 +53,7 @@ import {
 import { useFieldNavigation } from "../../../editor/useFieldNavigation";
 import type { ConvertibleElementKind } from "../../../state/ast/convertElement";
 import { insertBodyReference } from "../../../editor/prosemirror/bodyInsert";
+import { getTableCellEditContext } from "../../../editor/prosemirror/table/tableCellInsert";
 import { peekBodyTabModifiers } from "../../../editor/prosemirror/activeView";
 
 /** Shared stable empty array so selectors don't return a fresh `[]` each call. */
@@ -235,6 +236,16 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
         Boolean(documentFocus.elementId && documentFocus.elementId !== "project") ||
         focusedAuthorIndex(documentFocus.elementId, documentFocus.fieldId) !== null;
 
+    const tableCellEditing = useMemo(
+        () =>
+            getTableCellEditContext(
+                state,
+                documentFocus.elementId,
+                documentFocus.fieldId,
+            ) !== null,
+        [documentFocus.elementId, documentFocus.fieldId, state],
+    );
+
     const editorHandlersWithDelete = useMemo<ActionHandlerMap>(
         () => ({
             ...editorHandlers,
@@ -337,6 +348,7 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
             <main className={styles.editor}>
                 <EditorToolbar
                     canDeleteFocusedTarget={canDeleteFocusedTarget}
+                    tableCellEditing={tableCellEditing}
                     templateVariants={templateVariants}
                     resolvedVariantId={resolvedVariantId}
                     onDelete={() =>
@@ -439,7 +451,7 @@ export const Editor = ({ resources, outlineEntries }: EditorProps) => {
                     onSelect={applyReferenceInsert}
                 />
 
-                <div className={styles.editorScroll} data-scroll-region>
+                <div className={styles.editorScroll}>
                 {groups.map((group) => (
                     <section key={group.id} className={styles.templateGroupCard}>
                         <h2>{group.label}</h2>

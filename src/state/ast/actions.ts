@@ -237,7 +237,7 @@ export type UpdateTableCellAction = {
     tableId: string;
     rowIndex: number;
     colIndex: number;
-    content: import('../../bindings/RichText').RichText[];
+    elements: import('../../bindings/DocumentElement').DocumentElement[];
   };
 };
 

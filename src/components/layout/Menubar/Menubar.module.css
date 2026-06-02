@@ -31,6 +31,13 @@
     height: 100%;
 }
 
+/* DropdownMenu root — stretch trigger to full menubar height */
+.menuItem > div {
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+}
+
 .windowControls {
     display: flex;
     align-items: center;

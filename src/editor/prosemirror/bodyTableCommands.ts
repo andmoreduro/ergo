@@ -222,14 +222,24 @@ export const arrowTowardNextBlock = (direction: 1 | -1): Command => {
                 return false;
             }
             const $pos = state.doc.resolve(selection.from);
-            const candidate = direction > 0 ? $pos.nodeAfter : $pos.nodeBefore;
-            if (!candidate) {
+            // `selection.from` sits directly before the selected node, so
+            // `$pos.nodeAfter` is the node ITSELF, not the following sibling.
+            // Derive the candidate from the target position instead — otherwise
+            // the branch below runs off the (block-selectable) atom and
+            // node-selects whatever sits at `candidatePos`, e.g. a plain
+            // paragraph, giving it a stray whole-block outline.
+            const before = $pos.nodeBefore;
+            if (direction < 0 && !before) {
                 return false;
             }
             const candidatePos =
                 direction > 0
                     ? selection.from + selection.node.nodeSize
-                    : selection.from - candidate.nodeSize;
+                    : selection.from - (before?.nodeSize ?? 0);
+            const candidate = state.doc.nodeAt(candidatePos);
+            if (!candidate) {
+                return false;
+            }
             if (candidate.isTextblock) {
                 if (dispatch) {
                     dispatch(

@@ -21,7 +21,6 @@ type DialogPanelProps = {
     titleId: string;
     size?: DialogSize;
     zIndex?: number;
-    scrollable?: boolean;
     onClose?: () => void;
     closeLabel?: string;
     closeVariant?: "ghost" | "default";
@@ -49,7 +48,6 @@ export const Dialog = memo((props: DialogProps) => {
         titleId,
         size = "md",
         zIndex = 2100,
-        scrollable = true,
         onClose,
         closeLabel,
         closeVariant = "default",
@@ -61,13 +59,7 @@ export const Dialog = memo((props: DialogProps) => {
         panelProps,
     } = props;
 
-    const panelClassName = [
-        styles.panel,
-        sizeClass[size],
-        scrollable ? styles.panelScroll : "",
-    ]
-        .filter(Boolean)
-        .join(" ");
+    const panelClassName = [styles.panel, sizeClass[size]].join(" ");
 
     const showHeader = title || onClose || headerAction;
     const header = showHeader ? (
@@ -104,7 +96,6 @@ export const Dialog = memo((props: DialogProps) => {
                 aria-labelledby={titleId}
                 aria-modal="true"
                 className={panelClassName}
-                data-scroll-region={scrollable ? true : undefined}
                 role="dialog"
                 {...(panelProps as FormHTMLAttributes<HTMLFormElement>)}
             >
@@ -115,7 +106,6 @@ export const Dialog = memo((props: DialogProps) => {
                 aria-labelledby={titleId}
                 aria-modal="true"
                 className={panelClassName}
-                data-scroll-region={scrollable ? true : undefined}
                 role="dialog"
                 {...(panelProps as HTMLAttributes<HTMLElement>)}
             >

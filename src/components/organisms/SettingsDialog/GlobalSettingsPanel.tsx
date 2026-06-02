@@ -1,3 +1,4 @@
+import type { EquationSyntax } from "../../../bindings/EquationSyntax";
 import type { GlobalSettings } from "../../../bindings/GlobalSettings";
 import { m } from "../../../paraglide/messages.js";
 import { locales } from "../../../paraglide/runtime.js";
@@ -69,6 +70,35 @@ export const GlobalSettingsPanel = ({
                             onChange({
                                 ...settings,
                                 default_font: event.target.value.trim() || null,
+                            })
+                        }
+                    />
+                </FormField>
+            </div>
+        </section>
+        <section className={styles.settingsGroup}>
+            <h3>{m.settings_group_editing()}</h3>
+            <div className={styles.fieldGrid}>
+                <FormField label={m.settings_default_equation_syntax()}>
+                    <Select
+                        aria-label={m.settings_default_equation_syntax()}
+                        fullWidth
+                        value={settings.default_equation_syntax ?? "typst"}
+                        options={[
+                            {
+                                value: "typst",
+                                label: m.editor_equation_syntax_typst(),
+                            },
+                            {
+                                value: "latex",
+                                label: m.editor_equation_syntax_latex(),
+                            },
+                        ]}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                default_equation_syntax: event.target
+                                    .value as EquationSyntax,
                             })
                         }
                     />

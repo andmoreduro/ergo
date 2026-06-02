@@ -8,16 +8,18 @@ export const ElementAnnotationFields = ({
     element,
     fields,
     draftRef,
+    tabIndexOffset = 0,
 }: {
     element: WrapperHostElement;
     fields: ExtraFieldSpec[];
     draftRef?: MutableRefObject<Record<string, string>>;
+    tabIndexOffset?: number;
 }) => (
     <div className={styles.annotationFields}>
         {fields.map((field, index) => (
             <div
                 data-wrapper-tab="extra"
-                data-wrapper-tab-index={index}
+                data-wrapper-tab-index={tabIndexOffset + index}
                 key={field.key}
             >
                 <AnnotationFieldInput

@@ -32,7 +32,6 @@
       "appendix",
       "appendix-outline",
       "title-page",
-      "apa-figure",
       { "symbol": "versatile-apa", "alias": "apa-style" }
     ]
   },
@@ -302,9 +301,8 @@
     },
     {
       "id": "front-matter-outlines",
-      "kind": "literal",
-      "label": "Outlines",
-      "source": "#outline()\n#pagebreak()\n#outline(target: figure.where(kind: table), title: [Tables])\n#pagebreak()\n#outline(target: figure.where(kind: image), title: [Figures])\n#pagebreak()\n#outline(target: figure.where(kind: math.equation), title: [Equations])\n#pagebreak()\n#outline(target: figure.where(kind: raw), title: [Listings])\n#pagebreak()\n#appendix-outline(title: [Appendices])\n#pagebreak()\n"
+      "kind": "outlines",
+      "label": "Outlines"
     },
     {
       "id": "body",

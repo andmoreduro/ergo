@@ -1,4 +1,5 @@
 import type { ProjectSettings } from "../bindings/ProjectSettings";
+import type { TemplateOverride } from "../bindings/TemplateOverride";
 
 export const OUTLINE_TITLE_OVERRIDE_KEYS = {
     contents: "outline.contents_title",
@@ -9,8 +10,20 @@ export const OUTLINE_TITLE_OVERRIDE_KEYS = {
     appendices: "outline.appendices_title",
 } as const;
 
+export const OUTLINE_INCLUDE_OVERRIDE_KEYS = {
+    contents: "outline.include_contents",
+    tables: "outline.include_tables",
+    figures: "outline.include_figures",
+    equations: "outline.include_equations",
+    listings: "outline.include_listings",
+    appendices: "outline.include_appendices",
+} as const;
+
 export type OutlineTitleOverrideKey =
     (typeof OUTLINE_TITLE_OVERRIDE_KEYS)[keyof typeof OUTLINE_TITLE_OVERRIDE_KEYS];
+
+export type OutlineIncludeOverrideKey =
+    (typeof OUTLINE_INCLUDE_OVERRIDE_KEYS)[keyof typeof OUTLINE_INCLUDE_OVERRIDE_KEYS];
 
 export const getTemplateOverride = (
     settings: ProjectSettings,
@@ -37,3 +50,43 @@ export const setTemplateOverride = (
         template_overrides,
     };
 };
+
+const outlineIncludeFromOverrides = (
+    overrides: TemplateOverride[],
+    key: OutlineIncludeOverrideKey,
+): boolean | null => {
+    const overrideKey = OUTLINE_INCLUDE_OVERRIDE_KEYS[key];
+    const entry = overrides.find((item) => item.key === overrideKey);
+    if (!entry) {
+        return null;
+    }
+    return entry.value.trim().toLowerCase() !== "false";
+};
+
+/** Defaults for new projects and when a project override is absent (from template spec). */
+export const plainTemplateOutlineDisabledOverrides = (): TemplateOverride[] =>
+    (Object.values(OUTLINE_INCLUDE_OVERRIDE_KEYS) as OutlineIncludeOverrideKey[]).map(
+        (key) => ({ key, value: "false" }),
+    );
+
+export const getOutlineInclude = (
+    settings: ProjectSettings,
+    key: OutlineIncludeOverrideKey,
+    templateDefaultOverrides: TemplateOverride[] = [],
+): boolean => {
+    const project = outlineIncludeFromOverrides(settings.template_overrides, key);
+    if (project !== null) {
+        return project;
+    }
+    const templateDefault = outlineIncludeFromOverrides(templateDefaultOverrides, key);
+    if (templateDefault !== null) {
+        return templateDefault;
+    }
+    return true;
+};
+
+export const setOutlineInclude = (
+    settings: ProjectSettings,
+    key: OutlineIncludeOverrideKey,
+    included: boolean,
+): ProjectSettings => setTemplateOverride(settings, key, included ? "true" : "false");

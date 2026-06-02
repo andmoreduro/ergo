@@ -100,6 +100,7 @@ fn custom_element_template(field: ParamSpec) -> TemplateSpec {
         element_overrides: None,
         resource_policy: None,
         defaults: None,
+        default_template_overrides: vec![],
     }
 }
 
@@ -196,9 +197,58 @@ fn native_quote_list_diagram_and_latex_equations_emit_typst() {
     let equation_source = &generated.fragments["equation-1"].source;
     assert!(equation_source.contains("#import \"@preview/mitex:0.2.7\": mi, mitex"));
     assert!(equation_source.contains("#mitex("));
-    assert!(generated.fragments["diagram-1"]
-        .source
-        .contains("image(\"../assets/diagrams/diagram-1.svg\")"));
+    let diagram_source = &generated.fragments["diagram-1"].source;
+    assert!(diagram_source.contains("#figure("));
+    assert!(diagram_source.contains("image(\"../assets/diagrams/diagram-1.svg\")"));
+}
+
+#[test]
+fn none_template_injects_outlines_and_wraps_floats_in_figure() {
+    use crate::ast::Diagram;
+    use crate::template_spec::load_bundled_template;
+
+    let template = load_bundled_template("none").unwrap();
+    let mut ast = ast_with_table_and_figure();
+    ast.metadata.template_id = "none".to_string();
+    ast.metadata.project_settings.template_overrides = vec![];
+    ast.sections = vec![DocumentSection::Content(ContentSection {
+        id: "body".to_string(),
+        is_optional: false,
+        elements: vec![DocumentElement::Diagram(Diagram {
+            id: "diagram-none".to_string(),
+            mermaid_source: "flowchart TD\nA-->B".to_string(),
+            asset_id: Some("diagram-none".to_string()),
+            caption: "Chart".to_string(),
+            placement: "bottom".to_string(),
+            extra_fields: HashMap::new(),
+        })],
+    })];
+    ast.assets.push(AssetEntry {
+        id: "diagram-none".to_string(),
+        path: "assets/diagrams/diagram-none.svg".to_string(),
+        kind: "image".to_string(),
+        caption: None,
+    });
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+
+    assert!(
+        !generated.main_source.contains("#outline"),
+        "none template must not emit outlines by default:\n{}",
+        generated.main_source
+    );
+    let diagram_source = &generated.fragments["diagram-none"].source;
+    assert!(
+        diagram_source.contains("#figure("),
+        "diagram must use standard figure wrapper:\n{diagram_source}"
+    );
+    assert!(diagram_source.contains("caption: ["));
+    assert!(diagram_source.contains("Chart"));
+    assert!(
+        !diagram_source.contains("[image("),
+        "image must be a direct #figure argument, not literal text inside a content block:\n{diagram_source}"
+    );
 }
 
 #[test]
@@ -347,20 +397,7 @@ fn ast_with_table_and_figure() -> DocumentAST {
                     id: "table-1".to_string(),
                     rows: 1,
                     cols: 1,
-                    cells: vec![vec![TableCell {
-                        content: vec![RichText {
-                            text: "Cell".to_string(),
-                            bold: None,
-                            italic: None,
-                            underline: None,
-                            kind: None,
-                            reference_id: None,
-                            equation_source: None,
-                            equation_syntax: EquationSyntax::Typst,
-                        }],
-                        row_span: None,
-                        col_span: None,
-                    }]],
+                    cells: vec![vec![crate::test_fixtures::table_cell_from_text("Cell")]],
                     column_sizes: vec!["1fr".to_string()],
                     extra_fields: HashMap::new(),
                 }),
@@ -430,20 +467,9 @@ fn table_cell_spans_emit_table_cell_delimiters() {
         if let DocumentElement::Table(table) = &mut section.elements[0] {
             table.rows = 1;
             table.cols = 2;
-            table.cells = vec![vec![TableCell {
-                content: vec![RichText {
-                    text: "Merged".to_string(),
-                    bold: None,
-                    italic: None,
-                    underline: None,
-                    kind: None,
-                    reference_id: None,
-                    equation_source: None,
-                    equation_syntax: EquationSyntax::Typst,
-                }],
-                col_span: Some(2),
-                row_span: None,
-            }]];
+            let mut merged = crate::test_fixtures::table_cell_from_text("Merged");
+            merged.col_span = Some(2);
+            table.cells = vec![vec![merged]];
             table.column_sizes = vec!["1fr".to_string(), "1fr".to_string()];
         }
     }
@@ -459,7 +485,7 @@ fn table_cell_spans_emit_table_cell_delimiters() {
 }
 
 #[test]
-fn table_cell_multiline_rich_text_emits_linebreak() {
+fn table_cell_multiline_elements_emit_paragraph_break() {
     let template = template_with_apa_wrapper_fields();
     let mut ast = ast_with_table_and_figure();
     if let DocumentSection::Content(section) = &mut ast.sections[0] {
@@ -467,37 +493,33 @@ fn table_cell_multiline_rich_text_emits_linebreak() {
             table.rows = 1;
             table.cols = 1;
             table.cells = vec![vec![TableCell {
-                content: vec![
-                    RichText {
-                        text: "Then happens what needs to happen.".to_string(),
-                        bold: None,
-                        italic: None,
-                        underline: None,
-                        kind: None,
-                        reference_id: None,
-                        equation_source: None,
-                        equation_syntax: EquationSyntax::Typst,
-                    },
-                    RichText {
-                        text: "\n".to_string(),
-                        bold: None,
-                        italic: None,
-                        underline: None,
-                        kind: None,
-                        reference_id: None,
-                        equation_source: None,
-                        equation_syntax: EquationSyntax::Typst,
-                    },
-                    RichText {
-                        text: "Finalmente.".to_string(),
-                        bold: None,
-                        italic: None,
-                        underline: None,
-                        kind: None,
-                        reference_id: None,
-                        equation_source: None,
-                        equation_syntax: EquationSyntax::Typst,
-                    },
+                elements: vec![
+                    DocumentElement::Paragraph(Paragraph {
+                        id: "cell-p-1".to_string(),
+                        content: vec![RichText {
+                            text: "Then happens what needs to happen.".to_string(),
+                            bold: None,
+                            italic: None,
+                            underline: None,
+                            kind: None,
+                            reference_id: None,
+                            equation_source: None,
+                            equation_syntax: EquationSyntax::Typst,
+                        }],
+                    }),
+                    DocumentElement::Paragraph(Paragraph {
+                        id: "cell-p-2".to_string(),
+                        content: vec![RichText {
+                            text: "Finalmente.".to_string(),
+                            bold: None,
+                            italic: None,
+                            underline: None,
+                            kind: None,
+                            reference_id: None,
+                            equation_source: None,
+                            equation_syntax: EquationSyntax::Typst,
+                        }],
+                    }),
                 ],
                 col_span: None,
                 row_span: None,
@@ -510,8 +532,12 @@ fn table_cell_multiline_rich_text_emits_linebreak() {
         generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
     let table_source = &generated.fragments["table-1"].source;
     assert!(
-        table_source.contains("#linebreak()"),
-        "expected line break in:\n{table_source}"
+        table_source.contains("Then happens what needs to happen."),
+        "expected first paragraph in:\n{table_source}"
+    );
+    assert!(
+        table_source.contains("Finalmente."),
+        "expected second paragraph in:\n{table_source}"
     );
     assert_eq!(
         table_source.matches('[').count(),
@@ -763,12 +789,12 @@ fn apa7_main_typ_includes_front_matter_outlines_and_appendix_rule() {
         generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
 
     assert!(
-        generated.main_source.contains("#outline()"),
+        generated.main_source.contains("title: [Contents]"),
         "main.typ should include document outline; got:\n{}",
         generated.main_source
     );
     assert!(
-        generated.main_source.contains("#appendix-outline"),
+        generated.main_source.contains("#appendix-outline(title: [Appendices])"),
         "main.typ should include appendix outline; got:\n{}",
         generated.main_source
     );
@@ -777,6 +803,30 @@ fn apa7_main_typ_includes_front_matter_outlines_and_appendix_rule() {
         "main.typ should enable appendix show rule; got:\n{}",
         generated.main_source
     );
+}
+
+#[test]
+fn outline_generation_respects_include_flags() {
+    use crate::ast::TemplateOverride;
+    use crate::template_spec::load_bundled_template;
+
+    let mut ast = ast_with_table_and_figure();
+    ast.sections = vec![DocumentSection::Content(ContentSection {
+        id: "body".to_string(),
+        is_optional: false,
+        elements: vec![],
+    })];
+    ast.metadata.project_settings.template_overrides = vec![TemplateOverride {
+        key: "outline.include_figures".to_string(),
+        value: "false".to_string(),
+    }];
+
+    let template = load_bundled_template("apa7").expect("apa7 template");
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+
+    assert!(generated.main_source.contains("title: [Contents]"));
+    assert!(!generated.main_source.contains("kind: image"));
 }
 
 #[test]

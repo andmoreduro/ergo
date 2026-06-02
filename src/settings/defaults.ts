@@ -18,6 +18,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     autosave_on_window_blur: true,
     autosave_on_app_close: true,
     autosave_on_project_close: true,
+    default_equation_syntax: "typst",
 };
 
 export const DEFAULT_KEYMAP_SETTINGS: KeymapSettings = {

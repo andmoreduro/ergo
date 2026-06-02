@@ -10,14 +10,15 @@ use super::custom_fields::{
 };
 use super::figures::{
     element_figure_wrapper_name, figure_image_typst_source, push_custom_wrapper_figure_element,
-    uses_standard_typst_figure,
+    push_table_figure_caption, uses_standard_typst_figure,
 };
+use super::push_wrapper_symbol_import;
 use super::hashing::hash_source;
 use super::paths::{
     asset_path_relative_to_element, element_id, element_kind, equation_source_field_id,
-    figure_caption_field_id, label_for_id, path_id_for_id, rich_text_field_id, table_cell_field_id,
+    figure_caption_field_id, label_for_id, path_id_for_id, quote_content_field_id,
+    rich_text_field_id,
 };
-use super::push_wrapper_symbol_import;
 use super::references::bibliography_citation_keys;
 use super::rich_text::{normalize_math_source, push_rich_text_field};
 use super::tables::{sanitize_table_column_size, table_placement_value, typst_placement_arg};
@@ -246,11 +247,12 @@ fn generate_element_typst(
                 for (col_index, cell) in row.iter().enumerate() {
                     let open = super::tables::table_cell_open(cell.col_span, cell.row_span);
                     builder.push_literal(&format!(",\n  {open}"));
-                    super::rich_text::push_rich_text_field(
+                    push_table_cell_elements(
                         &mut builder,
                         &table.id,
-                        &table_cell_field_id(&table.id, row_index, col_index),
-                        &cell.content,
+                        row_index,
+                        col_index,
+                        &cell.elements,
                         bibliography_keys,
                     );
                     builder.push_literal("]");
@@ -262,16 +264,25 @@ fn generate_element_typst(
                 builder.push_literal("]");
             }
 
+            if uses_standard_typst_figure(wrapper) {
+                push_table_figure_caption(&mut builder, &table.id, &table.extra_fields);
+            }
+
             if let Some(placement) = typst_placement_arg(table_placement_value(table)) {
                 builder.push_literal(&format!(",\n  placement: {placement}"));
             }
 
+            let skip_table_extra_keys: &[&str] = if uses_standard_typst_figure(wrapper) {
+                &["placement", "width", "caption"]
+            } else {
+                &["placement", "width"]
+            };
             push_override_extra_fields(
                 &mut builder,
                 &table.id,
                 table_override,
                 &table.extra_fields,
-                &["placement", "width"],
+                skip_table_extra_keys,
             );
 
             builder.push_literal(&format!("\n) <{label}>\n\n"));
@@ -319,7 +330,7 @@ fn generate_element_typst(
             let wrapper = element_figure_wrapper_name(figure_override);
 
             if uses_standard_typst_figure(wrapper) {
-                builder.push_literal(&format!("#{wrapper}(\n  ["));
+                builder.push_literal(&format!("#{wrapper}(\n  "));
 
                 if let Some(path) = asset_path {
                     let image_source = figure_image_typst_source(&path, &figure.extra_fields);
@@ -337,10 +348,10 @@ fn generate_element_typst(
                         0,
                     );
                 } else {
+                    builder.push_literal("[");
                     builder.push_builder(body);
+                    builder.push_literal("]");
                 }
-
-                builder.push_literal("]");
 
                 if !caption.is_empty() {
                     builder.push_literal(",\n  caption: [");
@@ -415,10 +426,13 @@ fn generate_element_typst(
                 .and_then(|o| o.figure.as_ref());
             let wrapper = element_figure_wrapper_name(figure_override);
             if uses_standard_typst_figure(wrapper) {
-                builder.push_literal(&format!(
-                    "#{wrapper}(\n  [{}]",
-                    figure_image_typst_source(&path, &diagram.extra_fields)
-                ));
+                builder.push_literal(&format!("#{wrapper}(\n  "));
+                builder.push_generated_field_marker(
+                    &diagram.id,
+                    &figure_body_field_id(&diagram.id),
+                    &figure_image_typst_source(&path, &diagram.extra_fields),
+                    0,
+                );
                 if !caption.is_empty() {
                     builder.push_literal(",\n  caption: [");
                     builder.push_escaped_field(
@@ -527,6 +541,98 @@ fn generate_element_typst(
         }
     };
     builder
+}
+
+fn push_table_cell_elements(
+    builder: &mut SourceBuilder,
+    table_id: &str,
+    row_index: usize,
+    col_index: usize,
+    elements: &[DocumentElement],
+    bibliography_keys: &HashMap<String, String>,
+) {
+    for (block_index, element) in elements.iter().enumerate() {
+        if block_index > 0 {
+            builder.push_literal("\n\n");
+        }
+        match element {
+            DocumentElement::Paragraph(paragraph) => {
+                push_rich_text_field(
+                    builder,
+                    table_id,
+                    &rich_text_field_id(&paragraph.id),
+                    &paragraph.content,
+                    bibliography_keys,
+                );
+            }
+            DocumentElement::Quote(quote) => {
+                let mut quote_builder = SourceBuilder::default();
+                push_rich_text_field(
+                    &mut quote_builder,
+                    &quote.id,
+                    &quote_content_field_id(&quote.id),
+                    &quote.content,
+                    bibliography_keys,
+                );
+                if !quote_builder.source.trim().is_empty() {
+                    builder.push_literal("#quote(block: true)[");
+                    builder.push_builder(quote_builder);
+                    builder.push_literal("]");
+                }
+            }
+            DocumentElement::List(list) => {
+                push_list_like_element(
+                    builder,
+                    &list.id,
+                    &list.items,
+                    "list",
+                    &format!("{table_id}-cell-{row_index}-{col_index}-list-{block_index}"),
+                    bibliography_keys,
+                );
+            }
+            DocumentElement::Enumeration(enumeration) => {
+                push_list_like_element(
+                    builder,
+                    &enumeration.id,
+                    &enumeration.items,
+                    "enum",
+                    &format!("{table_id}-cell-{row_index}-{col_index}-enum-{block_index}"),
+                    bibliography_keys,
+                );
+            }
+            DocumentElement::Equation(equation) => {
+                let source = normalize_math_source(&equation.latex_source);
+                if source.is_empty() {
+                    continue;
+                }
+                let field_id = equation_source_field_id(&equation.id);
+                match equation.syntax {
+                    EquationSyntax::Latex => {
+                        let function = if equation.is_block { "mitex" } else { "mi" };
+                        builder.push_generated_field_marker(
+                            &equation.id,
+                            &field_id,
+                            &format!("#{function}(\"{}\")", super::escape_typst_string(&source)),
+                            0,
+                        );
+                    }
+                    EquationSyntax::Typst => {
+                        builder.push_literal(&format!(
+                            "#math.equation(block: {}, $",
+                            equation.is_block
+                        ));
+                        builder.push_raw_field(&equation.id, &field_id, &source, 0);
+                        builder.push_literal("$)");
+                    }
+                }
+            }
+            DocumentElement::Heading(_)
+            | DocumentElement::Table(_)
+            | DocumentElement::Figure(_)
+            | DocumentElement::Diagram(_)
+            | DocumentElement::Custom(_) => {}
+        }
+    }
 }
 
 fn push_list_like_element(

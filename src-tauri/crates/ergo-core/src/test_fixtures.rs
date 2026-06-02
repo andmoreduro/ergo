@@ -2,7 +2,19 @@
 use crate::ast::{
     ContentSection, DependencyManifest, DocumentAST, DocumentElement, DocumentSection, Package,
     EquationSyntax, GlobalSettings, Heading, Paragraph, ProjectMetadata, ProjectSettings, RichText,
+    TableCell,
 };
+
+pub fn table_cell_from_text(text: &str) -> TableCell {
+    TableCell {
+        elements: vec![DocumentElement::Paragraph(Paragraph {
+            id: format!("cell-p-{}", uuid::Uuid::new_v4()),
+            content: vec![rich_text(text)],
+        })],
+        row_span: None,
+        col_span: None,
+    }
+}
 
 pub fn rich_text(text: &str) -> RichText {
     RichText {

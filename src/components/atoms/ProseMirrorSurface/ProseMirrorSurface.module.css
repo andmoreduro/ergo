@@ -43,3 +43,7 @@
     color: var(--color-accent, #2563eb);
     cursor: default;
 }
+
+.bodyPaper :global(u) {
+    text-decoration: underline;
+}

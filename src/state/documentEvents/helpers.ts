@@ -207,6 +207,15 @@ export const figureElement = (ast: DocumentAST, elementId: string) => {
     return element;
 };
 
+export const diagramElement = (ast: DocumentAST, elementId: string) => {
+    const element = elementById(ast, elementId);
+    if (element.type !== "Diagram") {
+        throw new Error(`Element ${elementId} is not a diagram`);
+    }
+
+    return element;
+};
+
 export const referenceLocation = (
     ast: DocumentAST,
     referenceId: string,

@@ -1,4 +1,5 @@
-const ERGOPROJ_EXTENSION = ".ergproj";
+export const ERGOPROJ_FILE_EXTENSION = ".ergproj";
+const ERGOPROJ_EXTENSION = ERGOPROJ_FILE_EXTENSION;
 const DEFAULT_PROJECT_FILE_BASENAME = "untitled_document";
 const INVALID_FILE_NAME_CHARACTERS = /[<>:"/\\|?*\u0000-\u001f]/g;
 
@@ -16,11 +17,17 @@ const normalizeProjectFileBasename = (value: string): string =>
         .replace(/_+/g, "_")
         .replace(/^[._]+|[._]+$/g, "");
 
-export const projectFileNameFromTitle = (title: string): string => {
+export const projectFileBasenameFromTitle = (title: string): string => {
     const basename = normalizeProjectFileBasename(title);
 
-    return ensureErgprojExtension(basename || DEFAULT_PROJECT_FILE_BASENAME);
+    return basename || DEFAULT_PROJECT_FILE_BASENAME;
 };
+
+export const projectFileNameFromTitle = (title: string): string =>
+    ensureErgprojExtension(projectFileBasenameFromTitle(title));
+
+export const stripErgprojExtension = (fileName: string): string =>
+    fileName.replace(/\.ergproj$/i, "");
 
 export const sanitizeProjectFileName = (fileName: string): string =>
     ensureErgprojExtension(

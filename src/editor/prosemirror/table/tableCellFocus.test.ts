@@ -3,10 +3,12 @@ import { EditorState } from "prosemirror-state";
 import { createRichText } from "../../../state/ast/defaults";
 import { tableSchema } from "./tableSchema";
 import { tableToSubDoc } from "./tableSubBridge";
+import { richTextFieldId } from "../../fieldIds";
 import {
     parseTableCellFieldId,
     selectionInChildTableForFocus,
     tableCellCoordsFromChildState,
+    tableCellFocusTargetFromState,
 } from "./tableCellFocus";
 
 describe("tableCellFocus", () => {
@@ -27,36 +29,53 @@ describe("tableCellFocus", () => {
             cells: [
                 [
                     {
-                        content: [
-                            createRichText("ab"),
+                        elements: [
                             {
-                                ...createRichText("@ref"),
-                                kind: "reference",
-                                reference_id: "r1",
+                                type: "Paragraph",
+                                id: "cell-p-a",
+                                content: [createRichText("abcd")],
                             },
-                            createRichText("cd"),
                         ],
                         row_span: null,
                         col_span: null,
                     },
-                    { content: [createRichText("xy")], row_span: null, col_span: null },
+                    {
+                        elements: [
+                            {
+                                type: "Paragraph",
+                                id: "cell-p-b",
+                                content: [createRichText("xy")],
+                            },
+                        ],
+                        row_span: null,
+                        col_span: null,
+                    },
                 ],
             ],
             column_sizes: ["1fr", "1fr"],
             extra_fields: {},
         };
         const doc = tableToSubDoc(tableSchema, table);
+        const initialSelection = selectionInChildTableForFocus(doc, {
+            elementId: "t1",
+            fieldId: richTextFieldId("cell-p-a"),
+            caretUtf16Offset: 2,
+        });
+        expect(initialSelection).not.toBeNull();
         const state = EditorState.create({
             doc,
-            selection: selectionInChildTableForFocus(doc, {
-                elementId: "t1",
-                fieldId: "t1:cell:0:0",
-                caretUtf16Offset: 4,
-            })!,
+            selection: initialSelection!,
         });
         const coords = tableCellCoordsFromChildState(state);
         expect(coords?.row).toBe(0);
         expect(coords?.col).toBe(0);
-        expect(coords?.caretUtf16Offset).toBe(4);
+
+        const target = tableCellFocusTargetFromState("t1", state);
+        expect(target?.elementId).toBe("t1");
+        expect(target?.fieldId).toBe(richTextFieldId("cell-p-a"));
+        expect(target?.caretUtf16Offset).toBe(2);
+
+        const roundTrip = selectionInChildTableForFocus(doc, target!);
+        expect(roundTrip?.from).toBe(state.selection.from);
     });
 });

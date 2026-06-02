@@ -1,12 +1,12 @@
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { DocumentEvent } from "../../bindings/DocumentEvent";
 import type { TableCell } from "../../bindings/TableCell";
-import { richTextSignificantlyEqual } from "../../state/ast/commitPolicy";
+import { tableCellElementsEqual } from "./table/tableCellElements";
 
 export type TableElement = Extract<DocumentElement, { type: "Table" }>;
 
 const cellEqual = (a: TableCell, b: TableCell): boolean =>
-    richTextSignificantlyEqual(a.content, b.content) &&
+    tableCellElementsEqual(a.elements, b.elements) &&
     a.col_span === b.col_span &&
     a.row_span === b.row_span;
 
@@ -169,8 +169,8 @@ export const diffTableElement = (
         let change: {
             row: number;
             col: number;
-            content: TableCell["content"];
-            prevContent: TableCell["content"];
+            elements: TableCell["elements"];
+            prevElements: TableCell["elements"];
         } | null = null;
         for (let rowIndex = 0; rowIndex < prev.cells.length; rowIndex += 1) {
             for (let colIndex = 0; colIndex < prev.cells[rowIndex].length; colIndex += 1) {
@@ -182,7 +182,7 @@ export const diffTableElement = (
                 if (
                     before.col_span === after.col_span &&
                     before.row_span === after.row_span &&
-                    !richTextSignificantlyEqual(before.content, after.content)
+                    !tableCellElementsEqual(before.elements, after.elements)
                 ) {
                     if (change) {
                         return null;
@@ -190,8 +190,8 @@ export const diffTableElement = (
                     change = {
                         row: rowIndex,
                         col: colIndex,
-                        content: after.content,
-                        prevContent: before.content,
+                        elements: after.elements,
+                        prevElements: before.elements,
                     };
                     continue;
                 }
@@ -206,7 +206,7 @@ export const diffTableElement = (
                         table_id: tableId,
                         row_index: change.row,
                         col_index: change.col,
-                        content: change.content,
+                        elements: change.elements,
                     },
                 ],
                 inverse: [
@@ -215,7 +215,7 @@ export const diffTableElement = (
                         table_id: tableId,
                         row_index: change.row,
                         col_index: change.col,
-                        content: change.prevContent,
+                        elements: change.prevElements,
                     },
                 ],
             };

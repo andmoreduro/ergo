@@ -140,17 +140,22 @@ describe("diffSectionElements", () => {
     });
 
     it("maps a single table cell edit to updateTableCell", () => {
-        const prev = [createTable(2, 2, "t1")];
-        const nextTable = createTable(2, 2, "t1");
+        const prevTable = createTable(2, 2, "t1");
+        const prev = [prevTable];
+        const nextTable = structuredClone(prevTable);
         if (nextTable.type === "Table") {
-            nextTable.cells[0][0] = {
-                ...nextTable.cells[0][0],
-                content: [createRichText("changed")],
-            };
+            const cell = nextTable.cells[0][0];
+            const paragraph = cell.elements[0];
+            if (paragraph?.type === "Paragraph") {
+                cell.elements[0] = {
+                    ...paragraph,
+                    content: [createRichText("changed")],
+                };
+            }
         }
         const delta = expectRoundTrip(prev, [nextTable]);
         expect(delta.forward).toHaveLength(1);
-        expect(delta.forward[0].type).toBe("updateTableCell");
+        expect(delta.forward[0]?.type).toBe("updateTableCell");
     });
 });
 

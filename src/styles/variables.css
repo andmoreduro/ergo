@@ -64,6 +64,12 @@
     --layout-full: 100%;
     --layout-viewport-w: 100vw;
     --layout-viewport-h: 100vh;
+    --layout-app-chrome-h: var(--size-chrome);
+    --layout-dialog-available-h: calc(
+        var(--layout-viewport-h) - var(--layout-app-chrome-h)
+    );
+    --layout-dialog-max-w: calc(var(--layout-viewport-w) * 0.8);
+    --layout-dialog-max-h: calc(var(--layout-dialog-available-h) * 0.8);
     --layout-overlay-gutter: var(--space-8);
     --layout-palette-offset-top: 12vh;
     --layout-welcome-offset-top: -4vh;

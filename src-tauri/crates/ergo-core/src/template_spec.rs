@@ -1,8 +1,12 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::ast::TemplateOverride;
+
 const APA7_TEMPLATE: &str =
     include_str!("../../../resources/templates/apa7/template.json");
+const UMB_APA_TEMPLATE: &str =
+    include_str!("../../../resources/templates/umb-apa/template.json");
 
 // ─── Template Spec Root ────────────────────────────────────────────
 
@@ -26,6 +30,9 @@ pub struct TemplateSpec {
     #[serde(default)]
     pub resource_policy: Option<ResourcePolicySpec>,
     pub defaults: Option<DefaultsSpec>,
+    /// Project `template_overrides` applied when the project has no explicit entry (e.g. outlines off for `none`).
+    #[serde(default)]
+    pub default_template_overrides: Vec<TemplateOverride>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -85,6 +92,28 @@ impl ImportSymbol {
             ImportSymbol::Aliased { symbol, alias } => format!("{symbol} as {alias}"),
         }
     }
+
+    pub fn symbol_name(&self) -> &str {
+        match self {
+            ImportSymbol::Plain(name) => name.as_str(),
+            ImportSymbol::Aliased { symbol, .. } => symbol.as_str(),
+        }
+    }
+}
+
+/// Whether the template manifest imports a Typst symbol from its package (or dependencies).
+pub fn template_spec_exports_symbol(template: &TemplateSpec, symbol: &str) -> bool {
+    template
+        .package
+        .imports
+        .iter()
+        .any(|import| import.symbol_name() == symbol)
+        || template.package.dependencies.iter().any(|dependency| {
+            dependency
+                .imports
+                .iter()
+                .any(|import| import.symbol_name() == symbol)
+        })
 }
 
 // ─── Show Rule ─────────────────────────────────────────────────────
@@ -261,6 +290,8 @@ pub struct SectionSpec {
 pub enum SectionKind {
     FunctionCall,
     Literal,
+    /// Front-matter `#outline()` / `#pagebreak()` blocks from project outline settings.
+    Outlines,
     Content,
     Bibliography,
     Appendix,
@@ -396,7 +427,25 @@ pub fn plain_document_template() -> TemplateSpec {
         element_overrides: None,
         resource_policy: None,
         defaults: None,
+        default_template_overrides: plain_template_outline_defaults(),
     }
+}
+
+fn plain_template_outline_defaults() -> Vec<TemplateOverride> {
+    const KEYS: &[&str] = &[
+        "outline.include_contents",
+        "outline.include_tables",
+        "outline.include_figures",
+        "outline.include_equations",
+        "outline.include_listings",
+        "outline.include_appendices",
+    ];
+    KEYS.iter()
+        .map(|key| TemplateOverride {
+            key: (*key).to_string(),
+            value: "false".to_string(),
+        })
+        .collect()
 }
 
 pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> {
@@ -404,13 +453,22 @@ pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> 
         return Ok(plain_document_template());
     }
 
-    static TEMPLATE_CACHE: std::sync::OnceLock<TemplateSpec> = std::sync::OnceLock::new();
-    let spec = TEMPLATE_CACHE.get_or_init(|| {
-        serde_json::from_str(APA7_TEMPLATE).expect("failed to parse bundled template spec")
-    });
+    static APA7_CACHE: std::sync::OnceLock<TemplateSpec> = std::sync::OnceLock::new();
+    static UMB_APA_CACHE: std::sync::OnceLock<TemplateSpec> = std::sync::OnceLock::new();
 
     match template_id {
-        "apa7" => Ok(spec.clone()),
+        "apa7" => Ok(APA7_CACHE
+            .get_or_init(|| {
+                serde_json::from_str(APA7_TEMPLATE)
+                    .expect("failed to parse bundled apa7 template spec")
+            })
+            .clone()),
+        "umb-apa" => Ok(UMB_APA_CACHE
+            .get_or_init(|| {
+                serde_json::from_str(UMB_APA_TEMPLATE)
+                    .expect("failed to parse bundled umb-apa template spec")
+            })
+            .clone()),
         _ => Err(format!("unknown template: {template_id}")),
     }
 }
@@ -519,16 +577,27 @@ fn applies_to_variant(variants: Option<&Vec<String>>, active_variant: &str) -> b
 
 // ─── Typst Code Generation Helpers ─────────────────────────────────
 
+/// The `#import` target for a package: a `name:version` coordinate, or — when the
+/// version is empty — `name` used verbatim, which lets a bundled template point at
+/// a file path (e.g. `/umb-apa/lib.typ`) instead of a registry package.
+fn import_target(name: &str, version: &str) -> String {
+    if version.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name}:{version}")
+    }
+}
+
 impl PackageSpec {
+    /// The `#import` target string for this package (path or `name:version`).
+    pub fn import_target(&self) -> String {
+        import_target(&self.name, &self.version)
+    }
+
     /// Generates the `#import` line for this package.
     pub fn to_typst_import_line(&self) -> String {
         let symbols: Vec<String> = self.imports.iter().map(|i| i.to_typst_import()).collect();
-        format!(
-            "#import \"{}:{}\": {}",
-            self.name,
-            self.version,
-            symbols.join(", ")
-        )
+        format!("#import \"{}\": {}", self.import_target(), symbols.join(", "))
     }
 }
 
@@ -536,9 +605,8 @@ impl PackageDependency {
     pub fn to_typst_import_line(&self) -> String {
         let symbols: Vec<String> = self.imports.iter().map(|i| i.to_typst_import()).collect();
         format!(
-            "#import \"{}:{}\": {}",
-            self.name,
-            self.version,
+            "#import \"{}\": {}",
+            import_target(&self.name, &self.version),
             symbols.join(", ")
         )
     }
@@ -571,14 +639,12 @@ mod tests {
 
         assert_eq!(spec.sections[0].kind, SectionKind::FunctionCall);
         assert_eq!(spec.sections[0].function.as_deref(), Some("title-page"));
-        assert_eq!(spec.sections[2].kind, SectionKind::Literal);
-        let outline_source = spec.sections[2]
-            .source
-            .as_deref()
-            .expect("front matter outline literal");
-        assert!(outline_source.starts_with("#outline()\n#pagebreak()\n"));
-        assert!(outline_source.contains("figure.where(kind: table)"));
-        assert!(outline_source.contains("appendix-outline"));
+        assert_eq!(spec.sections[2].kind, SectionKind::Outlines);
+        assert_eq!(spec.sections[2].id, "front-matter-outlines");
+        assert!(
+            spec.sections[2].source.as_deref().unwrap_or("").is_empty(),
+            "outline Typst is generated by DocumentSession, not template literals"
+        );
         assert_eq!(spec.sections[3].kind, SectionKind::Content);
         assert_eq!(spec.sections[4].kind, SectionKind::Bibliography);
         assert_eq!(spec.sections[5].kind, SectionKind::Appendix);
@@ -637,6 +703,12 @@ mod tests {
         assert_eq!(spec.template.id, "none");
         assert!(spec.show_rule.is_none());
         assert!(spec.package.name.is_empty());
+        assert_eq!(spec.default_template_overrides.len(), 6);
+        assert!(
+            spec.default_template_overrides
+                .iter()
+                .all(|entry| entry.value == "false")
+        );
     }
 
     #[test]
@@ -654,4 +726,35 @@ mod tests {
         assert!(line.contains("versatile-apa as apa-style"));
     }
 
+    #[test]
+    fn umb_apa_template_imports_lib_by_path() {
+        let spec = load_bundled_template("umb-apa").expect("should parse");
+        assert_eq!(spec.template.id, "umb-apa");
+        assert_eq!(spec.template.name, "UMB's APA template");
+        assert_eq!(spec.package.name, "/umb-apa/lib.typ");
+        assert_eq!(spec.package.version, "");
+        // Same authored API and structure as apa7.
+        assert_eq!(spec.variants.len(), 3);
+        assert_eq!(spec.sections.len(), 6);
+
+        let line = spec.package.to_typst_import_line();
+        assert!(
+            line.starts_with("#import \"/umb-apa/lib.typ\": "),
+            "got: {line}"
+        );
+        // A path import must not carry a `:version` coordinate.
+        assert!(!line.contains("/umb-apa/lib.typ:"), "got: {line}");
+        assert!(line.contains("title-page"));
+        assert!(line.contains("apa-figure"));
+        assert!(line.contains("versatile-apa as apa-style"));
+    }
+
+    #[test]
+    fn empty_version_yields_path_import_target() {
+        assert_eq!(import_target("/umb-apa/lib.typ", ""), "/umb-apa/lib.typ");
+        assert_eq!(
+            import_target("@preview/versatile-apa", "7.2.0"),
+            "@preview/versatile-apa:7.2.0"
+        );
+    }
 }

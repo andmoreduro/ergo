@@ -1,6 +1,7 @@
 import type { GlobalSettings } from "../../../bindings/GlobalSettings";
 import type { KeymapSettings } from "../../../bindings/KeymapSettings";
 import type { ProjectSettings } from "../../../bindings/ProjectSettings";
+import type { TemplateOverride } from "../../../bindings/TemplateOverride";
 import type { TemplateVariantSpec } from "../../../bindings/TemplateVariantSpec";
 import type { KeymapProfile } from "../../../commands/types";
 import { m } from "../../../paraglide/messages.js";
@@ -21,6 +22,7 @@ export interface SettingsDialogProps {
     onGlobalSettingsChange: (settings: GlobalSettings) => void;
     onKeymapSettingsChange: (settings: KeymapSettings) => void;
     onProjectSettingsChange: (settings: ProjectSettings) => void;
+    templateDefaultOverrides?: TemplateOverride[];
     templateVariants?: TemplateVariantSpec[];
     templateVariantId?: string | null;
     onTemplateVariantChange?: (variantId: string) => void;
@@ -37,6 +39,7 @@ export const SettingsDialog = ({
     onGlobalSettingsChange,
     onKeymapSettingsChange,
     onProjectSettingsChange,
+    templateDefaultOverrides,
     templateVariants,
     templateVariantId,
     onTemplateVariantChange,
@@ -69,6 +72,7 @@ export const SettingsDialog = ({
                 <ProjectSettingsPanel
                     settings={projectSettings}
                     onChange={onProjectSettingsChange}
+                    templateDefaultOverrides={templateDefaultOverrides}
                     templateVariants={templateVariants}
                     templateVariantId={templateVariantId}
                     onTemplateVariantChange={onTemplateVariantChange}

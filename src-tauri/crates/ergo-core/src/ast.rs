@@ -62,6 +62,9 @@ pub struct GlobalSettings {
     pub autosave_on_app_close: Option<bool>,
     #[serde(default)]
     pub autosave_on_project_close: Option<bool>,
+    /// Syntax applied to newly inserted equations.
+    #[serde(default)]
+    pub default_equation_syntax: Option<EquationSyntax>,
 }
 
 impl Default for GlobalSettings {
@@ -80,6 +83,7 @@ impl Default for GlobalSettings {
             autosave_on_window_blur: Some(true),
             autosave_on_app_close: Some(true),
             autosave_on_project_close: Some(true),
+            default_equation_syntax: Some(EquationSyntax::Typst),
         }
     }
 }
@@ -683,11 +687,24 @@ pub struct Table {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct TableCell {
-    pub content: Vec<RichText>,
+    pub elements: Vec<DocumentElement>,
     #[serde(default)]
     pub row_span: Option<i32>,
     #[serde(default)]
     pub col_span: Option<i32>,
+}
+
+impl TableCell {
+    pub fn empty() -> Self {
+        Self {
+            elements: vec![DocumentElement::Paragraph(Paragraph {
+                id: format!("cell-p-{}", uuid::Uuid::new_v4()),
+                content: Vec::new(),
+            })],
+            row_span: None,
+            col_span: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

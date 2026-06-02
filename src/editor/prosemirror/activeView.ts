@@ -1,7 +1,12 @@
 import { toggleMark } from "prosemirror-commands";
+import { TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import type { DocumentEvent } from "../../bindings/DocumentEvent";
+import type { ASTAction } from "../../state/ast/actions";
+import { isBlockEditing } from "./blockEditMode";
 import { bodySchema } from "./schema";
+import { tableSchema } from "./table/tableSchema";
+import { getActiveTableCellCoords } from "./table/tableStructureBridge";
 
 /**
  * The body editor that currently holds focus. Mark/formatting actions dispatched
@@ -62,6 +67,17 @@ export const setBodyHistoryActions = (actions: BodyHistoryActions | null) => {
 
 export const getBodyHistoryActions = (): BodyHistoryActions | null => bodyHistory;
 
+let clearPmReconcileSkip: (() => void) | null = null;
+
+export const setBodyReconcileGuard = (clear: (() => void) | null): void => {
+    clearPmReconcileSkip = clear;
+};
+
+/** Clears the body editor deferral after undo/redo so AST changes can reconcile into PM. */
+export const clearBodyReconcileSkip = (): void => {
+    clearPmReconcileSkip?.();
+};
+
 /** AST paragraph insert from the focused body editor (table block shortcuts). */
 export interface BodyParagraphInsert {
     insertBeforeElement: (beforeElementId: string) => void;
@@ -83,6 +99,24 @@ export const setBodyTableCommit = (bridge: BodyTableCommit | null) => {
 };
 
 export const getBodyTableCommit = (): BodyTableCommit | null => bodyTableCommit;
+
+let bodyAstDispatch: ((action: ASTAction) => void) | null = null;
+
+export const setBodyAstDispatch = (dispatch: ((action: ASTAction) => void) | null) => {
+    bodyAstDispatch = dispatch;
+};
+
+export const getBodyAstDispatch = (): ((action: ASTAction) => void) | null =>
+    bodyAstDispatch;
+
+let activeTableCellEditor: EditorView | null = null;
+
+export const setActiveTableCellEditor = (view: EditorView | null) => {
+    activeTableCellEditor = view;
+};
+
+export const getActiveTableCellEditor = (): EditorView | null =>
+    activeTableCellEditor;
 
 export const setBodyParagraphInsert = (actions: BodyParagraphInsert | null) => {
     bodyParagraphInsert = actions;
@@ -109,17 +143,60 @@ const MARK_BY_NAME = {
     underline: bodySchema.marks.underline,
 } as const;
 
-/** Toggle a mark on the focused body editor. Returns false when none is focused. */
+/**
+ * Text editor that should receive formatting commands. While a table cell is
+ * being edited, keep routing to the nested child view even after toolbar focus
+ * moves away (hasFocus() would otherwise fall back to the outer body view).
+ */
+const focusedTextView = (): EditorView | null => {
+    const coords = getActiveTableCellCoords();
+    if (
+        activeTableCellEditor &&
+        coords &&
+        activeView &&
+        isBlockEditing(activeView.state, coords.tableId)
+    ) {
+        return activeTableCellEditor;
+    }
+    return activeView;
+};
+
 export const applyBodyMark = (
     mark: "bold" | "italic" | "underline",
 ): boolean => {
-    const view = activeView;
+    const view = focusedTextView();
     if (!view) {
         return false;
     }
+    const markName =
+        mark === "bold" ? "strong" : mark === "italic" ? "em" : "underline";
+    const markType =
+        view.state.schema === tableSchema
+            ? tableSchema.marks[markName]
+            : MARK_BY_NAME[mark];
+    if (!markType) {
+        return false;
+    }
+
+    const selectionBefore = view.state.selection;
     if (!view.hasFocus()) {
         view.focus();
     }
-    toggleMark(MARK_BY_NAME[mark])(view.state, view.dispatch);
+    if (
+        view.state.selection.from !== selectionBefore.from ||
+        view.state.selection.to !== selectionBefore.to
+    ) {
+        view.dispatch(
+            view.state.tr.setSelection(
+                TextSelection.create(
+                    view.state.doc,
+                    selectionBefore.from,
+                    selectionBefore.to,
+                ),
+            ),
+        );
+    }
+
+    toggleMark(markType)(view.state, view.dispatch);
     return true;
 };

@@ -1,3 +1,4 @@
+import { plainTemplateOutlineDisabledOverrides } from "../../settings/templateOverrides";
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentAST } from "../../bindings/DocumentAST";
 import type { DocumentElement } from "../../bindings/DocumentElement";
@@ -71,8 +72,8 @@ export const createEnumeration = (
     items: [[createRichText("")]],
 });
 
-const createEmptyCell = (): TableCell => ({
-    content: [],
+export const createEmptyCell = (): TableCell => ({
+    elements: [createParagraph()],
     row_span: null,
     col_span: null,
 });
@@ -132,6 +133,7 @@ export const createContentSection = (id = createId()): ContentSection => ({
 });
 
 export const DEFAULT_PROJECT_TEMPLATE_ID = "apa7";
+export const UMB_APA_TEMPLATE_ID = "umb-apa";
 export const NO_TEMPLATE_ID = "none";
 
 export const createDocumentAST = (
@@ -154,7 +156,7 @@ export const createDocumentAST = (
                     raw_font: "DejaVu Sans Mono",
                     font_size: 11,
                     table_stroke_width: 0.5,
-                    template_overrides: [],
+                    template_overrides: plainTemplateOutlineDisabledOverrides(),
                 },
                 local_overrides: {
                     default_font: null,
@@ -170,6 +172,7 @@ export const createDocumentAST = (
                     autosave_on_window_blur: true,
                     autosave_on_app_close: true,
                     autosave_on_project_close: true,
+                    default_equation_syntax: "typst",
                 },
             },
             dependencies: { packages: [] },
@@ -187,7 +190,14 @@ export const createDocumentAST = (
         };
     }
 
-    return createDefaultDocumentAST();
+    const ast = createDefaultDocumentAST();
+    if (templateId === "umb-apa") {
+        // umb-apa shares versatile-apa's schema but is a locally-bundled package
+        // imported by path, so it declares no external @preview dependency.
+        ast.metadata.template_id = "umb-apa";
+        ast.dependencies = { packages: [] };
+    }
+    return ast;
 };
 
 export const createDefaultDocumentAST = (): DocumentAST => ({
@@ -222,6 +232,7 @@ export const createDefaultDocumentAST = (): DocumentAST => ({
             autosave_on_window_blur: true,
             autosave_on_app_close: true,
             autosave_on_project_close: true,
+            default_equation_syntax: "typst",
         },
     },
     dependencies: {

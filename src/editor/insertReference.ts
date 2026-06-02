@@ -13,6 +13,8 @@ import {
     labelForReferenceId,
     richTextPlainLength,
 } from "../richText/richText";
+import { updateTableCellRichTextAtField } from "./prosemirror/table/tableCellElements";
+import { locateTableCell } from "./prosemirror/table/tableCellResolve";
 
 export type ReferenceInsertTarget = {
     referenceId: string;
@@ -86,6 +88,42 @@ export const buildReferenceInsertAction = (
         };
     }
 
+    const tableLocated = locateTableCell(state, elementId, fieldId);
+    if (tableLocated && fieldId) {
+        const cell = tableLocated.table.cells[tableLocated.row]?.[tableLocated.col];
+        if (cell) {
+            const innerElementId = fieldId.includes(":item:")
+                ? (fieldId.split(":item:")[0] ?? elementId)
+                : fieldId.endsWith(":text")
+                  ? fieldId.slice(0, -":text".length)
+                  : fieldId.endsWith(":quote")
+                    ? fieldId.slice(0, -":quote".length)
+                    : elementId;
+            const nextCell = updateTableCellRichTextAtField(
+                cell,
+                innerElementId,
+                fieldId,
+                caretOffset,
+                (content, localOffset) =>
+                    insertReferenceAtOffset(
+                        content,
+                        localOffset,
+                        target.referenceId,
+                        target.label,
+                    ),
+            );
+            return {
+                type: "UPDATE_TABLE_CELL",
+                payload: {
+                    tableId: tableLocated.table.id,
+                    rowIndex: tableLocated.row,
+                    colIndex: tableLocated.col,
+                    elements: nextCell.elements,
+                },
+            };
+        }
+    }
+
     const element = findElementById(state, elementId);
     if (!element) {
         return null;
@@ -151,36 +189,6 @@ export const buildReferenceInsertAction = (
             payload: {
                 figureId: element.id,
                 caption: nextValue,
-            },
-        };
-    }
-
-    if (fieldId.includes(":cell:") && element.type === "Table") {
-        const parts = fieldId.split(":");
-        const rowIndex = Number(parts[parts.length - 2]);
-        const colIndex = Number(parts[parts.length - 1]);
-        if (!Number.isFinite(rowIndex) || !Number.isFinite(colIndex)) {
-            return null;
-        }
-
-        const cell = element.cells[rowIndex]?.[colIndex];
-        if (!cell) {
-            return null;
-        }
-
-        const nextContent = insertReferenceAtOffset(
-            cell.content,
-            caretOffset ?? richTextPlainLength(cell.content),
-            target.referenceId,
-            target.label,
-        );
-        return {
-            type: "UPDATE_TABLE_CELL",
-            payload: {
-                tableId: element.id,
-                rowIndex,
-                colIndex,
-                content: nextContent,
             },
         };
     }

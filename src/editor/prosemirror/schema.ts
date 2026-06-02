@@ -203,7 +203,11 @@ const marks: Record<string, MarkSpec> = {
             { style: "text-decoration-line=underline" },
             { style: "text-decoration=underline" },
         ],
-        toDOM: () => ["u", 0],
+        toDOM: () => [
+            "span",
+            { style: "text-decoration: underline" },
+            0,
+        ],
     },
 };
 

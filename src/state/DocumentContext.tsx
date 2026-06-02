@@ -22,6 +22,7 @@ import {
     createDocumentEventHistoryEntry,
     type DocumentEventHistoryEntry,
 } from "./documentEvents";
+import { clearBodyReconcileSkip } from "../editor/prosemirror/activeView";
 
 const initialAST: DocumentAST = createDefaultDocumentAST();
 
@@ -397,8 +398,14 @@ export const DocumentProvider = ({
             sessionDispatch({ type: "COMMIT_EVENTS", forward, inverse }),
         [],
     );
-    const undo = useCallback(() => sessionDispatch({ type: "UNDO" }), []);
-    const redo = useCallback(() => sessionDispatch({ type: "REDO" }), []);
+    const undo = useCallback(() => {
+        clearBodyReconcileSkip();
+        sessionDispatch({ type: "UNDO" });
+    }, []);
+    const redo = useCallback(() => {
+        clearBodyReconcileSkip();
+        sessionDispatch({ type: "REDO" });
+    }, []);
     const markSaved = useCallback(
         () => sessionDispatch({ type: "MARK_SAVED" }),
         [],

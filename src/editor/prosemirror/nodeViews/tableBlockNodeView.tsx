@@ -2,23 +2,24 @@ import type { Node as PMNode } from "prosemirror-model";
 import { EditorState, NodeSelection, TextSelection } from "prosemirror-state";
 import { EditorView, type NodeView } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
-import { baseKeymap } from "prosemirror-commands";
+import { baseKeymap, splitBlock, toggleMark } from "prosemirror-commands";
 import { columnResizing, tableEditing } from "prosemirror-tables";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import { runBodyTab } from "../bodyTabCommand";
-import { getBodyTableCommit } from "../activeView";
+import { getBodyTableCommit, setActiveTableCellEditor } from "../activeView";
 import { isBlockEditing, setBlockEditing } from "../blockEditMode";
 import { clearBlockUiState, setBlockUiState } from "../blockUiState";
 import {
-    focusTargetForTableCell,
     selectionInChildTableForFocus,
     tableCellCoordsFromChildState,
+    tableCellFocusTargetFromState,
 } from "../table/tableCellFocus";
 import {
     registerTableFocusHandler,
     unregisterTableFocusHandler,
 } from "../table/tableFocusRegistry";
 import { getTableFocusPush } from "../table/tableFocusBridge";
+import { setActiveTableCellCoords } from "../table/tableStructureBridge";
 import { tableSchema } from "../table/tableSchema";
 import { subDocToTable, tableToSubDoc, type TableElement } from "../table/tableSubBridge";
 import {
@@ -44,17 +45,15 @@ const tableFromNode = (node: PMNode): TableElement => {
     return element;
 };
 
-const tableCellKeymap = keymap({
+/** Enter adds a block inside the cell; row/column inserts use action shortcuts. */
+const tableCellEnterKeymap = keymap({
+    Enter: splitBlock,
     "Shift-Enter": (state, dispatch) => {
         const type = tableSchema.nodes.hard_break;
-        if (!type) {
+        if (!type || !dispatch) {
             return false;
         }
-        if (dispatch) {
-            dispatch(
-                state.tr.replaceSelectionWith(type.create()).scrollIntoView(),
-            );
-        }
+        dispatch(state.tr.replaceSelectionWith(type.create()).scrollIntoView());
         return true;
     },
 });
@@ -65,14 +64,15 @@ const swallowTabKeymap = keymap({
 });
 
 const childPlugins = () => [
-    tableCellKeymap,
-    keymap(
-        Object.fromEntries(
+    keymap({
+        ...Object.fromEntries(
             Object.entries(baseKeymap).filter(([key]) => !/^Arrow/.test(key)),
         ),
-    ),
+        "Mod-u": toggleMark(tableSchema.marks.underline),
+    }),
     columnResizing({ defaultCellMinWidth: 96 }),
     tableEditing(),
+    tableCellEnterKeymap,
     swallowTabKeymap,
 ];
 
@@ -193,12 +193,23 @@ export const createTableBlockNodeView = (
                 if (push && childView.hasFocus()) {
                     const coords = tableCellCoordsFromChildState(next);
                     if (coords) {
-                        const target = focusTargetForTableCell(elementId(), coords);
-                        push({
-                            elementId: target.elementId,
-                            fieldId: target.fieldId,
-                            caretUtf16Offset: target.caretUtf16Offset,
+                        setActiveTableCellEditor(childView);
+                        setActiveTableCellCoords({
+                            tableId: elementId(),
+                            row: coords.row,
+                            col: coords.col,
                         });
+                        const target = tableCellFocusTargetFromState(
+                            elementId(),
+                            next,
+                        );
+                        if (target) {
+                            push({
+                                elementId: target.elementId,
+                                fieldId: target.fieldId,
+                                caretUtf16Offset: target.caretUtf16Offset,
+                            });
+                        }
                     }
                 }
             }
@@ -292,14 +303,23 @@ export const createTableBlockNodeView = (
         registry.update(portalKey, renderCoordinator);
     };
 
-    const enterEditAtCoords = (blockPos: number, clientX: number, clientY: number) => {
+    const enterEditAtCoords = (
+        blockPos: number,
+        coords?: { clientX: number; clientY: number },
+    ) => {
         let tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, blockPos));
         tr = setBlockEditing(tr, elementId(), true);
         view.dispatch(tr);
         childView.setProps({
             editable: () => isBlockEditing(view.state, elementId()),
         });
-        requestAnimationFrame(() => focusChildAtCoords(clientX, clientY));
+        requestAnimationFrame(() => {
+            if (coords) {
+                focusChildAtCoords(coords.clientX, coords.clientY);
+            } else {
+                focusChildAtFirstCell();
+            }
+        });
     };
 
     const onMouseDown = (event: MouseEvent) => {
@@ -316,7 +336,10 @@ export const createTableBlockNodeView = (
         }
         event.preventDefault();
         if (isWholeSelected(blockPos)) {
-            enterEditAtCoords(blockPos, event.clientX, event.clientY);
+            enterEditAtCoords(blockPos, {
+                clientX: event.clientX,
+                clientY: event.clientY,
+            });
         } else {
             view.dispatch(
                 view.state.tr.setSelection(
@@ -350,7 +373,7 @@ export const createTableBlockNodeView = (
         ) {
             event.preventDefault();
             event.stopPropagation();
-            enterEditAtCoords(blockPos, event.clientX, event.clientY);
+            enterEditAtCoords(blockPos);
             return;
         }
         if (!isBlockEditing(view.state, elementId())) {
@@ -366,6 +389,7 @@ export const createTableBlockNodeView = (
             let tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos));
             tr = setBlockEditing(tr, elementId(), false);
             view.dispatch(tr);
+            setActiveTableCellCoords(null);
             childView.setProps({
                 editable: () => isBlockEditing(view.state, elementId()),
             });
@@ -430,6 +454,8 @@ export const createTableBlockNodeView = (
             dom.removeEventListener("mousedown", onMouseDown);
             dom.removeEventListener("keydown", onKeyDown, true);
             unregisterTableFocusHandler(elementId());
+            setActiveTableCellCoords(null);
+            setActiveTableCellEditor(null);
             childView.destroy();
             clearBlockUiState(elementId());
             registry.unregister(portalKey);

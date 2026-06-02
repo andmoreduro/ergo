@@ -271,7 +271,13 @@ describe("applyDocumentEventToAst round-trip parity", () => {
                             tableId: "table-1",
                             rowIndex: 0,
                             colIndex: 0,
-                            content: [createRichText("Nueva celda")],
+                            elements: [
+                                {
+                                    type: "Paragraph",
+                                    id: "cell-p-event",
+                                    content: [createRichText("Nueva celda")],
+                                },
+                            ],
                         },
                     },
                 };
@@ -312,6 +318,27 @@ describe("applyDocumentEventToAst round-trip parity", () => {
                             elementId: "fig-1",
                             fieldKey: "note",
                             fieldValue: "General Note Content",
+                        },
+                    },
+                };
+            },
+        },
+        {
+            name: "UPDATE_DIAGRAM",
+            setup: () => {
+                const base = createDefaultDocumentAST();
+                const sectionId = contentSectionId(base);
+                const ast = astReducer(base, {
+                    type: "ADD_DIAGRAM",
+                    payload: { sectionId, diagramId: "diagram-1" },
+                });
+                return {
+                    ast,
+                    action: {
+                        type: "UPDATE_DIAGRAM",
+                        payload: {
+                            diagramId: "diagram-1",
+                            caption: "Flow chart",
                         },
                     },
                 };

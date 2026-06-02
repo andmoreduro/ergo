@@ -7,6 +7,7 @@ mod custom_fields;
 mod figures;
 mod fragments;
 mod hashing;
+mod outline_titles;
 mod paths;
 mod references;
 mod outlines;
@@ -93,8 +94,9 @@ pub(crate) fn push_wrapper_symbol_import(
         return;
     }
     builder.push_literal(&format!(
-        "#import \"{}:{}\": {}\n\n",
-        template.package.name, template.package.version, wrapper
+        "#import \"{}\": {}\n\n",
+        template.package.import_target(),
+        wrapper
     ));
 }
 

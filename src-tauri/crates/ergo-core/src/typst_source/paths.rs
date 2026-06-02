@@ -58,12 +58,12 @@ pub(crate) fn equation_source_field_id(element_id: &str) -> String {
     format!("{element_id}:latexSource")
 }
 
-pub(crate) fn table_cell_field_id(element_id: &str, row_index: usize, col_index: usize) -> String {
-    format!("{element_id}:cell:{row_index}:{col_index}")
-}
-
 pub(crate) fn figure_caption_field_id(element_id: &str) -> String {
     format!("{element_id}:caption")
+}
+
+pub(crate) fn quote_content_field_id(element_id: &str) -> String {
+    format!("{element_id}:quote")
 }
 
 pub(crate) fn path_id_for_id(id: &str) -> String {
