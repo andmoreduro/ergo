@@ -4,9 +4,15 @@ import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { Select } from "../../atoms/Select/Select";
 import { TextInput } from "../../atoms/TextInput/TextInput";
 import { m } from "../../../paraglide/messages.js";
-import { projectFileNameFromTitle } from "../../../project/paths";
+import {
+    ERGOPROJ_FILE_EXTENSION,
+    projectFileBasenameFromTitle,
+    sanitizeProjectFileName,
+    stripErgprojExtension,
+} from "../../../project/paths";
 import {
     DEFAULT_PROJECT_TEMPLATE_ID,
+    UMB_APA_TEMPLATE_ID,
     NO_TEMPLATE_ID,
 } from "../../../state/ast/defaults";
 import { Dialog } from "../../molecules/Dialog/Dialog";
@@ -36,22 +42,22 @@ export const NewProjectDialog = ({
 }: NewProjectDialogProps) => {
     const [projectName, setProjectName] = useState(initialProjectName);
     const [projectLocation, setProjectLocation] = useState(initialProjectLocation);
-    const [projectFileName, setProjectFileName] = useState(
-        projectFileNameFromTitle(initialProjectName),
+    const [projectFileBasename, setProjectFileBasename] = useState(
+        projectFileBasenameFromTitle(initialProjectName),
     );
     const [usesDefaultFileName, setUsesDefaultFileName] = useState(true);
     const [templateId, setTemplateId] = useState(DEFAULT_PROJECT_TEMPLATE_ID);
 
     const trimmedProjectName = projectName.trim();
     const trimmedProjectLocation = projectLocation.trim();
-    const trimmedProjectFileName = projectFileName.trim();
+    const trimmedProjectFileBasename = projectFileBasename.trim();
     const projectNameError = trimmedProjectName
         ? undefined
         : m.project_new_name_required();
     const projectLocationError = trimmedProjectLocation
         ? undefined
         : m.project_new_location_required();
-    const projectFileNameError = trimmedProjectFileName
+    const projectFileNameError = trimmedProjectFileBasename
         ? undefined
         : m.project_new_file_name_required();
 
@@ -60,12 +66,12 @@ export const NewProjectDialog = ({
         setProjectName(nextProjectName);
 
         if (usesDefaultFileName) {
-            setProjectFileName(projectFileNameFromTitle(nextProjectName));
+            setProjectFileBasename(projectFileBasenameFromTitle(nextProjectName));
         }
     };
 
-    const handleProjectFileNameChange = (event: ChangeEvent<HTMLInputElement>) => {
-        setProjectFileName(event.currentTarget.value);
+    const handleProjectFileBasenameChange = (event: ChangeEvent<HTMLInputElement>) => {
+        setProjectFileBasename(stripErgprojExtension(event.currentTarget.value));
     };
 
     const handleDefaultFileNameChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -73,7 +79,7 @@ export const NewProjectDialog = ({
         setUsesDefaultFileName(shouldUseDefaultFileName);
 
         if (shouldUseDefaultFileName) {
-            setProjectFileName(projectFileNameFromTitle(projectName));
+            setProjectFileBasename(projectFileBasenameFromTitle(projectName));
         }
     };
 
@@ -94,7 +100,7 @@ export const NewProjectDialog = ({
 
         onCreate({
             projectName: trimmedProjectName,
-            projectFileName: trimmedProjectFileName,
+            projectFileName: sanitizeProjectFileName(trimmedProjectFileBasename),
             projectLocation: trimmedProjectLocation,
             templateId,
         });
@@ -104,7 +110,6 @@ export const NewProjectDialog = ({
         <Dialog
             as="form"
             panelProps={{ onSubmit: handleSubmit }}
-            scrollable={false}
             size="md"
             title={m.project_new_dialog_title()}
             titleId="new-project-dialog-title"
@@ -160,6 +165,10 @@ export const NewProjectDialog = ({
                                 label: m.project_new_template_apa(),
                             },
                             {
+                                value: UMB_APA_TEMPLATE_ID,
+                                label: m.project_new_template_umb(),
+                            },
+                            {
                                 value: NO_TEMPLATE_ID,
                                 label: m.project_new_template_none(),
                             },
@@ -173,8 +182,10 @@ export const NewProjectDialog = ({
                             error={projectFileNameError}
                             fullWidth
                             label={m.project_new_file_name_label()}
-                            value={projectFileName}
-                            onChange={handleProjectFileNameChange}
+                            suffix={ERGOPROJ_FILE_EXTENSION}
+                            suffixAriaLabel={m.project_new_file_extension_hint()}
+                            value={projectFileBasename}
+                            onChange={handleProjectFileBasenameChange}
                         />
                         <Checkbox
                             checked={usesDefaultFileName}

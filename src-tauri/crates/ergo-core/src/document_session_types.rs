@@ -144,7 +144,7 @@ pub enum DocumentEvent {
         table_id: String,
         row_index: usize,
         col_index: usize,
-        content: Vec<crate::ast::RichText>,
+        elements: Vec<crate::ast::DocumentElement>,
     },
     InsertTableRow {
         table_id: String,
@@ -187,6 +187,13 @@ pub enum DocumentEvent {
         placement: Option<String>,
         body_text: Option<String>,
         asset_id: Option<String>,
+    },
+    UpdateDiagram {
+        element_id: String,
+        mermaid_source: Option<String>,
+        asset_id: Option<String>,
+        caption: Option<String>,
+        placement: Option<String>,
     },
     UpdateInput {
         path: String,

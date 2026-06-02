@@ -132,7 +132,7 @@ pub(crate) fn apply_document_event(
             table_id,
             row_index,
             col_index,
-            content,
+            elements,
         } => {
             let cell = table_mut(ast, &table_id)?
                 .cells
@@ -141,7 +141,7 @@ pub(crate) fn apply_document_event(
                 .ok_or_else(|| {
                     format!("Table cell {row_index},{col_index} was not found in {table_id}")
                 })?;
-            cell.content = content;
+            cell.elements = elements;
             Ok(())
         }
         DocumentEvent::InsertTableRow {
@@ -212,6 +212,33 @@ pub(crate) fn apply_document_event(
                     Ok(())
                 }
                 _ => Err(format!("Element {element_id} is not a figure")),
+            }
+        }
+        DocumentEvent::UpdateDiagram {
+            element_id,
+            mermaid_source,
+            asset_id,
+            caption,
+            placement,
+        } => {
+            let element = element_mut(ast, &element_id)?;
+            match element {
+                DocumentElement::Diagram(diagram) => {
+                    if let Some(source) = mermaid_source {
+                        diagram.mermaid_source = source;
+                    }
+                    if let Some(asset_id) = asset_id {
+                        diagram.asset_id = Some(asset_id);
+                    }
+                    if let Some(caption) = caption {
+                        diagram.caption = caption;
+                    }
+                    if let Some(placement) = placement {
+                        diagram.placement = placement;
+                    }
+                    Ok(())
+                }
+                _ => Err(format!("Element {element_id} is not a diagram")),
             }
         }
         DocumentEvent::UpdateCustomElementField {

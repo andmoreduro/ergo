@@ -55,6 +55,12 @@ export const focusWrapperPrimary = (root: HTMLElement): boolean => {
         stops[0].focus();
         return true;
     }
+
+    const allStops = wrapperTabStops(root);
+    if (allStops[0]) {
+        allStops[0].focus();
+        return true;
+    }
     return false;
 };
 

@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { useMemo, useRef, type RefObject } from "react";
 import type { DocumentAST } from "../../../bindings/DocumentAST";
+import { effectiveTableExtraFields } from "../../../editor/templateElementOverrides";
 import type { ExtraFieldSpec } from "../../../bindings/ExtraFieldSpec";
 import { wrapperFieldDraftValues } from "../../../editor/wrapperFields";
 import { useBlockUiState } from "../blockUiState";
@@ -41,10 +42,10 @@ const useTableAnnotationFields = (): ExtraFieldSpec[] => {
     const { spec: templateSpec } = useTemplateSpecContext();
     return useMemo(
         () =>
-            (templateSpec?.element_overrides?.table?.extra_fields ?? []).filter(
-                (field) => !TABLE_SETTINGS_KEYS.has(field.key),
-            ),
-        [templateSpec?.element_overrides?.table?.extra_fields],
+            effectiveTableExtraFields(
+                templateSpec?.element_overrides?.table ?? null,
+            ).filter((field) => !TABLE_SETTINGS_KEYS.has(field.key)),
+        [templateSpec?.element_overrides?.table],
     );
 };
 

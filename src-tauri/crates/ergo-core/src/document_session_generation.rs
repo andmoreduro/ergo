@@ -164,8 +164,29 @@ fn generate_project_sources_inner(
     }
     main_builder.push_literal(")\n\n");
 
+    let template_declares_outlines = template
+        .sections
+        .iter()
+        .any(|section| section.kind == SectionKind::Outlines);
+    let outline_overrides = &ast.metadata.project_settings.template_overrides;
+    let document_language = ast.metadata.project_settings.language.as_deref();
+    let mut auto_outlines_injected = false;
+
     // Generate sections according to template specification
     for section_spec in &template.sections {
+        if !template_declares_outlines
+            && !auto_outlines_injected
+            && section_spec.kind == SectionKind::Content
+        {
+            main_builder.push_literal(&generate_front_matter_outlines(
+                template,
+                document_language,
+                outline_overrides,
+            ));
+            main_builder.push_literal("\n");
+            auto_outlines_injected = true;
+        }
+
         match section_spec.kind {
             SectionKind::FunctionCall => {
                 if let Some(func_name) = &section_spec.function {
@@ -238,16 +259,19 @@ fn generate_project_sources_inner(
                     main_builder.push_literal("\n)\n\n");
                 }
             }
+            SectionKind::Outlines => {
+                if section_spec.pagebreak_before {
+                    main_builder.push_literal("#pagebreak()\n");
+                }
+                main_builder.push_literal(&generate_front_matter_outlines(
+                template,
+                document_language,
+                outline_overrides,
+            ));
+                main_builder.push_literal("\n");
+            }
             SectionKind::Literal => {
-                if section_spec.id == "front-matter-outlines" {
-                    if section_spec.pagebreak_before {
-                        main_builder.push_literal("#pagebreak()\n");
-                    }
-                    main_builder.push_literal(&generate_front_matter_outlines(
-                        &ast.metadata.project_settings.template_overrides,
-                    ));
-                    main_builder.push_literal("\n");
-                } else if let Some(lit) = &section_spec.source {
+                if let Some(lit) = &section_spec.source {
                     if section_spec.pagebreak_before {
                         main_builder.push_literal("#pagebreak()\n");
                     }

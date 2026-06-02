@@ -3,7 +3,7 @@ import { tableNodes } from "prosemirror-tables";
 
 const tNodes = tableNodes({
     tableGroup: "tableblock",
-    cellContent: "inline*",
+    cellContent: "cellblock+",
     cellAttributes: {},
 });
 
@@ -87,6 +87,72 @@ const inlineNodes: Record<string, NodeSpec> = {
     },
 };
 
+const cellBlockNodes: Record<string, NodeSpec> = {
+    paragraph: {
+        group: "cellblock",
+        content: "inline*",
+        attrs: { elementId: { default: "" } },
+        parseDOM: [{ tag: "p" }],
+        toDOM: (node) => ["p", { "data-element-id": node.attrs.elementId }, 0],
+    },
+
+    quote: {
+        group: "cellblock",
+        content: "inline*",
+        defining: true,
+        attrs: { elementId: { default: "" } },
+        parseDOM: [{ tag: "blockquote" }],
+        toDOM: (node) => [
+            "blockquote",
+            { "data-element-id": node.attrs.elementId },
+            0,
+        ],
+    },
+
+    list: {
+        group: "cellblock",
+        content: "list_item+",
+        attrs: { elementId: { default: "" }, ordered: { default: false } },
+        parseDOM: [
+            { tag: "ul", attrs: { ordered: false } },
+            { tag: "ol", attrs: { ordered: true } },
+        ],
+        toDOM: (node) => [
+            node.attrs.ordered ? "ol" : "ul",
+            { "data-element-id": node.attrs.elementId },
+            0,
+        ],
+    },
+
+    list_item: {
+        content: "inline*",
+        defining: true,
+        parseDOM: [{ tag: "li" }],
+        toDOM: () => ["li", 0],
+    },
+
+    equation: {
+        group: "cellblock",
+        atom: true,
+        selectable: true,
+        attrs: {
+            element: { default: null },
+            elementId: { default: "" },
+        },
+        toDOM: (node) => [
+            "div",
+            {
+                "data-element-kind": "Equation",
+                "data-element-id":
+                    (node.attrs.elementId as string) ||
+                    node.attrs.element?.id ||
+                    "",
+            },
+            "Equation",
+        ],
+    },
+};
+
 const marks: Record<string, MarkSpec> = {
     strong: {
         parseDOM: [
@@ -111,7 +177,11 @@ const marks: Record<string, MarkSpec> = {
             { style: "text-decoration-line=underline" },
             { style: "text-decoration=underline" },
         ],
-        toDOM: () => ["u", 0],
+        toDOM: () => [
+            "span",
+            { style: "text-decoration: underline" },
+            0,
+        ],
     },
 };
 
@@ -119,6 +189,7 @@ export const tableSchema = new Schema({
     nodes: {
         doc: { content: "table" },
         ...inlineNodes,
+        ...cellBlockNodes,
         table: tNodes.table,
         table_row: tNodes.table_row,
         table_cell: tNodes.table_cell,
@@ -130,4 +201,4 @@ export const tableSchema = new Schema({
 export type TableSchema = typeof tableSchema;
 
 /** Cell content expression used by `tableEditing` from prosemirror-tables. */
-export const tableCellContentExpr = "inline*";
+export const tableCellContentExpr = "cellblock+";

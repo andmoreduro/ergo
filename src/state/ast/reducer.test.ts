@@ -157,7 +157,13 @@ describe("astReducer", () => {
                 tableId: "table-1",
                 rowIndex: 0,
                 colIndex: 1,
-                content: [createRichText("Cell B")],
+                elements: [
+                    {
+                        type: "Paragraph",
+                        id: "cell-p-test",
+                        content: [createRichText("Cell B")],
+                    },
+                ],
             },
         });
         const withColumn = astReducer(withCell, {
@@ -169,7 +175,11 @@ describe("astReducer", () => {
         expect(table?.type).toBe("Table");
         if (table?.type === "Table") {
             expect(table.cols).toBe(3);
-            expect(table.cells[0][1].content).toEqual([createRichText("Cell B")]);
+            const cellParagraph = table.cells[0][1].elements[0];
+            expect(cellParagraph?.type).toBe("Paragraph");
+            if (cellParagraph?.type === "Paragraph") {
+                expect(cellParagraph.content).toEqual([createRichText("Cell B")]);
+            }
             expect(table.column_sizes).toHaveLength(3);
         }
     });

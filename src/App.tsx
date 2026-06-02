@@ -11,10 +11,23 @@ import {
     NewProjectDialog,
 } from "./components/organisms/NewProjectDialog/NewProjectDialog";
 import { DocumentProvider, useDocument } from "./state/DocumentContext";
+import type { TemplateOverride } from "./bindings/TemplateOverride";
 import type { TemplateVariantSpec } from "./bindings/TemplateVariantSpec";
-import { createId } from "./state/ast/defaults";
+import {
+    createEnumeration,
+    createEquation,
+    createId,
+    createList,
+    createParagraph,
+    createQuote,
+} from "./state/ast/defaults";
+import {
+    buildInsertInTableCellAction,
+    getTableCellEditContext,
+} from "./editor/prosemirror/table/tableCellInsert";
 import {
     defaultFieldIdForElement,
+    equationSourceFieldId,
     figureBodyFieldId,
     listItemFieldId,
     quoteContentFieldId,
@@ -25,6 +38,7 @@ import { createCommandRegistry } from "./commands/registry";
 import type { Command, CommandContext } from "./commands/types";
 import { workspaceCommands } from "./commands/workspaceCommands";
 import { TauriApi } from "./api/tauri";
+import type { EquationSyntax } from "./bindings/EquationSyntax";
 import type { ExportFormat } from "./bindings/ExportFormat";
 import type { RichText } from "./bindings/RichText";
 import { pageExportFileName, saveExportDialog } from "./platform/export";
@@ -36,7 +50,11 @@ import { editCommands } from "./commands/editCommands";
 import { settingsCommands } from "./commands/settingsCommands";
 import { helpCommands } from "./commands/helpCommands";
 import { applyRichTextMarkToFocusedField } from "./editor/richTextMarks";
-import { applyBodyMark } from "./editor/prosemirror/activeView";
+import {
+    applyBodyMark,
+    getActiveBodyView,
+    getActiveTableCellEditor,
+} from "./editor/prosemirror/activeView";
 import { insertBodyInlineEquation } from "./editor/prosemirror/bodyInsert";
 import { setPendingBlockEdit } from "./editor/prosemirror/pendingBlockEdit";
 import {
@@ -112,6 +130,9 @@ const AppShellContent = () => {
     });
     const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
     const [templateVariants, setTemplateVariants] = useState<TemplateVariantSpec[]>([]);
+    const [templateDefaultOverrides, setTemplateDefaultOverrides] = useState<
+        TemplateOverride[]
+    >([]);
     const [previewZoom, setPreviewZoom] = useState(PREVIEW_ZOOM_DEFAULT);
     const [previewZoomMode, setPreviewZoomMode] =
         useState<PreviewZoomMode>("manual");
@@ -123,6 +144,7 @@ const AppShellContent = () => {
     useEffect(() => {
         if (!hasActiveProject) {
             setTemplateVariants([]);
+            setTemplateDefaultOverrides([]);
             return;
         }
 
@@ -130,6 +152,7 @@ const AppShellContent = () => {
         void TauriApi.getTemplateSpec(state.metadata.template_id).then((spec) => {
             if (!cancelled) {
                 setTemplateVariants(spec.variants);
+                setTemplateDefaultOverrides(spec.default_template_overrides ?? []);
             }
         });
         return () => {
@@ -164,8 +187,8 @@ const AppShellContent = () => {
         setPreviewZoom((current) => stepPreviewZoom(current, -1));
     }, []);
 
-    const insertInlineEquation = useCallback(() => {
-        if (insertBodyInlineEquation()) {
+    const insertInlineEquation = useCallback((syntax: EquationSyntax = "typst") => {
+        if (insertBodyInlineEquation("", syntax)) {
             return true;
         }
 
@@ -193,6 +216,8 @@ const AppShellContent = () => {
             insertInlineEquationAtOffset(
                 content,
                 documentFocus.caretUtf16Offset ?? richTextPlainLength(content),
+                "x",
+                syntax,
             );
 
         if (
@@ -287,9 +312,12 @@ const AppShellContent = () => {
 
     const applyRichTextMark = useCallback(
         (mark: "bold" | "italic" | "underline") => {
-            // Body editing lives in ProseMirror (marks need the selection range);
-            // fall back to the metadata-form contentEditable fields otherwise.
+            // Body/table editing lives in ProseMirror; never run execCommand there
+            // (browser underline fights PM marks, especially Ctrl+U).
             if (applyBodyMark(mark)) {
+                return;
+            }
+            if (getActiveBodyView() || getActiveTableCellEditor()) {
                 return;
             }
             applyRichTextMarkToFocusedField(mark, documentFocus.fieldId);
@@ -306,6 +334,72 @@ const AppShellContent = () => {
         }
 
         ensureActiveProject();
+
+        const defaultEquationSyntax: EquationSyntax =
+            globalSettings.default_equation_syntax ?? "typst";
+
+        const tableCellCtx = getTableCellEditContext(
+            state,
+            documentFocus.elementId,
+            documentFocus.fieldId,
+        );
+        if (
+            tableCellCtx &&
+            elementType !== "table" &&
+            elementType !== "heading" &&
+            elementType !== "figure" &&
+            elementType !== "diagram"
+        ) {
+            const id = createId();
+            let block = null as ReturnType<typeof createParagraph> | null;
+            switch (elementType) {
+                case "paragraph":
+                    block = createParagraph("", id);
+                    break;
+                case "quote":
+                    block = createQuote("", id);
+                    break;
+                case "list":
+                    block = createList(id);
+                    break;
+                case "enumeration":
+                    block = createEnumeration(id);
+                    break;
+                case "equation":
+                    block = createEquation(id, "", defaultEquationSyntax);
+                    break;
+                default:
+                    break;
+            }
+            if (block) {
+                dispatch(buildInsertInTableCellAction(tableCellCtx, block));
+                const focusElementId =
+                    block.type === "Paragraph" ? tableCellCtx.tableId : block.id;
+                const focusFieldId =
+                    block.type === "Paragraph"
+                        ? richTextFieldId(block.id)
+                        : block.type === "Quote"
+                          ? quoteContentFieldId(block.id)
+                          : block.type === "Equation"
+                            ? equationSourceFieldId(block.id)
+                            : listItemFieldId(block.id, 0);
+                setDocumentFocus({
+                    elementId: focusElementId,
+                    fieldId: focusFieldId,
+                    caretUtf16Offset: 0,
+                    sourceRevision: null,
+                    anchorPageNumber: null,
+                    forcePreviewScroll: false,
+                    focusSource: "programmatic",
+                });
+                return;
+            }
+            if (elementType === "inlineEquation") {
+                if (insertInlineEquation(defaultEquationSyntax)) {
+                    return;
+                }
+            }
+        }
 
         const sectionId = contentSection.id;
         const id = elementType === "diagram" ? `diagram-${createId()}` : createId();
@@ -404,19 +498,29 @@ const AppShellContent = () => {
         if (elementType === "equation") {
             dispatch({
                 type: "ADD_EQUATION",
-                payload: { sectionId, equationId: id, afterElementId },
+                payload: {
+                    sectionId,
+                    equationId: id,
+                    afterElementId,
+                    syntax: defaultEquationSyntax,
+                },
             });
             finishInsert("Equation");
             return;
         }
 
         if (elementType === "inlineEquation") {
-            if (insertInlineEquation()) {
+            if (insertInlineEquation(defaultEquationSyntax)) {
                 return;
             }
             dispatch({
                 type: "ADD_EQUATION",
-                payload: { sectionId, equationId: id, afterElementId },
+                payload: {
+                    sectionId,
+                    equationId: id,
+                    afterElementId,
+                    syntax: defaultEquationSyntax,
+                },
             });
             dispatch({
                 type: "UPDATE_EQUATION",
@@ -467,7 +571,17 @@ const AppShellContent = () => {
             payload: { sectionId, figureId: id, afterElementId },
         });
         finishInsert("Figure");
-    }, [dispatch, documentFocus.elementId, ensureActiveProject, insertInlineEquation, setDocumentFocus, state.sections]);
+    }, [
+        dispatch,
+        documentFocus.elementId,
+        documentFocus.fieldId,
+        ensureActiveProject,
+        globalSettings.default_equation_syntax,
+        insertInlineEquation,
+        setDocumentFocus,
+        state,
+        state.sections,
+    ]);
 
     const exportDocument = useCallback(
         async (format: ExportFormat) => {
@@ -685,6 +799,7 @@ const AppShellContent = () => {
                                     payload: { settings },
                                 })
                             }
+                            templateDefaultOverrides={templateDefaultOverrides}
                             templateVariants={templateVariants}
                             templateVariantId={state.metadata.template_variant_id}
                             onTemplateVariantChange={(variantId) =>

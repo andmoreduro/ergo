@@ -84,7 +84,21 @@ export const caretOffsetAtEndForField = (
         const colIndex = Number(parts[1]);
         const cell = element.cells[rowIndex]?.[colIndex];
         if (cell) {
-            return richTextPlainLength(cell.content);
+            return cell.elements.reduce(
+                (total, block) =>
+                    total +
+                    (block.type === "Paragraph" || block.type === "Quote"
+                        ? richTextPlainLength(block.content)
+                        : block.type === "List" || block.type === "Enumeration"
+                          ? block.items.reduce(
+                                (sum, item) => sum + richTextPlainLength(item),
+                                0,
+                            )
+                          : block.type === "Equation"
+                            ? block.latex_source.length
+                            : 0),
+                0,
+            );
         }
     }
 

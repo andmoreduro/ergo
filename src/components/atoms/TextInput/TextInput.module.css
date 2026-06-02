@@ -15,6 +15,39 @@
   color: var(--color-text-primary);
 }
 
+.inputRow {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  border: var(--border-width-sm) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background-color: var(--color-bg-primary);
+  transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.inputRow:hover:not(.inputRowDisabled) {
+  border-color: var(--color-border-hover);
+}
+
+.inputRow:focus-within:not(.inputRowDisabled) {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-ring-focus);
+}
+
+.inputRowError {
+  border-color: var(--color-danger);
+}
+
+.inputRowError:focus-within {
+  border-color: var(--color-danger);
+  box-shadow: var(--shadow-ring-focus-danger);
+}
+
+.inputRowDisabled {
+  background-color: var(--color-bg-secondary);
+}
+
 .input {
   font-family: var(--font-family-sans);
   font-size: var(--font-size-md);
@@ -25,6 +58,42 @@
   padding: var(--space-2) var(--space-3);
   transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
   outline: none;
+}
+
+.inputWithSuffix {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-none);
+  box-shadow: none;
+  background: transparent;
+}
+
+.inputWithSuffix:hover:not(:disabled) {
+  border-color: transparent;
+}
+
+.inputWithSuffix:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.suffix {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 0 var(--space-3);
+  border-left: var(--border-width-sm) solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-md);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.inputRowDisabled .suffix {
+  color: var(--color-text-tertiary);
 }
 
 .input::placeholder {
@@ -40,11 +109,11 @@
   box-shadow: var(--shadow-ring-focus);
 }
 
-.inputError {
+.inputError:not(.inputWithSuffix) {
   border-color: var(--color-danger);
 }
 
-.inputError:focus-visible {
+.inputError:not(.inputWithSuffix):focus-visible {
   border-color: var(--color-danger);
   box-shadow: var(--shadow-ring-focus-danger);
 }

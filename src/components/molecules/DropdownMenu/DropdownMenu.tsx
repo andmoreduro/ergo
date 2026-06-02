@@ -16,7 +16,6 @@ export interface DropdownMenuProps {
     align?: DropdownMenuAlign;
     menuLabel?: string;
     menuId?: string;
-    scrollable?: boolean;
     open?: boolean;
     defaultOpen?: boolean;
     onOpenChange?: (open: boolean) => void;
@@ -34,7 +33,6 @@ export const DropdownMenu = ({
     align = "start",
     menuLabel,
     menuId: menuIdProp,
-    scrollable = false,
     open: openProp,
     defaultOpen = false,
     onOpenChange,
@@ -85,7 +83,6 @@ export const DropdownMenu = ({
                     aria-label={menuLabel}
                     className={menuClassName}
                     id={menuId}
-                    scrollable={scrollable}
                 >
                     {children}
                 </MenuPanel>

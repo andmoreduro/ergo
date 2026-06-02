@@ -24,6 +24,10 @@
     min-height: 0;
     touch-action: pan-y;
     padding: var(--space-2) 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: auto;
+    scrollbar-gutter: stable;
     background-color: var(--color-bg-secondary);
 }
 

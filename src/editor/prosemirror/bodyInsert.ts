@@ -1,38 +1,50 @@
 import type { EditorView } from "prosemirror-view";
-import { getActiveBodyView } from "./activeView";
+import { getActiveBodyView, getActiveTableCellEditor } from "./activeView";
 import { bodySchema } from "./schema";
+import { tableSchema } from "./table/tableSchema";
 
-const activeView = (): EditorView | null => getActiveBodyView();
+const focusedTextView = (): EditorView | null => {
+    const tableView = getActiveTableCellEditor();
+    if (tableView?.hasFocus()) {
+        return tableView;
+    }
+    return getActiveBodyView();
+};
 
-/** Insert a citation chip at the current text selection in the focused body editor. */
+/** Insert a citation chip at the current text selection in the focused editor. */
 export const insertBodyReference = (
     referenceId: string,
     label: string,
 ): boolean => {
-    const view = activeView();
+    const view = focusedTextView();
     if (!view) {
         return false;
     }
-    const { state } = view;
-    const ref = bodySchema.nodes.reference.create({ referenceId, label });
-    view.dispatch(state.tr.replaceSelectionWith(ref).scrollIntoView());
+    const schema =
+        view.state.schema === tableSchema ? tableSchema : bodySchema;
+    const ref = schema.nodes.reference.create({ referenceId, label });
+    view.dispatch(view.state.tr.replaceSelectionWith(ref).scrollIntoView());
     view.focus();
     return true;
 };
 
 /** Insert an inline equation atom at the current text selection. */
-export const insertBodyInlineEquation = (source = ""): boolean => {
-    const view = activeView();
+export const insertBodyInlineEquation = (
+    source = "",
+    syntax: "typst" | "latex" = "typst",
+): boolean => {
+    const view = focusedTextView();
     if (!view) {
         return false;
     }
-    const { state } = view;
-    const node = bodySchema.nodes.inlineEquation.create({
+    const schema =
+        view.state.schema === tableSchema ? tableSchema : bodySchema;
+    const node = schema.nodes.inlineEquation.create({
         source,
-        syntax: "typst",
+        syntax,
         label: source,
     });
-    view.dispatch(state.tr.replaceSelectionWith(node).scrollIntoView());
+    view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView());
     view.focus();
     return true;
 };

@@ -429,7 +429,6 @@ export const Preview = ({
                             align="center"
                             menuLabel={m.preview_zoom_options()}
                             open={isZoomMenuOpen}
-                            scrollable
                             onOpenChange={setZoomMenuOpen}
                             trigger={
                                 <ToolbarTextButton
@@ -527,13 +526,9 @@ export const Preview = ({
             <div className={styles.viewport}>
                 <div
                     className={styles.scrollArea}
-                    data-scroll-region
                     ref={previewScrollRef as RefObject<HTMLDivElement>}
                 >
-                    <div
-                        className={styles.scrollAreaInner}
-                        data-scroll-region-x
-                    >
+                    <div className={styles.scrollAreaInner}>
                     <div className={styles.svgContainer}>
                         {previewPages.length > 0 && previewRevision !== null ? (
                             previewPages.map((page, index) => {

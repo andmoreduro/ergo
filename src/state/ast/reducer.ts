@@ -4,6 +4,7 @@ import type { DocumentSection } from "../../bindings/DocumentSection";
 import type { ASTAction } from "./actions";
 import {
     createDiagram,
+    createEmptyCell,
     createEnumeration,
     createEquation,
     createFigure,
@@ -531,7 +532,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         }
 
         case "UPDATE_TABLE_CELL": {
-            const { tableId, rowIndex, colIndex, content } = action.payload;
+            const { tableId, rowIndex, colIndex, elements } = action.payload;
 
             return mapContentElements(state, (element) => {
                 if (element.type !== "Table" || element.id !== tableId) {
@@ -544,7 +545,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                         currentRowIndex === rowIndex
                             ? row.map((cell, currentColIndex) =>
                                   currentColIndex === colIndex
-                                      ? { ...cell, content }
+                                      ? { ...cell, elements }
                                       : cell,
                               )
                             : row,
@@ -562,11 +563,9 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                 }
 
                 const insertAt = rowIndex ?? element.cells.length;
-                const newRow = Array.from({ length: element.cols }, () => ({
-                    content: [],
-                    row_span: null,
-                    col_span: null,
-                }));
+                const newRow = Array.from({ length: element.cols }, () =>
+                    createEmptyCell(),
+                );
 
                 return {
                     ...element,
@@ -609,11 +608,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                 }
 
                 const insertAt = colIndex ?? element.column_sizes.length;
-                const emptyCell = {
-                    content: [],
-                    row_span: null,
-                    col_span: null,
-                };
+                const emptyCell = createEmptyCell();
 
                 return {
                     ...element,

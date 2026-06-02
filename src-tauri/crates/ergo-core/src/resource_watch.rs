@@ -359,7 +359,7 @@ fn collect_element_seeds(
 fn file_seed(asset: &AssetEntry) -> ResourceSeed {
     let body = if asset.kind == "image" || image_path(&asset.path) {
         format!(
-            "image(\"{}\", width: 100%)",
+            "#image(\"{}\", width: 100%)",
             escape_typst_string(&asset.path)
         )
     } else {
@@ -393,7 +393,17 @@ fn legacy_table_preview_body(table: &crate::ast::Table) -> String {
     for row in &table.cells {
         for cell in row {
             body.push_str(",\n  [");
-            body.push_str(&escape_typst(&rich_text_plain_text(&cell.content)));
+            let cell_text = cell
+                .elements
+                .iter()
+                .map(|element| match element {
+                    crate::ast::DocumentElement::Paragraph(p) => rich_text_plain_text(&p.content),
+                    crate::ast::DocumentElement::Quote(q) => rich_text_plain_text(&q.content),
+                    _ => String::new(),
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            body.push_str(&escape_typst(&cell_text));
             body.push(']');
         }
     }
@@ -403,7 +413,7 @@ fn legacy_table_preview_body(table: &crate::ast::Table) -> String {
 
 fn legacy_figure_preview_body(asset_ref: Option<&AssetEntry>) -> String {
     asset_ref
-        .map(|a| format!("image(\"{}\", width: 100%)", escape_typst_string(&a.path)))
+        .map(|a| format!("#image(\"{}\", width: 100%)", escape_typst_string(&a.path)))
         .unwrap_or_else(|| "[Figure]".to_string())
 }
 

@@ -74,6 +74,14 @@ describe("RichText ↔ PM fragment round-trip", () => {
         expect(roundTrip(content)).toEqual(content);
     });
 
+    it("preserves underline marks", () => {
+        const content = [
+            { ...createRichText("under"), underline: true },
+            { ...createRichText("plain") },
+        ];
+        expect(roundTrip(content)).toEqual(content);
+    });
+
     it("preserves reference spans (zero width)", () => {
         const content = [
             createRichText("see "),
@@ -92,13 +100,17 @@ describe("RichText ↔ PM fragment round-trip", () => {
         expect(roundTrip(content)).toEqual(content);
     });
 
-    it("collects hard breaks and inline content from table cells", () => {
+    it("collects hard breaks inside table cell paragraphs", () => {
         const cell = tableSchema.nodes.table_cell.create(null, [
-            tableSchema.text("line one"),
-            tableSchema.nodes.hard_break.create(),
-            tableSchema.text("line two"),
+            tableSchema.nodes.paragraph.create({ elementId: "cell-p" }, [
+                tableSchema.text("line one"),
+                tableSchema.nodes.hard_break.create(),
+                tableSchema.text("line two"),
+            ]),
         ]);
-        const spans = fragmentToRichText(cell.content);
+        const paragraph = cell.firstChild;
+        expect(paragraph?.type.name).toBe("paragraph");
+        const spans = fragmentToRichText(paragraph?.content ?? cell.content);
         expect(spans).toHaveLength(1);
         expect(spans[0]?.text).toContain("line one");
         expect(spans[0]?.text).toContain("line two");

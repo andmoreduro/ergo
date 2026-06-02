@@ -8,7 +8,10 @@ import { TauriApi } from "../../../../api/tauri";
 
 import { CompilerClient } from "../../../../workers/compilerClient";
 
-import { usesStandardTypstFigureWrapper } from "../../../../editor/templateElementOverrides";
+import {
+    effectiveFigureAnnotationFields,
+    usesStandardTypstFigureWrapper,
+} from "../../../../editor/templateElementOverrides";
 
 import {
 
@@ -64,7 +67,7 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
     const figureOverride = templateSpec?.element_overrides?.figure ?? null;
 
-    const extraFields = figureOverride?.extra_fields ?? [];
+    const extraFields = effectiveFigureAnnotationFields(figureOverride);
 
     const showPlacement = usesStandardTypstFigureWrapper(figureOverride);
 

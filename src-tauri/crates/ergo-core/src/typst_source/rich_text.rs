@@ -81,19 +81,19 @@ pub(crate) fn push_rich_text_field_with_emphasis(
             continue;
         }
 
-        if span.underline.unwrap_or(false) {
-            builder.push_literal("#underline[");
-        }
-
         let bold = emphasis == RichTextEmphasis::Full && span.bold.unwrap_or(false);
         let italic = emphasis == RichTextEmphasis::Full && span.italic.unwrap_or(false);
-        let (prefix, suffix) = match (bold, italic) {
-            (true, true) => ("*_", "_*"),
-            (true, false) => ("*", "*"),
-            (false, true) => ("_", "_"),
-            (false, false) => ("", ""),
-        };
-        builder.push_literal(prefix);
+        let underline = span.underline.unwrap_or(false);
+
+        if underline {
+            builder.push_literal("#underline[");
+        }
+        if bold {
+            builder.push_literal("#strong[");
+        }
+        if italic {
+            builder.push_literal("#emph[");
+        }
         push_escaped_text_with_linebreaks(
             builder,
             element_id,
@@ -101,10 +101,89 @@ pub(crate) fn push_rich_text_field_with_emphasis(
             &span.text,
             &mut field_utf16_offset,
         );
-        builder.push_literal(suffix);
-        if span.underline.unwrap_or(false) {
+        if italic {
             builder.push_literal("]");
         }
+        if bold {
+            builder.push_literal("]");
+        }
+        if underline {
+            builder.push_literal("]");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document_source_builder::SourceBuilder;
+    use crate::ast::{EquationSyntax, RichText};
+
+    fn render_spans(content: &[RichText]) -> String {
+        let mut builder = SourceBuilder::default();
+        push_rich_text_field(
+            &mut builder,
+            "el-1",
+            "el-1:text",
+            content,
+            &HashMap::new(),
+        );
+        builder.source
+    }
+
+    #[test]
+    fn rich_text_uses_function_syntax_for_emphasis() {
+        let source = render_spans(&[
+            RichText {
+                text: "bold".into(),
+                bold: Some(true),
+                italic: None,
+                underline: None,
+                kind: None,
+                reference_id: None,
+                equation_source: None,
+                equation_syntax: EquationSyntax::Typst,
+            },
+            RichText {
+                text: "mix".into(),
+                bold: Some(true),
+                italic: Some(true),
+                underline: None,
+                kind: None,
+                reference_id: None,
+                equation_source: None,
+                equation_syntax: EquationSyntax::Typst,
+            },
+            RichText {
+                text: "_not a delimiter_".into(),
+                bold: Some(true),
+                italic: None,
+                underline: None,
+                kind: None,
+                reference_id: None,
+                equation_source: None,
+                equation_syntax: EquationSyntax::Typst,
+            },
+        ]);
+        assert!(source.contains("#strong[bold]"));
+        assert!(source.contains("#strong[#emph[mix]]"));
+        assert!(source.contains("#strong[\\_not a delimiter\\_]"));
+        assert!(!source.contains('*'));
+    }
+
+    #[test]
+    fn rich_text_italic_and_underline_use_function_syntax() {
+        let source = render_spans(&[RichText {
+            text: "line".into(),
+            bold: None,
+            italic: Some(true),
+            underline: Some(true),
+            kind: None,
+            reference_id: None,
+            equation_source: None,
+            equation_syntax: EquationSyntax::Typst,
+        }]);
+        assert_eq!(source, "#underline[#emph[line]]");
     }
 }
 

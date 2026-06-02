@@ -133,6 +133,26 @@
       "sequence": [{ "key": "arrowdown", "modifiers": ["Alt"] }]
     },
     {
+      "action_id": "editor::AddTableRow",
+      "context": "body && input",
+      "sequence": [{ "key": "r", "modifiers": ["Control", "Alt", "Shift"] }]
+    },
+    {
+      "action_id": "editor::AddTableColumn",
+      "context": "body && input",
+      "sequence": [{ "key": "c", "modifiers": ["Control", "Alt", "Shift"] }]
+    },
+    {
+      "action_id": "editor::RemoveTableRow",
+      "context": "body && input",
+      "sequence": [{ "key": "r", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::RemoveTableColumn",
+      "context": "body && input",
+      "sequence": [{ "key": "c", "modifiers": ["Control", "Alt"] }]
+    },
+    {
       "action_id": "editor::EnterTable",
       "context": "body",
       "sequence": [{ "key": "enter", "modifiers": ["Control"] }]
