@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBlockUiState } from "../../../editor/prosemirror/blockUiState";
 
 /**
@@ -9,14 +9,22 @@ import { useBlockUiState } from "../../../editor/prosemirror/blockUiState";
  * share, keeping mouse and keyboard on the same control.
  */
 export const useElementSettingsShortcut = (elementId: string) => {
-    const { editing } = useBlockUiState(elementId);
+    const { selected, editing } = useBlockUiState(elementId);
     const [open, setOpen] = useState(false);
+    const hadBlockFocusRef = useRef(false);
+
+    useEffect(() => {
+        const focused = selected || editing;
+        // Close only after the block was focused and then lost focus — not when
+        // opening from the cog while the block is still unfocused.
+        if (hadBlockFocusRef.current && !focused) {
+            setOpen(false);
+        }
+        hadBlockFocusRef.current = focused;
+    }, [selected, editing]);
 
     useEffect(() => {
         if (!editing) {
-            // Leaving fine-grained mode closes the modal so it can't linger over
-            // an unfocused block.
-            setOpen(false);
             return;
         }
         const onKeyDown = (event: KeyboardEvent) => {

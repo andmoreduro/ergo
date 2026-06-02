@@ -1,0 +1,39 @@
+.preview,
+.loading,
+.unavailable {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    max-height: var(--layout-overlay-band);
+    border: var(--border-width-sm) solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-primary);
+}
+
+.preview :global(svg) {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.svgHost {
+    display: block;
+    flex-shrink: 0;
+}
+
+.loading {
+    min-height: var(--size-touch);
+}
+
+.unavailable {
+    padding: var(--space-2);
+    color: var(--color-danger);
+    font-size: var(--font-size-xs);
+    white-space: normal;
+    text-align: center;
+}

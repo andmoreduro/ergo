@@ -55,8 +55,7 @@ const outlineIncludeFromOverrides = (
     overrides: TemplateOverride[],
     key: OutlineIncludeOverrideKey,
 ): boolean | null => {
-    const overrideKey = OUTLINE_INCLUDE_OVERRIDE_KEYS[key];
-    const entry = overrides.find((item) => item.key === overrideKey);
+    const entry = overrides.find((item) => item.key === key);
     if (!entry) {
         return null;
     }

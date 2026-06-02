@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+    focusWrapperAtCoords,
     focusWrapperPrimary,
     handleWrapperTabKeyDown,
 } from "./wrapperTabCycle";
@@ -66,6 +67,71 @@ describe("handleWrapperTabKeyDown", () => {
             stopPropagation: vi.fn(),
         };
         expect(handleWrapperTabKeyDown(event, root)).toBe(true);
+        expect(document.activeElement).toBe(primary);
+        root.remove();
+    });
+});
+
+const mockRect = (
+    element: HTMLElement,
+    rect: Pick<DOMRect, "left" | "top" | "right" | "bottom" | "width" | "height">,
+) => {
+    element.getBoundingClientRect = () => rect as DOMRect;
+};
+
+describe("focusWrapperAtCoords", () => {
+    it("focuses the field under the pointer when entering edit mode", () => {
+        const root = mount(`
+      <div data-wrapper-tab="primary"><textarea id="p"></textarea></div>
+      <div data-wrapper-tab="extra" data-wrapper-tab-index="0"><input id="e0" /></div>
+    `);
+        const primary = root.querySelector<HTMLTextAreaElement>("#p")!;
+        const extra0 = root.querySelector<HTMLInputElement>("#e0")!;
+        mockRect(primary, {
+            left: 0,
+            top: 0,
+            right: 100,
+            bottom: 24,
+            width: 100,
+            height: 24,
+        });
+        mockRect(extra0, {
+            left: 0,
+            top: 32,
+            right: 100,
+            bottom: 56,
+            width: 100,
+            height: 24,
+        });
+        expect(focusWrapperAtCoords(root, 50, 40)).toBe(true);
+        expect(document.activeElement).toBe(extra0);
+        root.remove();
+    });
+
+    it("falls back to primary when the click is outside field bounds", () => {
+        const root = mount(`
+      <div data-wrapper-tab="primary"><textarea id="p"></textarea></div>
+      <div data-wrapper-tab="extra" data-wrapper-tab-index="0"><input id="e0" /></div>
+    `);
+        const primary = root.querySelector<HTMLTextAreaElement>("#p")!;
+        const extra0 = root.querySelector<HTMLInputElement>("#e0")!;
+        mockRect(primary, {
+            left: 0,
+            top: 0,
+            right: 100,
+            bottom: 24,
+            width: 100,
+            height: 24,
+        });
+        mockRect(extra0, {
+            left: 0,
+            top: 32,
+            right: 100,
+            bottom: 56,
+            width: 100,
+            height: 24,
+        });
+        expect(focusWrapperAtCoords(root, 50, 200)).toBe(true);
         expect(document.activeElement).toBe(primary);
         root.remove();
     });

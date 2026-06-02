@@ -178,6 +178,20 @@ export const SidebarBibliographyPanel = memo(
                                 ? m.bibliography_add()
                                 : m.bibliography_edit()
                         }
+                        cancelAction={{
+                            label: m.bibliography_cancel(),
+                            onClick: () => {
+                                void dispatchAction({
+                                    id: "bibliography::CancelEdit",
+                                    payload: null,
+                                });
+                                setDraft(null);
+                            },
+                        }}
+                        confirmAction={{
+                            label: m.bibliography_save(),
+                            onClick: saveDraft,
+                        }}
                     >
                         <Select
                             fullWidth
@@ -270,40 +284,16 @@ export const SidebarBibliographyPanel = memo(
                                 {validationError}
                             </p>
                         )}
-                        <div className={styles.referenceActions}>
+                        {draft.mode === "edit" ? (
                             <Button
                                 size="small"
                                 type="button"
-                                variant="primary"
-                                onClick={saveDraft}
+                                variant="danger"
+                                onClick={removeDraft}
                             >
-                                {m.bibliography_save()}
+                                {m.bibliography_remove()}
                             </Button>
-                            {draft.mode === "edit" && (
-                                <Button
-                                    size="small"
-                                    type="button"
-                                    variant="danger"
-                                    onClick={removeDraft}
-                                >
-                                    {m.bibliography_remove()}
-                                </Button>
-                            )}
-                            <Button
-                                size="small"
-                                type="button"
-                                variant="ghost"
-                                onClick={() => {
-                                    void dispatchAction({
-                                        id: "bibliography::CancelEdit",
-                                        payload: null,
-                                    });
-                                    setDraft(null);
-                                }}
-                            >
-                                {m.bibliography_cancel()}
-                            </Button>
-                        </div>
+                        ) : null}
                     </SidebarResourceDialog>
                 )}
             </div>

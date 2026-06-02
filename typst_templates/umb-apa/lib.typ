@@ -5,6 +5,7 @@
 #import "utils/apa-figure.typ": apa-figure
 #import "utils/abstract.typ": abstract-page
 #import "utils/title.typ": title-page
+#import "utils/front-matter.typ": front-matter
 #import "utils/constants.typ": double-spacing, first-indent-length, quote-word-trigger
 
 

@@ -1,6 +1,6 @@
 import type { KeyboardEventHandler } from "react";
 import type { ExtraFieldSpec } from "../../../../bindings/ExtraFieldSpec";
-import { elementExtraFieldFieldId } from "../../../../editor/fieldIds";
+import { elementAnnotationFieldId } from "../../../../editor/fieldIds";
 import { useElementEnterInsertsParagraph } from "../../../../editor/useInsertParagraphAfterElement";
 import { normalizeEditableText } from "../../../../editor/textInput";
 import { useEditorNavigation } from "../../../../editor/EditorNavigationContext";
@@ -26,7 +26,7 @@ export const ExtraFieldInput = ({
 }: ExtraFieldInputProps) => {
     const elementId = element.id;
     const handleEnterKey = useElementEnterInsertsParagraph(elementId);
-    const fieldId = elementExtraFieldFieldId(elementId, field.key);
+    const fieldId = elementAnnotationFieldId(elementId, element.type, field.key);
     const { handleAdvanceKeyDown } = useEditorNavigation();
 
     const handleChange = (raw: string) => {

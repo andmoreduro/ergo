@@ -113,23 +113,18 @@ export const NewProjectDialog = ({
             size="md"
             title={m.project_new_dialog_title()}
             titleId="new-project-dialog-title"
-            footer={
-                <>
-                    <Button type="button" variant="secondary" onClick={onCancel}>
-                        {m.project_new_cancel()}
-                    </Button>
-                    <Button
-                        disabled={
-                            !!projectNameError ||
-                            !!projectLocationError ||
-                            !!projectFileNameError
-                        }
-                        type="submit"
-                    >
-                        {m.project_new_create()}
-                    </Button>
-                </>
-            }
+            cancelAction={{
+                label: m.project_new_cancel(),
+                onClick: onCancel,
+            }}
+            confirmAction={{
+                label: m.project_new_create(),
+                type: "submit",
+                disabled:
+                    !!projectNameError ||
+                    !!projectLocationError ||
+                    !!projectFileNameError,
+            }}
         >
             <TextInput
                         autoFocus

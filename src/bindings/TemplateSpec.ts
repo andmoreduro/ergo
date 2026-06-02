@@ -12,4 +12,8 @@ import type { TemplateIdentity } from "./TemplateIdentity";
 import type { TemplateOverride } from "./TemplateOverride";
 import type { TemplateVariantSpec } from "./TemplateVariantSpec";
 
-export type TemplateSpec = { template: TemplateIdentity, package: PackageSpec, variants: Array<TemplateVariantSpec>, show_rule: ShowRuleSpec | null, inputs: Array<InputSchema>, groups: Array<InputGroupSpec>, custom_elements: Array<CustomElementSpec>, sections: Array<SectionSpec>, element_overrides: ElementOverrides | null, resource_policy: ResourcePolicySpec | null, defaults: DefaultsSpec | null, default_template_overrides: Array<TemplateOverride>, };
+export type TemplateSpec = { template: TemplateIdentity, package: PackageSpec, variants: Array<TemplateVariantSpec>, show_rule: ShowRuleSpec | null, inputs: Array<InputSchema>, groups: Array<InputGroupSpec>, custom_elements: Array<CustomElementSpec>, sections: Array<SectionSpec>, element_overrides: ElementOverrides | null, resource_policy: ResourcePolicySpec | null, defaults: DefaultsSpec | null, 
+/**
+ * Project `template_overrides` applied when the project has no explicit entry (e.g. outlines off for `none`).
+ */
+default_template_overrides: Array<TemplateOverride>, };

@@ -857,3 +857,133 @@ fn apa7_outline_titles_use_project_template_overrides() {
         generated.main_source
     );
 }
+
+#[test]
+fn umb_apa_source_generation_matches_spec() {
+    use crate::template_spec::load_bundled_template;
+    
+    let template = load_bundled_template("umb-apa").expect("umb-apa template");
+    
+    let mut inputs = HashMap::new();
+    inputs.insert("title".to_string(), json!("UMB APA Title"));
+    inputs.insert("running_head".to_string(), json!("Running Head Text"));
+    inputs.insert("authors".to_string(), json!([
+        {
+            "name": "Author 1",
+            "affiliations": ["1"]
+        }
+    ]));
+    inputs.insert("affiliations".to_string(), json!(["Affiliation Name 1"]));
+    inputs.insert("director".to_string(), json!({
+        "name": "Director Name",
+        "title": "Director Title"
+    }));
+    inputs.insert("degree".to_string(), json!("PhD in Typst"));
+    inputs.insert("city".to_string(), json!("Bogota"));
+    inputs.insert("year".to_string(), json!("2026"));
+    inputs.insert("authorities".to_string(), json!([
+        {
+            "name": "Authority 1",
+            "role": "Role 1"
+        },
+        {
+            "name": "Authority 2",
+            "role": "Role 2"
+        }
+    ]));
+    inputs.insert("acknowledgements".to_string(), json!("Agradezco a todos."));
+    inputs.insert("author_note".to_string(), json!("Author note text."));
+    inputs.insert("abstract_es".to_string(), json!("Resumen en espanol."));
+    inputs.insert("keywords_es".to_string(), json!(["clave1", "clave2"]));
+    inputs.insert("abstract_en".to_string(), json!("Abstract in English."));
+    inputs.insert("keywords_en".to_string(), json!(["key1", "key2"]));
+
+    let ast = DocumentAST {
+        version: "1.0".to_string(),
+        metadata: ProjectMetadata {
+            template_id: "umb-apa".to_string(),
+            template_variant_id: None,
+            title: "UMB APA Title".to_string(),
+            running_head: Some("Running Head Text".to_string()),
+            keywords: vec![],
+            project_settings: ProjectSettings::default(),
+            local_overrides: GlobalSettings::default(),
+        },
+        dependencies: DependencyManifest { packages: vec![] },
+        references: vec![ReferenceEntry {
+            id: "ref-1".to_string(),
+            citation_key: "ref-1".to_string(),
+            biblatex: "@book{ref-1}".to_string(),
+        }],
+        assets: vec![],
+        inputs,
+        sections: vec![
+            DocumentSection::Content(ContentSection {
+                id: "body".to_string(),
+                is_optional: false,
+                elements: vec![
+                    DocumentElement::Paragraph(Paragraph {
+                        id: "p-1".to_string(),
+                        content: vec![RichText {
+                            text: "Paragraph text".to_string(),
+                            bold: None,
+                            italic: None,
+                            underline: None,
+                            kind: None,
+                            reference_id: None,
+                            equation_source: None,
+                            equation_syntax: EquationSyntax::Typst,
+                        }],
+                    })
+                ],
+            })
+        ],
+    };
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+
+    let main = &generated.main_source;
+
+    // Generated UMB main.typ contains one front-matter call.
+    assert!(main.contains("#front-matter("), "main.typ should call front-matter function:\n{main}");
+    
+    // Generated UMB main.typ does not call title-page or abstract-page.
+    assert!(!main.contains("title-page"), "main.typ should not call title-page:\n{main}");
+    assert!(!main.contains("abstract-page"), "main.typ should not call abstract-page:\n{main}");
+
+    // director.name and director.title appear in the generated front-matter arguments.
+    assert!(main.contains("director: ("), "should contain director dictionary:\n{main}");
+    assert!(main.contains("name: [Director Name]"), "should contain director name:\n{main}");
+    assert!(main.contains("title: [Director Title]"), "should contain director title:\n{main}");
+
+    // Every authority emits a name and role.
+    assert!(main.contains("authorities: ("), "should contain authorities array:\n{main}");
+    assert!(main.contains("name: [Authority 1]"), "should contain authority 1 name:\n{main}");
+    assert!(main.contains("role: [Role 1]"), "should contain authority 1 role:\n{main}");
+    assert!(main.contains("name: [Authority 2]"), "should contain authority 2 name:\n{main}");
+    assert!(main.contains("role: [Role 2]"), "should contain authority 2 role:\n{main}");
+
+    // abstract_es maps to abstract-es, and abstract_en maps to abstract-en.
+    assert!(main.contains("abstract-es: [Resumen en espanol.]"), "should map abstract-es:\n{main}");
+    assert!(main.contains("abstract-en: [Abstract in English.]"), "should map abstract-en:\n{main}");
+
+    // keywords_es maps to keywords-es, and keywords_en maps to keywords-en.
+    assert!(main.contains("keywords-es: (\"clave1\", \"clave2\")"), "should map keywords-es:\n{main}");
+    assert!(main.contains("keywords-en: (\"key1\", \"key2\")"), "should map keywords-en:\n{main}");
+
+    // running_head still flows through the document show rule in lib.typ
+    assert!(generated.lib_source.contains("running-head: [Running Head Text]"), "lib.typ should pass running-head to show rule:\n{}", generated.lib_source);
+
+    // author_note is passed to front matter.
+    assert!(main.contains("author-note: [Author note text.]"), "should pass author-note:\n{main}");
+
+    // Body element includes still appear after front matter.
+    let front_matter_pos = main.find("#front-matter").unwrap();
+    let body_pos = main.find("#include \"elements/p-1.typ\"").unwrap();
+    assert!(front_matter_pos < body_pos, "front matter should precede body includes:\n{main}");
+
+    // Bibliography and appendix generation still appear in the expected order.
+    let bib_pos = main.find("#bibliography").unwrap();
+    assert!(body_pos < bib_pos, "body includes should precede bibliography:\n{main}");
+}

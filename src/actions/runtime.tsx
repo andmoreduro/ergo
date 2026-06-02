@@ -10,6 +10,7 @@ import {
     useState,
 } from "react";
 import { TauriApi } from "../api/tauri";
+import { buildActionContextSnapshot } from "../editor/buildActionContextSnapshot";
 import { captureBodyTabKey, getActiveBodyView } from "../editor/prosemirror/activeView";
 import { runBodyTab } from "../editor/prosemirror/bodyTabCommand";
 import type { ActionContextNode } from "../bindings/ActionContextNode";
@@ -216,34 +217,44 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
 
             const logicalEvent = eventToLogicalKeyEvent(event);
             const targetIsEditable = isEditableTarget(event.target);
+            // Suppress the browser default for app shortcuts when focus is not on
+            // an editable surface. Track that we did this ourselves so the resolver
+            // below can still run — its `defaultPrevented` bail is meant to detect a
+            // synchronous downstream handler (ProseMirror/input), not our own call.
+            let preventedBySelf = false;
             if (!targetIsEditable && (event.ctrlKey || event.metaKey || event.altKey)) {
                 event.preventDefault();
+                preventedBySelf = true;
             }
 
-            // Bold/Italic/Underline in the ProseMirror body are applied by the
-            // action runtime (editor::Bold/Italic/Underline -> applyBodyMark).
-            // The browser's native contenteditable formatting (execCommand) would
-            // ALSO toggle them: Ctrl+U flashed on (native -> PM parses <u>) then
-            // off (the runtime's toggleMark), while the toolbar — no keydown, no
-            // native formatting — worked. Block native ONLY inside the body
-            // surface; plain contenteditable fields (captions, template inputs)
-            // rely on execCommand and keep their existing behavior.
+            // Inside the ProseMirror body, two classes of keystroke are owned by
+            // the action runtime and must not also produce native input:
+            //  - Bold/Italic/Underline (editor::Bold/Italic/Underline). The
+            //    browser's execCommand would also toggle them — Ctrl+U flashed on
+            //    (native <u>) then off (the runtime's toggleMark).
+            //  - Ctrl+Alt chords (editor::Insert*). On AltGr layouts Ctrl+Alt is
+            //    AltGr and types a symbol (Ctrl+Alt+Q -> "@") instead of letting
+            //    the runtime insert a quote.
+            // Block native ONLY inside the body surface; plain contenteditable
+            // fields (captions, template inputs) keep their behavior. Tracked via
+            // `preventedBySelf` so the resolver below still runs.
             const markKey = normalizeKey(event.key);
             const isMarkShortcut =
                 (event.ctrlKey || event.metaKey) &&
                 !event.altKey &&
                 !event.shiftKey &&
                 (markKey === "b" || markKey === "i" || markKey === "u");
+            const isAltGrChord = event.ctrlKey && event.altKey;
             const bodyView = getActiveBodyView();
             const targetNode =
                 event.target instanceof Node ? event.target : null;
-            const markInBodySurface =
-                isMarkShortcut &&
+            const inBodySurface =
                 bodyView !== null &&
                 targetNode !== null &&
                 bodyView.dom.contains(targetNode);
-            if (markInBodySurface) {
+            if (inBodySurface && (isMarkShortcut || isAltGrChord)) {
                 event.preventDefault();
+                preventedBySelf = true;
             }
 
             const isPlainTextInput =
@@ -264,16 +275,17 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
             queueMicrotask(() => {
                 // Tab is always preventDefault'd in the editor column to trap focus;
                 // still resolve Shift+Tab (template field) via the action runtime.
-                // Body mark shortcuts preventDefault above to block native
-                // formatting but must still resolve here (the action runtime is
-                // their sole applier), so they get the same exception as Tab.
-                if (event.defaultPrevented && !tabKey && !markInBodySurface) {
+                // Anything we preventDefault'd ourselves (`preventedBySelf`) must
+                // still resolve — that bail is only for a synchronous downstream
+                // handler (ProseMirror/input) that already consumed the event.
+                if (event.defaultPrevented && !preventedBySelf && !tabKey) {
                     return;
                 }
 
-                const snapshot = getSnapshot({
-                    includeInputContext: targetIsEditable,
-                });
+                const snapshot = buildActionContextSnapshot(
+                    event.target,
+                    getSnapshot,
+                );
 
                 void TauriApi.resolveKeyEvent(logicalEvent, snapshot)
                     .then((resolution) => {

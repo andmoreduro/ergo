@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { editorFocusIdsForBackendField } from "./fieldIds";
+import {
+    backendFocusIdsForEditorField,
+    editorFocusIdsForBackendField,
+    elementAnnotationFieldId,
+} from "./fieldIds";
 
 describe("editorFocusIdsForBackendField", () => {
     it("maps backend template input paths to project input field ids", () => {
@@ -17,6 +21,34 @@ describe("editorFocusIdsForBackendField", () => {
         ).toEqual({
             elementId: "heading-1",
             fieldId: "heading-1:text",
+        });
+    });
+});
+
+describe("elementAnnotationFieldId", () => {
+    it("maps figure and diagram captions to the Typst source-map id", () => {
+        expect(elementAnnotationFieldId("fig-1", "Figure", "caption")).toBe(
+            "fig-1:caption",
+        );
+        expect(elementAnnotationFieldId("diag-1", "Diagram", "caption")).toBe(
+            "diag-1:caption",
+        );
+    });
+
+    it("keeps table annotation fields on extra-field ids", () => {
+        expect(elementAnnotationFieldId("tbl-1", "Table", "caption")).toBe(
+            "tbl-1:extra:caption",
+        );
+    });
+});
+
+describe("backendFocusIdsForEditorField", () => {
+    it("maps legacy extra caption ids for figure sync", () => {
+        expect(
+            backendFocusIdsForEditorField("fig-1", "fig-1:extra:caption"),
+        ).toEqual({
+            elementId: "fig-1",
+            fieldId: "fig-1:caption",
         });
     });
 });

@@ -49,107 +49,132 @@
     },
     {
       "action_id": "editor::InsertParagraph",
-      "context": "editor && !input",
+      "context": "editor",
       "sequence": [{ "key": "p", "modifiers": ["Control", "Alt"] }]
     },
     {
       "action_id": "editor::InsertHeading",
-      "context": "editor && !input",
+      "context": "editor && !tableCell",
+      "sequence": [{ "key": "h", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "tableCell",
       "sequence": [{ "key": "h", "modifiers": ["Control", "Alt"] }]
     },
     {
       "action_id": "editor::InsertTable",
-      "context": "editor && !input",
+      "context": "editor && !tableCell",
+      "sequence": [{ "key": "t", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::InsertTable",
+      "context": "tableCell",
       "sequence": [{ "key": "t", "modifiers": ["Control", "Alt"] }]
     },
     {
       "action_id": "editor::InsertEquation",
-      "context": "editor && !input",
+      "context": "editor",
       "sequence": [{ "key": "e", "modifiers": ["Control", "Alt"] }]
     },
     {
       "action_id": "editor::InsertFigure",
-      "context": "editor && !input",
+      "context": "editor && !tableCell",
       "sequence": [{ "key": "f", "modifiers": ["Control", "Alt"] }]
     },
     {
-      "action_id": "editor::ConvertToParagraph",
-      "context": "element && !input",
-      "sequence": [{ "key": "1", "modifiers": ["Control", "Alt"] }]
+      "action_id": "editor::InsertFigure",
+      "context": "tableCell",
+      "sequence": [{ "key": "f", "modifiers": ["Control", "Alt"] }]
     },
     {
-      "action_id": "editor::ConvertToHeading",
-      "context": "element && !input",
-      "sequence": [{ "key": "2", "modifiers": ["Control", "Alt"] }]
+      "action_id": "editor::InsertQuote",
+      "context": "editor",
+      "sequence": [{ "key": "q", "modifiers": ["Control", "Alt"] }]
     },
     {
-      "action_id": "editor::ConvertToTable",
-      "context": "element && !input",
-      "sequence": [{ "key": "3", "modifiers": ["Control", "Alt"] }]
+      "action_id": "editor::InsertDiagram",
+      "context": "editor && !tableCell",
+      "sequence": [{ "key": "d", "modifiers": ["Control", "Alt"] }]
     },
     {
-      "action_id": "editor::ConvertToEquation",
-      "context": "element && !input",
-      "sequence": [{ "key": "4", "modifiers": ["Control", "Alt"] }]
+      "action_id": "editor::InsertDiagram",
+      "context": "tableCell",
+      "sequence": [{ "key": "d", "modifiers": ["Control", "Alt"] }]
     },
     {
-      "action_id": "editor::ConvertToFigure",
-      "context": "element && !input",
-      "sequence": [{ "key": "5", "modifiers": ["Control", "Alt"] }]
+      "action_id": "editor::InsertList",
+      "context": "editor",
+      "sequence": [{ "key": "l", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::InsertEnumeration",
+      "context": "editor",
+      "sequence": [{ "key": "u", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::InsertInlineEquation",
+      "context": "editor",
+      "sequence": [{ "key": "i", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::InsertReference",
+      "context": "editor",
+      "sequence": [{ "key": "r", "modifiers": ["Control", "Alt", "Shift"] }]
     },
     {
       "action_id": "editor::Bold",
-      "context": "input",
+      "context": "editor || input",
       "sequence": [{ "key": "b", "modifiers": ["Control"] }]
     },
     {
       "action_id": "editor::Italic",
-      "context": "input",
+      "context": "editor || input",
       "sequence": [{ "key": "i", "modifiers": ["Control"] }]
     },
     {
       "action_id": "editor::Underline",
-      "context": "input",
+      "context": "editor || input",
       "sequence": [{ "key": "u", "modifiers": ["Control"] }]
     },
     {
       "action_id": "editor::MoveTableCellLeft",
-      "context": "body && input",
+      "context": "body || tableCell",
       "sequence": [{ "key": "arrowleft", "modifiers": ["Alt"] }]
     },
     {
       "action_id": "editor::MoveTableCellRight",
-      "context": "body && input",
+      "context": "body || tableCell",
       "sequence": [{ "key": "arrowright", "modifiers": ["Alt"] }]
     },
     {
       "action_id": "editor::MoveTableCellUp",
-      "context": "body && input",
+      "context": "body || tableCell",
       "sequence": [{ "key": "arrowup", "modifiers": ["Alt"] }]
     },
     {
       "action_id": "editor::MoveTableCellDown",
-      "context": "body && input",
+      "context": "body || tableCell",
       "sequence": [{ "key": "arrowdown", "modifiers": ["Alt"] }]
     },
     {
       "action_id": "editor::AddTableRow",
-      "context": "body && input",
+      "context": "body || tableCell",
       "sequence": [{ "key": "r", "modifiers": ["Control", "Alt", "Shift"] }]
     },
     {
       "action_id": "editor::AddTableColumn",
-      "context": "body && input",
+      "context": "body || tableCell",
       "sequence": [{ "key": "c", "modifiers": ["Control", "Alt", "Shift"] }]
     },
     {
       "action_id": "editor::RemoveTableRow",
-      "context": "body && input",
+      "context": "body || tableCell",
       "sequence": [{ "key": "r", "modifiers": ["Control", "Alt"] }]
     },
     {
       "action_id": "editor::RemoveTableColumn",
-      "context": "body && input",
+      "context": "body || tableCell",
       "sequence": [{ "key": "c", "modifiers": ["Control", "Alt"] }]
     },
     {

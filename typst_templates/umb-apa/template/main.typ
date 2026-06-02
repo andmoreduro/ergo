@@ -1,5 +1,4 @@
-#import "../lib.typ": abstract-page, appendix, appendix-outline, title-page, versatile-apa as apa-style
-#import "@preview/orchid:0.1.0": generate-link as orcid-link, logo-icon as orcid-logo
+#import "../lib.typ": front-matter, appendix, appendix-outline, versatile-apa as apa-style
 
 #set document(
   title: [American Psychological Association (APA) Style Template for Typst],
@@ -12,10 +11,8 @@
   running-head: [APA Style Template for Typst],
 )
 
-#title-page(
-  // Document titles should be formatted in title case (https://capitalizemytitle.com/)
-  // title: [Another title],
-
+#front-matter(
+  title: [American Psychological Association (APA) Style Template for Typst],
   authors: (
     (
       name: [Author Name],
@@ -24,41 +21,38 @@
         "ID-2",
       ),
     ),
-    (
-      name: [Author Name 2],
-    ),
-    (
-      name: [Author Name 3],
-      affiliations: "ID-4",
-    ),
-    (
-      name: [Author Name 4],
-      affiliations: ("ID-1", "ID-3", "ID-4"),
-    ),
   ),
   affiliations: (
     "ID-1": [Affiliation Name 1],
     "ID-2": [Affiliation Name 2],
-    "ID-3": [Affiliation Name 3],
-    "ID-4": [Affiliation Name 4],
   ),
-
-  // Student-specific fields
-  course: [Course Code: Course Name],
-  instructor: [Instructor Name],
-  due-date: datetime.today().display(),
-
-  // Professional-specific fields
-  author-note: [
-    Author Name~#orcid-logo()~#orcid-link("0000-0000-0000-0000", format: "full")
-
+  director: (
+    name: [Director Name],
+    title: [Director Title],
+  ),
+  degree: [Degree Name],
+  city: [City Name],
+  year: [2026],
+  authorities: (
+    (
+      name: [Authority Name],
+      role: [Authority Role],
+    ),
+  ),
+  acknowledgements: [
     #lorem(50)
   ],
-)
-
-#abstract-page(
-  lorem(100),
-  // keywords: ("APA", "template", "Typst"),
+  author-note: [
+    Author note text.
+  ],
+  abstract-es: [
+    Resumen en español.
+  ],
+  keywords-es: ("Palabra", "Clave"),
+  abstract-en: [
+    Abstract in English.
+  ],
+  keywords-en: ("Keyword", "One"),
 )
 
 #outline()
@@ -88,7 +82,6 @@
 #pagebreak()
 #include "sections/math.typ"
 
-// https://apastyle.apa.org/style-grammar-guidelines/paper-format/reference-list
 #pagebreak()
 #bibliography(
   "bibliography/ref.yml",

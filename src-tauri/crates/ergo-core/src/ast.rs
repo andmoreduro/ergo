@@ -182,6 +182,8 @@ pub enum ActionId {
     EditorItalic,
     #[serde(rename = "editor::Underline")]
     EditorUnderline,
+    #[serde(rename = "editor::SelectCurrentElement")]
+    EditorSelectCurrentElement,
     #[serde(rename = "editor::AddAuthor")]
     EditorAddAuthor,
     #[serde(rename = "editor::RemoveAuthor")]
@@ -301,6 +303,7 @@ impl ActionId {
             ActionId::EditorBold => "editor::Bold",
             ActionId::EditorItalic => "editor::Italic",
             ActionId::EditorUnderline => "editor::Underline",
+            ActionId::EditorSelectCurrentElement => "editor::SelectCurrentElement",
             ActionId::EditorAddAuthor => "editor::AddAuthor",
             ActionId::EditorRemoveAuthor => "editor::RemoveAuthor",
             ActionId::EditorAddTableRow => "editor::AddTableRow",
@@ -385,6 +388,7 @@ impl FromStr for ActionId {
             "editor::Bold" => Ok(ActionId::EditorBold),
             "editor::Italic" => Ok(ActionId::EditorItalic),
             "editor::Underline" => Ok(ActionId::EditorUnderline),
+            "editor::SelectCurrentElement" => Ok(ActionId::EditorSelectCurrentElement),
             "editor::AddAuthor" => Ok(ActionId::EditorAddAuthor),
             "editor::RemoveAuthor" => Ok(ActionId::EditorRemoveAuthor),
             "editor::AddTableRow" => Ok(ActionId::EditorAddTableRow),

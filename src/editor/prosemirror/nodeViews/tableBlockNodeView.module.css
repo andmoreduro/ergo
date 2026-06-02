@@ -7,21 +7,18 @@
     box-sizing: border-box;
 }
 
+.settingsMount {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 10;
+    pointer-events: auto;
+}
+
 .tableExtrasChrome {
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-}
-
-.tableExtrasChrome :global(.settingsAnchor) {
-    position: static;
-    top: auto;
-    right: auto;
-}
-
-/* Match locked block-object extras: visible while selected, inert until edit mode. */
-.tableExtrasChromeLocked {
-    pointer-events: none;
 }
 
 .tableExtrasChrome :global(.annotationFields) {

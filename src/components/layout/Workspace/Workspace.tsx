@@ -140,6 +140,12 @@ export const Workspace = ({
                         <Editor
                             resources={compiler.resources}
                             outlineEntries={outlineEntries}
+                            resourcePreviewRevisions={
+                                compiler.resourcePreviewRevisions
+                            }
+                            mainPreviewPaintedRevision={
+                                compiler.mainPreviewPaintedRevision
+                            }
                         />
                     </div>
                     <ColumnResizeHandle {...handle2} />

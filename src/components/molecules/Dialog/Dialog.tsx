@@ -1,5 +1,7 @@
 import {
     memo,
+    useEffect,
+    useRef,
     type FormHTMLAttributes,
     type HTMLAttributes,
     type ReactNode,
@@ -9,6 +11,16 @@ import styles from "./Dialog.module.css";
 
 export type DialogSize = "sm" | "md" | "lg" | "xl";
 
+export type DialogActionButton = {
+    label: string;
+    /** Omit when `type` is `submit` and the surrounding dialog is a form. */
+    onClick?: () => void;
+    disabled?: boolean;
+    variant?: "primary" | "secondary" | "danger" | "ghost";
+    /** When the dialog is rendered as a form, use `submit` for the confirm control. */
+    type?: "button" | "submit";
+};
+
 const sizeClass: Record<DialogSize, string> = {
     sm: styles.sizeSm,
     md: styles.sizeMd,
@@ -16,16 +28,27 @@ const sizeClass: Record<DialogSize, string> = {
     xl: styles.sizeXl,
 };
 
+const shouldIgnoreDialogEnter = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) {
+        return false;
+    }
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        return true;
+    }
+    if (target.isContentEditable) {
+        return true;
+    }
+    return false;
+};
+
 type DialogPanelProps = {
-    title?: string;
+    title: string;
     titleId: string;
     size?: DialogSize;
     zIndex?: number;
-    onClose?: () => void;
-    closeLabel?: string;
-    closeVariant?: "ghost" | "default";
-    headerAction?: ReactNode;
-    footer?: ReactNode;
+    cancelAction?: DialogActionButton;
+    confirmAction?: DialogActionButton;
     onBackdropClick?: () => void;
     children: ReactNode;
 };
@@ -47,40 +70,102 @@ export const Dialog = memo((props: DialogProps) => {
         title,
         titleId,
         size = "md",
-        zIndex = 2100,
-        onClose,
-        closeLabel,
-        closeVariant = "default",
-        headerAction,
-        footer,
+        zIndex = 3200,
+        cancelAction,
+        confirmAction,
         onBackdropClick,
         children,
         as = "section",
         panelProps,
     } = props;
 
+    const cancelRef = useRef(cancelAction);
+    const confirmRef = useRef(confirmAction);
+    cancelRef.current = cancelAction;
+    confirmRef.current = confirmAction;
+
+    const dismissViaBackdrop =
+        onBackdropClick ?? cancelAction?.onClick ?? confirmAction?.onClick;
+
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                const cancel = cancelRef.current;
+                const confirm = confirmRef.current;
+                const handler = cancel?.onClick ?? confirm?.onClick;
+                if (!handler) {
+                    return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                handler();
+                return;
+            }
+            if (event.key !== "Enter" || event.defaultPrevented) {
+                return;
+            }
+            if (shouldIgnoreDialogEnter(event.target)) {
+                return;
+            }
+            const confirm = confirmRef.current;
+            const cancel = cancelRef.current;
+            if (as === "form" && confirm?.type === "submit") {
+                return;
+            }
+            const handler = confirm?.onClick ?? cancel?.onClick;
+            if (!handler) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            handler();
+            return;
+        };
+        document.addEventListener("keydown", onKeyDown, true);
+        return () => document.removeEventListener("keydown", onKeyDown, true);
+    }, [as]);
+
     const panelClassName = [styles.panel, sizeClass[size]].join(" ");
 
-    const showHeader = title || onClose || headerAction;
-    const header = showHeader ? (
+    const header = (
         <header className={styles.header}>
-            {title ? <h2 id={titleId}>{title}</h2> : <span className={styles.visuallyHidden} id={titleId} />}
-            {headerAction ??
-                (onClose && closeLabel ? (
-                    <Button
-                        type="button"
-                        size="small"
-                        variant={closeVariant === "ghost" ? "ghost" : "primary"}
-                        onClick={onClose}
-                    >
-                        {closeLabel}
-                    </Button>
-                ) : null)}
+            <h2 id={titleId}>{title}</h2>
         </header>
-    ) : null;
+    );
 
     const body = <div className={styles.body}>{children}</div>;
-    const footerNode = footer ? <footer className={styles.footer}>{footer}</footer> : null;
+
+    const showFooter = Boolean(cancelAction || confirmAction);
+    const footerNode = showFooter ? (
+        <footer className={styles.footer}>
+            {cancelAction ? (
+                <Button
+                    type="button"
+                    size="small"
+                    variant={cancelAction.variant ?? "secondary"}
+                    disabled={cancelAction.disabled}
+                    onClick={cancelAction.onClick}
+                >
+                    {cancelAction.label}
+                </Button>
+            ) : null}
+            {confirmAction ? (
+                <Button
+                    type={confirmAction.type ?? "button"}
+                    size="small"
+                    variant={confirmAction.variant ?? "primary"}
+                    disabled={confirmAction.disabled}
+                    onClick={
+                        confirmAction.type === "submit"
+                            ? undefined
+                            : confirmAction.onClick
+                    }
+                >
+                    {confirmAction.label}
+                </Button>
+            ) : null}
+        </footer>
+    ) : null;
 
     const panelChildren = (
         <>
@@ -118,9 +203,14 @@ export const Dialog = memo((props: DialogProps) => {
             className={styles.backdrop}
             role="presentation"
             style={{ zIndex }}
-            onClick={onBackdropClick}
+            onClick={dismissViaBackdrop}
         >
-            <div onClick={(event) => event.stopPropagation()}>{panel}</div>
+            <div
+                className={styles.backdropShell}
+                onClick={(event) => event.stopPropagation()}
+            >
+                {panel}
+            </div>
         </div>
     );
 });

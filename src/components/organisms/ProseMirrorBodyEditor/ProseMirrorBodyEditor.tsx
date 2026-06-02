@@ -60,7 +60,7 @@ import {
 } from "../../../editor/prosemirror/sectionReconcileGuard";
 import { elementIdOf } from "../../../state/documentEvents/helpers";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
-import { enterTableBlockById } from "../../../editor/prosemirror/bodyTableCommands";
+import { enterBlockEditById } from "../../../editor/prosemirror/bodyTableCommands";
 import { takePendingBlockEditIfMatches } from "../../../editor/prosemirror/pendingBlockEdit";
 import { setTableFocusPush } from "../../../editor/prosemirror/table/tableFocusBridge";
 import { applyTableCellFocus } from "../../../editor/prosemirror/table/tableFocusRegistry";
@@ -489,13 +489,14 @@ export const ProseMirrorBodyEditor = ({
             return;
         }
 
-        // A freshly-inserted table opens directly in fine-grained mode with the
-        // caret in its first cell, so the user can type immediately.
+        // A freshly-inserted block (table, equation, …) opens directly in
+        // fine-grained mode with its primary field focused, so the user types
+        // into it immediately instead of replacing the node-selected block.
         if (takePendingBlockEditIfMatches(documentFocus.elementId)) {
             lastFocusRequestRef.current = documentFocus.requestId;
             applyingExternalRef.current = true;
             try {
-                enterTableBlockById(view, documentFocus.elementId);
+                enterBlockEditById(view, documentFocus.elementId);
             } finally {
                 applyingExternalRef.current = false;
             }
