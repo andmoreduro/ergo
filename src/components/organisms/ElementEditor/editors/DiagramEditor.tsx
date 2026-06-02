@@ -5,6 +5,7 @@ import { useDiagramMermaidAsset } from "../../../../editor/diagram/useDiagramMer
 import { useElementEnterInsertsParagraph } from "../../../../editor/useInsertParagraphAfterElement";
 import { useDocumentAst } from "../../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../../state/TemplateSpecContext";
+import { effectiveFigureAnnotationFields } from "../../../../editor/templateElementOverrides";
 import { wrapperFieldDraftValues } from "../../../../editor/wrapperFields";
 import { m } from "../../../../paraglide/messages.js";
 import { Textarea } from "../../../atoms/Textarea/Textarea";
@@ -23,7 +24,7 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
     const { state } = useDocumentAst();
     const { spec: templateSpec } = useTemplateSpecContext();
     const figureOverride = templateSpec?.element_overrides?.figure ?? null;
-    const extraFields = figureOverride?.extra_fields ?? [];
+    const extraFields = effectiveFigureAnnotationFields(figureOverride);
     const annotationFields = extraFields.filter(
         (field) => !FIGURE_SETTINGS_KEYS.has(field.key),
     );
@@ -74,7 +75,7 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
             </ElementSettingsButton>
             <ElementExtrasCollapse
                 elementId={element.id}
-                showToggle={annotationFields.length > 0}
+                showToggle
                 primary={
                     <div
                         className={`${styles.figureWrap} ${styles.editorTableGridSize} ${styles.elementPrimary}`}
@@ -90,31 +91,36 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
                                 <Image24Regular />
                             </span>
                         )}
-                        <Textarea
-                            {...sourceField}
-                            fullWidth
-                            monospace
-                            label={m.editor_diagram_source()}
-                            value={sourceDraft}
-                            onChange={(event) => {
-                                sourceEditingRef.current = true;
-                                setSourceDraft(event.target.value);
-                            }}
-                            onBlur={() => {
-                                sourceEditingRef.current = false;
-                            }}
-                            onKeyDown={(event) => {
-                                handleEnterKey(event);
-                            }}
-                        />
                     </div>
                 }
                 extras={
-                    <ElementAnnotationFields
-                        draftRef={wrapperDraftRef}
-                        element={element}
-                        fields={annotationFields}
-                    />
+                    <>
+                        <div data-wrapper-tab="extra" data-wrapper-tab-index={0}>
+                            <Textarea
+                                {...sourceField}
+                                fullWidth
+                                monospace
+                                label={m.editor_diagram_source()}
+                                value={sourceDraft}
+                                onChange={(event) => {
+                                    sourceEditingRef.current = true;
+                                    setSourceDraft(event.target.value);
+                                }}
+                                onBlur={() => {
+                                    sourceEditingRef.current = false;
+                                }}
+                                onKeyDown={(event) => {
+                                    handleEnterKey(event);
+                                }}
+                            />
+                        </div>
+                        <ElementAnnotationFields
+                            draftRef={wrapperDraftRef}
+                            element={element}
+                            fields={annotationFields}
+                            tabIndexOffset={1}
+                        />
+                    </>
                 }
             />
         </>

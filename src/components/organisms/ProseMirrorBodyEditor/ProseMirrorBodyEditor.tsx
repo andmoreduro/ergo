@@ -50,15 +50,21 @@ import {
     setActiveBodyView,
     setBodyHistoryActions,
     setBodyParagraphInsert,
+    setBodyAstDispatch,
     setBodyTableCommit,
+    setBodyReconcileGuard,
 } from "../../../editor/prosemirror/activeView";
+import {
+    contentSectionFromAst,
+    pmFormattingAheadOfSection,
+} from "../../../editor/prosemirror/sectionReconcileGuard";
 import { elementIdOf } from "../../../state/documentEvents/helpers";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
 import { enterTableBlockById } from "../../../editor/prosemirror/bodyTableCommands";
 import { takePendingBlockEditIfMatches } from "../../../editor/prosemirror/pendingBlockEdit";
 import { setTableFocusPush } from "../../../editor/prosemirror/table/tableFocusBridge";
 import { applyTableCellFocus } from "../../../editor/prosemirror/table/tableFocusRegistry";
-import { isTableCellFieldId } from "../../../editor/prosemirror/table/tableCellFocus";
+import { locateTableCell } from "../../../editor/prosemirror/table/tableCellResolve";
 import { ProseMirrorSurface } from "../../atoms/ProseMirrorSurface/ProseMirrorSurface";
 import bodyPaperStyles from "../../atoms/ProseMirrorSurface/ProseMirrorSurface.module.css";
 
@@ -181,10 +187,12 @@ export const ProseMirrorBodyEditor = ({
     // Suppresses AST/focus echo while we apply an externally-driven doc/selection.
     const applyingExternalRef = useRef(false);
     const lastFocusRequestRef = useRef<number | null>(null);
-    // Set when this view originated the pending commit. The resulting section
-    // change is already reflected in the doc, so the reconciliation effect can
-    // skip re-deriving and deep-comparing the whole section on that pass.
-    const pmOriginCommitRef = useRef(false);
+    // After a PM-originated AST commit, skip one-way section→doc reconcile until
+    // props catch up — rebuilding from a stale `section` would strip marks.
+    const skipPmReconcileRef = useRef(false);
+    const markPmCommit = () => {
+        skipPmReconcileRef.current = true;
+    };
 
     const canUndoRef = useRef(canUndo);
     const canRedoRef = useRef(canRedo);
@@ -205,6 +213,13 @@ export const ProseMirrorBodyEditor = ({
         });
         return () => setBodyHistoryActions(null);
     }, [undo, redo]);
+
+    useLayoutEffect(() => {
+        setBodyReconcileGuard(() => {
+            skipPmReconcileRef.current = false;
+        });
+        return () => setBodyReconcileGuard(null);
+    }, []);
 
     useLayoutEffect(() => {
         setBodyParagraphInsert({
@@ -229,10 +244,15 @@ export const ProseMirrorBodyEditor = ({
     }, []);
 
     useLayoutEffect(() => {
+        setBodyAstDispatch((action) => dispatchRef.current(action));
+        return () => setBodyAstDispatch(null);
+    }, []);
+
+    useLayoutEffect(() => {
         setBodyTableCommit({
             sectionId: section.id,
             commit: (forward, inverse) => {
-                pmOriginCommitRef.current = true;
+                markPmCommit();
                 commitRef.current(forward, inverse);
             },
             elementIndex: (tableId) =>
@@ -334,14 +354,18 @@ export const ProseMirrorBodyEditor = ({
                 }
 
                 if (delta && delta.forward.length > 0) {
-                    pmOriginCommitRef.current = true;
+                    markPmCommit();
                     commitRef.current(delta.forward, delta.inverse);
                 }
             }
 
             if ((tr.selectionSet || tr.docChanged) && view.hasFocus()) {
                 const target = focusTargetFromState(nextState);
-                if (target) {
+                if (
+                    target &&
+                    target.fieldId != null &&
+                    target.caretUtf16Offset != null
+                ) {
                     rememberBodyFocus({
                         elementId: target.elementId,
                         fieldId: target.fieldId,
@@ -401,27 +425,35 @@ export const ProseMirrorBodyEditor = ({
     }, []);
 
     // Reconcile externally-applied AST changes (undo/redo, toolbar insert/delete,
-    // reference insert) back into the doc. PM-origin commits already match, so the
-    // structural compare short-circuits and prevents an update loop.
-    useEffect(() => {
+    // reference insert) back into the doc. Compare against the live AST, not a
+    // stale `section` prop, and defer while a PM-originated commit is in flight.
+    useLayoutEffect(() => {
         const view = viewRef.current;
         if (!view) {
             return;
         }
-        // This section change is the echo of our own commit; the doc already
-        // matches it (diffSectionElements verified the round-trip), so skip the
-        // full docToElements re-derive + deep compare on the typing hot path.
-        if (pmOriginCommitRef.current) {
-            pmOriginCommitRef.current = false;
-            return;
-        }
-        if (deepEqual(docToElements(view.state.doc), section.elements)) {
+        const pmElements = docToElements(view.state.doc);
+        const astSection =
+            contentSectionFromAst(documentAstRef.current, section.id) ?? section;
+        const astElements = astSection.elements;
+
+        if (deepEqual(pmElements, astElements)) {
+            skipPmReconcileRef.current = false;
             return;
         }
 
+        if (
+            skipPmReconcileRef.current &&
+            pmFormattingAheadOfSection(pmElements, astElements)
+        ) {
+            return;
+        }
+
+        skipPmReconcileRef.current = false;
+
         applyingExternalRef.current = true;
         try {
-            const doc = sectionToDoc(bodySchema, section);
+            const doc = sectionToDoc(bodySchema, astSection);
             // Prefer an in-place patch (keeps Nodeviews/focus); fall back to a
             // full rebuild only when the block structure changed.
             if (reconcileDocInPlace(view, doc)) {
@@ -434,14 +466,14 @@ export const ProseMirrorBodyEditor = ({
             view.updateState(
                 EditorState.create({
                     doc,
-                    plugins: pluginsRef.current,
+                    plugins: pluginsRef.current ?? bodyPlugins(),
                     selection: selection ?? undefined,
                 }),
             );
         } finally {
             applyingExternalRef.current = false;
         }
-    }, [section]);
+    }, [section, documentAst]);
 
     // Apply externally-requested focus (preview click, sidebar nav, insert) to
     // the PM selection.
@@ -479,9 +511,18 @@ export const ProseMirrorBodyEditor = ({
         lastFocusRequestRef.current = documentFocus.requestId;
         applyingExternalRef.current = true;
         try {
+            const tableCell = locateTableCell(
+                documentAstRef.current,
+                target.elementId,
+                target.fieldId,
+            );
             if (
-                isTableCellFieldId(target.fieldId, target.elementId) &&
-                applyTableCellFocus(target)
+                tableCell &&
+                applyTableCellFocus({
+                    elementId: tableCell.table.id,
+                    fieldId: target.fieldId,
+                    caretUtf16Offset: target.caretUtf16Offset,
+                })
             ) {
                 return;
             }

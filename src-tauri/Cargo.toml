@@ -33,7 +33,11 @@ uuid = { version = "1.23.1", features = ["v4", "js"] }
 chrono = "0.4.44"
 parking_lot = "0.12.5"
 zip = "8.6.0"
+reqwest = { version = "0.13", features = ["blocking"] }
+flate2 = "1"
+tar = "0.4"
 ergo-core = { path = "crates/ergo-core" }
 typst = "0.14.2"
 typst-assets = { version = "0.14.2", features = ["fonts"] }
 typst-ide = "0.14.2"
+include_dir = "0.7.4"

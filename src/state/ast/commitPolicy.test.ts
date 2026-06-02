@@ -36,6 +36,26 @@ describe("commitPolicy", () => {
         expect(shouldCommitAstAction(ast, action, nextAst)).toBe(false);
     });
 
+    it("commits an equation syntax change (typst -> latex)", () => {
+        const ast = astWithEquation("E=mc^2");
+        const action: ASTAction = {
+            type: "UPDATE_EQUATION",
+            payload: { equationId: "equation-1", syntax: "latex" },
+        };
+        const nextAst = applyAction(ast, action);
+        expect(shouldCommitAstAction(ast, action, nextAst)).toBe(true);
+    });
+
+    it("skips an equation syntax change to the same syntax", () => {
+        const ast = astWithEquation("E=mc^2");
+        const action: ASTAction = {
+            type: "UPDATE_EQUATION",
+            payload: { equationId: "equation-1", syntax: "typst" },
+        };
+        const nextAst = applyAction(ast, action);
+        expect(shouldCommitAstAction(ast, action, nextAst)).toBe(false);
+    });
+
     it("skips project input updates that only add trailing whitespace", () => {
         const ast = createDefaultDocumentAST();
         ast.inputs = { title: "Hello" };

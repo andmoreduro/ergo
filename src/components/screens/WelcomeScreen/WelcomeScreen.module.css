@@ -33,13 +33,12 @@
     font-style: italic;
 }
 
-.appIconPlaceholder {
+.appIcon {
     flex-shrink: 0;
     width: var(--size-avatar);
     height: var(--size-avatar);
-    border: var(--border-width-sm) dashed var(--color-border);
     border-radius: var(--border-radius-sm);
-    background: var(--color-bg-secondary);
+    object-fit: cover;
 }
 
 .group + .group {

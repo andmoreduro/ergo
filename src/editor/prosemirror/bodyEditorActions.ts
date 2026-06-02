@@ -1,8 +1,12 @@
 import type { ActionHandlerMap } from "../../actions/runtime";
-import { getActiveBodyView } from "./activeView";
+import {
+    getActiveBodyView,
+    getBodyAstDispatch,
+    peekBodyTabModifiers,
+} from "./activeView";
 import { runBodyTab } from "./bodyTabCommand";
-import { peekBodyTabModifiers } from "./activeView";
 import { enterLockedWholeBlock, runBodyNavigate } from "./bodyTableCommands";
+import { getActiveTableCellCoords } from "./table/tableStructureBridge";
 
 const withBodyView = (
     run: (
@@ -49,4 +53,52 @@ export const bodyEditorActionHandlers = (): ActionHandlerMap => ({
     "editor::BodyNavigateDown": withBodyView((view) =>
         runBodyNavigate(view, "down"),
     ),
+    "editor::AddTableRow": () => {
+        const coords = getActiveTableCellCoords();
+        const dispatch = getBodyAstDispatch();
+        if (!coords || !dispatch) {
+            return false;
+        }
+        dispatch({
+            type: "ADD_TABLE_ROW",
+            payload: { tableId: coords.tableId, rowIndex: coords.row + 1 },
+        });
+        return true;
+    },
+    "editor::AddTableColumn": () => {
+        const coords = getActiveTableCellCoords();
+        const dispatch = getBodyAstDispatch();
+        if (!coords || !dispatch) {
+            return false;
+        }
+        dispatch({
+            type: "ADD_TABLE_COLUMN",
+            payload: { tableId: coords.tableId, colIndex: coords.col + 1 },
+        });
+        return true;
+    },
+    "editor::RemoveTableRow": () => {
+        const coords = getActiveTableCellCoords();
+        const dispatch = getBodyAstDispatch();
+        if (!coords || !dispatch) {
+            return false;
+        }
+        dispatch({
+            type: "REMOVE_TABLE_ROW",
+            payload: { tableId: coords.tableId, rowIndex: coords.row },
+        });
+        return true;
+    },
+    "editor::RemoveTableColumn": () => {
+        const coords = getActiveTableCellCoords();
+        const dispatch = getBodyAstDispatch();
+        if (!coords || !dispatch) {
+            return false;
+        }
+        dispatch({
+            type: "REMOVE_TABLE_COLUMN",
+            payload: { tableId: coords.tableId, colIndex: coords.col },
+        });
+        return true;
+    },
 });

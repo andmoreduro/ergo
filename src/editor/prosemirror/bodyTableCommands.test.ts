@@ -13,7 +13,9 @@ const wrapTableElement = () => {
     if (table.type !== "Table") {
         throw new Error("expected table element");
     }
-    table.cells[0][0].content = [createRichText("in table")];
+    table.cells[0][0].elements = [
+        { type: "Paragraph", id: "cell-p", content: [createRichText("in table")] },
+    ];
     return bodySchema.nodes.table_block.create({
         elementId: table.id,
         element: table,

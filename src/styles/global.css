@@ -1,54 +1,29 @@
 @import "./variables.css";
 
-/* Shared scroll regions (editor + preview) */
-[data-scroll-region] {
+/* Scrollbar appearance (Firefox + WebKit / Tauri WebView2) */
+* {
     scrollbar-width: thin;
     scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
-    scrollbar-gutter: stable;
-    overscroll-behavior: auto;
-    overflow-x: hidden;
-    overflow-y: scroll;
 }
 
-[data-scroll-region]::-webkit-scrollbar {
-    -webkit-appearance: none;
-    appearance: none;
+::-webkit-scrollbar {
     width: var(--size-scrollbar);
     height: var(--size-scrollbar);
-}
-
-[data-scroll-region]::-webkit-scrollbar-track {
-    background-color: var(--color-scrollbar-track);
-}
-
-[data-scroll-region]::-webkit-scrollbar-thumb {
-    border-radius: var(--radius-pill);
-    background-color: var(--color-scrollbar-thumb);
-}
-
-[data-scroll-region]::-webkit-scrollbar-corner {
-    background-color: var(--color-scrollbar-track);
-}
-
-/* Preview horizontal pan — same thumb/track tokens, no vertical scroll rules. */
-[data-scroll-region-x] {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
-}
-
-[data-scroll-region-x]::-webkit-scrollbar {
     -webkit-appearance: none;
     appearance: none;
-    height: var(--size-scrollbar);
 }
 
-[data-scroll-region-x]::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
     background-color: var(--color-scrollbar-track);
 }
 
-[data-scroll-region-x]::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
     border-radius: var(--radius-pill);
     background-color: var(--color-scrollbar-thumb);
+}
+
+::-webkit-scrollbar-corner {
+    background-color: var(--color-scrollbar-track);
 }
 
 html,

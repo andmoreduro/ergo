@@ -117,6 +117,11 @@ const typingKeymap = keymap(
         Object.entries(baseKeymap).filter(([key]) => !/^Arrow/.test(key)),
     ),
 );
+// Note: Mod-b / Mod-i / Mod-u are intentionally NOT registered here. baseKeymap
+// carries none of them, so bold/italic/underline all flow through the action
+// runtime (editor::Bold/Italic/Underline -> applyBodyMark). Registering Mod-u
+// here too made underline toggle twice (PM applied it, then the action runtime
+// toggled it back off), which the toolbar — single path — never hit.
 
 export const bodyPlugins = () => [
     blockEditModePlugin(),

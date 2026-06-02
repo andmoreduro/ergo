@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { RichText } from "../bindings/RichText";
-import { richTextPlainText } from "../state/documentEvents/helpers";
 import { richTextSignificantlyEqual } from "../state/ast/commitPolicy";
 
 /**
@@ -12,11 +11,11 @@ export const useDeferredRichTextCommit = (
     committed: RichText[],
 ) => {
     const [draft, setDraft] = useState(committed);
-    const committedPlainText = richTextPlainText(committed);
+    const committedKey = JSON.stringify(committed);
 
     useEffect(() => {
         setDraft(committed);
-    }, [elementId, committedPlainText]);
+    }, [elementId, committedKey]);
 
     const shouldCommit = (next: RichText[]) =>
         !richTextSignificantlyEqual(next, committed);

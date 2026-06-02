@@ -3,7 +3,7 @@ use crate::ast::{
     AssetEntry, DocumentElement, DocumentSection, Equation, EquationSyntax, Figure, Paragraph,
     ProjectSettings, ReferenceEntry, RichText, Table, TableCell,
 };
-use crate::test_fixtures::basic_document_ast;
+use crate::test_fixtures::{basic_document_ast, table_cell_from_text};
 
 fn rich_text(text: &str) -> Vec<RichText> {
     vec![RichText {
@@ -343,11 +343,7 @@ fn applies_document_event_variants_to_backend_ast() {
                 id: "table-1".to_string(),
                 rows: 1,
                 cols: 1,
-                cells: vec![vec![TableCell {
-                    content: rich_text("A"),
-                    row_span: None,
-                    col_span: None,
-                }]],
+                cells: vec![vec![table_cell_from_text("A")]],
                 column_sizes: vec!["1fr".to_string()],
                 extra_fields: std::collections::HashMap::new(),
             })),
@@ -357,11 +353,7 @@ fn applies_document_event_variants_to_backend_ast() {
         .apply_event(DocumentEvent::InsertTableRow {
             table_id: "table-1".to_string(),
             row_index: 1,
-            cells: vec![TableCell {
-                content: rich_text("B"),
-                row_span: None,
-                col_span: None,
-            }],
+            cells: vec![table_cell_from_text("B")],
         })
         .unwrap();
     session
@@ -369,25 +361,17 @@ fn applies_document_event_variants_to_backend_ast() {
             table_id: "table-1".to_string(),
             row_index: 1,
             col_index: 0,
-            content: rich_text("Celda"),
+            elements: vec![DocumentElement::Paragraph(Paragraph {
+                id: "table-cell-p".to_string(),
+                content: rich_text("Celda"),
+            })],
         })
         .unwrap();
     session
         .apply_event(DocumentEvent::InsertTableColumn {
             table_id: "table-1".to_string(),
             col_index: 1,
-            cells: vec![
-                TableCell {
-                    content: rich_text("C"),
-                    row_span: None,
-                    col_span: None,
-                },
-                TableCell {
-                    content: rich_text("D"),
-                    row_span: None,
-                    col_span: None,
-                },
-            ],
+            cells: vec![table_cell_from_text("C"), table_cell_from_text("D")],
             size: "2fr".to_string(),
         })
         .unwrap();
@@ -402,18 +386,7 @@ fn applies_document_event_variants_to_backend_ast() {
         .apply_event(DocumentEvent::RestoreTableRow {
             table_id: "table-1".to_string(),
             row_index: 2,
-            cells: vec![
-                TableCell {
-                    content: rich_text("E"),
-                    row_span: None,
-                    col_span: None,
-                },
-                TableCell {
-                    content: rich_text("F"),
-                    row_span: None,
-                    col_span: None,
-                },
-            ],
+            cells: vec![table_cell_from_text("E"), table_cell_from_text("F")],
         })
         .unwrap();
     session
@@ -426,18 +399,7 @@ fn applies_document_event_variants_to_backend_ast() {
         .apply_event(DocumentEvent::RestoreTableColumn {
             table_id: "table-1".to_string(),
             col_index: 2,
-            cells: vec![
-                TableCell {
-                    content: rich_text("G"),
-                    row_span: None,
-                    col_span: None,
-                },
-                TableCell {
-                    content: rich_text("H"),
-                    row_span: None,
-                    col_span: None,
-                },
-            ],
+            cells: vec![table_cell_from_text("G"), table_cell_from_text("H")],
             size: "auto".to_string(),
         })
         .unwrap();
@@ -522,7 +484,12 @@ fn applies_document_event_variants_to_backend_ast() {
                 DocumentElement::Table(table) => {
                     assert_eq!(table.rows, 2);
                     assert_eq!(table.cols, 2);
-                    assert_eq!(table.cells[1][0].content, rich_text("Celda"));
+                    match &table.cells[1][0].elements[0] {
+                        DocumentElement::Paragraph(paragraph) => {
+                            assert_eq!(paragraph.content, rich_text("Celda"));
+                        }
+                        _ => panic!("expected paragraph in table cell"),
+                    }
                     assert_eq!(table.column_sizes[1], "3fr");
                 }
                 _ => panic!("table missing"),

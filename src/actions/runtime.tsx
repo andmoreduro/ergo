@@ -220,6 +220,32 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
                 event.preventDefault();
             }
 
+            // Bold/Italic/Underline in the ProseMirror body are applied by the
+            // action runtime (editor::Bold/Italic/Underline -> applyBodyMark).
+            // The browser's native contenteditable formatting (execCommand) would
+            // ALSO toggle them: Ctrl+U flashed on (native -> PM parses <u>) then
+            // off (the runtime's toggleMark), while the toolbar — no keydown, no
+            // native formatting — worked. Block native ONLY inside the body
+            // surface; plain contenteditable fields (captions, template inputs)
+            // rely on execCommand and keep their existing behavior.
+            const markKey = normalizeKey(event.key);
+            const isMarkShortcut =
+                (event.ctrlKey || event.metaKey) &&
+                !event.altKey &&
+                !event.shiftKey &&
+                (markKey === "b" || markKey === "i" || markKey === "u");
+            const bodyView = getActiveBodyView();
+            const targetNode =
+                event.target instanceof Node ? event.target : null;
+            const markInBodySurface =
+                isMarkShortcut &&
+                bodyView !== null &&
+                targetNode !== null &&
+                bodyView.dom.contains(targetNode);
+            if (markInBodySurface) {
+                event.preventDefault();
+            }
+
             const isPlainTextInput =
                 targetIsEditable &&
                 !event.ctrlKey &&
@@ -238,7 +264,10 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
             queueMicrotask(() => {
                 // Tab is always preventDefault'd in the editor column to trap focus;
                 // still resolve Shift+Tab (template field) via the action runtime.
-                if (event.defaultPrevented && !tabKey) {
+                // Body mark shortcuts preventDefault above to block native
+                // formatting but must still resolve here (the action runtime is
+                // their sole applier), so they get the same exception as Tab.
+                if (event.defaultPrevented && !tabKey && !markInBodySurface) {
                     return;
                 }
 

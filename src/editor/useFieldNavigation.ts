@@ -177,7 +177,13 @@ export const useFieldNavigation = (
 
     const handleAdvanceKeyDown = useCallback(
         (
-            event: { key: string; ctrlKey: boolean; shiftKey: boolean; preventDefault: () => void },
+            event: {
+                key: string;
+                ctrlKey: boolean;
+                metaKey?: boolean;
+                shiftKey: boolean;
+                preventDefault: () => void;
+            },
             currentFieldId: string | null,
         ) => {
             const isShiftTab = event.key === "Tab" && event.shiftKey;

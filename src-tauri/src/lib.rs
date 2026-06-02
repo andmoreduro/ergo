@@ -104,6 +104,7 @@ pub mod archive;
 pub mod compile_events;
 pub mod compiler;
 pub mod document_session_commands;
+pub mod package_download;
 pub mod settings;
 #[cfg(test)]
 pub use ergo_core::test_fixtures;

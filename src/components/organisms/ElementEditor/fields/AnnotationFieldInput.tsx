@@ -1,5 +1,6 @@
 import { useEffect, type MutableRefObject } from "react";
 import type { ExtraFieldSpec } from "../../../../bindings/ExtraFieldSpec";
+import { inputRichTextPlain } from "../../../../editor/richTextMarks";
 import { wrapperFieldValue, type WrapperHostElement } from "../../../../editor/wrapperFields";
 import { useDeferredTextCommit } from "../../../../editor/useDeferredTextCommit";
 import { useDocumentAst } from "../../../../state/DocumentContext";
@@ -28,6 +29,30 @@ export const AnnotationFieldInput = ({
 
     const commit = (next: string | unknown) => {
         if (field.type === "content") {
+            if (field.key === "caption") {
+                const caption = inputRichTextPlain(next);
+                if (element.type === "Figure") {
+                    dispatch({
+                        type: "UPDATE_FIGURE",
+                        payload: {
+                            figureId: element.id,
+                            caption,
+                        },
+                    });
+                    return;
+                }
+                if (element.type === "Diagram") {
+                    dispatch({
+                        type: "UPDATE_DIAGRAM",
+                        payload: {
+                            diagramId: element.id,
+                            caption,
+                        },
+                    });
+                    return;
+                }
+            }
+
             dispatch({
                 type: "UPDATE_ELEMENT_EXTRA_FIELD",
                 payload: {

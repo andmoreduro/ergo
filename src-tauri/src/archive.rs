@@ -1,7 +1,15 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
+use include_dir::{include_dir, Dir, DirEntry};
 use tauri::State;
+
+/// The bundled `umb-apa` Typst package source (the editable copy under
+/// `typst_templates/umb-apa`). Embedded at build time so a project using the
+/// `umb-apa` template can `#import "/umb-apa/lib.typ"` without the package
+/// existing in any registry or cache.
+static UMB_APA_PACKAGE: Dir<'_> =
+    include_dir!("$CARGO_MANIFEST_DIR/../typst_templates/umb-apa");
 
 use crate::app_state::TauriAppState;
 use crate::ast::DocumentAST;
@@ -139,26 +147,42 @@ fn is_worker_bootstrap_file(path: &str) -> bool {
     path.starts_with("assets/") || path.starts_with("packages/")
 }
 
-fn project_files_for_package(
-    package: &ergo_core::package_resolver::PackageRef,
-) -> Result<Vec<ProjectFile>, String> {
-    use ergo_core::package_resolver::collect_package_files;
-
-    collect_package_files(package).map(|files| {
-        files
-            .into_iter()
-            .map(|file| ProjectFile {
-                path: file.path,
-                bytes: file.bytes,
-            })
-            .collect()
-    })
-}
-
 fn mirror_project_files_to_vfs(state: &TauriAppState, files: &[ProjectFile]) {
     for file in files {
         state.vfs.write_file(&file.path, file.bytes.clone());
     }
+}
+
+/// Files of a locally-bundled template package, mounted under `<name>/…` in the
+/// VFS so the generated document can import them by path. `template/` (the
+/// package's own starter document) is skipped — only the compiled library and its
+/// assets are needed.
+fn bundled_package_files(package: &Dir<'_>, mount: &str) -> Vec<ProjectFile> {
+    fn walk(entry: &DirEntry<'_>, mount: &str, out: &mut Vec<ProjectFile>) {
+        match entry {
+            DirEntry::Dir(dir) => {
+                for child in dir.entries() {
+                    walk(child, mount, out);
+                }
+            }
+            DirEntry::File(file) => {
+                let rel = file.path().to_string_lossy().replace('\\', "/");
+                if rel.starts_with("template/") {
+                    return;
+                }
+                out.push(ProjectFile {
+                    path: format!("{mount}/{rel}"),
+                    bytes: file.contents().to_vec(),
+                });
+            }
+        }
+    }
+
+    let mut files = Vec::new();
+    for entry in package.entries() {
+        walk(entry, mount, &mut files);
+    }
+    files
 }
 
 #[tauri::command]
@@ -169,9 +193,17 @@ pub fn load_template_package_files(
     use ergo_core::package_resolver::PackageRef;
     use ergo_core::template_spec::load_bundled_template;
 
+    // `umb-apa` is bundled with the app and imported by path (`/umb-apa/lib.typ`),
+    // not resolved from a registry/cache.
+    if template_id == "umb-apa" {
+        let files = bundled_package_files(&UMB_APA_PACKAGE, "umb-apa");
+        mirror_project_files_to_vfs(&state, &files);
+        return Ok(files);
+    }
+
     let spec = load_bundled_template(&template_id)?;
     let package = PackageRef::from_import(&spec.package.name, &spec.package.version)?;
-    let files = project_files_for_package(&package)?;
+    let files = crate::package_download::collect_package_files_with_deps(&package)?;
     mirror_project_files_to_vfs(&state, &files);
     Ok(files)
 }
@@ -185,7 +217,7 @@ pub fn load_package_files(
     use ergo_core::package_resolver::PackageRef;
 
     let package = PackageRef::from_import(&name, &version)?;
-    let files = project_files_for_package(&package)?;
+    let files = crate::package_download::collect_package_files_with_deps(&package)?;
     mirror_project_files_to_vfs(&state, &files);
     Ok(files)
 }
@@ -432,6 +464,21 @@ mod tests {
 
         assert!(!names.contains(".ergproj/resource-previews/svg/equation-1-deadbeef.svg"));
         assert!(names.contains("assets/image.png"));
+    }
+
+    #[test]
+    fn bundled_umb_apa_includes_lib_and_csl_but_not_starter() {
+        let files = bundled_package_files(&UMB_APA_PACKAGE, "umb-apa");
+        let paths: HashSet<String> = files.iter().map(|file| file.path.clone()).collect();
+
+        assert!(paths.contains("umb-apa/lib.typ"), "missing lib.typ: {paths:?}");
+        assert!(
+            paths.contains("umb-apa/assets/styles/apa.csl"),
+            "missing bundled CSL: {paths:?}"
+        );
+        assert!(paths.iter().any(|path| path.starts_with("umb-apa/utils/")));
+        // The package's own starter document is not needed to compile a project.
+        assert!(!paths.iter().any(|path| path.starts_with("umb-apa/template/")));
     }
 
     #[test]

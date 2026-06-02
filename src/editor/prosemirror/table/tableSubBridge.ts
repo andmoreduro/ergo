@@ -1,9 +1,9 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import {
-    fragmentToRichText,
-    richTextToInlineNodes,
-} from "../astBridge";
+    cellFragmentToElements,
+    tableCellToSubDocNodes,
+} from "./tableCellBridge";
 import { type TableSchema, tableSchema } from "./tableSchema";
 
 export type TableElement = Extract<DocumentElement, { type: "Table" }>;
@@ -18,7 +18,7 @@ export const tableToSubDoc = (
             const rowspan = cell.row_span ?? 1;
             return schema.nodes.table_cell.create(
                 { colspan, rowspan },
-                richTextToInlineNodes(schema, cell.content),
+                tableCellToSubDocNodes(schema, cell),
             );
         });
         return schema.nodes.table_row.create(null, cells);
@@ -40,7 +40,7 @@ export const subDocToTable = (doc: PMNode, prev: TableElement): TableElement => 
             const rowspan = cell.attrs.rowspan ?? 1;
             const colspan = cell.attrs.colspan ?? 1;
             rowCells.push({
-                content: fragmentToRichText(cell.content),
+                elements: cellFragmentToElements(tableSchema, cell.content),
                 row_span: rowspan !== 1 ? rowspan : null,
                 col_span: colspan !== 1 ? colspan : null,
             });

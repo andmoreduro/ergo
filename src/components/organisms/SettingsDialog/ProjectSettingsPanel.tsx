@@ -2,46 +2,89 @@ import type { ProjectSettings } from "../../../bindings/ProjectSettings";
 import type { TemplateVariantSpec } from "../../../bindings/TemplateVariantSpec";
 import { m } from "../../../paraglide/messages.js";
 import {
+    DOCUMENT_LOCALES,
+    normalizeDocumentLanguage,
+    type DocumentLocale,
+} from "../../../settings/documentLanguage";
+import {
+    defaultOutlineTitle,
+    type OutlineTitleKind,
+} from "../../../settings/outlineDefaults";
+import {
+    getOutlineInclude,
     getTemplateOverride,
+    OUTLINE_INCLUDE_OVERRIDE_KEYS,
     OUTLINE_TITLE_OVERRIDE_KEYS,
+    setOutlineInclude,
     setTemplateOverride,
+    type OutlineIncludeOverrideKey,
+    type OutlineTitleOverrideKey,
 } from "../../../settings/templateOverrides";
+import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { Select } from "../../atoms/Select/Select";
 import { TextInput } from "../../atoms/TextInput/TextInput";
 import { FormField } from "../../molecules/FormField/FormField";
 import styles from "./SettingsDialog.module.css";
 import { toOptionalNumber } from "./settingsDialogUtils";
 
+import type { TemplateOverride } from "../../../bindings/TemplateOverride";
+
 export interface ProjectSettingsPanelProps {
     settings: ProjectSettings;
     onChange: (settings: ProjectSettings) => void;
+    templateDefaultOverrides?: TemplateOverride[];
     templateVariants?: TemplateVariantSpec[];
     templateVariantId?: string | null;
     onTemplateVariantChange?: (variantId: string) => void;
 }
 
-const outlineField = (
+const outlineSetting = (
     settings: ProjectSettings,
     onChange: (settings: ProjectSettings) => void,
-    label: string,
-    key: (typeof OUTLINE_TITLE_OVERRIDE_KEYS)[keyof typeof OUTLINE_TITLE_OVERRIDE_KEYS],
-) => (
-    <FormField label={label}>
-        <TextInput
-            aria-label={label}
-            fullWidth
-            placeholder={m.settings_outline_title_placeholder()}
-            value={getTemplateOverride(settings, key)}
-            onChange={(event) =>
-                onChange(setTemplateOverride(settings, key, event.target.value))
-            }
-        />
-    </FormField>
-);
+    templateDefaultOverrides: TemplateOverride[],
+    includeLabel: string,
+    titleLabel: string,
+    titleKind: OutlineTitleKind,
+    includeKey: OutlineIncludeOverrideKey,
+    titleKey: OutlineTitleOverrideKey,
+) => {
+    const included = getOutlineInclude(settings, includeKey, templateDefaultOverrides);
+
+    return (
+        <div className={styles.outlineSetting}>
+            <Checkbox
+                checked={included}
+                label={includeLabel}
+                onChange={(event) =>
+                    onChange(
+                        setOutlineInclude(settings, includeKey, event.currentTarget.checked),
+                    )
+                }
+            />
+            {included ? (
+                <FormField label={titleLabel}>
+                    <TextInput
+                        aria-label={titleLabel}
+                        fullWidth
+                        placeholder={defaultOutlineTitle(
+                            settings.language,
+                            titleKind,
+                        )}
+                        value={getTemplateOverride(settings, titleKey)}
+                        onChange={(event) =>
+                            onChange(setTemplateOverride(settings, titleKey, event.target.value))
+                        }
+                    />
+                </FormField>
+            ) : null}
+        </div>
+    );
+};
 
 export const ProjectSettingsPanel = ({
     settings,
     onChange,
+    templateDefaultOverrides = [],
     templateVariants = [],
     templateVariantId = null,
     onTemplateVariantChange,
@@ -66,40 +109,64 @@ export const ProjectSettingsPanel = ({
                         />
                     </FormField>
                 ) : null}
-                {outlineField(
+                {outlineSetting(
                     settings,
                     onChange,
+                    templateDefaultOverrides,
+                    m.settings_outline_include_contents(),
                     m.settings_outline_contents_title(),
+                    "contents",
+                    OUTLINE_INCLUDE_OVERRIDE_KEYS.contents,
                     OUTLINE_TITLE_OVERRIDE_KEYS.contents,
                 )}
-                {outlineField(
+                {outlineSetting(
                     settings,
                     onChange,
+                    templateDefaultOverrides,
+                    m.settings_outline_include_tables(),
                     m.settings_outline_tables_title(),
+                    "tables",
+                    OUTLINE_INCLUDE_OVERRIDE_KEYS.tables,
                     OUTLINE_TITLE_OVERRIDE_KEYS.tables,
                 )}
-                {outlineField(
+                {outlineSetting(
                     settings,
                     onChange,
+                    templateDefaultOverrides,
+                    m.settings_outline_include_figures(),
                     m.settings_outline_figures_title(),
+                    "figures",
+                    OUTLINE_INCLUDE_OVERRIDE_KEYS.figures,
                     OUTLINE_TITLE_OVERRIDE_KEYS.figures,
                 )}
-                {outlineField(
+                {outlineSetting(
                     settings,
                     onChange,
+                    templateDefaultOverrides,
+                    m.settings_outline_include_equations(),
                     m.settings_outline_equations_title(),
+                    "equations",
+                    OUTLINE_INCLUDE_OVERRIDE_KEYS.equations,
                     OUTLINE_TITLE_OVERRIDE_KEYS.equations,
                 )}
-                {outlineField(
+                {outlineSetting(
                     settings,
                     onChange,
+                    templateDefaultOverrides,
+                    m.settings_outline_include_listings(),
                     m.settings_outline_listings_title(),
+                    "listings",
+                    OUTLINE_INCLUDE_OVERRIDE_KEYS.listings,
                     OUTLINE_TITLE_OVERRIDE_KEYS.listings,
                 )}
-                {outlineField(
+                {outlineSetting(
                     settings,
                     onChange,
+                    templateDefaultOverrides,
+                    m.settings_outline_include_appendices(),
                     m.settings_outline_appendices_title(),
+                    "appendices",
+                    OUTLINE_INCLUDE_OVERRIDE_KEYS.appendices,
                     OUTLINE_TITLE_OVERRIDE_KEYS.appendices,
                 )}
             </div>
@@ -121,14 +188,21 @@ export const ProjectSettingsPanel = ({
                     />
                 </FormField>
                 <FormField label={m.settings_project_language()}>
-                    <TextInput
+                    <Select
                         aria-label={m.settings_project_language()}
                         fullWidth
-                        value={settings.language ?? ""}
+                        value={normalizeDocumentLanguage(settings.language)}
+                        options={DOCUMENT_LOCALES.map((locale) => ({
+                            value: locale,
+                            label:
+                                locale === "es"
+                                    ? m.menubar_language_spanish()
+                                    : m.menubar_language_english(),
+                        }))}
                         onChange={(event) =>
                             onChange({
                                 ...settings,
-                                language: event.target.value.trim() || null,
+                                language: event.target.value as DocumentLocale,
                             })
                         }
                     />

@@ -26,9 +26,27 @@ pub(crate) fn uses_standard_typst_figure(wrapper: &str) -> bool {
     wrapper == "figure"
 }
 
-/// Emit `#wrapper(...)` for template-specific wrappers such as `apa-figure`.
+pub(crate) fn push_table_figure_caption(
+    builder: &mut SourceBuilder,
+    table_id: &str,
+    extra_fields: &std::collections::HashMap<String, serde_json::Value>,
+) {
+    let Some(serde_json::Value::String(caption)) = extra_fields.get("caption") else {
+        return;
+    };
+    if caption.trim().is_empty() {
+        return;
+    }
+    builder.push_literal(",\n  caption: [");
+    builder.push_escaped_field(
+        table_id,
+        &format!("{table_id}:extra:caption"),
+        caption,
+        0,
+    );
+    builder.push_literal("]\n");
+}
 
-/// Emit `#wrapper(...)` for template-specific wrappers such as `apa-figure`.
 pub(crate) fn figure_image_typst_source(
     path: &str,
     extra_fields: &std::collections::HashMap<String, serde_json::Value>,
@@ -50,11 +68,7 @@ pub(crate) fn figure_image_typst_source(
     format!("image(\"{escaped}\"{args})")
 }
 
-/// The body (`#image`, `table(...)`, or rich text) is a direct argument — never wrapped
-/// in Typst's built-in `#figure(...)`.
-
-/// The body (`#image`, `table(...)`, or rich text) is a direct argument — never wrapped
-/// in Typst's built-in `#figure(...)`.
+/// The body (`image(...)`, `table(...)`, or rich text) is a direct argument — not wrapped in `#figure(...)`.
 pub(crate) fn push_custom_wrapper_figure_element(
     builder: &mut SourceBuilder,
     template: &TemplateSpec,

@@ -282,6 +282,7 @@ fn dirty_resource_ids_for_event(ast: &DocumentAST, event: &DocumentEvent) -> Has
         }
         DocumentEvent::UpdateEquation { element_id, .. }
         | DocumentEvent::UpdateFigure { element_id, .. }
+        | DocumentEvent::UpdateDiagram { element_id, .. }
         | DocumentEvent::UpdateCustomElementField { element_id, .. } => {
             ids.insert(element_id.clone());
         }

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, type MouseEvent } from "react";
 import {
     Diagram24Regular,
     TextHeader124Regular,
@@ -23,8 +23,15 @@ import { TextParagraph24Regular } from "../../icons/TextParagraph24Regular";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./EditorToolbar.module.css";
 
+/** Keep ProseMirror selection when toolbar buttons are clicked. */
+const keepEditorSelection = (event: MouseEvent) => {
+    event.preventDefault();
+};
+
 export interface EditorToolbarProps {
     canDeleteFocusedTarget: boolean;
+    /** When true, only in-cell block inserts (no heading/table/figure/diagram). */
+    tableCellEditing?: boolean;
     templateVariants: TemplateVariantSpec[];
     resolvedVariantId: string;
     onDelete: () => void;
@@ -48,6 +55,7 @@ export interface EditorToolbarProps {
 export const EditorToolbar = memo(
     ({
         canDeleteFocusedTarget,
+        tableCellEditing = false,
         templateVariants,
         resolvedVariantId,
         onDelete,
@@ -82,6 +90,7 @@ export const EditorToolbar = memo(
                 <IconButton
                     title={m.menubar_text_bold()}
                     aria-label={m.menubar_text_bold()}
+                    onMouseDown={keepEditorSelection}
                     onClick={onBold}
                 >
                     <TextBold24Regular />
@@ -89,6 +98,7 @@ export const EditorToolbar = memo(
                 <IconButton
                     title={m.menubar_text_italic()}
                     aria-label={m.menubar_text_italic()}
+                    onMouseDown={keepEditorSelection}
                     onClick={onItalic}
                 >
                     <TextItalic24Regular />
@@ -96,6 +106,7 @@ export const EditorToolbar = memo(
                 <IconButton
                     title={m.menubar_text_underline()}
                     aria-label={m.menubar_text_underline()}
+                    onMouseDown={keepEditorSelection}
                     onClick={onUnderline}
                 >
                     <TextUnderline24Regular />
@@ -105,6 +116,7 @@ export const EditorToolbar = memo(
                 <IconButton
                     title={m.menubar_insert_heading()}
                     aria-label={m.menubar_insert_heading()}
+                    disabled={tableCellEditing}
                     onClick={onInsertHeading}
                 >
                     <TextHeader124Regular />
@@ -140,6 +152,7 @@ export const EditorToolbar = memo(
                 <IconButton
                     title={m.menubar_insert_table()}
                     aria-label={m.menubar_insert_table()}
+                    disabled={tableCellEditing}
                     onClick={onInsertTable}
                 >
                     <Table24Regular />
@@ -165,6 +178,7 @@ export const EditorToolbar = memo(
                 <IconButton
                     title={m.menubar_insert_figure()}
                     aria-label={m.menubar_insert_figure()}
+                    disabled={tableCellEditing}
                     onClick={onInsertFigure}
                 >
                     <Image24Regular />
@@ -172,6 +186,7 @@ export const EditorToolbar = memo(
                 <IconButton
                     title={m.menubar_insert_diagram()}
                     aria-label={m.menubar_insert_diagram()}
+                    disabled={tableCellEditing}
                     onClick={onInsertDiagram}
                 >
                     <Diagram24Regular />

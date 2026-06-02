@@ -289,7 +289,7 @@ mod tests {
 
         let main_source = vfs.read_source("main.typ").unwrap();
         assert!(
-            main_source.contains("#outline()"),
+            main_source.contains("title: [Contents]"),
             "main.typ should include document outline; got:\n{main_source}"
         );
         assert!(

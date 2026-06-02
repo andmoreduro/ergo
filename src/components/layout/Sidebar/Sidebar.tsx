@@ -36,11 +36,7 @@ const SidebarComponent = ({
     const references = useDocumentAstSelector((ast) => ast.references);
 
     return (
-        <aside
-            className={styles.sidebar}
-            data-editor-focus-lose-exempt=""
-            data-scroll-region
-        >
+        <aside className={styles.sidebar} data-editor-focus-lose-exempt="">
             <Accordion title={m.sidebar_compiled_outline()} defaultOpen>
                 <SidebarOutlinePanel
                     outline={outline}

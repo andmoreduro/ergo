@@ -1,6 +1,9 @@
 .backdrop {
     position: fixed;
-    inset: 0;
+    top: var(--layout-app-chrome-h);
+    right: 0;
+    bottom: 0;
+    left: 0;
     display: grid;
     place-items: center;
     padding: var(--space-4);
@@ -10,7 +13,12 @@
 .panel {
     display: flex;
     flex-direction: column;
-    max-height: min(var(--height-panel-max), calc(var(--layout-viewport-h) - var(--space-8)));
+    width: 100%;
+    max-width: var(--layout-dialog-max-w);
+    max-height: min(
+        var(--layout-dialog-max-h),
+        calc(var(--layout-dialog-available-h) - 2 * var(--space-4))
+    );
     border: var(--border-width-sm) solid var(--color-border);
     border-radius: var(--border-radius-lg);
     background: var(--color-bg-primary);
@@ -18,29 +26,25 @@
     box-shadow: var(--shadow-md);
 }
 
-.panelScroll {
-    overflow: auto;
-    overscroll-behavior: auto;
-}
-
 .sizeSm {
-    width: min(var(--width-panel-sm), var(--layout-full));
+    width: min(var(--width-panel-sm), var(--layout-dialog-max-w));
 }
 
 .sizeMd {
-    width: min(var(--width-panel-md), var(--layout-full));
+    width: min(var(--width-panel-md), var(--layout-dialog-max-w));
 }
 
 .sizeLg {
-    width: min(var(--width-panel-lg), var(--layout-full));
+    width: min(var(--width-panel-lg), var(--layout-dialog-max-w));
 }
 
 .sizeXl {
-    width: min(var(--width-panel-xl), var(--layout-full));
+    width: min(var(--width-panel-xl), var(--layout-dialog-max-w));
 }
 
 .header {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
@@ -55,12 +59,18 @@
 
 .body {
     display: grid;
+    flex: 1 1 auto;
+    min-height: 0;
     gap: var(--space-4);
     padding: var(--space-4);
+    overflow-y: auto;
+    overscroll-behavior: auto;
+    scrollbar-gutter: auto;
 }
 
 .footer {
     display: flex;
+    flex-shrink: 0;
     justify-content: flex-end;
     gap: var(--space-2);
     padding: var(--space-4);

@@ -244,11 +244,14 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
                 elementId !== projectInputElementId &&
                 elementId !== backendInputsElementId
             ) {
-                rememberBodyFocus({
-                    elementId,
-                    fieldId,
-                    caretUtf16Offset: caretOffsetFromNode(node),
-                });
+                const caret = caretOffsetFromNode(node);
+                if (caret != null) {
+                    rememberBodyFocus({
+                        elementId,
+                        fieldId,
+                        caretUtf16Offset: caret,
+                    });
+                }
             }
 
             setDocumentFocus({

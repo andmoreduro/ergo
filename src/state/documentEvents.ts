@@ -11,6 +11,7 @@ import {
     elementIdOf,
     elementLocation,
     equationElement,
+    diagramElement,
     figureElement,
     getValueAtPath,
     headingElement,
@@ -267,7 +268,7 @@ export const applyDocumentEventToAst = (
                               rowIndex === event.row_index
                                   ? row.map((cell, colIndex) =>
                                         colIndex === event.col_index
-                                            ? { ...cell, content: event.content }
+                                            ? { ...cell, elements: event.elements }
                                             : cell,
                                     )
                                   : row,
@@ -343,6 +344,19 @@ export const applyDocumentEventToAst = (
                                     content: richTextFromString(event.body_text),
                                 }
                               : element.content,
+                };
+            });
+        case "updateDiagram":
+            return mapContentElements(ast, event.element_id, (element) => {
+                if (element.type !== "Diagram") {
+                    return element;
+                }
+                return {
+                    ...element,
+                    mermaid_source: event.mermaid_source ?? element.mermaid_source,
+                    caption: event.caption ?? element.caption,
+                    placement: event.placement ?? element.placement,
+                    asset_id: event.asset_id ?? element.asset_id,
                 };
             });
         case "updateElementExtraField":
@@ -542,7 +556,14 @@ const documentEventFromAction = (
             return replaceElementWith(nextAst, action.payload.quoteId, "insertElement");
 
         case "UPDATE_DIAGRAM":
-            return replaceElementWith(nextAst, action.payload.diagramId, "insertElement");
+            return {
+                type: "updateDiagram",
+                element_id: action.payload.diagramId,
+                mermaid_source: action.payload.mermaidSource ?? null,
+                asset_id: action.payload.assetId ?? null,
+                caption: action.payload.caption ?? null,
+                placement: action.payload.placement ?? null,
+            };
 
         case "UPDATE_LIST_ITEM":
             return replaceElementWith(nextAst, action.payload.listId, "insertElement");
@@ -560,7 +581,7 @@ const documentEventFromAction = (
                 table_id: action.payload.tableId,
                 row_index: action.payload.rowIndex,
                 col_index: action.payload.colIndex,
-                content: action.payload.content,
+                elements: action.payload.elements,
             };
 
         case "ADD_TABLE_ROW": {
@@ -854,8 +875,25 @@ const inverseDocumentEventFromAction = (
         case "UPDATE_QUOTE_CONTENT":
             return replaceElementWith(previousAst, action.payload.quoteId, "restoreElement");
 
-        case "UPDATE_DIAGRAM":
-            return replaceElementWith(previousAst, action.payload.diagramId, "restoreElement");
+        case "UPDATE_DIAGRAM": {
+            const diagram = diagramElement(previousAst, action.payload.diagramId);
+            return {
+                type: "updateDiagram",
+                element_id: action.payload.diagramId,
+                mermaid_source:
+                    action.payload.mermaidSource === undefined
+                        ? null
+                        : diagram.mermaid_source,
+                asset_id:
+                    action.payload.assetId === undefined ? null : diagram.asset_id,
+                caption:
+                    action.payload.caption === undefined ? null : diagram.caption,
+                placement:
+                    action.payload.placement === undefined
+                        ? null
+                        : diagram.placement,
+            };
+        }
 
         case "UPDATE_LIST_ITEM":
             return replaceElementWith(previousAst, action.payload.listId, "restoreElement");
@@ -874,7 +912,11 @@ const inverseDocumentEventFromAction = (
                 table_id: action.payload.tableId,
                 row_index: action.payload.rowIndex,
                 col_index: action.payload.colIndex,
-                content: tableCell(table, action.payload.rowIndex, action.payload.colIndex).content,
+                elements: tableCell(
+                    table,
+                    action.payload.rowIndex,
+                    action.payload.colIndex,
+                ).elements,
             };
         }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createRichText } from "../../../state/ast/defaults";
-import { richTextSignificantlyEqual } from "../../../state/ast/commitPolicy";
+import { createParagraph, createRichText } from "../../../state/ast/defaults";
+import { tableCellElementsEqual } from "./tableCellElements";
 import type { TableElement } from "./tableSubBridge";
 import { subDocToTable, tableToSubDoc } from "./tableSubBridge";
 
@@ -15,7 +15,7 @@ const tableEqual = (left: TableElement, right: TableElement): boolean =>
         row.every((cell, colIndex) => {
             const other = right.cells[rowIndex][colIndex];
             return (
-                richTextSignificantlyEqual(cell.content, other.content) &&
+                tableCellElementsEqual(cell.elements, other.elements) &&
                 cell.col_span === other.col_span &&
                 cell.row_span === other.row_span
             );
@@ -32,9 +32,15 @@ describe("tableSubBridge", () => {
             cells: [
                 [
                     {
-                        content: [
-                            { ...createRichText("bold "), bold: true },
-                            createRichText("plain"),
+                        elements: [
+                            {
+                                type: "Paragraph",
+                                id: "cell-p-1",
+                                content: [
+                                    { ...createRichText("bold "), bold: true },
+                                    createRichText("plain"),
+                                ],
+                            },
                         ],
                         row_span: null,
                         col_span: 2,
@@ -42,19 +48,25 @@ describe("tableSubBridge", () => {
                 ],
                 [
                     {
-                        content: [
-                            createRichText("see "),
+                        elements: [
                             {
-                                ...createRichText("Smith2020"),
-                                kind: "reference",
-                                reference_id: "ref-1",
+                                type: "Paragraph",
+                                id: "cell-p-2",
+                                content: [
+                                    createRichText("see "),
+                                    {
+                                        ...createRichText("Smith2020"),
+                                        kind: "reference",
+                                        reference_id: "ref-1",
+                                    },
+                                ],
                             },
                         ],
                         row_span: null,
                         col_span: null,
                     },
                     {
-                        content: [],
+                        elements: [createParagraph()],
                         row_span: null,
                         col_span: null,
                     },
