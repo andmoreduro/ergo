@@ -44,6 +44,7 @@ import {
 } from "../../../editor/fieldIds";
 import { parseInputRichText } from "../../../editor/richTextMarks";
 import {
+    contentBlocksSignificantlyEqual,
     finalizeContentBlocks,
     normalizeContentBlocks,
     parseInputContentBlocks,
@@ -666,12 +667,27 @@ const DynamicFieldContentBlocks = ({ schema, path, label }: DynamicFieldProps) =
             paragraphs={content}
             fieldBinding={fieldBinding}
             onChange={(next) => {
+                setDraft(next);
                 const normalized = normalizeContentBlocks(next);
-                setDraft(normalized);
                 if (shouldCommit(normalized)) {
                     dispatch({
                         type: "UPDATE_INPUT",
                         payload: { path, value: finalizeContentBlocks(normalized) },
+                    });
+                }
+            }}
+            onBlur={() => {
+                const normalized = normalizeContentBlocks(content);
+                const finalized = finalizeContentBlocks(normalized);
+                if (
+                    !contentBlocksSignificantlyEqual(
+                        finalized,
+                        finalizeContentBlocks(committed),
+                    )
+                ) {
+                    dispatch({
+                        type: "UPDATE_INPUT",
+                        payload: { path, value: finalized },
                     });
                 }
             }}

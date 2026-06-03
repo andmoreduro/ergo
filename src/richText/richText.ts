@@ -420,21 +420,24 @@ const escapeHtml = (value: string): string =>
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
 
-export const caretPlainOffsetFromSelection = (
-    root: HTMLElement,
-    selection: Selection,
-): number | null => {
-    if (!selection.rangeCount) {
-        return null;
-    }
+const blockStructuredEditableRoot = (root: HTMLElement): boolean =>
+    Array.from(root.childNodes).some(
+        (node) =>
+            node instanceof HTMLElement && BLOCK_TAGS.has(node.tagName),
+    );
 
-    const range = selection.getRangeAt(0);
-    if (!root.contains(range.startContainer)) {
-        return null;
-    }
+const blockElementsInEditableRoot = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.childNodes).filter(
+        (node): node is HTMLElement =>
+            node instanceof HTMLElement && BLOCK_TAGS.has(node.tagName),
+    );
 
+const caretOffsetWithinSubtree = (
+    container: HTMLElement,
+    range: Range,
+): number => {
     const probe = range.cloneRange();
-    probe.selectNodeContents(root);
+    probe.selectNodeContents(container);
     probe.setEnd(range.startContainer, range.startOffset);
 
     const fragment = probe.cloneContents();
@@ -454,6 +457,77 @@ export const caretPlainOffsetFromSelection = (
 
     fragment.childNodes.forEach(walk);
     return offset;
+};
+
+const placeCaretInBlockElement = (block: HTMLElement, offset: number) => {
+    const selection = document.getSelection();
+    if (!selection) {
+        return;
+    }
+
+    const textLength = plainTextLengthInEditable(block);
+    if (textLength === 0) {
+        const range = document.createRange();
+        range.selectNodeContents(block);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return;
+    }
+
+    let remaining = offset;
+    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    let textNode: Text | null = null;
+
+    while ((textNode = walker.nextNode() as Text | null)) {
+        const length = textNode.textContent?.length ?? 0;
+        if (remaining <= length) {
+            const range = document.createRange();
+            range.setStart(textNode, remaining);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            return;
+        }
+        remaining -= length;
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(block);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+};
+
+export const caretPlainOffsetFromSelection = (
+    root: HTMLElement,
+    selection: Selection,
+): number | null => {
+    if (!selection.rangeCount) {
+        return null;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (!root.contains(range.startContainer)) {
+        return null;
+    }
+
+    if (blockStructuredEditableRoot(root)) {
+        let offset = 0;
+        const blocks = blockElementsInEditableRoot(root);
+        for (const block of blocks) {
+            if (
+                block.contains(range.startContainer) ||
+                block === range.startContainer
+            ) {
+                return offset + caretOffsetWithinSubtree(block, range);
+            }
+            offset += plainTextLengthInEditable(block);
+        }
+        return offset;
+    }
+
+    return caretOffsetWithinSubtree(root, range);
 };
 
 export const insertTextAtCaret = (
@@ -485,6 +559,39 @@ export const restoreCaretAtPlainOffset = (
     root: HTMLElement,
     offset: number,
 ): void => {
+    if (blockStructuredEditableRoot(root)) {
+        let remaining = offset;
+        const blocks = blockElementsInEditableRoot(root);
+        for (let index = 0; index < blocks.length; index += 1) {
+            const block = blocks[index]!;
+            const blockLength = plainTextLengthInEditable(block);
+            const hasNextBlock = index < blocks.length - 1;
+
+            if (remaining < blockLength) {
+                placeCaretInBlockElement(block, remaining);
+                return;
+            }
+
+            if (remaining === blockLength && hasNextBlock) {
+                remaining = 0;
+                continue;
+            }
+
+            if (remaining === blockLength) {
+                placeCaretInBlockElement(block, remaining);
+                return;
+            }
+
+            remaining -= blockLength;
+        }
+
+        const lastBlock = blocks[blocks.length - 1];
+        if (lastBlock) {
+            placeCaretInBlockElement(lastBlock, plainTextLengthInEditable(lastBlock));
+        }
+        return;
+    }
+
     const selection = document.getSelection();
     if (!selection) {
         return;
