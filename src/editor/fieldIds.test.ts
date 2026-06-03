@@ -15,6 +15,15 @@ describe("editorFocusIdsForBackendField", () => {
         });
     });
 
+    it("collapses indexed content_blocks paths to the editor field id", () => {
+        expect(
+            editorFocusIdsForBackendField("inputs", "/abstract_es/2"),
+        ).toEqual({
+            elementId: "project",
+            fieldId: "project-input-/abstract_es",
+        });
+    });
+
     it("passes through non-input element and field ids", () => {
         expect(
             editorFocusIdsForBackendField("heading-1", "heading-1:text"),

@@ -8,8 +8,9 @@ use crate::compilation_types::SourceRevision;
 use crate::document_session::{FieldSourceMapEntry, SourceMapEntry};
 use crate::path_utils::path_from_file_id;
 use crate::preview_sync_lookup::{
-    candidate_offsets, field_entries_for_target, field_entry_closest_to_caret,
-    field_entry_for_offset, focus_target_for_field_offset, preview_position,
+    candidate_offsets, field_entries_for_target, field_entry_for_content_blocks_caret,
+    field_entry_for_offset,
+    focus_target_for_field_offset, local_caret_in_content_block_entry, preview_position,
     source_entry_for_offset, source_offset_for_caret,
 };
 pub use crate::preview_sync_types::{
@@ -286,8 +287,18 @@ impl PreviewSyncState {
         };
 
         let entries = field_entries_for_target(&preview.field_source_map, target);
-        let Some(entry) = field_entry_closest_to_caret(&entries, target.caret_utf16_offset) else {
+        let entry_refs: Vec<_> = entries.iter().copied().collect();
+        let Some(entry) =
+            field_entry_for_content_blocks_caret(&entry_refs, target.caret_utf16_offset)
+        else {
             return self.positions_for_element(&target.element_id, source_revision);
+        };
+        let caret_in_entry = if entry_refs.len() > 1 {
+            target.caret_utf16_offset.map(|global| {
+                local_caret_in_content_block_entry(entry, &entry_refs, global)
+            })
+        } else {
+            target.caret_utf16_offset
         };
 
         let source = match preview.source_snapshot.source_for_path(&entry.file_path) {
@@ -300,7 +311,7 @@ impl PreviewSyncState {
             }
         };
 
-        let mut positions = if let Some(caret_utf16_offset) = target.caret_utf16_offset {
+        let mut positions = if let Some(caret_utf16_offset) = caret_in_entry {
             let Some(preferred_offset) = source_offset_for_caret(entry, caret_utf16_offset) else {
                 return PreviewElementPositionsResult::NoMatch {
                     source_revision: Some(preview.source_revision),

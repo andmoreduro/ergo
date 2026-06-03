@@ -105,6 +105,31 @@ pub(crate) fn field_entry_closest_to_caret<'a>(
         .min_by_key(|entry| caret_utf16_distance_to_entry(entry, caret_utf16_offset))
 }
 
+fn paragraph_index_from_field_id(field_id: &str) -> Option<usize> {
+    let path = field_id.strip_prefix('/')?;
+    let mut parts = path.split('/');
+    parts.next()?;
+    let index = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some(index)
+}
+
+fn is_indexed_content_block_field_id(field_id: &str) -> bool {
+    paragraph_index_from_field_id(field_id).is_some()
+}
+
+fn field_utf16_length(entry: &FieldSourceMapEntry) -> usize {
+    entry
+        .segments
+        .iter()
+        .map(|segment| segment.field_utf16_end)
+        .max()
+        .unwrap_or(0)
+        .max(entry.fallback_caret_utf16_offset.unwrap_or(0))
+}
+
 pub(crate) fn field_entries_for_target<'a>(
     field_source_map: &'a [FieldSourceMapEntry],
     target: &PreviewFocusTarget,
@@ -113,10 +138,98 @@ pub(crate) fn field_entries_for_target<'a>(
         return Vec::new();
     };
 
-    field_source_map
+    let exact: Vec<_> = field_source_map
         .iter()
         .filter(|entry| entry.element_id == target.element_id && entry.field_id == field_id)
+        .collect();
+
+    if !exact.is_empty() {
+        return exact;
+    }
+
+    // `content_blocks` inputs register one source-map field per paragraph (`/id/0`, …)
+    // while the editor focuses the parent path (`/id`).
+    if field_id.starts_with('/') && field_id[1..].contains('/') {
+        return Vec::new();
+    }
+
+    field_source_map
+        .iter()
+        .filter(|entry| {
+            entry.element_id == target.element_id
+                && entry
+                    .field_id
+                    .strip_prefix(field_id)
+                    .is_some_and(|suffix| {
+                        suffix.starts_with('/')
+                            && suffix[1..]
+                                .chars()
+                                .all(|character| character.is_ascii_digit())
+                    })
+        })
         .collect()
+}
+
+pub(crate) fn field_entry_for_content_blocks_caret<'a>(
+    entries: &[&'a FieldSourceMapEntry],
+    caret_utf16_offset: Option<usize>,
+) -> Option<&'a FieldSourceMapEntry> {
+    if entries.is_empty() {
+        return None;
+    }
+
+    if entries.len() == 1 {
+        return field_entry_closest_to_caret(entries, caret_utf16_offset);
+    }
+
+    let all_indexed = entries
+        .iter()
+        .all(|entry| is_indexed_content_block_field_id(&entry.field_id));
+    if !all_indexed {
+        return field_entry_closest_to_caret(entries, caret_utf16_offset);
+    }
+
+    let Some(global_caret) = caret_utf16_offset else {
+        return entries
+            .iter()
+            .copied()
+            .min_by_key(|entry| paragraph_index_from_field_id(&entry.field_id).unwrap_or(0));
+    };
+
+    let mut sorted: Vec<&FieldSourceMapEntry> = entries.to_vec();
+    sorted.sort_by_key(|entry| paragraph_index_from_field_id(&entry.field_id).unwrap_or(0));
+
+    let mut offset = 0usize;
+    for entry in &sorted {
+        let length = field_utf16_length(entry);
+        if global_caret <= offset + length {
+            return Some(entry);
+        }
+        offset += length;
+    }
+
+    sorted.last().copied()
+}
+
+pub(crate) fn local_caret_in_content_block_entry(
+    entry: &FieldSourceMapEntry,
+    entries: &[&FieldSourceMapEntry],
+    global_caret: usize,
+) -> usize {
+    let mut sorted: Vec<&FieldSourceMapEntry> = entries.to_vec();
+    sorted.sort_by_key(|candidate| {
+        paragraph_index_from_field_id(&candidate.field_id).unwrap_or(0)
+    });
+
+    let mut offset = 0usize;
+    for candidate in sorted {
+        if candidate.field_id == entry.field_id {
+            return global_caret.saturating_sub(offset);
+        }
+        offset += field_utf16_length(candidate);
+    }
+
+    global_caret
 }
 
 pub(crate) fn focus_target_for_field_offset(

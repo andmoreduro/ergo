@@ -4,10 +4,14 @@ import type { ActionHandlerMap } from "../actions/runtime";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { CommandRegistry } from "../commands/registry";
 import type { CommandContext } from "../commands/types";
+import { parseInputContentBlocks } from "../editor/contentBlocks";
+import { globalCaretInContentBlocks, parseIndexedInputFieldPath } from "../editor/contentBlocksCaret";
 import {
+    backendInputsElementId,
     defaultFieldIdForElement,
     editorFocusIdsForBackendField,
 } from "../editor/fieldIds";
+import { getValueAtPath } from "../state/documentEvents/helpers";
 import type { DocumentFocusInput } from "../state/DocumentContext";
 
 interface FocusFieldPayload {
@@ -102,10 +106,28 @@ export const useAppActionHandlers = ({
                 target.elementId,
                 fieldId,
             );
+            let caretUtf16Offset = target.caretUtf16Offset;
+            if (
+                target.elementId === backendInputsElementId &&
+                fieldId &&
+                caretUtf16Offset !== null
+            ) {
+                const indexed = parseIndexedInputFieldPath(fieldId);
+                if (indexed) {
+                    const pathParts = indexed.basePath.split("/").filter(Boolean);
+                    const raw = getValueAtPath(getState().inputs, pathParts);
+                    const paragraphs = parseInputContentBlocks(raw);
+                    caretUtf16Offset = globalCaretInContentBlocks(
+                        paragraphs,
+                        indexed.paragraphIndex,
+                        caretUtf16Offset,
+                    );
+                }
+            }
             setDocumentFocus({
                 elementId: editorTarget.elementId,
                 fieldId: editorTarget.fieldId,
-                caretUtf16Offset: target.caretUtf16Offset,
+                caretUtf16Offset,
                 sourceRevision: target.sourceRevision,
                 anchorPageNumber: target.anchorPageNumber,
                 forcePreviewScroll: target.forcePreviewScroll,
