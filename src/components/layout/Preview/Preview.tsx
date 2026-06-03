@@ -239,6 +239,55 @@ export const Preview = ({
         return map;
     }, [previewPages, renderedPageMetrics]);
 
+    // Drop SVG/metrics for page numbers no longer in the compile result (e.g. after
+    // opening a shorter project). Also clear caches while revision is unset.
+    useEffect(() => {
+        if (previewRevision === null) {
+            renderedSvgPagesRef.current = {};
+            setRenderedSvgPages({});
+            setRenderedPageMetrics({});
+            visiblePageIndicesRef.current = new Set([0]);
+            previewSvgPageIndicesRef.current = [0];
+            return;
+        }
+
+        const activePageNumbers = new Set(
+            previewPages.map((page) => page.page_number),
+        );
+
+        setRenderedSvgPages((current) => {
+            let changed = false;
+            const next: Record<number, RenderedSvgPage> = {};
+            for (const [key, rendered] of Object.entries(current)) {
+                const pageNumber = Number(key);
+                if (activePageNumbers.has(pageNumber)) {
+                    next[pageNumber] = rendered;
+                } else {
+                    changed = true;
+                }
+            }
+            if (!changed) {
+                return current;
+            }
+            renderedSvgPagesRef.current = next;
+            return next;
+        });
+
+        setRenderedPageMetrics((current) => {
+            let changed = false;
+            const next: Record<number, PagePtMetrics> = {};
+            for (const [key, metrics] of Object.entries(current)) {
+                const pageNumber = Number(key);
+                if (activePageNumbers.has(pageNumber)) {
+                    next[pageNumber] = metrics;
+                } else {
+                    changed = true;
+                }
+            }
+            return changed ? next : current;
+        });
+    }, [previewRevision, previewPages, previewSvgPageIndicesRef]);
+
     useLayoutEffect(() => {
         const element = previewScrollRef.current;
         if (!element) {

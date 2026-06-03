@@ -148,6 +148,7 @@ fn param_type_from_str(s: &str) -> ParamType {
         "dictionary" => ParamType::Dictionary,
         "author_list" => ParamType::AuthorList,
         "affiliation_map" => ParamType::AffiliationMap,
+        "degree_map" => ParamType::DegreeMap,
         _ => ParamType::String,
     }
 }

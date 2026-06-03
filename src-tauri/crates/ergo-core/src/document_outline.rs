@@ -4,7 +4,7 @@ use typst::foundations::NativeElement;
 use typst::layout::PagedDocument;
 use typst_library::model::HeadingElem;
 
-/// A single heading entry in the compiled document outline.
+/// A single heading entry in the sidebar navigation outline.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -17,7 +17,7 @@ pub struct OutlineEntry {
     pub page: usize,
 }
 
-/// Ordered list of headings extracted from a compiled `PagedDocument`.
+/// Ordered list of PDF-bookmarked headings extracted from a compiled `PagedDocument`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -26,8 +26,9 @@ pub struct DocumentOutline {
 }
 
 /// Extracts an ordered heading outline from a compiled [`PagedDocument`] using
-/// `document.introspector`. This is a fast in-memory query over an already-built
-/// index; for a typical academic document the cost is in the low microseconds.
+/// `document.introspector`. Entries match the PDF bookmark panel: a heading is
+/// included when `bookmarked` is `true`, or when `bookmarked` is `auto` and
+/// `outlined` is `true` (same rule as Typst's PDF exporter).
 pub fn extract_outline(document: &PagedDocument) -> DocumentOutline {
     use typst::foundations::Selector;
 
@@ -45,7 +46,7 @@ pub fn extract_outline(document: &PagedDocument) -> DocumentOutline {
                 typst::foundations::Smart::Custom(n) => n.get() as u8,
                 typst::foundations::Smart::Auto => 1u8,
             };
-            if !heading.outlined.get(styles) {
+            if !heading_pdf_bookmarked(heading, styles) {
                 return None;
             }
 
@@ -56,6 +57,14 @@ pub fn extract_outline(document: &PagedDocument) -> DocumentOutline {
         .collect();
 
     DocumentOutline { entries }
+}
+
+/// Whether this heading appears in the exported PDF bookmark outline.
+fn heading_pdf_bookmarked(heading: &HeadingElem, styles: typst::foundations::StyleChain) -> bool {
+    heading
+        .bookmarked
+        .get(styles)
+        .unwrap_or_else(|| heading.outlined.get(styles))
 }
 
 #[cfg(test)]
@@ -114,5 +123,39 @@ mod tests {
         let outline = extract_outline(&doc);
 
         assert!(outline.entries.iter().all(|e| e.page == 1));
+    }
+
+    #[test]
+    fn includes_outlined_false_bookmarked_true() {
+        let doc = compile_with_source(
+            "#heading(outlined: false, bookmarked: true)[Abstract]\n\n= Introduction\n",
+        );
+        let outline = extract_outline(&doc);
+
+        assert_eq!(outline.entries.len(), 2);
+        assert_eq!(outline.entries[0].text, "Abstract");
+        assert_eq!(outline.entries[1].text, "Introduction");
+    }
+
+    #[test]
+    fn excludes_outlined_true_bookmarked_false() {
+        let doc = compile_with_source(
+            "#heading(outlined: true, bookmarked: false)[TOC only]\n\n= Introduction\n",
+        );
+        let outline = extract_outline(&doc);
+
+        assert_eq!(outline.entries.len(), 1);
+        assert_eq!(outline.entries[0].text, "Introduction");
+    }
+
+    #[test]
+    fn excludes_outlined_false_when_bookmarked_is_auto() {
+        let doc = compile_with_source(
+            "#heading(outlined: false)[Hidden]\n\n= Introduction\n",
+        );
+        let outline = extract_outline(&doc);
+
+        assert_eq!(outline.entries.len(), 1);
+        assert_eq!(outline.entries[0].text, "Introduction");
     }
 }

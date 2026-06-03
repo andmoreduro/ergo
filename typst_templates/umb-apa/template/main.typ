@@ -16,22 +16,22 @@
   authors: (
     (
       name: [Author Name],
-      affiliations: (
-        "ID-1",
-        "ID-2",
-      ),
+      affiliations: ("a",),
+      degrees: ("a",),
     ),
   ),
   affiliations: (
-    "ID-1": [Affiliation Name 1],
-    "ID-2": [Affiliation Name 2],
+    "a": [Affiliation Name 1],
+  ),
+  degrees: (
+    "a": [Degree Name],
   ),
   director: (
     name: [Director Name],
     title: [Director Title],
   ),
-  degree: [Degree Name],
-  city: [City Name],
+  city: [Bogotá],
+  country: [Colombia],
   year: [2026],
   authorities: (
     (
@@ -41,9 +41,6 @@
   ),
   acknowledgements: [
     #lorem(50)
-  ],
-  author-note: [
-    Author note text.
   ],
   abstract-es: [
     Resumen en español.

@@ -162,6 +162,7 @@ fn compile_preview(
     source_map: Vec<SourceMapEntry>,
     field_source_map: Vec<FieldSourceMapEntry>,
 ) -> PreviewSyncState {
+    crate::test_fixtures::populate_versatile_apa(&vfs);
     let main_id = FileId::new(None, VirtualPath::new("main.typ"));
     let source_snapshot = WorldSourceSnapshot::from_vfs(&vfs);
     let world = SnapshotWorld::new(source_snapshot.clone(), main_id);

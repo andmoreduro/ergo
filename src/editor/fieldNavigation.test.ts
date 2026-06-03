@@ -11,19 +11,21 @@ describe("buildEditorFieldOrder", () => {
         const ast = createDefaultDocumentAST();
         ast.inputs.affiliations = ["North University", "Lab B"];
         const spec = {
-            inputs: [
-                { id: "title", type: "string" },
-                { id: "authors", type: "array" },
-                { id: "affiliations", type: "simple_list" },
-                { id: "keywords", type: "simple_list" },
-            ],
-            groups: [
-                {
-                    id: "cover",
-                    inputs: ["title", "authors", "affiliations", "keywords"],
-                },
-            ],
-        } as Parameters<typeof buildEditorFieldOrder>[0];
+            editor: {
+                inputs: [
+                    { id: "title", type: "string" },
+                    { id: "authors", type: "array" },
+                    { id: "affiliations", type: "simple_list" },
+                    { id: "keywords", type: "simple_list" },
+                ],
+                groups: [
+                    {
+                        id: "cover",
+                        inputs: ["title", "authors", "affiliations", "keywords"],
+                    },
+                ],
+            },
+        } as unknown as Parameters<typeof buildEditorFieldOrder>[0];
 
         const order = buildEditorFieldOrder(spec, "student", ast).map(
             (entry) => entry.fieldId,

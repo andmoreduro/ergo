@@ -23,7 +23,7 @@ const FIGURE_SETTINGS_KEYS = new Set(["width"]);
 export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
     const { state } = useDocumentAst();
     const { spec: templateSpec } = useTemplateSpecContext();
-    const figureOverride = templateSpec?.element_overrides?.figure ?? null;
+    const figureOverride = templateSpec?.typst.element_overrides?.figure ?? null;
     const extraFields = effectiveFigureAnnotationFields(figureOverride);
     const annotationFields = extraFields.filter(
         (field) => !FIGURE_SETTINGS_KEYS.has(field.key),

@@ -34,11 +34,11 @@ sequenceDiagram
     Preview-->>User: Preview page update
 ```
 
-- Bootstrap (open/new project): `CompilerClient.bootstrap` and `sync_document_snapshot` both complete before the document sync barrier drains.
+- Bootstrap (open/new project): `CompilerClient.bootstrap` clears the WASM VFS and `DocumentSession`, resets compiled preview state, resets WASM fonts, awaits lazy load of non-bundled project font families (all faces per family), then compiles; `sync_document_snapshot` on the backend completes before the document sync barrier drains. The UI clears preview pages on `sessionId` change and ignores compile results from a prior session. Edits compile without reloading fonts.
 - Queued document events are acknowledged after the backend mirror accepts the same batch.
 - Main preview and resource previews compile in WASM via `preview_pipeline`.
 - Resource preview VFS uses the same `lib.typ` and `#show: apply` as the main document; `resources.typ` adds preview page dimensions and `#set page` / `#show page` overrides for a white background without headers or numbering. Sidebar thumbnails cap height at 40vh.
-- Compiled outline comes from `document.introspector` on the paged document (headings with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries (e.g. bibliography title) scroll the preview to that page.
+- Compiled outline comes from `document.introspector` on the paged document using the same heading filter as the PDF bookmark panel (`bookmarked: true`, or `bookmarked: auto` with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries (e.g. front-matter sections with `outlined: false, bookmarked: true`) scroll the preview to that page.
 - Main preview pages use `render_svg_page`; the worker returns serialized SVG markup and compiled page-frame metrics for layout, click mapping, and caret overlays.
 - Main preview pages render only viewport pages whose content changed; unchanged visible pages keep their existing `innerHTML`. Zoom updates page layout without requesting a page rerender.
 - Resource thumbnails use `render_resource_svg_page` and write SVG markup into stable thumbnail containers.

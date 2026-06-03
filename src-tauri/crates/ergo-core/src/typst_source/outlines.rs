@@ -46,7 +46,7 @@ fn outline_included(
     if let Some(included) = resolve(project_overrides) {
         return included;
     }
-    if let Some(included) = resolve(&template.default_template_overrides) {
+    if let Some(included) = resolve(&template.typst.default_template_overrides) {
         return included;
     }
     true

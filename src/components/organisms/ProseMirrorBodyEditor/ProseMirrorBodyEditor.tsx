@@ -1,4 +1,5 @@
 import {
+    memo,
     useEffect,
     useLayoutEffect,
     useMemo,
@@ -16,7 +17,12 @@ import "prosemirror-tables/style/tables.css";
 import "../../../editor/prosemirror/nodeViews/blockObjectNodeViews.global.css";
 import "../../../editor/prosemirror/nodeViews/tableBlockNodeView.global.css";
 import type { ContentSection } from "../../../bindings/ContentSection";
-import { useDocumentAst, useDocumentFocus } from "../../../state/DocumentContext";
+import {
+    useDocumentActions,
+    useDocumentAstStore,
+    useDocumentFocusSelector,
+    useDocumentReconcile,
+} from "../../../state/DocumentContext";
 import {
     changedTopLevelRange,
     docToElements,
@@ -54,10 +60,7 @@ import {
     setBodyTableCommit,
     setBodyReconcileGuard,
 } from "../../../editor/prosemirror/activeView";
-import {
-    contentSectionFromAst,
-    pmFormattingAheadOfSection,
-} from "../../../editor/prosemirror/sectionReconcileGuard";
+import { contentSectionFromAst } from "../../../editor/prosemirror/sectionReconcileGuard";
 import { elementIdOf } from "../../../state/documentEvents/helpers";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
 import { enterBlockEditById } from "../../../editor/prosemirror/bodyTableCommands";
@@ -68,8 +71,46 @@ import { locateTableCell } from "../../../editor/prosemirror/table/tableCellReso
 import { ProseMirrorSurface } from "../../atoms/ProseMirrorSurface/ProseMirrorSurface";
 import bodyPaperStyles from "../../atoms/ProseMirrorSurface/ProseMirrorSurface.module.css";
 
-const deepEqual = (a: unknown, b: unknown): boolean =>
-    JSON.stringify(a) === JSON.stringify(b);
+/**
+ * Structural deep-equality that short-circuits at the first difference and
+ * allocates nothing. Used on the typing hot path to compare the editor doc
+ * against the AST section every keystroke, so `JSON.stringify`-ing the whole
+ * document twice per keystroke (the previous approach) is far too costly on
+ * larger documents. `undefined` values are treated as absent to match the
+ * JSON-serialization semantics this replaces.
+ */
+const deepEqual = (a: unknown, b: unknown): boolean => {
+    if (a === b) {
+        return true;
+    }
+    if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) {
+        return false;
+    }
+    if (Array.isArray(a) || Array.isArray(b)) {
+        if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+            return false;
+        }
+        for (let i = 0; i < a.length; i += 1) {
+            if (!deepEqual(a[i], b[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    const aObj = a as Record<string, unknown>;
+    const bObj = b as Record<string, unknown>;
+    const aKeys = Object.keys(aObj).filter((key) => aObj[key] !== undefined);
+    const bKeys = Object.keys(bObj).filter((key) => bObj[key] !== undefined);
+    if (aKeys.length !== bKeys.length) {
+        return false;
+    }
+    for (const key of aKeys) {
+        if (!deepEqual(aObj[key], bObj[key])) {
+            return false;
+        }
+    }
+    return true;
+};
 
 /**
  * Reconcile an externally-changed section into the live doc with a single
@@ -139,16 +180,34 @@ const initialBodyTextSelection = (doc: PMNode): Selection | undefined => {
     return selection;
 };
 
-export const ProseMirrorBodyEditor = ({
-    section,
+const ProseMirrorBodyEditorImpl = ({
+    sectionId,
     autoFocus = false,
 }: {
-    section: ContentSection;
+    sectionId: string;
     autoFocus?: boolean;
 }) => {
-    const { state: documentAst, dispatch, commitDocumentEvents, undo, redo, canUndo, canRedo } =
-        useDocumentAst();
-    const { documentFocus, setDocumentFocus } = useDocumentFocus();
+    const { dispatch, commitDocumentEvents, undo, redo, setDocumentFocus } =
+        useDocumentActions();
+    const { externalRevision, canUndo, canRedo } = useDocumentReconcile();
+    const astStore = useDocumentAstStore();
+    // React only to EXTERNAL focus requests (preview click, sidebar nav). The
+    // native focus this editor pushes on every keystroke is filtered out here so
+    // it never re-renders the editor.
+    const externalFocus = useDocumentFocusSelector(
+        (focus) => focus,
+        (_prev, next) => next.focusSource === "native",
+    );
+
+    // The live content section, read on demand from the AST store so the editor
+    // doesn't need to re-render (and receive a new `section` prop) on every
+    // keystroke just to keep its reconcile source fresh.
+    const liveSection = (): ContentSection =>
+        contentSectionFromAst(astStore.getSnapshot(), sectionId) ?? {
+            id: sectionId,
+            is_optional: false,
+            elements: [],
+        };
 
     const mountRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
@@ -177,8 +236,6 @@ export const ProseMirrorBodyEditor = ({
 
     const bodyHandlers = useMemo(() => bodyEditorActionHandlers(), []);
 
-    const sectionRef = useRef(section);
-    sectionRef.current = section;
     const commitRef = useRef(commitDocumentEvents);
     commitRef.current = commitDocumentEvents;
     const setFocusRef = useRef(setDocumentFocus);
@@ -199,8 +256,6 @@ export const ProseMirrorBodyEditor = ({
     canUndoRef.current = canUndo;
     canRedoRef.current = canRedo;
 
-    const documentAstRef = useRef(documentAst);
-    documentAstRef.current = documentAst;
     const dispatchRef = useRef(dispatch);
     dispatchRef.current = dispatch;
 
@@ -225,7 +280,7 @@ export const ProseMirrorBodyEditor = ({
         setBodyParagraphInsert({
             insertBeforeElement: (beforeElementId) => {
                 insertParagraphBeforeElement(
-                    documentAstRef.current,
+                    astStore.getSnapshot(),
                     dispatchRef.current,
                     setFocusRef.current,
                     beforeElementId,
@@ -233,7 +288,7 @@ export const ProseMirrorBodyEditor = ({
             },
             insertAfterElement: (afterElementId) => {
                 insertParagraphAfterElement(
-                    documentAstRef.current,
+                    astStore.getSnapshot(),
                     dispatchRef.current,
                     setFocusRef.current,
                     afterElementId,
@@ -250,18 +305,18 @@ export const ProseMirrorBodyEditor = ({
 
     useLayoutEffect(() => {
         setBodyTableCommit({
-            sectionId: section.id,
+            sectionId,
             commit: (forward, inverse) => {
                 markPmCommit();
                 commitRef.current(forward, inverse);
             },
             elementIndex: (tableId) =>
-                sectionRef.current.elements.findIndex(
+                liveSection().elements.findIndex(
                     (element) => elementIdOf(element) === tableId,
                 ),
         });
         return () => setBodyTableCommit(null);
-    }, [section.id]);
+    }, [sectionId]);
 
     useLayoutEffect(() => {
         setTableFocusPush((focus) => {
@@ -301,7 +356,7 @@ export const ProseMirrorBodyEditor = ({
                 if (tr.getMeta(TABLE_ATTR_SYNC_META)) {
                     return;
                 }
-                const current = sectionRef.current;
+                const current = liveSection();
                 // Fast path: a single-step, same-block-count edit (ordinary
                 // typing) only touched a few top-level blocks, so convert and
                 // diff just those instead of re-deriving the whole section.
@@ -388,7 +443,7 @@ export const ProseMirrorBodyEditor = ({
         pluginsRef.current = plugins;
         const view = new EditorView(mount, {
             state: EditorState.create({
-                doc: sectionToDoc(bodySchema, sectionRef.current),
+                doc: sectionToDoc(bodySchema, liveSection()),
                 plugins,
             }),
             attributes: {
@@ -425,31 +480,22 @@ export const ProseMirrorBodyEditor = ({
     }, []);
 
     // Reconcile externally-applied AST changes (undo/redo, toolbar insert/delete,
-    // reference insert) back into the doc. Compare against the live AST, not a
-    // stale `section` prop, and defer while a PM-originated commit is in flight.
+    // reference insert) back into the doc. This fires ONLY on `externalRevision`
+    // — never on body typing (`COMMIT_EVENTS` doesn't bump it) — so the costly
+    // whole-document re-derive + compare is off the typing hot path. PM-origin
+    // commits update the AST synchronously without bumping `externalRevision`, so
+    // when this runs the doc is never behind and an external change is always
+    // authoritative; reconcile it in.
     useLayoutEffect(() => {
         const view = viewRef.current;
         if (!view) {
             return;
         }
-        const pmElements = docToElements(view.state.doc);
-        const astSection =
-            contentSectionFromAst(documentAstRef.current, section.id) ?? section;
-        const astElements = astSection.elements;
-
-        if (deepEqual(pmElements, astElements)) {
-            skipPmReconcileRef.current = false;
-            return;
-        }
-
-        if (
-            skipPmReconcileRef.current &&
-            pmFormattingAheadOfSection(pmElements, astElements)
-        ) {
-            return;
-        }
-
         skipPmReconcileRef.current = false;
+        const astSection = liveSection();
+        if (deepEqual(docToElements(view.state.doc), astSection.elements)) {
+            return;
+        }
 
         applyingExternalRef.current = true;
         try {
@@ -473,18 +519,18 @@ export const ProseMirrorBodyEditor = ({
         } finally {
             applyingExternalRef.current = false;
         }
-    }, [section, documentAst]);
+    }, [sectionId, externalRevision]);
 
     // Apply externally-requested focus (preview click, sidebar nav, insert) to
     // the PM selection.
     useEffect(() => {
         const view = viewRef.current;
-        if (!view || documentFocus.focusSource === "native") {
+        if (!view || externalFocus.focusSource === "native") {
             return;
         }
         if (
-            !documentFocus.elementId ||
-            lastFocusRequestRef.current === documentFocus.requestId
+            !externalFocus.elementId ||
+            lastFocusRequestRef.current === externalFocus.requestId
         ) {
             return;
         }
@@ -492,11 +538,11 @@ export const ProseMirrorBodyEditor = ({
         // A freshly-inserted block (table, equation, …) opens directly in
         // fine-grained mode with its primary field focused, so the user types
         // into it immediately instead of replacing the node-selected block.
-        if (takePendingBlockEditIfMatches(documentFocus.elementId)) {
-            lastFocusRequestRef.current = documentFocus.requestId;
+        if (takePendingBlockEditIfMatches(externalFocus.elementId)) {
+            lastFocusRequestRef.current = externalFocus.requestId;
             applyingExternalRef.current = true;
             try {
-                enterBlockEditById(view, documentFocus.elementId);
+                enterBlockEditById(view, externalFocus.elementId);
             } finally {
                 applyingExternalRef.current = false;
             }
@@ -504,16 +550,16 @@ export const ProseMirrorBodyEditor = ({
         }
 
         const target = {
-            elementId: documentFocus.elementId,
-            fieldId: documentFocus.fieldId,
-            caretUtf16Offset: documentFocus.caretUtf16Offset,
+            elementId: externalFocus.elementId,
+            fieldId: externalFocus.fieldId,
+            caretUtf16Offset: externalFocus.caretUtf16Offset,
         };
 
-        lastFocusRequestRef.current = documentFocus.requestId;
+        lastFocusRequestRef.current = externalFocus.requestId;
         applyingExternalRef.current = true;
         try {
             const tableCell = locateTableCell(
-                documentAstRef.current,
+                astStore.getSnapshot(),
                 target.elementId,
                 target.fieldId,
             );
@@ -537,11 +583,11 @@ export const ProseMirrorBodyEditor = ({
         } finally {
             applyingExternalRef.current = false;
         }
-    }, [documentFocus]);
+    }, [externalFocus]);
 
     return (
         <ActionContextProvider
-            id={`body-${section.id}`}
+            id={`body-${sectionId}`}
             contexts={["body", "editor"]}
             handlers={bodyHandlers}
         >
@@ -552,3 +598,10 @@ export const ProseMirrorBodyEditor = ({
         </ActionContextProvider>
     );
 };
+
+/**
+ * Memoized on `sectionId` (stable) so body typing — which changes the AST but
+ * not this prop — never re-renders the editor subtree. External AST changes are
+ * reconciled through `useDocumentReconcile`, not through prop churn.
+ */
+export const ProseMirrorBodyEditor = memo(ProseMirrorBodyEditorImpl);

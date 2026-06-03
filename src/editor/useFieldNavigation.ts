@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { TemplateSpec } from "../bindings/TemplateSpec";
 import { createId } from "../state/ast/defaults";
-import { useDocument, useDocumentAst } from "../state/DocumentContext";
+import { useDocumentActions, useDocumentAstStore } from "../state/DocumentContext";
 import {
     caretOffsetAtEndForField,
     applyAstActions,
@@ -25,12 +25,16 @@ export const useFieldNavigation = (
     templateSpec: TemplateSpec | null,
     variantId: string | null,
 ) => {
-    const { state, dispatch } = useDocumentAst();
-    const { setDocumentFocus } = useDocument();
+    // Read the live AST from the store rather than subscribing via `useDocumentAst`.
+    // Field order is only needed inside navigation callbacks (key/tab handlers), so
+    // computing it lazily keeps this hook — and its host `Editor` — from re-rendering
+    // on every keystroke, which would otherwise churn the EditorNavigation context.
+    const astStore = useDocumentAstStore();
+    const { dispatch, setDocumentFocus } = useDocumentActions();
 
-    const fieldOrder = useMemo(
-        () => buildEditorFieldOrder(templateSpec, variantId, state),
-        [state, templateSpec, variantId],
+    const getFieldOrder = useCallback(
+        () => buildEditorFieldOrder(templateSpec, variantId, astStore.getSnapshot()),
+        [astStore, templateSpec, variantId],
     );
 
     const focusField = useCallback(
@@ -53,17 +57,19 @@ export const useFieldNavigation = (
             if (!fieldId) {
                 return;
             }
-            const current = fieldOrder.find((entry) => entry.fieldId === fieldId);
+            const current = getFieldOrder().find(
+                (entry) => entry.fieldId === fieldId,
+            );
             if (current) {
                 focusField(current.elementId, current.fieldId);
             }
         },
-        [fieldOrder, focusField],
+        [getFieldOrder, focusField],
     );
 
     const focusNextField = useCallback(
         (currentFieldId: string | null, options?: { createParagraphAtEnd?: boolean }) => {
-            const next = findNextEditorField(fieldOrder, currentFieldId);
+            const next = findNextEditorField(getFieldOrder(), currentFieldId);
             if (next) {
                 focusField(next.elementId, next.fieldId);
                 return;
@@ -74,7 +80,7 @@ export const useFieldNavigation = (
                 return;
             }
 
-            const section = contentSection(state);
+            const section = contentSection(astStore.getSnapshot());
             if (!section) {
                 return;
             }
@@ -91,41 +97,43 @@ export const useFieldNavigation = (
             });
             focusField(paragraphId, `${paragraphId}:text`);
         },
-        [dispatch, fieldOrder, focusField, refocusField, state],
+        [astStore, dispatch, getFieldOrder, focusField, refocusField],
     );
 
     const focusPreviousField = useCallback(
         (currentFieldId: string | null) => {
-            const previous = findPreviousEditorField(fieldOrder, currentFieldId);
+            const previous = findPreviousEditorField(getFieldOrder(), currentFieldId);
             if (previous) {
                 focusField(previous.elementId, previous.fieldId);
                 return;
             }
             refocusField(currentFieldId);
         },
-        [fieldOrder, focusField, refocusField],
+        [getFieldOrder, focusField, refocusField],
     );
 
     const focusLastTemplateField = useCallback((): boolean => {
-        const last = findLastTemplateFieldTarget(fieldOrder);
+        const last = findLastTemplateFieldTarget(getFieldOrder());
         if (!last) {
             return false;
         }
         focusField(last.elementId, last.fieldId);
         return true;
-    }, [fieldOrder, focusField]);
+    }, [getFieldOrder, focusField]);
 
     const focusLastFocusedTemplateField = useCallback((): boolean => {
         const remembered = getLastTemplateFieldId();
         if (remembered) {
-            const entry = fieldOrder.find((item) => item.fieldId === remembered);
+            const entry = getFieldOrder().find(
+                (item) => item.fieldId === remembered,
+            );
             if (entry) {
                 focusField(entry.elementId, entry.fieldId);
                 return true;
             }
         }
         return focusLastTemplateField();
-    }, [fieldOrder, focusField, focusLastTemplateField]);
+    }, [getFieldOrder, focusField, focusLastTemplateField]);
 
     const restoreLastBodyFocus = useCallback((): boolean => {
         const saved = getLastBodyFocus();
@@ -224,16 +232,31 @@ export const useFieldNavigation = (
         [focusNextField, focusPreviousField, handleFieldAdvance, restoreLastBodyFocus],
     );
 
-    return {
-        fieldOrder,
-        focusField,
-        focusNextField,
-        focusPreviousField,
-        focusLastTemplateField,
-        focusLastFocusedTemplateField,
-        restoreLastBodyFocus,
-        removeContentElement,
-        handleFieldAdvance,
-        handleAdvanceKeyDown,
-    };
+    // Memoized so the EditorNavigation context value stays referentially stable
+    // across renders (every member is a stable useCallback) — consumers don't
+    // re-render just because the host re-rendered.
+    return useMemo(
+        () => ({
+            focusField,
+            focusNextField,
+            focusPreviousField,
+            focusLastTemplateField,
+            focusLastFocusedTemplateField,
+            restoreLastBodyFocus,
+            removeContentElement,
+            handleFieldAdvance,
+            handleAdvanceKeyDown,
+        }),
+        [
+            focusField,
+            focusNextField,
+            focusPreviousField,
+            focusLastTemplateField,
+            focusLastFocusedTemplateField,
+            restoreLastBodyFocus,
+            removeContentElement,
+            handleFieldAdvance,
+            handleAdvanceKeyDown,
+        ],
+    );
 };

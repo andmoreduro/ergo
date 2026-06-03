@@ -21,6 +21,7 @@ export type BootstrapPreviewResult = {
 
 export type WorkerRequest =
     | { type: "init"; payload: { wasmUrl: string } }
+    | { type: "reset_fonts" }
     | { type: "load_fonts"; payload: number[][] }
     | { type: "sync_snapshot"; payload: DocumentAST }
     | { type: "sync_events"; payload: DocumentEvent[] }
@@ -82,6 +83,7 @@ export type RenderSvgPagePayload = {
 
 export type WorkerResponse =
     | { type: "init_done" }
+    | { type: "reset_fonts_done" }
     | { type: "load_fonts_done" }
     | { type: "sync_done"; status: DocumentSessionStatus }
     | { type: "compile_done"; result: CompilationResult }

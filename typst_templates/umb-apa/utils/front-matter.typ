@@ -1,6 +1,5 @@
-#import "languages.typ": get-terms
-#import "authoring.typ": print-affiliations, print-authors
-#import "constants.typ": double-spacing, first-indent-length
+#import "authoring.typ": print-affiliations, print-authors-stacked, print-degrees
+#import "constants.typ": first-indent-length
 #import "to-string.typ": to-string
 
 #let has-visible-content(val) = {
@@ -14,220 +13,192 @@
   return s.trim() != ""
 }
 
+#let umb-escudo = image("../assets/escudo_umb.png", height: 7em)
+
+#let print-director(director) = {
+  if director == none or type(director) != dictionary {
+    return none
+  }
+  let d-name = director.at("name", default: none)
+  let d-title = director.at("title", default: none)
+  if has-visible-content(d-name) {
+    block[
+      #d-name
+      #if has-visible-content(d-title) [
+        \ #d-title
+      ]
+    ]
+  } else {
+    none
+  }
+}
+
+#let print-location(city, country, year) = {
+  let has-city = has-visible-content(city)
+  let has-country = has-visible-content(country)
+  let has-year = has-visible-content(year)
+  if not has-city and not has-country and not has-year {
+    return none
+  }
+  block[
+    #if has-city or has-country {
+      if has-city and has-country {
+        [#city, #country]
+      } else if has-city {
+        city
+      } else {
+        country
+      }
+    }
+    #if has-year [
+      #if has-city or has-country [\ ] else []
+      #year
+    ]
+  ]
+}
+
+#let print-cover-bottom-group(authors, affiliations, degrees, city, country, year) = {
+  block[
+    #if affiliations != none {
+      print-affiliations(authors, affiliations)
+    }
+    #if degrees != none {
+      print-degrees(authors, degrees)
+    }
+    #print-location(city, country, year)
+  ]
+}
+
+// Cover page: four leading parbreaks (versatile-apa), then a fill block with even row gutters.
+#let umb-cover-page(
+  title: none,
+  authors: none,
+  affiliations: none,
+  degrees: none,
+  director: none,
+  city: none,
+  country: none,
+  year: none,
+) = context {
+  set document(
+    title: title,
+  ) if title != none
+
+  place(top + center, umb-escudo)
+
+  for i in range(4) {
+    [~] + parbreak()
+  }
+
+  block(width: 100%, height: 1fr,
+    align(center,
+      grid(
+        columns: 1,
+        rows: 4,
+        row-gutter: 1fr,
+        align: center + horizon,
+        std.title(),
+        if authors != none {
+          print-authors-stacked(authors, affiliations, degrees)
+        },
+        print-director(director),
+        print-cover-bottom-group(authors, affiliations, degrees, city, country, year),
+      )
+    )
+  )
+
+  pagebreak(weak: true)
+}
+
+#let visible-authorities(authorities) = {
+  if authorities == none or type(authorities) != array {
+    return ()
+  }
+  authorities.filter(auth => {
+    type(auth) == dictionary and has-visible-content(auth.at("name", default: none))
+  })
+}
+
+#let umb-authorities-page(authorities) = {
+  let entries = visible-authorities(authorities)
+  if entries.len() == 0 {
+    return
+  }
+  block(width: 100%, height: 1fr,
+    align(center,
+      grid(
+        align: center + horizon,
+        columns: 1,
+        rows: entries.len() + 1,
+        row-gutter: 1fr,
+        heading(level: 1, outlined: false, bookmarked: true)[Autoridades Académicas],
+        ..entries.map(auth => {
+          let role = auth.at("role", default: none)
+          block[
+            #auth.name
+            #linebreak()
+            #if has-visible-content(role) [
+              #role
+            ]
+          ]
+        }),
+      )
+    )
+  )
+  pagebreak()
+}
+
 #let front-matter(
   title: none,
   authors: none,
   affiliations: none,
+  degrees: none,
   director: none,
-  degree: none,
   city: none,
+  country: none,
   year: none,
   authorities: none,
   acknowledgements: none,
-  author-note: none,
   abstract-es: none,
   keywords-es: none,
   abstract-en: none,
   keywords-en: none,
 ) = context {
-  // 1. Cover page
-  {
-    set page(header: none)
-    set align(center)
-    
-    v(2.5cm)
-    
-    // Centered document title
-    if title != none {
-      block(width: 80%, text(weight: "bold", size: 1.5em, title))
-    }
-    
-    v(1.5cm)
-    
-    // Centered author list
-    if authors != none {
-      text(size: 1.2em, print-authors(authors, affiliations, text.lang, text.script))
-    }
-    
-    v(1.5cm)
-    
-    // Director block
-    if director != none and type(director) == dictionary {
-      let d-name = director.at("name", default: none)
-      let d-title = director.at("title", default: none)
-      if has-visible-content(d-name) {
-        block[
-          #text(style: "italic")[Director:] \
-          #d-name
-          #if has-visible-content(d-title) [
-            \ #d-title
-          ]
-        ]
-      }
-    }
-    
-    v(1.5cm)
-    
-    // Affiliation lines from existing affiliations input
-    if affiliations != none {
-      print-affiliations(authors, affiliations)
-    }
-    
-    v(1fr)
-    
-    // City & Year
-    if has-visible-content(city) {
-      text(city)
-      if has-visible-content(year) [
-        , #year
-      ]
-    } else if has-visible-content(year) {
-      text(year)
-    }
-    
-    pagebreak()
-  }
+  umb-cover-page(
+    title: title,
+    authors: authors,
+    affiliations: affiliations,
+    degrees: degrees,
+    director: director,
+    city: city,
+    country: country,
+    year: year,
+  )
 
-  // 2. Presentation page
-  {
-    set page(header: none)
-    set align(center)
-    
-    v(2.5cm)
-    
-    // Centered document title
-    if title != none {
-      block(width: 80%, text(weight: "bold", size: 1.5em, title))
-    }
-    
-    v(1.5cm)
-    
-    // Centered author list
-    if authors != none {
-      text(size: 1.2em, print-authors(authors, affiliations, text.lang, text.script))
-    }
-    
-    v(1.5cm)
-    
-    // Degree requirement text
-    if has-visible-content(degree) {
-      block(width: 75%)[
-        Trabajo de grado presentado como requisito parcial para optar al título de #degree
-      ]
-    }
-    
-    v(1.5cm)
-    
-    // Director block
-    if director != none and type(director) == dictionary {
-      let d-name = director.at("name", default: none)
-      let d-title = director.at("title", default: none)
-      if has-visible-content(d-name) {
-        block[
-          #text(style: "italic")[Director:] \
-          #d-name
-          #if has-visible-content(d-title) [
-            \ #d-title
-          ]
-        ]
-      }
-    }
-    
-    v(1.5cm)
-    
-    // Affiliation lines
-    if affiliations != none {
-      print-affiliations(authors, affiliations)
-    }
-    
-    v(1fr)
-    
-    // City & Year
-    if has-visible-content(city) {
-      text(city)
-      if has-visible-content(year) [
-        , #year
-      ]
-    } else if has-visible-content(year) {
-      text(year)
-    }
-    
-    pagebreak()
-  }
+  umb-authorities-page(authorities)
 
-  // 3. Academic authorities page
-  if authorities != none and type(authorities) == array and authorities.len() > 0 {
-    set page(header: none)
-    set align(center)
-    
-    v(2.5cm)
-    heading(level: 1, outlined: false, bookmarked: true)[Autoridades Académicas]
-    v(1.5cm)
-    
-    for auth in authorities {
-      if type(auth) == dictionary {
-        let name = auth.at("name", default: none)
-        let role = auth.at("role", default: none)
-        if has-visible-content(name) {
-          block[
-            #strong(name) \
-            #text(style: "italic", role)
-          ]
-          v(1cm)
-        }
-      }
-    }
-    
-    pagebreak()
-  }
-
-  // 4. Acknowledgements page
   if has-visible-content(acknowledgements) {
-    set page(header: none)
     heading(level: 1, outlined: false, bookmarked: true)[Agradecimientos]
-    v(1.5cm)
-    
     {
-      set align(left)
-      set par(first-line-indent: first-indent-length, justify: true)
       acknowledgements
     }
-    
     pagebreak()
   }
 
-  // 5. Author Note page
-  if has-visible-content(author-note) {
-    set page(header: none)
-    heading(level: 1, outlined: false, bookmarked: true)[Nota de Autor]
-    v(1.5cm)
-    
-    {
-      set align(left)
-      set par(first-line-indent: first-indent-length, justify: true)
-      author-note
-    }
-    
-    pagebreak()
-  }
-
-  // 6. Bilingual abstracts page
   let show-es = has-visible-content(abstract-es)
   let show-en = has-visible-content(abstract-en)
   if show-es or show-en {
-    set page(header: none)
-    
     if show-es {
       heading(level: 1, outlined: false, bookmarked: true)[Resumen]
-      v(0.5cm)
+      v(0.5fr)
       {
         set align(left)
         set par(first-line-indent: 0in, justify: true)
         abstract-es
       }
-      
+
       if keywords-es != none and keywords-es != () {
-        v(0.5cm)
+        v(0.5fr)
         emph[Palabras clave: ]
         if type(keywords-es) == array {
           keywords-es.join(", ")
@@ -235,23 +206,23 @@
           keywords-es
         }
       }
-      
+
       if show-en {
-        v(1.5cm)
+        v(1.5fr)
       }
     }
-    
+
     if show-en {
       heading(level: 1, outlined: false, bookmarked: true)[Abstract]
-      v(0.5cm)
+      v(0.5fr)
       {
         set align(left)
         set par(first-line-indent: 0in, justify: true)
         abstract-en
       }
-      
+
       if keywords-en != none and keywords-en != () {
-        v(0.5cm)
+        v(0.5fr)
         emph[Keywords: ]
         if type(keywords-en) == array {
           keywords-en.join(", ")
@@ -260,7 +231,7 @@
         }
       }
     }
-    
+
     pagebreak()
   }
 }

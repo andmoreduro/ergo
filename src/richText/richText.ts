@@ -159,7 +159,7 @@ export const richTextToPlainText = (content: readonly RichText[]): string =>
         .map((span) => (isReferenceSpan(span) ? "" : span.text))
         .join("");
 
-export const parseRichTextFromEditableRoot = (root: HTMLElement): RichText[] => {
+const parseInlineNodes = (nodes: Iterable<Node>): RichText[] => {
     const spans: RichText[] = [];
 
     const walk = (
@@ -236,8 +236,81 @@ export const parseRichTextFromEditableRoot = (root: HTMLElement): RichText[] => 
         node.childNodes.forEach((child) => walk(child, nextMarks));
     };
 
-    root.childNodes.forEach((child) => walk(child));
+    for (const child of nodes) {
+        walk(child);
+    }
     return mergeAdjacentTextSpans(spans);
+};
+
+export const parseRichTextFromEditableRoot = (root: HTMLElement): RichText[] =>
+    parseInlineNodes(root.childNodes);
+
+const BLOCK_TAGS = new Set(["DIV", "P"]);
+
+const paragraphIsEmpty = (paragraph: RichText[]): boolean =>
+    richTextToPlainText(paragraph).length === 0;
+
+/**
+ * Parse a contenteditable root into paragraphs (`RichText[][]`). Each top-level
+ * block child (`<div>`/`<p>`, as browsers produce on Enter) is one paragraph;
+ * loose inline nodes are grouped into a paragraph. Nested blocks are flattened.
+ */
+export const parseRichTextParagraphsFromEditableRoot = (
+    root: HTMLElement,
+): RichText[][] => {
+    const paragraphs: RichText[][] = [];
+    let inlineBuffer: Node[] = [];
+
+    const flushInline = () => {
+        if (inlineBuffer.length > 0) {
+            paragraphs.push(parseInlineNodes(inlineBuffer));
+            inlineBuffer = [];
+        }
+    };
+
+    root.childNodes.forEach((child) => {
+        if (child instanceof HTMLElement && BLOCK_TAGS.has(child.tagName)) {
+            flushInline();
+            const hasNestedBlock = Array.from(child.childNodes).some(
+                (node) =>
+                    node instanceof HTMLElement && BLOCK_TAGS.has(node.tagName),
+            );
+            if (hasNestedBlock) {
+                paragraphs.push(...parseRichTextParagraphsFromEditableRoot(child));
+            } else {
+                paragraphs.push(parseInlineNodes(child.childNodes));
+            }
+        } else {
+            inlineBuffer.push(child);
+        }
+    });
+    flushInline();
+
+    // Drop a single trailing empty paragraph (browsers leave a trailing block),
+    // but always keep at least one paragraph.
+    while (
+        paragraphs.length > 1 &&
+        paragraphIsEmpty(paragraphs[paragraphs.length - 1] ?? [])
+    ) {
+        paragraphs.pop();
+    }
+
+    return paragraphs.length > 0 ? paragraphs : [[]];
+};
+
+/** Render paragraphs (`RichText[][]`) to contenteditable HTML, one block each. */
+export const renderRichTextParagraphsToEditableHtml = (
+    paragraphs: readonly RichText[][],
+): string => {
+    if (paragraphs.length === 0) {
+        return "<div><br /></div>";
+    }
+    return paragraphs
+        .map((paragraph) => {
+            const inner = renderRichTextToEditableHtml(paragraph);
+            return `<div>${inner || "<br />"}</div>`;
+        })
+        .join("");
 };
 
 export const insertInlineEquationAtOffset = (

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 
 import type { ActionHandlerMap } from "../actions/runtime";
 import type { DocumentAST } from "../bindings/DocumentAST";
@@ -20,7 +20,8 @@ interface FocusFieldPayload {
 }
 
 interface UseAppActionHandlersOptions {
-    state: DocumentAST;
+    /** Reads the live AST at call time (stable identity — never a render dep). */
+    getState: () => DocumentAST;
     commandRegistry: CommandRegistry;
     commandContext: CommandContext;
     setDocumentFocus: (focus: DocumentFocusInput) => void;
@@ -80,14 +81,11 @@ const defaultFieldIdForFocus = (
 };
 
 export const useAppActionHandlers = ({
-    state,
+    getState,
     commandRegistry,
     commandContext,
     setDocumentFocus,
 }: UseAppActionHandlersOptions): ActionHandlerMap => {
-    const stateRef = useRef(state);
-    stateRef.current = state;
-
     return useMemo<ActionHandlerMap>(() => {
         const handlers: ActionHandlerMap = {};
 
@@ -99,7 +97,7 @@ export const useAppActionHandlers = ({
 
             const fieldId =
                 target.fieldId ??
-                defaultFieldIdForFocus(stateRef.current, target.elementId);
+                defaultFieldIdForFocus(getState(), target.elementId);
             const editorTarget = editorFocusIdsForBackendField(
                 target.elementId,
                 fieldId,
@@ -124,5 +122,5 @@ export const useAppActionHandlers = ({
         }
 
         return handlers;
-    }, [commandContext, commandRegistry, setDocumentFocus]);
+    }, [commandContext, commandRegistry, getState, setDocumentFocus]);
 };

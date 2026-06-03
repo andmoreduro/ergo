@@ -14,8 +14,12 @@ describe("createDocumentAST defaults", () => {
 
         // Initializes new first-page inputs
         expect(ast.inputs.director).toEqual({ name: "", title: "" });
-        expect(ast.inputs.degree).toBe("");
+        expect(ast.inputs.degrees).toEqual([]);
         expect(ast.inputs.city).toBe("");
+        expect(ast.inputs.country).toBe("");
+        expect(ast.inputs.authors).toEqual([
+            { name: "", affiliations: [], degrees: [] },
+        ]);
         expect(typeof ast.inputs.year).toBe("string");
         expect(ast.inputs.year).toMatch(/^\d{4}$/); // current year, e.g. 2026
         expect(ast.inputs.authorities).toEqual([]);
@@ -44,7 +48,8 @@ describe("createDocumentAST defaults", () => {
 
         // Assert new keys are not present
         expect(ast.inputs.director).toBeUndefined();
-        expect(ast.inputs.degree).toBeUndefined();
+        expect(ast.inputs.degrees).toBeUndefined();
+        expect(ast.inputs.country).toBeUndefined();
         expect(ast.inputs.city).toBeUndefined();
     });
 });

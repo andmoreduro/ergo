@@ -57,6 +57,14 @@ interface DocumentSessionState {
     bootstrapFiles: ProjectFile[] | null;
     isDirty: boolean;
     documentFocus: DocumentFocusState;
+    /**
+     * Bumps on AST mutations that did NOT originate from a ProseMirror body
+     * commit (`APPLY_AST_ACTION`, `UNDO`, `REDO`, `LOAD_DOCUMENT`) — i.e. changes
+     * the body editor must reconcile into its doc. Body typing (`COMMIT_EVENTS`)
+     * deliberately does not bump it, so the body editor can drive its reconcile
+     * off this counter instead of re-rendering on every keystroke.
+     */
+    externalRevision: number;
 }
 
 type DocumentSessionAction =
@@ -149,11 +157,39 @@ interface DocumentActionsContextType {
     undo: () => void;
     redo: () => void;
     markSaved: () => void;
+    setDocumentFocus: (focus: DocumentFocusInput) => void;
 }
 
 const DocumentActionsContext = createContext<
     DocumentActionsContextType | undefined
 >(undefined);
+
+/**
+ * Narrow signal for the ProseMirror body editor: `externalRevision` bumps only
+ * on non-PM AST mutations (so the editor reconciles external edits without
+ * re-rendering on every keystroke), and `canUndo`/`canRedo` flip rarely. Kept
+ * out of `DocumentAstContext` so consuming it does not re-render on body typing.
+ */
+interface DocumentReconcileContextType {
+    externalRevision: number;
+    canUndo: boolean;
+    canRedo: boolean;
+    isDirty: boolean;
+}
+
+const DocumentReconcileContext = createContext<
+    DocumentReconcileContextType | undefined
+>(undefined);
+
+/** Selector-capable focus store (mirrors `DocumentAstStore`). */
+interface DocumentFocusStore {
+    subscribe: (listener: () => void) => () => void;
+    getSnapshot: () => DocumentFocusState;
+}
+
+const DocumentFocusStoreContext = createContext<DocumentFocusStore | undefined>(
+    undefined,
+);
 
 interface DocumentProviderProps {
     children: ReactNode;
@@ -182,6 +218,7 @@ const createInitialSessionState = (
         focusSource: "programmatic",
         requestId: 0,
     },
+    externalRevision: 0,
 });
 
 const queueDocumentEvents = (
@@ -222,6 +259,7 @@ const createSessionReducer =
                 ],
                 nextEventId: state.nextEventId + previous.inverseEvents.length,
                 isDirty: true,
+                externalRevision: state.externalRevision + 1,
             };
         }
 
@@ -246,6 +284,7 @@ const createSessionReducer =
                 ],
                 nextEventId: state.nextEventId + next.forwardEvents.length,
                 isDirty: true,
+                externalRevision: state.externalRevision + 1,
             };
         }
 
@@ -320,6 +359,7 @@ const createSessionReducer =
                 ...createInitialSessionState(nextAST, state.sessionId + 1),
                 ast: nextAST,
                 bootstrapFiles: action.action.payload.projectFiles ?? null,
+                externalRevision: state.externalRevision + 1,
             };
         }
 
@@ -353,6 +393,7 @@ const createSessionReducer =
             nextEventId:
                 state.nextEventId + historyEntry.forwardEvents.length,
             isDirty: true,
+            externalRevision: state.externalRevision + 1,
         };
     };
 
@@ -386,6 +427,27 @@ export const DocumentProvider = ({
             };
         },
         getSnapshot: () => astRef.current,
+    }).current;
+
+    // Same slice-subscription pattern for focus, so the body editor can react to
+    // external focus requests (preview click, sidebar nav) without re-rendering
+    // on the native focus it pushes itself every keystroke.
+    const focusRef = useRef(sessionState.documentFocus);
+    focusRef.current = sessionState.documentFocus;
+    const focusListenersRef = useRef(new Set<() => void>());
+    useEffect(() => {
+        for (const listener of focusListenersRef.current) {
+            listener();
+        }
+    }, [sessionState.documentFocus]);
+    const focusStore = useRef<DocumentFocusStore>({
+        subscribe: (listener) => {
+            focusListenersRef.current.add(listener);
+            return () => {
+                focusListenersRef.current.delete(listener);
+            };
+        },
+        getSnapshot: () => focusRef.current,
     }).current;
 
     const dispatch = useCallback(
@@ -452,8 +514,33 @@ export const DocumentProvider = ({
     // Stable across the whole session (every callback is a stable useCallback),
     // so action-only consumers never re-render from AST changes.
     const actionsValue = useMemo(
-        () => ({ dispatch, commitDocumentEvents, undo, redo, markSaved }),
-        [dispatch, commitDocumentEvents, undo, redo, markSaved],
+        () => ({
+            dispatch,
+            commitDocumentEvents,
+            undo,
+            redo,
+            markSaved,
+            setDocumentFocus,
+        }),
+        [dispatch, commitDocumentEvents, undo, redo, markSaved, setDocumentFocus],
+    );
+
+    // Changes only on external (non-PM) mutations and rare undo/redo-availability
+    // flips — never on plain body typing.
+    // Depend on the booleans, NOT past/future length: history grows on every
+    // keystroke, but `canUndo`/`canRedo` only flip rarely. Keying the memo on the
+    // booleans keeps this context value referentially stable across typing, so
+    // its consumers (body editor, app shell) don't re-render on every keystroke.
+    const canUndo = sessionState.past.length > 0;
+    const canRedo = sessionState.future.length > 0;
+    const reconcileValue = useMemo(
+        () => ({
+            externalRevision: sessionState.externalRevision,
+            canUndo,
+            canRedo,
+            isDirty: sessionState.isDirty,
+        }),
+        [sessionState.externalRevision, canUndo, canRedo, sessionState.isDirty],
     );
 
     const syncValue = useMemo(() => {
@@ -485,15 +572,19 @@ export const DocumentProvider = ({
 
     return (
         <DocumentAstStoreContext.Provider value={astStore}>
-            <DocumentActionsContext.Provider value={actionsValue}>
-                <DocumentAstContext.Provider value={astValue}>
-                    <DocumentSyncContext.Provider value={syncValue}>
-                        <DocumentFocusContext.Provider value={focusValue}>
-                            {children}
-                        </DocumentFocusContext.Provider>
-                    </DocumentSyncContext.Provider>
-                </DocumentAstContext.Provider>
-            </DocumentActionsContext.Provider>
+            <DocumentFocusStoreContext.Provider value={focusStore}>
+                <DocumentReconcileContext.Provider value={reconcileValue}>
+                    <DocumentActionsContext.Provider value={actionsValue}>
+                        <DocumentAstContext.Provider value={astValue}>
+                            <DocumentSyncContext.Provider value={syncValue}>
+                                <DocumentFocusContext.Provider value={focusValue}>
+                                    {children}
+                                </DocumentFocusContext.Provider>
+                            </DocumentSyncContext.Provider>
+                        </DocumentAstContext.Provider>
+                    </DocumentActionsContext.Provider>
+                </DocumentReconcileContext.Provider>
+            </DocumentFocusStoreContext.Provider>
         </DocumentAstStoreContext.Provider>
     );
 };
@@ -540,6 +631,73 @@ export function useDocumentAstSelector<T>(
 
     return useSyncExternalStore(store.subscribe, getSelection, getSelection);
 }
+
+/**
+ * Subscribe to a slice of the focus state. Lets the body editor react only to
+ * external focus requests (preview click, sidebar nav) and skip the native focus
+ * it pushes itself on every keystroke.
+ */
+export function useDocumentFocusSelector<T>(
+    selector: (focus: DocumentFocusState) => T,
+    isEqual: (a: T, b: T) => boolean = Object.is,
+): T {
+    const store = useContext(DocumentFocusStoreContext);
+    if (store === undefined) {
+        throw new Error(
+            "useDocumentFocusSelector must be used within a DocumentProvider",
+        );
+    }
+    const selectorRef = useRef(selector);
+    selectorRef.current = selector;
+    const isEqualRef = useRef(isEqual);
+    isEqualRef.current = isEqual;
+    const cacheRef = useRef<{ value: T } | null>(null);
+
+    const getSelection = useCallback(() => {
+        const next = selectorRef.current(store.getSnapshot());
+        const cache = cacheRef.current;
+        if (cache && isEqualRef.current(cache.value, next)) {
+            return cache.value;
+        }
+        cacheRef.current = { value: next };
+        return next;
+    }, [store]);
+
+    return useSyncExternalStore(store.subscribe, getSelection, getSelection);
+}
+
+/** Live AST store for imperative reads without subscribing to re-renders. */
+export const useDocumentAstStore = (): DocumentAstStore => {
+    const store = useContext(DocumentAstStoreContext);
+    if (store === undefined) {
+        throw new Error(
+            "useDocumentAstStore must be used within a DocumentProvider",
+        );
+    }
+    return store;
+};
+
+/** Live focus store for imperative reads (e.g. caret offset) without subscribing. */
+export const useDocumentFocusStore = (): DocumentFocusStore => {
+    const store = useContext(DocumentFocusStoreContext);
+    if (store === undefined) {
+        throw new Error(
+            "useDocumentFocusStore must be used within a DocumentProvider",
+        );
+    }
+    return store;
+};
+
+/** Narrow reconcile signal for the body editor (see `DocumentReconcileContextType`). */
+export const useDocumentReconcile = (): DocumentReconcileContextType => {
+    const context = useContext(DocumentReconcileContext);
+    if (context === undefined) {
+        throw new Error(
+            "useDocumentReconcile must be used within a DocumentProvider",
+        );
+    }
+    return context;
+};
 
 /** Stable document mutators that never change identity across the session. */
 export const useDocumentActions = (): DocumentActionsContextType => {

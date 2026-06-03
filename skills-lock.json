@@ -29,7 +29,7 @@
       "source": "lucifer1004/claude-skill-typst",
       "sourceType": "github",
       "skillPath": "skills/typst/SKILL.md",
-      "computedHash": "0525019aa571ca4a10681b30c22a58adac8e8b9f5192d826cb31162fa3017ba5"
+      "computedHash": "879b5ac484d3e8246fbae35a007fe7504b9129832728ec3c05ebd35931dced1b"
     },
     "vercel-react-best-practices": {
       "source": "vercel-labs/agent-skills",

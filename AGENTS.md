@@ -77,6 +77,7 @@ The context files describe the intended current design. They are not a changelog
 | `pnpm test:changed` | Compile paraglide, then `vitest run --changed` (only tests affected by working-tree diff) |
 | `pnpm build` | `build:wasm` → paraglide compile → `tsc` → `vite build` |
 | `pnpm tauri dev` | Full Tauri desktop app (runs `pnpm dev` internally) |
+| `pnpm react-devtools` | Standalone React DevTools — start before `pnpm tauri dev`, then reload the app window |
 | `cargo run --release -p ergo-engine-wasm --bin wasm_preview_profile -- --scenario typing-title --iterations 200` | Profile the WASM preview pipeline (sync → compile → canvas render) without Tauri/WebView |
 | `cargo nextest run` | Run Rust tests via nextest (skips per-type `export_bindings_*` smoke tests; from `src-tauri/`) |
 | `cargo test -p ergo export_typescript_bindings` | Regenerate `src/bindings/` after IPC type changes |

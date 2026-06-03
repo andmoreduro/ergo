@@ -43,9 +43,9 @@ const useTableAnnotationFields = (): ExtraFieldSpec[] => {
     return useMemo(
         () =>
             effectiveTableExtraFields(
-                templateSpec?.element_overrides?.table ?? null,
+                templateSpec?.typst.element_overrides?.table ?? null,
             ).filter((field) => !TABLE_SETTINGS_KEYS.has(field.key)),
-        [templateSpec?.element_overrides?.table],
+        [templateSpec?.typst.element_overrides?.table],
     );
 };
 

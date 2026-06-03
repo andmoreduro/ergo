@@ -72,11 +72,11 @@ pub(crate) fn generate_lib_typst(ast: &DocumentAST, template: &TemplateSpec) -> 
 }
 
 pub(crate) fn push_package_imports(template: &TemplateSpec, builder: &mut SourceBuilder) {
-    if !template.package.name.is_empty() {
-        builder.push_literal(&template.package.to_typst_import_line());
+    if !template.typst.package.name.is_empty() {
+        builder.push_literal(&template.typst.package.to_typst_import_line());
         builder.push_literal("\n");
     }
-    for dep in &template.package.dependencies {
+    for dep in &template.typst.package.dependencies {
         builder.push_literal(&dep.to_typst_import_line());
         builder.push_literal("\n");
     }
@@ -95,7 +95,7 @@ pub(crate) fn push_wrapper_symbol_import(
     }
     builder.push_literal(&format!(
         "#import \"{}\": {}\n\n",
-        template.package.import_target(),
+        template.typst.package.import_target(),
         wrapper
     ));
 }
@@ -106,7 +106,7 @@ fn push_document_show_rule(
     fallbacks: &RequiredInputFallbacks<'_>,
     builder: &mut SourceBuilder,
 ) {
-    let Some(show_rule) = &template.show_rule else {
+    let Some(show_rule) = &template.typst.show_rule else {
         return;
     };
     builder.push_literal(&format!("  #show: {}.with(\n", show_rule.function));
@@ -317,6 +317,70 @@ fn resolve_input_param(
                 false
             }
         }
+        ParamType::ContentArray => {
+            // Multi-paragraph rich text. The value is an array of paragraphs, each a
+            // `RichText[]`; they're emitted as one content block with `parbreak()`
+            // between paragraphs. Legacy values are migrated: a plain string (from a
+            // field that used to be `string`/`content`) or a single-paragraph
+            // `RichText[]` becomes one paragraph.
+            if let Some(s) = val.as_str() {
+                let text = fallbacks.effective_string(key, s);
+                let trimmed = text.trim();
+                if trimmed.is_empty() {
+                    if param.key != "_positional" {
+                        return false;
+                    }
+                    builder.push_literal("[]");
+                } else {
+                    builder.push_literal("[");
+                    builder.push_escaped_field("inputs", &format!("/{}", key), trimmed, 0);
+                    builder.push_literal("]");
+                }
+                return true;
+            }
+
+            let paragraphs: Vec<Vec<RichText>> = match val.as_array() {
+                Some(items) if items.first().map(|i| i.is_array()).unwrap_or(false) => {
+                    items
+                        .iter()
+                        .map(|item| rich_text_array_from_value(item).unwrap_or_default())
+                        .collect()
+                }
+                _ => rich_text_array_from_value(&val)
+                    .map(|content| vec![content])
+                    .unwrap_or_default(),
+            };
+
+            let non_empty: Vec<(usize, &Vec<RichText>)> = paragraphs
+                .iter()
+                .enumerate()
+                .filter(|(_, para)| !para.is_empty())
+                .collect();
+
+            if non_empty.is_empty() {
+                if param.key != "_positional" {
+                    return false;
+                }
+                builder.push_literal("[]");
+                return true;
+            }
+
+            builder.push_literal("[");
+            for (rendered, (index, para)) in non_empty.iter().enumerate() {
+                if rendered > 0 {
+                    builder.push_literal(" #parbreak() ");
+                }
+                rich_text::push_rich_text_field(
+                    builder,
+                    "inputs",
+                    &format!("/{}/{}", key, index),
+                    para,
+                    &std::collections::HashMap::new(),
+                );
+            }
+            builder.push_literal("]");
+            true
+        }
         ParamType::String => {
             if let Some(s) = val.as_str() {
                 let text = fallbacks.effective_string(key, s);
@@ -433,8 +497,11 @@ fn resolve_input_param(
         ParamType::AuthorList => {
             resolve_author_list_param(&val, raw.unwrap_or(&serde_json::Value::Null), builder)
         }
-        ParamType::AffiliationMap => resolve_affiliation_map_param(&val, builder),
-        _ => false,
+        ParamType::AffiliationMap => {
+            let letter_ids = ast.metadata.template_id == "umb-apa";
+            resolve_affiliation_map_param(&val, builder, letter_ids, "affiliations")
+        }
+        ParamType::DegreeMap => resolve_degree_map_param(&val, builder),
     }
 }
 
@@ -522,39 +589,24 @@ fn resolve_author_list_param(
                     }
                 }
                 if let Some(affs) = obj.get("affiliations").and_then(|v| v.as_array()) {
-                    let aff_refs = affs
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(aff_idx, value)| {
-                            value
-                                .as_str()
-                                .filter(|s| !s.trim().is_empty())
-                                .map(|s| (aff_idx, s))
-                        })
-                        .collect::<Vec<_>>();
-                    if !aff_refs.is_empty() {
-                        if has_field {
-                            builder.push_literal(", ");
-                        }
-                        builder.push_literal("affiliations: (");
-                        for (aff_position, (aff_idx, aff_ref)) in aff_refs.iter().enumerate() {
-                            if aff_position > 0 {
-                                builder.push_literal(", ");
-                            }
-                            builder.push_literal("\"");
-                            builder.push_escaped_field(
-                                "inputs",
-                                &format!("/authors/{}/affiliations/{}", idx, aff_idx),
-                                aff_ref,
-                                0,
-                            );
-                            builder.push_literal("\"");
-                        }
-                        if aff_refs.len() == 1 {
-                            builder.push_literal(",");
-                        }
-                        builder.push_literal(")");
-                    }
+                    push_author_reference_list(
+                        obj,
+                        builder,
+                        idx,
+                        "affiliations",
+                        affs,
+                        &mut has_field,
+                    );
+                }
+                if let Some(degree_refs) = obj.get("degrees").and_then(|v| v.as_array()) {
+                    push_author_reference_list(
+                        obj,
+                        builder,
+                        idx,
+                        "degrees",
+                        degree_refs,
+                        &mut has_field,
+                    );
                 }
                 builder.push_literal(")");
             }
@@ -596,7 +648,71 @@ fn input_value_has_visible_text(value: &serde_json::Value) -> bool {
     false
 }
 
-fn resolve_affiliation_map_param(val: &serde_json::Value, builder: &mut SourceBuilder) -> bool {
+fn affiliation_map_key(index: usize, letter_ids: bool) -> String {
+    if letter_ids {
+        char::from_u32(97 + index as u32)
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| (index + 1).to_string())
+    } else {
+        (index + 1).to_string()
+    }
+}
+
+fn push_author_reference_list(
+    _obj: &serde_json::Map<String, serde_json::Value>,
+    builder: &mut SourceBuilder,
+    author_idx: usize,
+    field: &str,
+    refs: &[serde_json::Value],
+    has_field: &mut bool,
+) {
+    let ref_values = refs
+        .iter()
+        .enumerate()
+        .filter_map(|(ref_idx, value)| {
+            value
+                .as_str()
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| (ref_idx, s))
+        })
+        .collect::<Vec<_>>();
+    if ref_values.is_empty() {
+        return;
+    }
+    if *has_field {
+        builder.push_literal(", ");
+    }
+    builder.push_literal(&format!("{field}: ("));
+    for (position, (ref_idx, ref_value)) in ref_values.iter().enumerate() {
+        if position > 0 {
+            builder.push_literal(", ");
+        }
+        builder.push_literal("\"");
+        builder.push_escaped_field(
+            "inputs",
+            &format!("/authors/{author_idx}/{field}/{ref_idx}"),
+            ref_value,
+            0,
+        );
+        builder.push_literal("\"");
+    }
+    if ref_values.len() == 1 {
+        builder.push_literal(",");
+    }
+    builder.push_literal(")");
+    *has_field = true;
+}
+
+fn resolve_degree_map_param(val: &serde_json::Value, builder: &mut SourceBuilder) -> bool {
+    resolve_affiliation_map_param(val, builder, true, "degrees")
+}
+
+fn resolve_affiliation_map_param(
+    val: &serde_json::Value,
+    builder: &mut SourceBuilder,
+    letter_ids: bool,
+    field_prefix: &str,
+) -> bool {
     if let Some(arr) = val.as_array() {
         let has_any = arr.iter().any(input_value_has_visible_text);
         if !has_any {
@@ -606,6 +722,7 @@ fn resolve_affiliation_map_param(val: &serde_json::Value, builder: &mut SourceBu
         builder.push_literal("(");
         let mut first = true;
         let bibliography_keys = std::collections::HashMap::new();
+        let mut visible_index = 0usize;
         for (idx, item) in arr.iter().enumerate() {
             if let Some(aff_name) = item.as_str() {
                 if aff_name.trim().is_empty() {
@@ -615,10 +732,12 @@ fn resolve_affiliation_map_param(val: &serde_json::Value, builder: &mut SourceBu
                     builder.push_literal(", ");
                 }
                 first = false;
-                builder.push_literal(&format!("\"{}\": [", idx + 1));
+                let map_key = affiliation_map_key(visible_index, letter_ids);
+                visible_index += 1;
+                builder.push_literal(&format!("\"{map_key}\": ["));
                 builder.push_escaped_field(
                     "inputs",
-                    &format!("/affiliations/{}", idx),
+                    &format!("/{field_prefix}/{idx}"),
                     aff_name,
                     0,
                 );
@@ -631,11 +750,13 @@ fn resolve_affiliation_map_param(val: &serde_json::Value, builder: &mut SourceBu
                     builder.push_literal(", ");
                 }
                 first = false;
-                builder.push_literal(&format!("\"{}\": [", idx + 1));
+                let map_key = affiliation_map_key(visible_index, letter_ids);
+                visible_index += 1;
+                builder.push_literal(&format!("\"{map_key}\": ["));
                 rich_text::push_rich_text_field(
                     builder,
                     "inputs",
-                    &format!("/affiliations/{}", idx),
+                    &format!("/{field_prefix}/{idx}"),
                     &content,
                     &bibliography_keys,
                 );

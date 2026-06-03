@@ -14,14 +14,10 @@ import {
     Link24Regular,
     Delete24Regular,
 } from "@fluentui/react-icons";
-import type { TemplateVariantSpec } from "../../../bindings/TemplateVariantSpec";
 import { IconButton } from "../../atoms/IconButton/IconButton";
-import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
-import { Select } from "../../atoms/Select/Select";
-import { Toolbar, ToolbarGroup, ToolbarSpacer } from "../../molecules/Toolbar/Toolbar";
+import { Toolbar, ToolbarGroup } from "../../molecules/Toolbar/Toolbar";
 import { TextParagraph24Regular } from "../../icons/TextParagraph24Regular";
 import { m } from "../../../paraglide/messages.js";
-import styles from "./EditorToolbar.module.css";
 
 /** Keep ProseMirror selection when toolbar buttons are clicked. */
 const keepEditorSelection = (event: MouseEvent) => {
@@ -32,8 +28,6 @@ export interface EditorToolbarProps {
     canDeleteFocusedTarget: boolean;
     /** When true, only in-cell block inserts (no heading/table/figure/diagram). */
     tableCellEditing?: boolean;
-    templateVariants: TemplateVariantSpec[];
-    resolvedVariantId: string;
     onDelete: () => void;
     onBold: () => void;
     onItalic: () => void;
@@ -49,15 +43,12 @@ export interface EditorToolbarProps {
     onInsertFigure: () => void;
     onInsertDiagram: () => void;
     onInsertReference: () => void;
-    onVariantChange: (variantId: string) => void;
 }
 
 export const EditorToolbar = memo(
     ({
         canDeleteFocusedTarget,
         tableCellEditing = false,
-        templateVariants,
-        resolvedVariantId,
         onDelete,
         onBold,
         onItalic,
@@ -73,9 +64,9 @@ export const EditorToolbar = memo(
         onInsertFigure,
         onInsertDiagram,
         onInsertReference,
-        onVariantChange,
-    }: EditorToolbarProps) => (
-        <Toolbar scrollable>
+    }: EditorToolbarProps) => {
+        return (
+            <Toolbar scrollable>
             <ToolbarGroup>
                 <IconButton
                     title={m.element_delete()}
@@ -201,30 +192,9 @@ export const EditorToolbar = memo(
                     <Link24Regular />
                 </IconButton>
             </ToolbarGroup>
-            {templateVariants.length > 1 ? (
-                <>
-                    <ToolbarSpacer />
-                    <FieldLabel
-                        htmlFor="template-variant"
-                        className={styles.variantToolbarLabel}
-                    >
-                        {m.settings_template_variant()}
-                    </FieldLabel>
-                    <Select
-                        id="template-variant"
-                        variant="inline"
-                        aria-label={m.settings_template_variant()}
-                        value={resolvedVariantId}
-                        options={templateVariants.map((variant) => ({
-                            value: variant.id,
-                            label: variant.label,
-                        }))}
-                        onChange={(event) => onVariantChange(event.target.value)}
-                    />
-                </>
-            ) : null}
         </Toolbar>
-    ),
+        );
+    },
 );
 
 EditorToolbar.displayName = "EditorToolbar";

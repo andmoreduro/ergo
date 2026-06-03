@@ -198,15 +198,16 @@ export const createDocumentAST = (
         ast.inputs = {
             title: "Untitled Document",
             running_head: "",
-            authors: [{ name: "", affiliations: [] }],
+            authors: [{ name: "", affiliations: [], degrees: [] }],
             affiliations: [],
+            degrees: [],
             author_note: "",
             director: {
                 name: "",
                 title: "",
             },
-            degree: "",
             city: "",
+            country: "",
             year: new Date().getFullYear().toString(),
             authorities: [],
             acknowledgements: "",

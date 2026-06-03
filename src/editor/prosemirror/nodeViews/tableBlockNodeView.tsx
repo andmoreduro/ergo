@@ -14,6 +14,7 @@ import {
 import { isBlockEditing, setBlockEditing } from "../blockEditMode";
 import { clearBlockUiState, setBlockUiState } from "../blockUiState";
 import {
+    isTableEscapeSelection,
     selectionInChildTableForFocus,
     tableCellCoordsFromChildState,
     tableCellFocusTargetFromState,
@@ -212,6 +213,21 @@ export const createTableBlockNodeView = (
         editable: () => isBlockEditing(view.state, elementId()),
         dispatchTransaction(tr) {
             const next = childView.state.apply(tr);
+
+            // Arrow navigation off the table's outer edge escapes the cells onto
+            // a NodeSelection of the whole table. Don't apply it (the caret would
+            // vanish and typing would replace the table) — exit fine-grained mode
+            // and lock the whole block instead, matching Escape.
+            if (
+                !applyingExternalRef &&
+                tr.selectionSet &&
+                !tr.docChanged &&
+                isTableEscapeSelection(next)
+            ) {
+                exitToLockedWholeBlock();
+                return;
+            }
+
             childView.updateState(next);
 
             if (!applyingExternalRef && (tr.selectionSet || tr.docChanged)) {
@@ -329,6 +345,25 @@ export const createTableBlockNodeView = (
         registry.update(portalKey, renderCoordinator);
     };
 
+    /** Re-lock the table as a whole block and hand focus back to the body view. */
+    const exitToLockedWholeBlock = () => {
+        const pos = getPos();
+        if (pos === undefined) {
+            return;
+        }
+        let tr = view.state.tr.setSelection(
+            NodeSelection.create(view.state.doc, pos),
+        );
+        tr = setBlockEditing(tr, elementId(), false);
+        view.dispatch(tr);
+        setActiveTableCellCoords(null);
+        childView.setProps({
+            editable: () => isBlockEditing(view.state, elementId()),
+        });
+        view.focus();
+        pushBlockUi();
+    };
+
     const enterEditAtCoords = (
         blockPos: number,
         coords?: { clientX: number; clientY: number },
@@ -414,19 +449,7 @@ export const createTableBlockNodeView = (
         if (event.key === "Escape" || (event.key === "Enter" && event.ctrlKey)) {
             event.preventDefault();
             event.stopPropagation();
-            const pos = getPos();
-            if (pos === undefined) {
-                return;
-            }
-            let tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos));
-            tr = setBlockEditing(tr, elementId(), false);
-            view.dispatch(tr);
-            setActiveTableCellCoords(null);
-            childView.setProps({
-                editable: () => isBlockEditing(view.state, elementId()),
-            });
-            view.focus();
-            pushBlockUi();
+            exitToLockedWholeBlock();
         }
     };
 

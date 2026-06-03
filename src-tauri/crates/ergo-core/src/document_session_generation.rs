@@ -165,6 +165,7 @@ fn generate_project_sources_inner(
     main_builder.push_literal(")\n\n");
 
     let template_declares_outlines = template
+        .typst
         .sections
         .iter()
         .any(|section| section.kind == SectionKind::Outlines);
@@ -173,7 +174,7 @@ fn generate_project_sources_inner(
     let mut auto_outlines_injected = false;
 
     // Generate sections according to template specification
-    for section_spec in &template.sections {
+    for section_spec in &template.typst.sections {
         if !template_declares_outlines
             && !auto_outlines_injected
             && section_spec.kind == SectionKind::Content

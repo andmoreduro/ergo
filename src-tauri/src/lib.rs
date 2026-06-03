@@ -7,9 +7,7 @@ fn apply_window_icons(
         .cloned()
         .unwrap_or_else(|| tauri::include_image!("icons/32x32.png"));
 
-    let _ = window.set_icon(icon.clone());
-    #[cfg(windows)]
-    let _ = window.set_overlay_icon(Some(icon));
+    let _ = window.set_icon(icon);
 }
 
 #[cfg(windows)]
@@ -69,6 +67,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            let resource_templates = app.path().resource_dir().unwrap().join("resources/templates");
+            ergo_core::template_spec::set_templates_dir(resource_templates);
+
+            let custom_templates = app.path().app_data_dir().unwrap().join("templates");
+            ergo_core::template_spec::set_custom_templates_dir(custom_templates);
+
             if let Some(window) = app.get_webview_window("main") {
                 apply_window_icons(app, &window);
                 #[cfg(windows)]
@@ -85,6 +89,7 @@ pub fn run() {
             compiler::write_zip_export,
             compiler::load_fonts_for_families,
             compiler::load_fonts_for_document,
+            compiler::list_system_font_families,
             compiler::write_source,
             compiler::patch_source,
             compiler::open_devtools,

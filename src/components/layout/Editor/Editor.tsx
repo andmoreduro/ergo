@@ -8,12 +8,14 @@ import {
 } from "react";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import {
-    useDocument,
     useDocumentActions,
-    useDocumentAst,
     useDocumentAstSelector,
+    useDocumentAstStore,
+    useDocumentFocusSelector,
+    useDocumentFocusStore,
 } from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
+import { useTemplateTranslation } from "../../../hooks/useTemplateTranslation";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import {
     ActionContextProvider,
@@ -41,6 +43,13 @@ import {
     simpleListComposerFieldId,
 } from "../../../editor/fieldIds";
 import { parseInputRichText } from "../../../editor/richTextMarks";
+import {
+    finalizeContentBlocks,
+    normalizeContentBlocks,
+    parseInputContentBlocks,
+} from "../../../editor/contentBlocks";
+import { useDeferredContentBlocksCommit } from "../../../editor/useDeferredContentBlocksCommit";
+import { ParagraphsField } from "../../molecules/ParagraphsField/ParagraphsField";
 import { parseSimpleListContentItems } from "../../../editor/simpleListContent";
 import { normalizeEditableText, normalizeRichTextContent } from "../../../editor/textInput";
 import { useDeferredRichTextCommit } from "../../../editor/useDeferredRichTextCommit";
@@ -60,6 +69,10 @@ import { peekBodyTabModifiers } from "../../../editor/prosemirror/activeView";
 
 /** Shared stable empty array so selectors don't return a fresh `[]` each call. */
 const EMPTY_ARRAY: readonly unknown[] = [];
+
+/** Element-wise string-array equality so the section-id selector stays stable while typing. */
+const stringArrayEquals = (a: readonly string[], b: readonly string[]): boolean =>
+    a.length === b.length && a.every((value, index) => value === b[index]);
 
 const getValueAtPath = (obj: any, path: string): any => {
     const parts = path.split("/").filter(Boolean);
@@ -105,14 +118,32 @@ export interface EditorProps {
     mainPreviewPaintedRevision: number | null;
 }
 
-export const Editor = ({
+const EditorComponent = ({
     resources,
     outlineEntries,
     resourcePreviewRevisions,
     mainPreviewPaintedRevision,
 }: EditorProps) => {
-    const { state, dispatch: dispatchAst } = useDocumentAst();
-    const { documentFocus } = useDocument();
+    // Narrow subscriptions: the editor shell must not re-render on body typing.
+    // `dispatchAst` is identity-stable; live AST/focus are read imperatively in
+    // callbacks; only the render-affecting slices subscribe — and those
+    // (focus identity, variant, references, section ids) stay stable while typing.
+    const { dispatch: dispatchAst } = useDocumentActions();
+    const astStore = useDocumentAstStore();
+    const focusStore = useDocumentFocusStore();
+    const focusElementId = useDocumentFocusSelector((focus) => focus.elementId);
+    const focusFieldId = useDocumentFocusSelector((focus) => focus.fieldId);
+    const templateVariantId = useDocumentAstSelector(
+        (s) => s.metadata.template_variant_id,
+    );
+    const references = useDocumentAstSelector((s) => s.references);
+    const contentSectionIds = useDocumentAstSelector(
+        (s) =>
+            s.sections
+                .filter((section) => section.type === "Content")
+                .map((section) => section.id),
+        stringArrayEquals,
+    );
     const dispatchAction = useActionDispatcher();
     const [referenceDialogOpen, setReferenceDialogOpen] = useState(false);
 
@@ -123,11 +154,12 @@ export const Editor = ({
                 return;
             }
 
+            const focus = focusStore.getSnapshot();
             const selection =
-                documentFocus.elementId && documentFocus.fieldId
+                focus.elementId && focus.fieldId
                     ? {
-                          elementId: documentFocus.elementId,
-                          fieldId: documentFocus.fieldId,
+                          elementId: focus.elementId,
+                          fieldId: focus.fieldId,
                       }
                     : null;
             if (!selection) {
@@ -135,36 +167,32 @@ export const Editor = ({
             }
 
             const action = buildReferenceInsertAction(
-                state,
+                astStore.getSnapshot(),
                 selection,
                 pick,
-                documentFocus.caretUtf16Offset,
+                focus.caretUtf16Offset,
             );
             if (action) {
                 dispatchAst(action);
             }
             setReferenceDialogOpen(false);
         },
-        [
-            dispatchAst,
-            documentFocus.caretUtf16Offset,
-            documentFocus.elementId,
-            documentFocus.fieldId,
-            state,
-        ],
+        [astStore, dispatchAst, focusStore],
     );
 
-    const focusedContentElement = useMemo(() => {
-        const elementId = documentFocus.elementId;
+    const getFocusedContentElement = useCallback(() => {
+        const elementId = focusStore.getSnapshot().elementId;
         if (!elementId || elementId === "project" || elementId === "inputs") {
             return null;
         }
-        const section = state.sections.find((entry) => entry.type === "Content");
+        const section = astStore
+            .getSnapshot()
+            .sections.find((entry) => entry.type === "Content");
         if (!section || section.type !== "Content") {
             return null;
         }
         return section.elements.find((entry) => entry.id === elementId) ?? null;
-    }, [documentFocus.elementId, state.sections]);
+    }, [astStore, focusStore]);
 
     const editorHandlers = useMemo<ActionHandlerMap>(
         () => ({
@@ -185,26 +213,28 @@ export const Editor = ({
     );
 
     const { spec: templateSpec, variantId: activeVariantId } = useTemplateSpecContext();
-    const templateVariants = templateSpec?.variants ?? [];
+    const t = useTemplateTranslation(templateSpec);
+    const templateVariants = templateSpec?.editor?.variants ?? [];
     const resolvedVariantId =
-        state.metadata.template_variant_id ??
+        templateVariantId ??
         activeVariantId ??
         templateVariants.find((variant) => variant.default)?.id ??
         templateVariants[0]?.id ??
         "student";
-    const groups = templateSpec?.groups || [];
+    const groups = templateSpec?.editor?.groups || [];
     const inputsMap = useMemo(() => {
         return new Map<string, InputSchema>(
-            (templateSpec?.inputs || []).map((input) => [input.id!, input])
+            (templateSpec?.editor?.inputs || []).map((input) => [input.id!, input])
         );
-    }, [templateSpec?.inputs]);
+    }, [templateSpec?.editor?.inputs]);
     const fieldNavigation = useFieldNavigation(templateSpec, resolvedVariantId);
     const fieldNavigationRef = useRef(fieldNavigation);
     fieldNavigationRef.current = fieldNavigation;
 
     const deleteFocusedElement = useCallback(() => {
-        const elementId = documentFocus.elementId;
-        const authorIndex = focusedAuthorIndex(elementId, documentFocus.fieldId);
+        const focus = focusStore.getSnapshot();
+        const elementId = focus.elementId;
+        const authorIndex = focusedAuthorIndex(elementId, focus.fieldId);
         if (authorIndex !== null) {
             dispatchAst({
                 type: "REMOVE_INPUT_ARRAY_ITEM",
@@ -221,12 +251,15 @@ export const Editor = ({
             return false;
         }
 
-        return fieldNavigationRef.current.removeContentElement(state, elementId);
-    }, [dispatchAst, documentFocus.elementId, documentFocus.fieldId, state]);
+        return fieldNavigationRef.current.removeContentElement(
+            astStore.getSnapshot(),
+            elementId,
+        );
+    }, [astStore, dispatchAst, focusStore]);
 
     const canDeleteFocusedTarget =
-        Boolean(documentFocus.elementId && documentFocus.elementId !== "project") ||
-        focusedAuthorIndex(documentFocus.elementId, documentFocus.fieldId) !== null;
+        Boolean(focusElementId && focusElementId !== "project") ||
+        focusedAuthorIndex(focusElementId, focusFieldId) !== null;
 
     const tableCellEditing = useSyncExternalStore(
         subscribeActiveTableCellSession,
@@ -250,27 +283,30 @@ export const Editor = ({
             },
             "editor::DeleteElement": () => deleteFocusedElement(),
             "editor::AddTableRow": () => {
-                if (focusedContentElement?.type !== "Table") {
+                const focused = getFocusedContentElement();
+                if (focused?.type !== "Table") {
                     return false;
                 }
                 dispatchAst({
                     type: "ADD_TABLE_ROW",
-                    payload: { tableId: focusedContentElement.id },
+                    payload: { tableId: focused.id },
                 });
                 return true;
             },
             "editor::AddTableColumn": () => {
-                if (focusedContentElement?.type !== "Table") {
+                const focused = getFocusedContentElement();
+                if (focused?.type !== "Table") {
                     return false;
                 }
                 dispatchAst({
                     type: "ADD_TABLE_COLUMN",
-                    payload: { tableId: focusedContentElement.id },
+                    payload: { tableId: focused.id },
                 });
                 return true;
             },
             "editor::RemoveTableRow": (invocation) => {
-                if (focusedContentElement?.type !== "Table") {
+                const focused = getFocusedContentElement();
+                if (focused?.type !== "Table") {
                     return false;
                 }
                 const payload = invocation.payload;
@@ -280,18 +316,19 @@ export const Editor = ({
                     "rowIndex" in payload &&
                     typeof payload.rowIndex === "number"
                         ? payload.rowIndex
-                        : focusedContentElement.rows - 1;
+                        : focused.rows - 1;
                 dispatchAst({
                     type: "REMOVE_TABLE_ROW",
                     payload: {
-                        tableId: focusedContentElement.id,
+                        tableId: focused.id,
                         rowIndex,
                     },
                 });
                 return true;
             },
             "editor::RemoveTableColumn": (invocation) => {
-                if (focusedContentElement?.type !== "Table") {
+                const focused = getFocusedContentElement();
+                if (focused?.type !== "Table") {
                     return false;
                 }
                 const payload = invocation.payload;
@@ -301,11 +338,11 @@ export const Editor = ({
                     "colIndex" in payload &&
                     typeof payload.colIndex === "number"
                         ? payload.colIndex
-                        : focusedContentElement.cols - 1;
+                        : focused.cols - 1;
                 dispatchAst({
                     type: "REMOVE_TABLE_COLUMN",
                     payload: {
-                        tableId: focusedContentElement.id,
+                        tableId: focused.id,
                         colIndex,
                     },
                 });
@@ -316,8 +353,56 @@ export const Editor = ({
             deleteFocusedElement,
             dispatchAst,
             editorHandlers,
-            focusedContentElement,
+            getFocusedContentElement,
         ],
+    );
+
+    // Stable toolbar callbacks: `EditorToolbar` is memoized, so inline arrows
+    // here would re-render it on every parent render (every compile). `dispatchAction`
+    // is identity-stable, so this object is created once for the session.
+    const toolbarHandlers = useMemo(
+        () => ({
+            onDelete: () =>
+                void dispatchAction({ id: "editor::DeleteElement", payload: null }),
+            onBold: () =>
+                void dispatchAction({ id: "editor::Bold", payload: null }),
+            onItalic: () =>
+                void dispatchAction({ id: "editor::Italic", payload: null }),
+            onUnderline: () =>
+                void dispatchAction({ id: "editor::Underline", payload: null }),
+            onInsertHeading: () =>
+                void dispatchAction({ id: "editor::InsertHeading", payload: null }),
+            onInsertParagraph: () =>
+                void dispatchAction({ id: "editor::InsertParagraph", payload: null }),
+            onInsertQuote: () =>
+                void dispatchAction({ id: "editor::InsertQuote", payload: null }),
+            onInsertList: () =>
+                void dispatchAction({ id: "editor::InsertList", payload: null }),
+            onInsertEnumeration: () =>
+                void dispatchAction({
+                    id: "editor::InsertEnumeration",
+                    payload: null,
+                }),
+            onInsertTable: () =>
+                void dispatchAction({ id: "editor::InsertTable", payload: null }),
+            onInsertBlockEquation: () =>
+                void dispatchAction({
+                    id: "editor::InsertBlockEquation",
+                    payload: null,
+                }),
+            onInsertInlineEquation: () =>
+                void dispatchAction({
+                    id: "editor::InsertInlineEquation",
+                    payload: null,
+                }),
+            onInsertFigure: () =>
+                void dispatchAction({ id: "editor::InsertFigure", payload: null }),
+            onInsertDiagram: () =>
+                void dispatchAction({ id: "editor::InsertDiagram", payload: null }),
+            onInsertReference: () =>
+                void dispatchAction({ id: "editor::InsertReference", payload: null }),
+        }),
+        [dispatchAction],
     );
 
     return (
@@ -331,103 +416,12 @@ export const Editor = ({
                 <EditorToolbar
                     canDeleteFocusedTarget={canDeleteFocusedTarget}
                     tableCellEditing={tableCellEditing}
-                    templateVariants={templateVariants}
-                    resolvedVariantId={resolvedVariantId}
-                    onDelete={() =>
-                        void dispatchAction({
-                            id: "editor::DeleteElement",
-                            payload: null,
-                        })
-                    }
-                    onBold={() =>
-                        void dispatchAction({ id: "editor::Bold", payload: null })
-                    }
-                    onItalic={() =>
-                        void dispatchAction({ id: "editor::Italic", payload: null })
-                    }
-                    onUnderline={() =>
-                        void dispatchAction({
-                            id: "editor::Underline",
-                            payload: null,
-                        })
-                    }
-                    onInsertHeading={() =>
-                        void dispatchAction({
-                            id: "editor::InsertHeading",
-                            payload: null,
-                        })
-                    }
-                    onInsertParagraph={() =>
-                        void dispatchAction({
-                            id: "editor::InsertParagraph",
-                            payload: null,
-                        })
-                    }
-                    onInsertQuote={() =>
-                        void dispatchAction({
-                            id: "editor::InsertQuote",
-                            payload: null,
-                        })
-                    }
-                    onInsertList={() =>
-                        void dispatchAction({
-                            id: "editor::InsertList",
-                            payload: null,
-                        })
-                    }
-                    onInsertEnumeration={() =>
-                        void dispatchAction({
-                            id: "editor::InsertEnumeration",
-                            payload: null,
-                        })
-                    }
-                    onInsertTable={() =>
-                        void dispatchAction({
-                            id: "editor::InsertTable",
-                            payload: null,
-                        })
-                    }
-                    onInsertBlockEquation={() =>
-                        void dispatchAction({
-                            id: "editor::InsertBlockEquation",
-                            payload: null,
-                        })
-                    }
-                    onInsertInlineEquation={() =>
-                        void dispatchAction({
-                            id: "editor::InsertInlineEquation",
-                            payload: null,
-                        })
-                    }
-                    onInsertFigure={() =>
-                        void dispatchAction({
-                            id: "editor::InsertFigure",
-                            payload: null,
-                        })
-                    }
-                    onInsertDiagram={() =>
-                        void dispatchAction({
-                            id: "editor::InsertDiagram",
-                            payload: null,
-                        })
-                    }
-                    onInsertReference={() =>
-                        void dispatchAction({
-                            id: "editor::InsertReference",
-                            payload: null,
-                        })
-                    }
-                    onVariantChange={(variantId) =>
-                        dispatchAst({
-                            type: "UPDATE_TEMPLATE_VARIANT",
-                            payload: { variantId },
-                        })
-                    }
+                    {...toolbarHandlers}
                 />
                 <InsertReferenceDialog
                     open={referenceDialogOpen}
                     resources={resources}
-                    references={state.references}
+                    references={references}
                     outlineEntries={outlineEntries}
                     resourcePreviewRevisions={resourcePreviewRevisions}
                     mainPreviewPaintedRevision={mainPreviewPaintedRevision}
@@ -438,7 +432,7 @@ export const Editor = ({
                 <div className={styles.editorScroll}>
                 {groups.map((group) => (
                     <section key={group.id} className={styles.templateGroupCard}>
-                        <h2>{group.label}</h2>
+                        <h2>{t(group.label)}</h2>
                         <div className={styles.groupContent}>
                             {group.inputs.map((inputId) => {
                                 const schema = inputsMap.get(inputId);
@@ -448,7 +442,7 @@ export const Editor = ({
                                         key={inputId}
                                         schema={schema}
                                         path={`/${inputId}`}
-                                        label={schema.label ?? undefined}
+                                        label={schema.label ? t(schema.label) : undefined}
                                     />
                                 );
                             })}
@@ -456,19 +450,13 @@ export const Editor = ({
                     </section>
                 ))}
 
-                {state.sections.map((section) =>
-                    section.type === "Content" ? (
-                        <ProseMirrorBodyEditor
-                            key={section.id}
-                            section={section}
-                            autoFocus={
-                                section.id ===
-                                state.sections.find((entry) => entry.type === "Content")
-                                    ?.id
-                            }
-                        />
-                    ) : null,
-                )}
+                {contentSectionIds.map((sectionId, index) => (
+                    <ProseMirrorBodyEditor
+                        key={sectionId}
+                        sectionId={sectionId}
+                        autoFocus={index === 0}
+                    />
+                ))}
                 </div>
             </main>
         </ActionContextProvider>
@@ -476,21 +464,29 @@ export const Editor = ({
     );
 };
 
+// Memoized: Workspace re-renders on every keystroke (it drives the compiler off
+// the live AST), but Editor's props change only per compile. Without memo, every
+// keystroke re-rendered the whole form; now Editor skips between compiles and the
+// edited field updates through its own `useDocumentAstSelector`.
+export const Editor = memo(EditorComponent);
+
 interface DynamicFieldProps {
     schema: InputSchema;
     path: string;
     label?: string;
 }
 
-const getFieldLabel = (schema: InputSchema, label?: string) =>
-    label || schema.label || schema.id || "";
+const getFieldLabel = (schema: InputSchema, label?: string, t?: (key: string) => string) => {
+    const raw = label || schema.label || schema.id || "";
+    return t ? t(raw) : raw;
+};
 
-const getFieldPlaceholder = (schema: InputSchema, label?: string) => {
+const getFieldPlaceholder = (schema: InputSchema, label?: string, t?: (key: string) => string) => {
     const description = schema.description?.trim();
     if (description) {
-        return description;
+        return t ? t(description) : description;
     }
-    return getFieldLabel(schema, label);
+    return getFieldLabel(schema, label, t);
 };
 
 // Memoized: a body keystroke re-renders the top-level Editor, but the form
@@ -522,10 +518,16 @@ const DynamicField = memo(function DynamicField({
         return <DynamicFieldContent schema={schema} path={path} label={label} />;
     }
 
+    if (schema.type === "content_blocks") {
+        return <DynamicFieldContentBlocks schema={schema} path={path} label={label} />;
+    }
+
     return <DynamicFieldString schema={schema} path={path} label={label} />;
 });
 
 const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
+    const { spec } = useTemplateSpecContext();
+    const t = useTemplateTranslation(spec);
     const { dispatch } = useDocumentActions();
     const { handleFieldAdvance } = useEditorNavigation();
     const rawItems = useDocumentAstSelector((s) => getValueAtPath(s.inputs, path));
@@ -540,7 +542,7 @@ const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
                 importance={schema.importance ?? undefined}
                 itemKind="content"
                 items={items}
-                label={getFieldLabel(schema, label)}
+                label={getFieldLabel(schema, label, t)}
                 path={path}
                 onAdvance={() => handleFieldAdvance(simpleListComposerFieldId(path))}
                 onChange={(nextItems) =>
@@ -560,7 +562,7 @@ const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
             importance={schema.importance ?? undefined}
             itemKind="string"
             items={items.map(String)}
-            label={getFieldLabel(schema, label)}
+            label={getFieldLabel(schema, label, t)}
             path={path}
             onAdvance={() => handleFieldAdvance(simpleListComposerFieldId(path))}
             onChange={(nextItems) =>
@@ -574,21 +576,30 @@ const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
 };
 
 const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
+    const templateId = useDocumentAstSelector((s) => s.metadata.template_id);
     const authors = (useDocumentAstSelector((s) => getValueAtPath(s.inputs, path)) ??
         []) as Array<{
         name?: string;
         affiliations?: string[];
+        degrees?: string[];
     }>;
     const affiliations = useDocumentAstSelector((s) =>
         getValueAtPath(s.inputs, "/affiliations"),
     );
+    const degrees = useDocumentAstSelector((s) =>
+        getValueAtPath(s.inputs, "/degrees"),
+    );
+    const referenceStyle =
+        templateId === "umb-apa" ? "lowercase-alpha" : "numeric";
 
     return (
         <AuthorsField
             affiliations={Array.isArray(affiliations) ? affiliations : []}
             authors={authors}
+            degrees={Array.isArray(degrees) ? degrees : []}
             importance={schema.importance ?? undefined}
             label={getFieldLabel(schema, label)}
+            referenceStyle={referenceStyle}
         />
     );
 };
@@ -621,6 +632,46 @@ const DynamicFieldContent = ({ schema, path, label }: DynamicFieldProps) => {
                     dispatch({
                         type: "UPDATE_INPUT",
                         payload: { path, value: normalized },
+                    });
+                }
+            }}
+            onKeyDown={(event) => {
+                if (handleAdvanceKeyDown(event, fieldId)) {
+                    return;
+                }
+            }}
+        />
+    );
+};
+
+const DynamicFieldContentBlocks = ({ schema, path, label }: DynamicFieldProps) => {
+    const { dispatch } = useDocumentActions();
+    const { handleAdvanceKeyDown } = useEditorNavigation();
+    const rawValue = useDocumentAstSelector((s) => getValueAtPath(s.inputs, path));
+    const committed = parseInputContentBlocks(rawValue);
+    const { content, setDraft, shouldCommit } = useDeferredContentBlocksCommit(
+        projectInputFieldId(path),
+        committed,
+    );
+    const fieldId = projectInputFieldId(path);
+    const fieldBinding = useEditorFieldBinding<HTMLDivElement>({
+        elementId: "project",
+        fieldId,
+    });
+
+    return (
+        <ParagraphsField
+            label={getFieldLabel(schema, label)}
+            importance={schema.importance ?? undefined}
+            paragraphs={content}
+            fieldBinding={fieldBinding}
+            onChange={(next) => {
+                const normalized = normalizeContentBlocks(next);
+                setDraft(normalized);
+                if (shouldCommit(normalized)) {
+                    dispatch({
+                        type: "UPDATE_INPUT",
+                        payload: { path, value: finalizeContentBlocks(normalized) },
                     });
                 }
             }}

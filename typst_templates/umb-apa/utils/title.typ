@@ -30,7 +30,7 @@
   }
 
   std.title()
-
+  
   [~]
 
   parbreak()

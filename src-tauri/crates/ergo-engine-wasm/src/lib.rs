@@ -299,6 +299,12 @@ impl ErgoWasmCompiler {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
+pub fn reset_fonts_to_bundled() {
+    engine::reset_fonts_to_bundled();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
 pub fn append_font_buffers(font_buffers: js_sys::Array) {
     engine::append_font_buffers(font_buffers);
 }

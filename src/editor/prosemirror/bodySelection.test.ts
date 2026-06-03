@@ -12,6 +12,7 @@ import { sectionToDoc } from "./astBridge";
 import { bodySchema } from "./schema";
 import {
     blockIndexAtPos,
+    clearElementSelection,
     extendBlockSelection,
     isBlockSelectionHighlighted,
     selectBlockRange,
@@ -173,6 +174,34 @@ describe("selectBlockRange (mouse selection)", () => {
         );
         // Range covers the heading through the equation; the atom is highlighted.
         expect(isBlockSelectionHighlighted(applied.selection, pos, 1)).toBe(true);
+    });
+});
+
+describe("clearElementSelection (Esc deselects)", () => {
+    it("collapses an element NodeSelection to a caret", () => {
+        const selected = run(stateWithCaretIn(1), selectCurrentElement);
+        expect(selected.selection).toBeInstanceOf(NodeSelection);
+        const caret = clearElementSelection(selected);
+        expect(caret).not.toBeNull();
+        expect(caret!.empty).toBe(true);
+    });
+
+    it("collapses a multi-element range to a caret", () => {
+        let state = stateWithCaretIn(0);
+        state = state.apply(
+            state.tr.setSelection(extendBlockSelection(state, 1)!),
+        );
+        state = state.apply(
+            state.tr.setSelection(extendBlockSelection(state, 1)!),
+        );
+        expect(state.selection.empty).toBe(false);
+        const caret = clearElementSelection(state);
+        expect(caret).not.toBeNull();
+        expect(caret!.empty).toBe(true);
+    });
+
+    it("returns null for a plain caret (nothing to clear)", () => {
+        expect(clearElementSelection(stateWithCaretIn(1))).toBeNull();
     });
 });
 

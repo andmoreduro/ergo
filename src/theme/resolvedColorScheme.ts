@@ -13,7 +13,4 @@ export const readResolvedColorScheme = (): ResolvedColorScheme => {
         : "light";
 };
 
-export const ergoThemeLogoSrc = (scheme: ResolvedColorScheme): string =>
-    scheme === "dark"
-        ? "/ergo_logo_dark_mode.svg"
-        : "/ergo_logo_light_mode.svg";
+export const APP_LOGO_SRC = "/app_logo.svg";
