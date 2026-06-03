@@ -33,6 +33,8 @@ export interface AuthorsFieldProps {
     authors: AuthorEntry[];
     affiliations: unknown[];
     degrees?: unknown[];
+    affiliationsLabel: string;
+    degreesLabel: string;
     referenceStyle?: ListReferenceStyle;
 }
 
@@ -86,6 +88,7 @@ const AuthorReferenceCheckbox = ({
 const AuthorReferenceGroup = ({
     authorIndex,
     field,
+    groupLabel,
     items,
     selectedReferences,
     referenceStyle,
@@ -94,6 +97,7 @@ const AuthorReferenceGroup = ({
 }: {
     authorIndex: number;
     field: "affiliations" | "degrees";
+    groupLabel: string;
     items: unknown[];
     selectedReferences: string[];
     referenceStyle: ListReferenceStyle;
@@ -102,12 +106,17 @@ const AuthorReferenceGroup = ({
 }) => {
     if (!items.some((item) => inputRichTextPlain(item).trim().length > 0)) {
         return (
-            <p className={styles.emptyAffiliations}>{emptyLabel}</p>
+            <div className={styles.referenceGroup}>
+                <span className={styles.referenceGroupLabel}>{groupLabel}</span>
+                <p className={styles.emptyAffiliations}>{emptyLabel}</p>
+            </div>
         );
     }
 
     return (
-        <div className={styles.inlineAffiliations}>
+        <div className={styles.referenceGroup}>
+            <span className={styles.referenceGroupLabel}>{groupLabel}</span>
+            <div className={styles.inlineAffiliations}>
             {items.map((item, index) => {
                 const plain = inputRichTextPlain(item).trim();
                 if (!plain) {
@@ -128,6 +137,7 @@ const AuthorReferenceGroup = ({
                     />
                 );
             })}
+            </div>
         </div>
     );
 };
@@ -137,6 +147,8 @@ const AuthorRow = ({
     authorIndex,
     affiliations,
     degrees,
+    affiliationsLabel,
+    degreesLabel,
     referenceStyle,
     showDegrees,
 }: {
@@ -144,6 +156,8 @@ const AuthorRow = ({
     authorIndex: number;
     affiliations: unknown[];
     degrees: unknown[];
+    affiliationsLabel: string;
+    degreesLabel: string;
     referenceStyle: ListReferenceStyle;
     showDegrees: boolean;
 }) => {
@@ -193,12 +207,13 @@ const AuthorRow = ({
             <AuthorReferenceGroup
                 authorIndex={authorIndex}
                 emptyLabel={m.editor_reference_empty({
-                    label: m.editor_affiliations(),
+                    label: affiliationsLabel,
                 })}
                 fallbackLabel={(index) =>
                     m.editor_affiliation_fallback({ index })
                 }
                 field="affiliations"
+                groupLabel={affiliationsLabel}
                 items={affiliations}
                 referenceStyle={referenceStyle}
                 selectedReferences={affiliationReferences}
@@ -207,12 +222,13 @@ const AuthorRow = ({
                 <AuthorReferenceGroup
                     authorIndex={authorIndex}
                     emptyLabel={m.editor_reference_empty({
-                        label: m.editor_degrees(),
+                        label: degreesLabel,
                     })}
                     fallbackLabel={(index) =>
                         m.editor_degree_fallback({ index })
                     }
                     field="degrees"
+                    groupLabel={degreesLabel}
                     items={degrees}
                     referenceStyle={referenceStyle}
                     selectedReferences={degreeReferences}
@@ -228,6 +244,8 @@ export const AuthorsField = ({
     authors,
     affiliations,
     degrees = [],
+    affiliationsLabel,
+    degreesLabel,
     referenceStyle = "numeric",
 }: AuthorsFieldProps) => {
     const { dispatch } = useDocumentAst();
@@ -258,7 +276,9 @@ export const AuthorsField = ({
                             author={author}
                             authorIndex={index}
                             affiliations={affiliations}
+                            affiliationsLabel={affiliationsLabel}
                             degrees={degrees}
+                            degreesLabel={degreesLabel}
                             key={`author-${index}`}
                             referenceStyle={referenceStyle}
                             showDegrees={showDegrees}
