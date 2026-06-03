@@ -1,402 +1,147 @@
 {
   "$schema": "../../schemas/ergo-template.schema.json",
-  "template": {
+  "metadata": {
     "id": "umb-apa",
     "name": "UMB's APA template",
     "version": "1.0.0",
     "description": "UMB's APA 7th Edition paper, based on a bundled fork of versatile-apa with a UMB-specific cover page."
   },
-  "variants": [],
-  "package": {
-    "name": "/umb-apa/lib.typ",
-    "version": "",
-    "imports": [
-      "front-matter",
-      "appendix",
-      "appendix-outline",
-      "apa-figure",
-      { "symbol": "versatile-apa", "alias": "apa-style" }
-    ]
-  },
-  "element_overrides": {
-    "figure": {
-      "wrapper": "apa-figure",
-      "extra_fields": [
-        {
-          "key": "width",
-          "type": "length",
-          "label": "Image width"
-        },
-        {
-          "key": "caption",
-          "type": "content",
-          "label": "Caption"
-        },
-        {
-          "key": "note",
-          "type": "content",
-          "label": "Note"
-        },
-        {
-          "key": "specific-note",
-          "type": "content",
-          "label": "Specific note"
-        },
-        {
-          "key": "probability-note",
-          "type": "content",
-          "label": "Probability note (significance symbols, e.g. * p < .05)"
-        }
+  "typst": {
+    "package": {
+      "name": "/umb-apa/lib.typ",
+      "version": "",
+      "imports": [
+        "front-matter",
+        "appendix",
+        "appendix-outline",
+        "apa-figure",
+        { "symbol": "versatile-apa", "alias": "apa-style" }
       ]
     },
-    "table": {
-      "wrapper": "apa-figure",
-      "extra_fields": [
-        {
-          "key": "caption",
-          "type": "content",
-          "label": "Caption"
-        },
-        {
-          "key": "note",
-          "type": "content",
-          "label": "Note"
-        },
-        {
-          "key": "specific-note",
-          "type": "content",
-          "label": "Specific note"
-        },
-        {
-          "key": "probability-note",
-          "type": "content",
-          "label": "Probability note (significance symbols, e.g. * p < .05)"
-        }
-      ]
-    }
-  },
-  "show_rule": {
-    "function": "apa-style",
-    "params": [
-      {
-        "key": "font-size",
-        "type": "length",
-        "source": "settings.font_size",
-        "default": "12pt"
+    "element_overrides": {
+      "figure": {
+        "wrapper": "apa-figure",
+        "extra_fields": [
+          { "key": "width", "type": "length", "label": "Image width" },
+          { "key": "caption", "type": "content", "label": "Caption" },
+          { "key": "note", "type": "content", "label": "Note" },
+          { "key": "specific-note", "type": "content", "label": "Specific note" },
+          { "key": "probability-note", "type": "content", "label": "Probability note (significance symbols, e.g. * p < .05)" }
+        ]
       },
-      {
-        "key": "running-head",
-        "type": "content",
-        "source": "inputs.running_head"
+      "table": {
+        "wrapper": "apa-figure",
+        "extra_fields": [
+          { "key": "caption", "type": "content", "label": "Caption" },
+          { "key": "note", "type": "content", "label": "Note" },
+          { "key": "specific-note", "type": "content", "label": "Specific note" },
+          { "key": "probability-note", "type": "content", "label": "Probability note (significance symbols, e.g. * p < .05)" }
+        ]
       }
+    },
+    "show_rule": {
+      "function": "apa-style",
+      "params": [
+        { "key": "font-size", "type": "length", "source": "settings.font_size", "default": "12pt" },
+        { "key": "running-head", "type": "content", "source": "inputs.running_head" }
+      ]
+    },
+    "sections": [
+      {
+        "id": "front-matter",
+        "kind": "function_call",
+        "function": "front-matter",
+        "label": "Front Matter",
+        "params": [
+          { "key": "title", "type": "content", "source": "inputs.title" },
+          { "key": "authors", "type": "author_list", "source": "inputs.authors" },
+          { "key": "affiliations", "type": "affiliation_map", "source": "inputs.affiliations" },
+          { "key": "degrees", "type": "degree_map", "source": "inputs.degrees" },
+          { "key": "director", "type": "dictionary", "source": "inputs.director" },
+          { "key": "city", "type": "content", "source": "inputs.city" },
+          { "key": "country", "type": "content", "source": "inputs.country" },
+          { "key": "year", "type": "content", "source": "inputs.year" },
+          { "key": "authorities", "type": "dictionary", "source": "inputs.authorities" },
+          { "key": "acknowledgements", "type": "content_array", "source": "inputs.acknowledgements" },
+          { "key": "abstract-es", "type": "content_array", "source": "inputs.abstract_es" },
+          { "key": "keywords-es", "type": "string_array", "source": "inputs.keywords_es" },
+          { "key": "abstract-en", "type": "content_array", "source": "inputs.abstract_en" },
+          { "key": "keywords-en", "type": "string_array", "source": "inputs.keywords_en" }
+        ]
+      },
+      { "id": "front-matter-outlines", "kind": "outlines", "label": "Outlines" },
+      { "id": "body", "kind": "content", "label": "Body" },
+      { "id": "references", "kind": "bibliography", "label": "References", "file": "references.bib", "title": "References", "pagebreak_before": true },
+      { "id": "appendices", "kind": "appendix", "label": "Appendices", "show_rule": "appendix" }
     ]
   },
-  "inputs": [
-    {
-      "id": "title",
-      "type": "string",
-      "label": "Document Title",
-      "importance": "recommended",
-      "default": "Untitled Document"
-    },
-    {
-      "id": "running_head",
-      "type": "string",
-      "label": "Running Head",
-      "importance": "recommended"
-    },
-    {
-      "id": "authors",
-      "type": "array",
-      "label": "Authors",
-      "importance": "required",
-      "items": {
-        "id": "author",
-        "type": "object",
-        "label": "Author",
-        "properties": [
-          {
-            "id": "name",
-            "type": "string",
-            "label": "Name",
-            "importance": "required"
-          },
-          {
-            "id": "affiliations",
-            "type": "array",
-            "label": "Author's affiliations",
-            "importance": "recommended",
-            "items": {
-              "type": "reference",
-              "target": "affiliations",
-              "label": "Affiliation Reference"
+  "editor": {
+    "inputs": [
+      { "id": "title", "type": "string", "label": "Document Title", "importance": "recommended", "default": "Untitled Document" },
+      { "id": "running_head", "type": "string", "label": "Running Head", "importance": "recommended" },
+      {
+        "id": "authors", "type": "array", "label": "Authors", "importance": "required",
+        "items": {
+          "id": "author", "type": "object", "label": "Author",
+          "properties": [
+            { "id": "name", "type": "string", "label": "Name", "importance": "required" },
+            {
+              "id": "affiliations", "type": "array", "label": "Author's affiliations", "importance": "recommended",
+              "items": { "type": "reference", "target": "affiliations", "label": "Affiliation Reference" }
+            },
+            {
+              "id": "degrees", "type": "array", "label": "Author's degrees", "importance": "recommended",
+              "items": { "type": "reference", "target": "degrees", "label": "Degree Reference" }
             }
-          }
-        ]
-      }
-    },
-    {
-      "id": "affiliations",
-      "type": "simple_list",
-      "label": "Affiliations",
-      "importance": "recommended",
-      "items": {
-        "type": "content",
-        "label": "Affiliation"
-      }
-    },
-    {
-      "id": "director",
-      "type": "object",
-      "label": "Director",
-      "importance": "recommended",
-      "properties": [
-        {
-          "id": "name",
-          "type": "string",
-          "label": "Name",
-          "importance": "recommended"
-        },
-        {
-          "id": "title",
-          "type": "string",
-          "label": "Title",
-          "importance": "recommended"
+          ]
         }
-      ]
-    },
-    {
-      "id": "degree",
-      "type": "string",
-      "label": "Degree",
-      "importance": "recommended"
-    },
-    {
-      "id": "city",
-      "type": "string",
-      "label": "City",
-      "importance": "recommended"
-    },
-    {
-      "id": "year",
-      "type": "string",
-      "label": "Year",
-      "importance": "recommended"
-    },
-    {
-      "id": "authorities",
-      "type": "array",
-      "label": "Authorities",
-      "importance": "recommended",
-      "items": {
-        "id": "authority",
-        "type": "object",
-        "label": "Authority",
+      },
+      { "id": "affiliations", "type": "simple_list", "label": "Affiliations", "importance": "recommended", "items": { "type": "content", "label": "Affiliation" } },
+      { "id": "degrees", "type": "simple_list", "label": "Degrees", "importance": "recommended", "items": { "type": "content", "label": "Degree" } },
+      {
+        "id": "director", "type": "object", "label": "Director", "importance": "recommended",
         "properties": [
-          {
-            "id": "name",
-            "type": "string",
-            "label": "Name",
-            "importance": "required"
-          },
-          {
-            "id": "role",
-            "type": "string",
-            "label": "Role",
-            "importance": "required"
-          }
+          { "id": "name", "type": "string", "label": "Name", "importance": "recommended" },
+          { "id": "title", "type": "string", "label": "Title", "importance": "recommended" }
+        ]
+      },
+      { "id": "city", "type": "string", "label": "City", "importance": "recommended" },
+      { "id": "country", "type": "string", "label": "Country", "importance": "recommended" },
+      { "id": "year", "type": "string", "label": "Year", "importance": "recommended" },
+      {
+        "id": "authorities", "type": "array", "label": "Authorities", "importance": "recommended",
+        "items": {
+          "id": "authority", "type": "object", "label": "Authority",
+          "properties": [
+            { "id": "name", "type": "string", "label": "Name", "importance": "required" },
+            { "id": "role", "type": "string", "label": "Role", "importance": "required" }
+          ]
+        }
+      },
+      { "id": "acknowledgements", "type": "content_blocks", "label": "Acknowledgements", "importance": "recommended" },
+      { "id": "abstract_es", "type": "content_blocks", "label": "Abstract (ES)", "importance": "recommended" },
+      { "id": "keywords_es", "type": "simple_list", "label": "Keywords (ES)", "importance": "recommended", "items": { "type": "string", "label": "Keyword" } },
+      { "id": "abstract_en", "type": "content_blocks", "label": "Abstract (EN)", "importance": "recommended" },
+      { "id": "keywords_en", "type": "simple_list", "label": "Keywords (EN)", "importance": "recommended", "items": { "type": "string", "label": "Keyword" } }
+    ],
+    "groups": [
+      {
+        "id": "front_matter",
+        "label": "Front Matter",
+        "inputs": [
+          "title", "running_head", "authors", "affiliations", "degrees", "director", "city", "country", "year", "authorities", "acknowledgements", "abstract_es", "keywords_es", "abstract_en", "keywords_en"
         ]
       }
-    },
-    {
-      "id": "acknowledgements",
-      "type": "content",
-      "label": "Acknowledgements",
-      "importance": "recommended"
-    },
-    {
-      "id": "author_note",
-      "type": "content",
-      "label": "Author Note",
-      "importance": "recommended"
-    },
-    {
-      "id": "abstract_es",
-      "type": "content",
-      "label": "Abstract (ES)",
-      "importance": "recommended"
-    },
-    {
-      "id": "keywords_es",
-      "type": "simple_list",
-      "label": "Keywords (ES)",
-      "importance": "recommended",
-      "items": {
-        "type": "string",
-        "label": "Keyword"
-      }
-    },
-    {
-      "id": "abstract_en",
-      "type": "content",
-      "label": "Abstract (EN)",
-      "importance": "recommended"
-    },
-    {
-      "id": "keywords_en",
-      "type": "simple_list",
-      "label": "Keywords (EN)",
-      "importance": "recommended",
-      "items": {
-        "type": "string",
-        "label": "Keyword"
-      }
+    ],
+    "variants": [],
+    "defaults": {
+      "paper_size": "us-letter",
+      "language": "en",
+      "text_font": "Libertinus Serif",
+      "math_font": "Libertinus Math",
+      "raw_font": "DejaVu Sans Mono",
+      "font_size": 12.0,
+      "table_stroke_width": 0.5
     }
-  ],
-  "groups": [
-    {
-      "id": "front_matter",
-      "label": "Front Matter",
-      "inputs": [
-        "title",
-        "running_head",
-        "authors",
-        "affiliations",
-        "director",
-        "degree",
-        "city",
-        "year",
-        "authorities",
-        "acknowledgements",
-        "author_note",
-        "abstract_es",
-        "keywords_es",
-        "abstract_en",
-        "keywords_en"
-      ]
-    }
-  ],
-  "resource_policy": {
-    "preview": {
-      "width_pt": 360,
-      "margin_pt": 8
-    },
-    "pasted_image": {
-      "behavior": "figure",
-      "wrapper": "apa-figure"
-    }
-  },
-  "sections": [
-    {
-      "id": "front-matter",
-      "kind": "function_call",
-      "function": "front-matter",
-      "label": "Front Matter",
-      "params": [
-        {
-          "key": "title",
-          "type": "content",
-          "source": "inputs.title"
-        },
-        {
-          "key": "authors",
-          "type": "author_list",
-          "source": "inputs.authors"
-        },
-        {
-          "key": "affiliations",
-          "type": "affiliation_map",
-          "source": "inputs.affiliations"
-        },
-        {
-          "key": "director",
-          "type": "dictionary",
-          "source": "inputs.director"
-        },
-        {
-          "key": "degree",
-          "type": "content",
-          "source": "inputs.degree"
-        },
-        {
-          "key": "city",
-          "type": "content",
-          "source": "inputs.city"
-        },
-        {
-          "key": "year",
-          "type": "content",
-          "source": "inputs.year"
-        },
-        {
-          "key": "authorities",
-          "type": "dictionary",
-          "source": "inputs.authorities"
-        },
-        {
-          "key": "acknowledgements",
-          "type": "content",
-          "source": "inputs.acknowledgements"
-        },
-        {
-          "key": "author-note",
-          "type": "content",
-          "source": "inputs.author_note"
-        },
-        {
-          "key": "abstract-es",
-          "type": "content",
-          "source": "inputs.abstract_es"
-        },
-        {
-          "key": "keywords-es",
-          "type": "string_array",
-          "source": "inputs.keywords_es"
-        },
-        {
-          "key": "abstract-en",
-          "type": "content",
-          "source": "inputs.abstract_en"
-        },
-        {
-          "key": "keywords-en",
-          "type": "string_array",
-          "source": "inputs.keywords_en"
-        }
-      ]
-    },
-    {
-      "id": "front-matter-outlines",
-      "kind": "outlines",
-      "label": "Outlines"
-    },
-    {
-      "id": "body",
-      "kind": "content",
-      "label": "Body"
-    },
-    {
-      "id": "references",
-      "kind": "bibliography",
-      "label": "References",
-      "file": "references.bib",
-      "title": "References",
-      "pagebreak_before": true
-    },
-    {
-      "id": "appendices",
-      "kind": "appendix",
-      "label": "Appendices",
-      "show_rule": "appendix"
-    }
-  ],
-  "defaults": {
-    "paper_size": "us-letter",
-    "language": "en",
-    "text_font": "Libertinus Serif",
-    "math_font": "Libertinus Math",
-    "raw_font": "DejaVu Sans Mono",
-    "font_size": 12.0,
-    "table_stroke_width": 0.5
   }
 }

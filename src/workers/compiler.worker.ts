@@ -1,4 +1,8 @@
-import init, { ErgoWasmCompiler, append_font_buffers } from "../wasm-compiler/ergo_engine_wasm.js";
+import init, {
+    ErgoWasmCompiler,
+    append_font_buffers,
+    reset_fonts_to_bundled,
+} from "../wasm-compiler/ergo_engine_wasm.js";
 import type { WorkerMessage, WorkerReply } from "./compilerProtocol";
 
 let compiler: ErgoWasmCompiler | null = null;
@@ -36,6 +40,12 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                     initialized = true;
                 }
                 reply({ type: "init_done", id });
+                break;
+            }
+            case "reset_fonts": {
+                if (!compiler) return;
+                reset_fonts_to_bundled();
+                reply({ type: "reset_fonts_done", id });
                 break;
             }
             case "load_fonts": {

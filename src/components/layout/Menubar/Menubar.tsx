@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ErgoThemeLogo } from "../../atoms/ErgoThemeLogo/ErgoThemeLogo";
 import { MenubarMenuButton } from "../../atoms/MenubarMenuButton/MenubarMenuButton";
@@ -32,7 +32,7 @@ export interface MenubarProps {
     isCommandEnabled: (commandId: ActionId) => boolean;
 }
 
-export const Menubar = ({
+const MenubarComponent = ({
     hasActiveProject,
     onCommand,
     isCommandEnabled,
@@ -258,3 +258,8 @@ export const Menubar = ({
         </nav>
     );
 };
+
+// Memoized: its props (onCommand, isCommandEnabled, hasActiveProject) are stable,
+// so it skips the app shell's occasional re-renders (e.g. the first keystroke's
+// dirty-flag flip) instead of re-rendering the whole menu tree.
+export const Menubar = memo(MenubarComponent);

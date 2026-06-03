@@ -17,6 +17,15 @@ import {
     blockSelectionGuardPlugin,
     clickBelowLastBlockPlugin,
 } from "./blockSelectionGuard";
+
+/**
+ * Flag set on the transaction `idNormalizer` appends when it reassigns one or
+ * more duplicated/empty `elementId`s. `atomElementIdSync` keys off this so its
+ * full-document walk only runs right after an id was actually reassigned —
+ * never on the plain-typing hot path, where no atom payload can be stale.
+ */
+const ID_REASSIGNED_META = "idsReassigned";
+
 /**
  * Top-level block nodes whose `elementId` must be unique and non-empty. Splits
  * and pastes can produce blocks that share an id (the split copies attrs) or
@@ -111,6 +120,7 @@ const idNormalizer = new Plugin({
             tr.setNodeAttribute(pos, "elementId", createId());
         }
         tr.setMeta("addToHistory", false);
+        tr.setMeta(ID_REASSIGNED_META, true);
         return tr;
     },
 });
@@ -123,7 +133,10 @@ const idNormalizer = new Plugin({
  */
 const atomElementIdSync = new Plugin({
     appendTransaction(transactions, _oldState, newState) {
-        if (!transactions.some((tr) => tr.docChanged)) {
+        // Only relevant immediately after `idNormalizer` reassigned an id; plain
+        // typing never makes an atom's `element` payload stale, so skip the
+        // whole-document walk on the hot path.
+        if (!transactions.some((tr) => tr.getMeta(ID_REASSIGNED_META))) {
             return null;
         }
         let tr = newState.tr;

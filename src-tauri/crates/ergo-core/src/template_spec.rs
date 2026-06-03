@@ -3,36 +3,85 @@ use ts_rs::TS;
 
 use crate::ast::TemplateOverride;
 
-const APA7_TEMPLATE: &str =
-    include_str!("../../../resources/templates/apa7/template.json");
-const UMB_APA_TEMPLATE: &str =
-    include_str!("../../../resources/templates/umb-apa/template.json");
+static TEMPLATES_DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+static CUSTOM_TEMPLATES_DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+static TEMPLATE_CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, TemplateSpec>>> = std::sync::OnceLock::new();
+
+pub fn set_templates_dir(path: std::path::PathBuf) {
+    let _ = TEMPLATES_DIR.set(path);
+}
+
+pub fn set_custom_templates_dir(path: std::path::PathBuf) {
+    let _ = CUSTOM_TEMPLATES_DIR.set(path);
+}
+
+pub fn get_templates_dir() -> Option<&'static std::path::Path> {
+    TEMPLATES_DIR.get().map(|p| p.as_path())
+}
+
+fn get_cached_template(template_id: &str) -> Option<TemplateSpec> {
+    let cache = TEMPLATE_CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    let guard = cache.lock().unwrap();
+    guard.get(template_id).cloned()
+}
+
+fn cache_template(template_id: &str, spec: TemplateSpec) {
+    let cache = TEMPLATE_CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    let mut guard = cache.lock().unwrap();
+    guard.insert(template_id.to_string(), spec);
+}
 
 // ─── Template Spec Root ────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct TemplateSpec {
-    pub template: TemplateIdentity,
+    pub metadata: TemplateMetadata,
+    pub typst: TypstConfig,
+    pub editor: EditorConfig,
+    #[serde(default)]
+    pub messages: std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TemplateMetadata {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TypstConfig {
     pub package: PackageSpec,
     #[serde(default)]
-    pub variants: Vec<TemplateVariantSpec>,
     pub show_rule: Option<ShowRuleSpec>,
     #[serde(default)]
-    pub inputs: Vec<InputSchema>,
-    #[serde(default)]
-    pub groups: Vec<InputGroupSpec>,
-    #[serde(default)]
-    pub custom_elements: Vec<CustomElementSpec>,
     pub sections: Vec<SectionSpec>,
     #[serde(default)]
     pub element_overrides: Option<ElementOverrides>,
     #[serde(default)]
     pub resource_policy: Option<ResourcePolicySpec>,
-    pub defaults: Option<DefaultsSpec>,
-    /// Project `template_overrides` applied when the project has no explicit entry (e.g. outlines off for `none`).
     #[serde(default)]
     pub default_template_overrides: Vec<TemplateOverride>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct EditorConfig {
+    #[serde(default)]
+    pub inputs: Vec<InputSchema>,
+    #[serde(default)]
+    pub groups: Vec<InputGroupSpec>,
+    #[serde(default)]
+    pub variants: Vec<TemplateVariantSpec>,
+    #[serde(default)]
+    pub custom_elements: Vec<CustomElementSpec>,
+    #[serde(default)]
+    pub defaults: Option<DefaultsSpec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -44,16 +93,6 @@ pub struct TemplateVariantSpec {
     pub description: Option<String>,
     #[serde(default)]
     pub default: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct TemplateIdentity {
-    pub id: String,
-    pub name: String,
-    pub version: String,
-    #[serde(default)]
-    pub description: Option<String>,
 }
 
 // ─── Package & Imports ─────────────────────────────────────────────
@@ -104,11 +143,12 @@ impl ImportSymbol {
 /// Whether the template manifest imports a Typst symbol from its package (or dependencies).
 pub fn template_spec_exports_symbol(template: &TemplateSpec, symbol: &str) -> bool {
     template
+        .typst
         .package
         .imports
         .iter()
         .any(|import| import.symbol_name() == symbol)
-        || template.package.dependencies.iter().any(|dependency| {
+        || template.typst.package.dependencies.iter().any(|dependency| {
             dependency
                 .imports
                 .iter()
@@ -142,6 +182,10 @@ pub enum InputType {
     Object,
     Reference,
     Content,
+    /// Multi-paragraph rich text. Stored as an array of paragraphs (`RichText[][]`)
+    /// and generated as content with `parbreak()` between paragraphs.
+    #[serde(rename = "content_blocks")]
+    ContentBlocks,
     #[serde(rename = "simple_list")]
     SimpleList,
 }
@@ -249,6 +293,7 @@ pub enum ParamType {
     Dictionary,
     AuthorList,
     AffiliationMap,
+    DegreeMap,
 }
 
 // ─── Sections ──────────────────────────────────────────────────────
@@ -380,7 +425,7 @@ pub struct DefaultsSpec {
 
 pub fn plain_document_template() -> TemplateSpec {
     TemplateSpec {
-        template: TemplateIdentity {
+        metadata: TemplateMetadata {
             id: "none".to_string(),
             name: "No template".to_string(),
             version: "1.0.0".to_string(),
@@ -388,46 +433,51 @@ pub fn plain_document_template() -> TemplateSpec {
                 "Minimal document without a bundled Typst template package".to_string(),
             ),
         },
-        package: PackageSpec {
-            name: String::new(),
-            version: String::new(),
-            imports: vec![],
-            dependencies: vec![],
-        },
-        variants: vec![],
-        show_rule: None,
-        inputs: vec![InputSchema {
-            id: Some("title".to_string()),
-            input_type: InputType::String,
-            label: Some("Title".to_string()),
-            description: None,
-            default: Some(serde_json::json!("")),
-            importance: Importance::Recommended,
-            variants: None,
-            properties: None,
-            items: None,
-            target: None,
-        }],
-        groups: vec![],
-        custom_elements: vec![],
-        sections: vec![SectionSpec {
-            id: "body".to_string(),
-            kind: SectionKind::Content,
-            label: None,
-            function: None,
-            params: vec![],
-            variants: None,
-            source: None,
-            file: None,
-            title: None,
+        typst: TypstConfig {
+            package: PackageSpec {
+                name: String::new(),
+                version: String::new(),
+                imports: vec![],
+                dependencies: vec![],
+            },
             show_rule: None,
-            editable: None,
-            pagebreak_before: false,
-        }],
-        element_overrides: None,
-        resource_policy: None,
-        defaults: None,
-        default_template_overrides: plain_template_outline_defaults(),
+            sections: vec![SectionSpec {
+                id: "body".to_string(),
+                kind: SectionKind::Content,
+                label: None,
+                function: None,
+                params: vec![],
+                variants: None,
+                source: None,
+                file: None,
+                title: None,
+                show_rule: None,
+                editable: None,
+                pagebreak_before: false,
+            }],
+            element_overrides: None,
+            resource_policy: None,
+            default_template_overrides: plain_template_outline_defaults(),
+        },
+        editor: EditorConfig {
+            inputs: vec![InputSchema {
+                id: Some("title".to_string()),
+                input_type: InputType::String,
+                label: Some("Title".to_string()),
+                description: None,
+                default: Some(serde_json::json!("")),
+                importance: Importance::Recommended,
+                variants: None,
+                properties: None,
+                items: None,
+                target: None,
+            }],
+            groups: vec![],
+            variants: vec![],
+            custom_elements: vec![],
+            defaults: None,
+        },
+        messages: std::collections::HashMap::new(),
     }
 }
 
@@ -448,29 +498,148 @@ fn plain_template_outline_defaults() -> Vec<TemplateOverride> {
         .collect()
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_template_from_zip(path: &std::path::Path) -> Result<TemplateSpec, String> {
+    let file = std::fs::File::open(path)
+        .map_err(|e| format!("failed to open template archive '{}': {}", path.display(), e))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("failed to parse template archive '{}': {}", path.display(), e))?;
+
+    // Find template.json
+    let mut template_json_file = archive
+        .by_name("template.json")
+        .map_err(|e| format!("template.json not found in archive '{}': {}", path.display(), e))?;
+    
+    let mut template_json_str = String::new();
+    std::io::Read::read_to_string(&mut template_json_file, &mut template_json_str)
+        .map_err(|e| format!("failed to read template.json: {}", e))?;
+    drop(template_json_file);
+
+    let mut spec: TemplateSpec = serde_json::from_str(&template_json_str)
+        .map_err(|e| format!("failed to parse template.json in '{}': {}", path.display(), e))?;
+
+    // Read locales directory inside zip
+    spec.messages = std::collections::HashMap::new();
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        let name = file.name().to_string();
+        if name.starts_with("locales/") && name.ends_with(".json") {
+            let path_buf = std::path::PathBuf::from(&name);
+            if let Some(stem) = path_buf.file_stem().and_then(|s| s.to_str()) {
+                let mut locale_content = String::new();
+                std::io::Read::read_to_string(&mut file, &mut locale_content)
+                    .map_err(|e| format!("failed to read locale file '{}': {}", name, e))?;
+                
+                if let Ok(translations) = serde_json::from_str::<std::collections::HashMap<String, String>>(&locale_content) {
+                    spec.messages.insert(stem.to_string(), translations);
+                }
+            }
+        }
+    }
+
+    Ok(spec)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> {
     if template_id == "none" {
         return Ok(plain_document_template());
     }
 
-    static APA7_CACHE: std::sync::OnceLock<TemplateSpec> = std::sync::OnceLock::new();
-    static UMB_APA_CACHE: std::sync::OnceLock<TemplateSpec> = std::sync::OnceLock::new();
-
-    match template_id {
-        "apa7" => Ok(APA7_CACHE
-            .get_or_init(|| {
-                serde_json::from_str(APA7_TEMPLATE)
-                    .expect("failed to parse bundled apa7 template spec")
-            })
-            .clone()),
-        "umb-apa" => Ok(UMB_APA_CACHE
-            .get_or_init(|| {
-                serde_json::from_str(UMB_APA_TEMPLATE)
-                    .expect("failed to parse bundled umb-apa template spec")
-            })
-            .clone()),
-        _ => Err(format!("unknown template: {template_id}")),
+    if let Some(cached) = get_cached_template(template_id) {
+        return Ok(cached);
     }
+
+    // 1. Try custom templates directory first
+    if let Some(custom_dir) = CUSTOM_TEMPLATES_DIR.get() {
+        let path = custom_dir.join(format!("{template_id}.ergtemplate"));
+        if path.exists() {
+            if let Ok(spec) = load_template_from_zip(&path) {
+                cache_template(template_id, spec.clone());
+                return Ok(spec);
+            }
+        }
+    }
+
+    // 2. Fallback to bundled templates directory
+    let mut templates_dir = None;
+    if let Some(dir) = TEMPLATES_DIR.get() {
+        templates_dir = Some(dir.clone());
+    } else {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+        let candidates = [
+            std::path::PathBuf::from(&manifest_dir).join("../../../src-tauri/resources/templates"),
+            std::path::PathBuf::from(&manifest_dir).join("resources/templates"),
+            std::path::PathBuf::from(&manifest_dir).join("../resources/templates"),
+            std::env::current_dir().unwrap_or_default().join("resources/templates"),
+            std::env::current_dir().unwrap_or_default().join("src-tauri/resources/templates"),
+        ];
+        for candidate in candidates {
+            if candidate.exists() {
+                templates_dir = Some(candidate);
+                break;
+            }
+        }
+    }
+
+    let templates_dir = templates_dir.ok_or_else(|| {
+        format!(
+            "could not locate templates directory (CARGO_MANIFEST_DIR: {}, current_dir: {})",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default(),
+            std::env::current_dir().unwrap_or_default().display()
+        )
+    })?;
+
+    let path = templates_dir.join(format!("{template_id}.ergtemplate"));
+    if !path.exists() {
+        return Err(format!(
+            "template archive not found at path: {} (current working dir: {})",
+            path.display(),
+            std::env::current_dir().unwrap_or_default().display()
+        ));
+    }
+
+    let spec = load_template_from_zip(&path)?;
+    cache_template(template_id, spec.clone());
+    Ok(spec)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> {
+    if template_id == "none" {
+        return Ok(plain_document_template());
+    }
+
+    if let Some(cached) = get_cached_template(template_id) {
+        return Ok(cached);
+    }
+
+    let (template_json, es_json) = match template_id {
+        "apa7" => {
+            let t = include_str!("../../../resources/templates/apa7/template.json");
+            let es = include_str!("../../../resources/templates/apa7/locales/es.json");
+            (t, Some(es))
+        }
+        "umb-apa" => {
+            let t = include_str!("../../../resources/templates/umb-apa/template.json");
+            let es = include_str!("../../../resources/templates/umb-apa/locales/es.json");
+            (t, Some(es))
+        }
+        _ => return Err(format!("unknown bundled template: {}", template_id)),
+    };
+
+    let mut spec: TemplateSpec = serde_json::from_str(template_json)
+        .map_err(|e| format!("failed to parse static template {}: {}", template_id, e))?;
+
+    spec.messages = std::collections::HashMap::new();
+    if let Some(es_content) = es_json {
+        if let Ok(translations) = serde_json::from_str::<std::collections::HashMap<String, String>>(es_content) {
+            spec.messages.insert("es".to_string(), translations);
+        }
+    }
+
+    cache_template(template_id, spec.clone());
+    Ok(spec)
 }
 
 /// UI-only variant: expose every input/group/section regardless of per-field `variants`.
@@ -486,22 +655,23 @@ pub fn typst_template_variant_id(variant_id: &str) -> &str {
 }
 
 pub fn default_template_variant_id(spec: &TemplateSpec) -> String {
-    spec.variants
+    spec.editor
+        .variants
         .iter()
         .find(|variant| variant.default)
         .map(|variant| variant.id.clone())
-        .or_else(|| spec.variants.first().map(|variant| variant.id.clone()))
+        .or_else(|| spec.editor.variants.first().map(|variant| variant.id.clone()))
         .unwrap_or_else(|| "student".to_string())
 }
 
 pub fn resolve_template_variant(spec: &TemplateSpec, variant_id: Option<&str>) -> TemplateSpec {
-    if spec.variants.is_empty() {
+    if spec.editor.variants.is_empty() {
         return spec.clone();
     }
 
     let active_variant = variant_id
         .map(str::to_string)
-        .filter(|id| spec.variants.iter().any(|variant| variant.id == *id))
+        .filter(|id| spec.editor.variants.iter().any(|variant| variant.id == *id))
         .unwrap_or_else(|| default_template_variant_id(spec));
 
     if active_variant == COMPLETE_TEMPLATE_VARIANT_ID {
@@ -509,13 +679,15 @@ pub fn resolve_template_variant(spec: &TemplateSpec, variant_id: Option<&str>) -
     }
 
     let mut resolved = spec.clone();
-    resolved.inputs = spec
+    resolved.editor.inputs = spec
+        .editor
         .inputs
         .iter()
         .filter(|input| applies_to_variant(input.variants.as_ref(), &active_variant))
         .cloned()
         .collect();
-    resolved.groups = spec
+    resolved.editor.groups = spec
+        .editor
         .groups
         .iter()
         .filter(|group| applies_to_variant(group.variants.as_ref(), &active_variant))
@@ -524,7 +696,7 @@ pub fn resolve_template_variant(spec: &TemplateSpec, variant_id: Option<&str>) -
                 .inputs
                 .iter()
                 .filter(|input_id| {
-                    spec.inputs.iter().any(|input| {
+                    spec.editor.inputs.iter().any(|input| {
                         input.id.as_deref() == Some(input_id.as_str())
                             && applies_to_variant(input.variants.as_ref(), &active_variant)
                     })
@@ -535,7 +707,8 @@ pub fn resolve_template_variant(spec: &TemplateSpec, variant_id: Option<&str>) -
         })
         .filter(|group| !group.inputs.is_empty())
         .collect();
-    resolved.sections = spec
+    resolved.typst.sections = spec
+        .typst
         .sections
         .iter()
         .filter(|section| applies_to_variant(section.variants.as_ref(), &active_variant))
@@ -549,8 +722,8 @@ pub fn resolve_template_variant(spec: &TemplateSpec, variant_id: Option<&str>) -
             ..section.clone()
         })
         .collect();
-    if let Some(show_rule) = spec.show_rule.as_ref() {
-        resolved.show_rule = Some(ShowRuleSpec {
+    if let Some(show_rule) = spec.typst.show_rule.as_ref() {
+        resolved.typst.show_rule = Some(ShowRuleSpec {
             params: show_rule
                 .params
                 .iter()
@@ -577,9 +750,6 @@ fn applies_to_variant(variants: Option<&Vec<String>>, active_variant: &str) -> b
 
 // ─── Typst Code Generation Helpers ─────────────────────────────────
 
-/// The `#import` target for a package: a `name:version` coordinate, or — when the
-/// version is empty — `name` used verbatim, which lets a bundled template point at
-/// a file path (e.g. `/umb-apa/lib.typ`) instead of a registry package.
 fn import_target(name: &str, version: &str) -> String {
     if version.is_empty() {
         name.to_string()
@@ -589,12 +759,10 @@ fn import_target(name: &str, version: &str) -> String {
 }
 
 impl PackageSpec {
-    /// The `#import` target string for this package (path or `name:version`).
     pub fn import_target(&self) -> String {
         import_target(&self.name, &self.version)
     }
 
-    /// Generates the `#import` line for this package.
     pub fn to_typst_import_line(&self) -> String {
         let symbols: Vec<String> = self.imports.iter().map(|i| i.to_typst_import()).collect();
         format!("#import \"{}\": {}", self.import_target(), symbols.join(", "))
@@ -621,33 +789,38 @@ mod tests {
     #[test]
     fn parses_apa7_template_spec() {
         let spec = load_bundled_template("apa7").expect("should parse");
-        assert_eq!(spec.template.id, "apa7");
-        assert_eq!(spec.template.name, "APA 7th Edition");
-        assert_eq!(spec.package.name, "@preview/versatile-apa");
-        assert_eq!(spec.package.version, "7.2.0");
-        assert_eq!(spec.variants.len(), 3);
-        assert_eq!(spec.sections.len(), 6);
-        assert!(!spec.inputs.is_empty());
-        assert!(!spec.groups.is_empty());
-        assert!(spec.defaults.is_some());
+        assert_eq!(spec.metadata.id, "apa7");
+        assert_eq!(spec.metadata.name, "APA 7th Edition");
+        assert_eq!(spec.typst.package.name, "/versatile-apa/lib.typ");
+        assert_eq!(spec.typst.package.version, "");
+        assert_eq!(spec.editor.variants.len(), 3);
+        assert_eq!(spec.typst.sections.len(), 6);
+        assert!(!spec.editor.inputs.is_empty());
+        assert!(!spec.editor.groups.is_empty());
+        assert!(spec.editor.defaults.is_some());
 
-        let show_rule = spec.show_rule.as_ref().expect("show rule");
+        let show_rule = spec.typst.show_rule.as_ref().expect("show rule");
         assert_eq!(show_rule.function, "apa-style");
         assert_eq!(show_rule.params.len(), 2);
         assert_eq!(show_rule.params[0].key, "font-size");
         assert_eq!(show_rule.params[0].param_type, ParamType::Length);
 
-        assert_eq!(spec.sections[0].kind, SectionKind::FunctionCall);
-        assert_eq!(spec.sections[0].function.as_deref(), Some("title-page"));
-        assert_eq!(spec.sections[2].kind, SectionKind::Outlines);
-        assert_eq!(spec.sections[2].id, "front-matter-outlines");
+        assert_eq!(spec.typst.sections[0].kind, SectionKind::FunctionCall);
+        assert_eq!(spec.typst.sections[0].function.as_deref(), Some("title-page"));
+        assert_eq!(spec.typst.sections[2].kind, SectionKind::Outlines);
+        assert_eq!(spec.typst.sections[2].id, "front-matter-outlines");
         assert!(
-            spec.sections[2].source.as_deref().unwrap_or("").is_empty(),
+            spec.typst.sections[2].source.as_deref().unwrap_or("").is_empty(),
             "outline Typst is generated by DocumentSession, not template literals"
         );
-        assert_eq!(spec.sections[3].kind, SectionKind::Content);
-        assert_eq!(spec.sections[4].kind, SectionKind::Bibliography);
-        assert_eq!(spec.sections[5].kind, SectionKind::Appendix);
+        assert_eq!(spec.typst.sections[3].kind, SectionKind::Content);
+        assert_eq!(spec.typst.sections[4].kind, SectionKind::Bibliography);
+        assert_eq!(spec.typst.sections[5].kind, SectionKind::Appendix);
+
+        // Verify Spanish locales are loaded
+        assert!(spec.messages.contains_key("es"), "should contain Spanish locales");
+        let es_messages = spec.messages.get("es").unwrap();
+        assert_eq!(es_messages.get("Student paper").map(|s| s.as_str()), Some("Trabajo de estudiante"));
     }
 
     #[test]
@@ -656,6 +829,7 @@ mod tests {
 
         let student = resolve_template_variant(&spec, Some("student"));
         let student_inputs: Vec<_> = student
+            .editor
             .inputs
             .iter()
             .filter_map(|input| input.id.clone())
@@ -664,6 +838,7 @@ mod tests {
         assert!(!student_inputs.contains(&"running_head".to_string()));
         assert!(!student_inputs.contains(&"author_note".to_string()));
         assert!(student
+            .typst
             .show_rule
             .expect("show rule")
             .params
@@ -672,6 +847,7 @@ mod tests {
 
         let professional = resolve_template_variant(&spec, Some("professional"));
         let professional_inputs: Vec<_> = professional
+            .editor
             .inputs
             .iter()
             .filter_map(|input| input.id.clone())
@@ -682,6 +858,7 @@ mod tests {
 
         let complete = resolve_template_variant(&spec, Some("complete"));
         let complete_inputs: Vec<_> = complete
+            .editor
             .inputs
             .iter()
             .filter_map(|input| input.id.clone())
@@ -690,6 +867,7 @@ mod tests {
         assert!(complete_inputs.contains(&"running_head".to_string()));
         assert!(complete_inputs.contains(&"author_note".to_string()));
         assert!(complete
+            .typst
             .show_rule
             .expect("show rule")
             .params
@@ -700,12 +878,12 @@ mod tests {
     #[test]
     fn plain_template_has_no_package_imports() {
         let spec = load_bundled_template("none").unwrap();
-        assert_eq!(spec.template.id, "none");
-        assert!(spec.show_rule.is_none());
-        assert!(spec.package.name.is_empty());
-        assert_eq!(spec.default_template_overrides.len(), 6);
+        assert_eq!(spec.metadata.id, "none");
+        assert!(spec.typst.show_rule.is_none());
+        assert!(spec.typst.package.name.is_empty());
+        assert_eq!(spec.typst.default_template_overrides.len(), 6);
         assert!(
-            spec.default_template_overrides
+            spec.typst.default_template_overrides
                 .iter()
                 .all(|entry| entry.value == "false")
         );
@@ -720,8 +898,8 @@ mod tests {
     #[test]
     fn generates_import_line() {
         let spec = load_bundled_template("apa7").unwrap();
-        let line = spec.package.to_typst_import_line();
-        assert!(line.starts_with("#import \"@preview/versatile-apa:7.2.0\": "));
+        let line = spec.typst.package.to_typst_import_line();
+        assert!(line.starts_with("#import \"/versatile-apa/lib.typ\": "));
         assert!(line.contains("title-page"));
         assert!(line.contains("versatile-apa as apa-style"));
     }
@@ -729,20 +907,19 @@ mod tests {
     #[test]
     fn umb_apa_template_imports_lib_by_path() {
         let spec = load_bundled_template("umb-apa").expect("should parse");
-        assert_eq!(spec.template.id, "umb-apa");
-        assert_eq!(spec.template.name, "UMB's APA template");
-        assert_eq!(spec.package.name, "/umb-apa/lib.typ");
-        assert_eq!(spec.package.version, "");
+        assert_eq!(spec.metadata.id, "umb-apa");
+        assert_eq!(spec.metadata.name, "UMB's APA template");
+        assert_eq!(spec.typst.package.name, "/umb-apa/lib.typ");
+        assert_eq!(spec.typst.package.version, "");
         
         // Assert umb-apa has no variants
-        assert!(spec.variants.is_empty(), "umb-apa should have no variants");
+        assert!(spec.editor.variants.is_empty(), "umb-apa should have no variants");
 
-        let line = spec.package.to_typst_import_line();
+        let line = spec.typst.package.to_typst_import_line();
         assert!(
             line.starts_with("#import \"/umb-apa/lib.typ\": "),
             "got: {line}"
         );
-        // A path import must not carry a `:version` coordinate.
         assert!(!line.contains("/umb-apa/lib.typ:"), "got: {line}");
         
         // Assert imports
@@ -750,11 +927,11 @@ mod tests {
         assert!(line.contains("versatile-apa as apa-style"), "should import versatile-apa as apa-style");
         
         // Assert exposed inputs
-        let input_ids: std::collections::HashSet<&str> = spec.inputs.iter().filter_map(|input| input.id.as_deref()).collect();
+        let input_ids: std::collections::HashSet<&str> = spec.editor.inputs.iter().filter_map(|input| input.id.as_deref()).collect();
         assert!(input_ids.contains("running_head"));
-        assert!(input_ids.contains("author_note"));
         assert!(input_ids.contains("director"));
-        assert!(input_ids.contains("degree"));
+        assert!(input_ids.contains("degrees"));
+        assert!(input_ids.contains("country"));
         assert!(input_ids.contains("city"));
         assert!(input_ids.contains("year"));
         assert!(input_ids.contains("authorities"));
@@ -770,26 +947,38 @@ mod tests {
         assert!(!input_ids.contains("due_date"));
         
         // Assert groups
-        assert!(!spec.groups.is_empty());
-        assert_eq!(spec.groups[0].id, "front_matter");
+        assert!(!spec.editor.groups.is_empty());
+        assert_eq!(spec.editor.groups[0].id, "front_matter");
         
         // Assert sections
-        assert!(!spec.sections.is_empty());
-        assert_eq!(spec.sections[0].id, "front-matter");
-        assert_eq!(spec.sections[0].kind, SectionKind::FunctionCall);
-        assert_eq!(spec.sections[0].function.as_deref(), Some("front-matter"));
+        assert!(!spec.typst.sections.is_empty());
+        assert_eq!(spec.typst.sections[0].id, "front-matter");
+        assert_eq!(spec.typst.sections[0].kind, SectionKind::FunctionCall);
+        assert_eq!(spec.typst.sections[0].function.as_deref(), Some("front-matter"));
         
-        assert_eq!(spec.sections[1].id, "front-matter-outlines");
-        assert_eq!(spec.sections[1].kind, SectionKind::Outlines);
+        assert_eq!(spec.typst.sections[1].id, "front-matter-outlines");
+        assert_eq!(spec.typst.sections[1].kind, SectionKind::Outlines);
         
-        assert_eq!(spec.sections[2].id, "body");
-        assert_eq!(spec.sections[2].kind, SectionKind::Content);
+        assert_eq!(spec.typst.sections[2].id, "body");
+        assert_eq!(spec.typst.sections[2].kind, SectionKind::Content);
         
-        assert_eq!(spec.sections[3].id, "references");
-        assert_eq!(spec.sections[3].kind, SectionKind::Bibliography);
+        assert_eq!(spec.typst.sections[3].id, "references");
+        assert_eq!(spec.typst.sections[3].kind, SectionKind::Bibliography);
         
-        assert_eq!(spec.sections[4].id, "appendices");
-        assert_eq!(spec.sections[4].kind, SectionKind::Appendix);
+        assert_eq!(spec.typst.sections[4].id, "appendices");
+        assert_eq!(spec.typst.sections[4].kind, SectionKind::Appendix);
+
+        // Verify Spanish locales are loaded
+        assert!(spec.messages.contains_key("es"), "should contain Spanish locales");
+        let es_messages = spec.messages.get("es").unwrap();
+        assert_eq!(
+            es_messages.get("Degrees").map(|s| s.as_str()),
+            Some("Grados académicos")
+        );
+        assert_eq!(
+            es_messages.get("Country").map(|s| s.as_str()),
+            Some("País")
+        );
     }
 
     #[test]

@@ -44,6 +44,10 @@ export const TauriApi = {
         return buffers.map((buf) => new Uint8Array(buf));
     },
 
+    async listSystemFontFamilies(): Promise<string[]> {
+        return invoke("list_system_font_families");
+    },
+
     async syncDocumentSnapshot(ast: DocumentAST): Promise<DocumentSessionStatus> {
         return invoke("sync_document_snapshot", { ast });
     },

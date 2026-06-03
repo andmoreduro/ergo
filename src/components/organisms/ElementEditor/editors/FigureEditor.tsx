@@ -65,7 +65,7 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
     const { spec: templateSpec } = useTemplateSpecContext();
 
-    const figureOverride = templateSpec?.element_overrides?.figure ?? null;
+    const figureOverride = templateSpec?.typst.element_overrides?.figure ?? null;
 
     const extraFields = effectiveFigureAnnotationFields(figureOverride);
 

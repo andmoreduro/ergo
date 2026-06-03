@@ -1,6 +1,7 @@
 import { Plugin, TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import { extendBlockSelection } from "./bodySelection";
+import { clearElementSelection, extendBlockSelection } from "./bodySelection";
+import { blockEditIds } from "./blockEditMode";
 import {
     enterLockedWholeBlock,
     lockedWholeBlockElementId,
@@ -62,6 +63,26 @@ export const bodyKeyboardPlugin = () =>
                         event.stopPropagation();
                         return true;
                     }
+                }
+
+                // Esc clears a whole-element / range selection back to a caret.
+                // While a block is edited fine-grained, Esc belongs to that block
+                // (its NodeView exits edit mode), so leave it alone here.
+                if (
+                    event.key === "Escape" &&
+                    !mod &&
+                    blockEditIds(view.state).size === 0
+                ) {
+                    const caret = clearElementSelection(view.state);
+                    if (caret) {
+                        view.dispatch(
+                            view.state.tr.setSelection(caret).scrollIntoView(),
+                        );
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return true;
+                    }
+                    return false;
                 }
 
                 if (event.key === "Tab") {

@@ -20,14 +20,15 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'"
+      "csp": "default-src 'self'; script-src 'self' http://localhost:8097; connect-src 'self' ws://localhost:8097 http://localhost:8097; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
     "resources": [
-      "defaults/*"
+      "defaults/*",
+      "resources/templates/*.ergtemplate"
     ],
     "icon": [
       "icons/icon.png",

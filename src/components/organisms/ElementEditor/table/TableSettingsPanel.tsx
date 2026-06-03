@@ -24,7 +24,7 @@ export const TableSettingsPanel = ({
 }) => {
     const { dispatch } = useDocumentAst();
     const { spec: templateSpec } = useTemplateSpecContext();
-    const tableOverride = templateSpec?.element_overrides?.table ?? null;
+    const tableOverride = templateSpec?.typst.element_overrides?.table ?? null;
     const showPlacement = usesStandardTypstFigureWrapper(tableOverride);
 
     const committedPlacement = tablePlacementValue(element.extra_fields);

@@ -1,5 +1,5 @@
 import type { ImgHTMLAttributes } from "react";
-import { useErgoThemeLogoSrc } from "../../../hooks/useResolvedColorScheme";
+import { APP_LOGO_SRC } from "../../../theme/resolvedColorScheme";
 import styles from "./ErgoThemeLogo.module.css";
 
 export type ErgoThemeLogoProps = Omit<
@@ -12,12 +12,10 @@ export const ErgoThemeLogo = ({
     alt,
     ...rest
 }: ErgoThemeLogoProps) => {
-    const src = useErgoThemeLogoSrc();
-
     return (
         <img
             className={`${styles.logo} ${className}`.trim()}
-            src={src}
+            src={APP_LOGO_SRC}
             alt={alt}
             {...rest}
         />

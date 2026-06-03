@@ -220,6 +220,7 @@ fn generate_element_typst(
             };
 
             let table_override = template
+                .typst
                 .element_overrides
                 .as_ref()
                 .and_then(|o| o.table.as_ref());
@@ -324,6 +325,7 @@ fn generate_element_typst(
             }
 
             let figure_override = template
+                .typst
                 .element_overrides
                 .as_ref()
                 .and_then(|o| o.figure.as_ref());
@@ -421,6 +423,7 @@ fn generate_element_typst(
             };
 
             let figure_override = template
+                .typst
                 .element_overrides
                 .as_ref()
                 .and_then(|o| o.figure.as_ref());
@@ -483,6 +486,7 @@ fn generate_element_typst(
         }
         DocumentElement::Custom(custom) => {
             if let Some(spec) = template
+                .editor
                 .custom_elements
                 .iter()
                 .find(|ce| ce.kind == custom.element_type)

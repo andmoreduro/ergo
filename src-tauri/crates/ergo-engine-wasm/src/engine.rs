@@ -49,6 +49,11 @@ pub fn extend_fonts_from_js_buffers(fonts: &mut Vec<Font>, font_buffers: js_sys:
     }
 }
 
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub fn reset_fonts_to_bundled() {
+    store_fonts(bundled_fonts_vec());
+}
+
 #[cfg(target_arch = "wasm32")]
 pub fn append_font_buffers(font_buffers: js_sys::Array) {
     console_error_panic_hook::set_once();
@@ -318,11 +323,26 @@ impl ErgoPreviewEngine {
         }
     }
 
+    /// Drop the previous project's VFS, session, compiled documents, and preview
+    /// caches so a shorter document cannot inherit extra pages from the prior compile.
+    pub fn reset_for_new_project(&mut self) {
+        self.vfs.clear();
+        self.session = DocumentSession::new(Arc::clone(&self.vfs));
+        self.sync_worlds_if_needed();
+        self.preview_world = make_world(Arc::clone(&self.vfs), "main.typ");
+        self.resource_world = make_world(Arc::clone(&self.vfs), RESOURCE_WATCH_MAIN);
+        self.document = None;
+        self.resource_document = None;
+        self.preview_page_fingerprints.clear();
+        self.sync_state = PreviewSyncState::default();
+    }
+
     pub fn bootstrap_preview(
         &mut self,
         ast: DocumentAST,
         files: Vec<VfsFileEntry>,
     ) -> Result<BootstrapPreviewOutput, String> {
+        self.reset_for_new_project();
         self.write_vfs_files(files);
         let status = self.sync_snapshot(ast)?;
         // Inline the first page so the initial open paints in a single trip.
@@ -600,6 +620,19 @@ mod tests {
             .as_ref()
             .expect("compile should return pages");
         assert!(pages.iter().all(|page| page.content.is_none()));
+    }
+
+    #[test]
+    fn reset_for_new_project_clears_vfs_and_page_fingerprints() {
+        let mut engine = ErgoPreviewEngine::new();
+        engine.write_source("orphan.typ", "stale");
+        engine.preview_page_fingerprints = vec![1, 2, 3, 4, 5];
+
+        engine.reset_for_new_project();
+
+        assert!(engine.vfs.read_source("orphan.typ").is_err());
+        assert!(engine.preview_page_fingerprints.is_empty());
+        assert!(engine.document.is_none());
     }
 
     #[test]

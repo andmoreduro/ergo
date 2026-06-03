@@ -1,4 +1,11 @@
-import { useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import {
+    startTransition,
+    useEffect,
+    useRef,
+    type Dispatch,
+    type MutableRefObject,
+    type SetStateAction,
+} from "react";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { CompilationResult } from "../bindings/CompilationResult";
 import type { DocumentOutline } from "../bindings/DocumentOutline";
@@ -111,37 +118,50 @@ export function useDocumentCompilerSync({
     const applyPreviewResult = (
         status: DocumentSessionStatus,
         result: CompilationResult,
+        forSessionId: number,
     ) => {
+        if (desiredSessionIdRef.current !== forSessionId) {
+            return;
+        }
         if (!isNewerPreviewResult(result)) {
             return;
         }
 
+        // Mark the preview update as a non-urgent transition so React keeps
+        // typing/caret responsive and renders (and repaints) the preview at lower
+        // priority — interrupting stale preview work when the user keeps typing.
+        // This trades a little preview latency for input responsiveness during
+        // bursts; it does not debounce (every change still compiles immediately).
         if (result.status === "succeeded") {
             latestRevisionRef.current = status.sourceRevision;
-            updateResourcePreviewRevisions(status);
-            setSourceMap(status.sourceMap);
-            setOutline(result.outline);
-            if (result.resources) {
-                setResources(result.resources);
-            }
-            setPreviewPages(result.preview_pages || []);
-            setPreviewRevision(result.source_revision);
             previewRevisionRef.current = result.source_revision;
-            setError(null);
-            if (
-                latestRevisionRef.current === null ||
-                result.source_revision >= latestRevisionRef.current
-            ) {
+            startTransition(() => {
+                updateResourcePreviewRevisions(status);
+                setSourceMap(status.sourceMap);
+                setOutline(result.outline);
+                if (result.resources) {
+                    setResources(result.resources);
+                }
+                setPreviewPages(result.preview_pages || []);
+                setPreviewRevision(result.source_revision);
+                setError(null);
+                if (
+                    latestRevisionRef.current === null ||
+                    result.source_revision >= latestRevisionRef.current
+                ) {
                     setIsCompiling(false);
-            }
+                }
+            });
         } else if (result.status === "failed") {
-            setError(result.diagnostics.join("\n") || "Compilation failed");
-            if (
-                latestRevisionRef.current === null ||
-                result.source_revision >= latestRevisionRef.current
-            ) {
-                setIsCompiling(false);
-            }
+            startTransition(() => {
+                setError(result.diagnostics.join("\n") || "Compilation failed");
+                if (
+                    latestRevisionRef.current === null ||
+                    result.source_revision >= latestRevisionRef.current
+                ) {
+                    setIsCompiling(false);
+                }
+            });
         }
     };
 
@@ -246,7 +266,7 @@ export function useDocumentCompilerSync({
                             ),
                         });
                     }
-                    applyPreviewResult(status, result);
+                    applyPreviewResult(status, result, currentSessionId);
 
                     await mirrorToBackend(currentAst, [], true);
                     continue;
@@ -263,7 +283,6 @@ export function useDocumentCompilerSync({
                 const syncStarted = nowMs();
 
                 const status = await CompilerClient.syncEvents(
-                    currentAst,
                     pendingEvents.map((event) => event.event),
                 );
 
@@ -297,7 +316,7 @@ export function useDocumentCompilerSync({
                     workerSyncMs: elapsedMs(syncStarted, syncFinished),
                     compileMs: elapsedMs(compileStarted, compileFinished),
                 });
-                applyPreviewResult(status, result);
+                applyPreviewResult(status, result, currentSessionId);
 
                 await mirrorPromise;
 
@@ -367,6 +386,7 @@ export function useDocumentCompilerSync({
         ) {
             syncFailedRef.current = false;
             if (didSessionChange) {
+                bootstrappedSessionIdRef.current = null;
                 setPreviewPages([]);
                 setPreviewRevision(null);
                 previewRevisionRef.current = null;

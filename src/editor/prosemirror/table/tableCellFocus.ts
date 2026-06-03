@@ -1,7 +1,7 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { ResolvedPos } from "prosemirror-model";
 import type { EditorState } from "prosemirror-state";
-import { TextSelection } from "prosemirror-state";
+import { NodeSelection, TextSelection } from "prosemirror-state";
 import { selectionCell, TableMap } from "prosemirror-tables";
 import {
     equationSourceFieldId,
@@ -119,6 +119,20 @@ export const tableCellFocusTargetFromState = (
 const tableNodeInChildDoc = (doc: PMNode): PMNode | null => {
     const table = doc.firstChild;
     return table?.type.name === "table" ? table : null;
+};
+
+/**
+ * True when the child-table selection has escaped its cells onto the whole
+ * `table` node. `prosemirror-tables`' arrow navigation produces this at the
+ * table's outer edge (top row + ArrowUp, last cell + ArrowRight, …): with no
+ * adjacent cell it falls back to `Selection.near` at the sub-doc boundary,
+ * which — since the sub-doc holds only the table — resolves to a `NodeSelection`
+ * on the table. Left as-is the caret vanishes and typing replaces the table, so
+ * the NodeView treats this as a request to exit fine-grained mode.
+ */
+export const isTableEscapeSelection = (state: EditorState): boolean => {
+    const sel = state.selection;
+    return sel instanceof NodeSelection && sel.node.type.name === "table";
 };
 
 export const tableCellCoordsFromChildState = (

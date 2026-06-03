@@ -245,7 +245,7 @@
       "additionalProperties": false,
       "properties": {
         "key":        { "type": "string", "description": "Typst parameter name. '_positional' for positional args." },
-        "type":       { "type": "string", "enum": ["content", "string", "length", "boolean", "integer", "float", "string_array", "content_array", "dictionary", "author_list", "affiliation_map"] },
+        "type":       { "type": "string", "enum": ["content", "string", "length", "boolean", "integer", "float", "string_array", "content_array", "dictionary", "author_list", "affiliation_map", "degree_map"] },
         "source":     { "type": "string", "description": "Dot-path into the AST inputs/settings (e.g. 'inputs.title')." },
         "label":      { "type": "string" },
         "default":    { "description": "Default value if the AST field is empty." },
