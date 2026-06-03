@@ -121,7 +121,6 @@ pub fn default_apa7_project_ast() -> DocumentAST {
 pub fn default_umb_apa_project_ast() -> DocumentAST {
     let mut inputs = std::collections::HashMap::new();
     inputs.insert("title".to_string(), serde_json::json!("UMB APA Title"));
-    inputs.insert("running_head".to_string(), serde_json::json!("Running Head"));
     inputs.insert(
         "authors".to_string(),
         serde_json::json!([{ "name": "Author 1", "affiliations": ["a"], "degrees": ["a"] }]),
@@ -153,7 +152,7 @@ pub fn default_umb_apa_project_ast() -> DocumentAST {
             title: "UMB APA Title".to_string(),
             project_settings: ProjectSettings::default(),
             local_overrides: GlobalSettings::default(),
-            running_head: Some("Running Head".to_string()),
+            running_head: None,
             keywords: vec![],
         },
         dependencies: DependencyManifest { packages: vec![] },

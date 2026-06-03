@@ -21,10 +21,24 @@ const isEditableTarget = (target: EventTarget | null): boolean => {
 const targetNode = (target: EventTarget | null): Node | null =>
     target instanceof Node ? target : null;
 
+const BODY_EDITOR_SELECTOR = "[data-ergo-body-editor]";
+
 const isInProseMirrorSurface = (
     view: { dom: HTMLElement } | null,
     node: Node | null,
-): boolean => view !== null && node !== null && view.dom.contains(node);
+): boolean => {
+    if (view !== null && node !== null && view.dom.contains(node)) {
+        return true;
+    }
+
+    if (!(node instanceof Node)) {
+        return false;
+    }
+
+    const element =
+        node instanceof HTMLElement ? node : node.parentElement;
+    return Boolean(element?.closest(BODY_EDITOR_SELECTOR));
+};
 
 /**
  * ProseMirror body and nested table-cell editors are contenteditable, but they

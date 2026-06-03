@@ -9,12 +9,10 @@
 #import "utils/constants.typ": double-spacing, first-indent-length, quote-word-trigger
 
 
-/// The APA 7th edition template for academic and professional documents.
-#let versatile-apa(
+/// UMB graduate-work APA 7 (guía resumida Biblioteca UMB).
+#let apa-style(
   font-size: 12pt,
   custom-terms: (:),
-  running-head: none,
-  running-head-limit: 50,
   body,
 ) = {
   context language-terms.update(custom-terms)
@@ -32,17 +30,12 @@
     numbering: "1",
     number-align: top + right,
     margin: 1in,
-    header: if running-head != none {
-      grid(
-        columns: (1fr, auto),
-        upper(running-head), context here().page(),
-      )
-    } else { auto },
   )
 
   set par(
     leading: double-spacing,
     spacing: double-spacing,
+    justify: false,
   )
 
   // Show-set rules are at least, easier to override compared to show-function
@@ -50,25 +43,17 @@
   show link: set text(fill: blue)
   show link: underline // considering one would want to disable underline, current workaround is set its stroke to 0pt
 
-  if running-head != none {
-    if type(running-head) == content { running-head = to-string(running-head) }
-    if running-head.len() > running-head-limit {
-      panic(
-        "Running head must be no more than",
-        running-head-limit,
-        "characters, including spaces and punctuation.",
-        "Current length:",
-        running-head.len(),
-      )
-    }
-  }
-
   show heading: set text(size: font-size)
   show heading: set block(spacing: double-spacing)
+  set heading(numbering: none)
 
   show heading.where(level: 1): set align(center)
-  show heading.where(level: 3).or(heading.where(level: 5)): set text(style: "italic")
-  show heading.where(level: 4).or(heading.where(level: 5)): it => [#it.body.]
+  show heading.where(level: 3).or(heading.where(level: 5)).or(heading.where(level: 6)): set text(
+    style: "italic",
+  )
+  show heading.where(level: 4).or(heading.where(level: 5)).or(heading.where(level: 6)): it => [
+    #it.body.
+  ]
 
   set par(
     first-line-indent: (
@@ -89,6 +74,7 @@
   )
 
   set figure.caption(separator: parbreak(), position: top)
+  show figure.caption: set text(size: 10pt)
   show figure.caption: set align(left)
   show figure.caption: set par(first-line-indent: 0em)
   show figure.caption: it => {
@@ -208,3 +194,5 @@
 
   body
 }
+
+#let versatile-apa = apa-style

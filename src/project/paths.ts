@@ -29,6 +29,31 @@ export const projectFileNameFromTitle = (title: string): string =>
 export const stripErgprojExtension = (fileName: string): string =>
     fileName.replace(/\.ergproj$/i, "");
 
+export const projectBaseNameFromPath = (projectPath: string): string => {
+    const segments = projectPath.split(/[/\\]/);
+    const fileName = segments[segments.length - 1] ?? "";
+    return stripErgprojExtension(fileName);
+};
+
+const sanitizeExportBaseName = (baseName: string): string =>
+    baseName
+        .replace(INVALID_FILE_NAME_CHARACTERS, " ")
+        .trim()
+        .replace(/\s+/g, " ")
+        .replace(/^\.+|\.+$/g, "");
+
+/** Default PDF export file name matching the open `.ergproj` basename. */
+export const exportPdfFileNameFromProjectPath = (
+    projectPath: string | null,
+): string => {
+    const fallback = `${DEFAULT_PROJECT_FILE_BASENAME}.pdf`;
+    if (!projectPath) {
+        return fallback;
+    }
+    const sanitized = sanitizeExportBaseName(projectBaseNameFromPath(projectPath));
+    return sanitized ? `${sanitized}.pdf` : fallback;
+};
+
 export const sanitizeProjectFileName = (fileName: string): string =>
     ensureErgprojExtension(
         fileName

@@ -3,8 +3,9 @@ use crate::template_spec::{template_spec_exports_symbol, TemplateSpec};
 
 use super::escape_typst_string;
 use super::outline_titles::{
-    default_outline_title, OUTLINE_APPENDICES_TITLE, OUTLINE_CONTENTS_TITLE,
-    OUTLINE_EQUATIONS_TITLE, OUTLINE_FIGURES_TITLE, OUTLINE_LISTINGS_TITLE, OUTLINE_TABLES_TITLE,
+    default_bibliography_section_title, default_outline_title, BIBLIOGRAPHY_SECTION_TITLE,
+    OUTLINE_APPENDICES_TITLE, OUTLINE_CONTENTS_TITLE, OUTLINE_EQUATIONS_TITLE,
+    OUTLINE_FIGURES_TITLE, OUTLINE_LISTINGS_TITLE, OUTLINE_TABLES_TITLE,
 };
 
 pub(crate) const OUTLINE_INCLUDE_CONTENTS: &str = "outline.include_contents";
@@ -137,6 +138,14 @@ pub(crate) fn generate_front_matter_outlines(
     }
 
     out
+}
+
+pub(crate) fn effective_bibliography_section_title<'a>(
+    document_language: Option<&str>,
+    overrides: &'a [TemplateOverride],
+) -> &'a str {
+    lookup_title(overrides, BIBLIOGRAPHY_SECTION_TITLE)
+        .unwrap_or_else(|| default_bibliography_section_title(document_language))
 }
 
 fn appendix_outline_line(title: &str) -> String {

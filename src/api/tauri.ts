@@ -62,6 +62,20 @@ export const TauriApi = {
         return invoke("import_resource_file", { sourcePath });
     },
 
+    async importResourceBytes(
+        fileName: string,
+        bytes: Uint8Array,
+    ): Promise<ImportResourceResult> {
+        const result = await invoke<ImportResourceResult>("import_resource_bytes", {
+            fileName,
+            bytes: Array.from(bytes),
+        });
+        return {
+            asset: result.asset,
+            bytes: new Uint8Array(result.bytes),
+        };
+    },
+
     async readVfsFile(path: string): Promise<Uint8Array> {
         const bytes = await invoke<number[]>("read_vfs_file", { path });
         return new Uint8Array(bytes);

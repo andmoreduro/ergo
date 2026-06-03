@@ -480,11 +480,13 @@ mod tests {
                 action_id: ActionId::WorkspaceOpenProject,
                 context: "app".to_string(),
                 sequence: parse_key_sequence("Ctrl+O").unwrap(),
+                payload: None,
             }],
             keymap_overrides: vec![KeyBindingPreference {
                 action_id: ActionId::WorkspaceOpenProject,
                 context: "workspace".to_string(),
                 sequence: parse_key_sequence("Ctrl+O").unwrap(),
+                payload: None,
             }],
         };
 

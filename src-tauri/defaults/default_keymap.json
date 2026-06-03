@@ -55,12 +55,68 @@
     {
       "action_id": "editor::InsertHeading",
       "context": "editor && !tableCell",
-      "sequence": [{ "key": "h", "modifiers": ["Control", "Alt"] }]
+      "sequence": [{ "key": "1", "modifiers": ["Control", "Alt", "Shift"] }],
+      "payload": { "level": 1 }
     },
     {
       "action_id": "editor::InsertHeading",
       "context": "tableCell",
-      "sequence": [{ "key": "h", "modifiers": ["Control", "Alt"] }]
+      "sequence": [{ "key": "1", "modifiers": ["Control", "Alt", "Shift"] }]
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "editor && !tableCell",
+      "sequence": [{ "key": "2", "modifiers": ["Control", "Alt", "Shift"] }],
+      "payload": { "level": 2 }
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "tableCell",
+      "sequence": [{ "key": "2", "modifiers": ["Control", "Alt", "Shift"] }]
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "editor && !tableCell",
+      "sequence": [{ "key": "3", "modifiers": ["Control", "Alt", "Shift"] }],
+      "payload": { "level": 3 }
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "tableCell",
+      "sequence": [{ "key": "3", "modifiers": ["Control", "Alt", "Shift"] }]
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "editor && !tableCell",
+      "sequence": [{ "key": "4", "modifiers": ["Control", "Alt", "Shift"] }],
+      "payload": { "level": 4 }
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "tableCell",
+      "sequence": [{ "key": "4", "modifiers": ["Control", "Alt", "Shift"] }]
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "editor && !tableCell",
+      "sequence": [{ "key": "5", "modifiers": ["Control", "Alt", "Shift"] }],
+      "payload": { "level": 5 }
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "tableCell",
+      "sequence": [{ "key": "5", "modifiers": ["Control", "Alt", "Shift"] }]
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "editor && !tableCell",
+      "sequence": [{ "key": "6", "modifiers": ["Control", "Alt", "Shift"] }],
+      "payload": { "level": 6 }
+    },
+    {
+      "action_id": "editor::InsertHeading",
+      "context": "tableCell",
+      "sequence": [{ "key": "6", "modifiers": ["Control", "Alt", "Shift"] }]
     },
     {
       "action_id": "editor::InsertTable",

@@ -8,13 +8,9 @@ import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
 import { RichTextField } from "../../../molecules/RichTextField/RichTextField";
 import { Select } from "../../../atoms/Select/Select";
+import { headingLevelOptions } from "../../../../editor/headingLevels";
 import type { HeadingElement } from "../types";
 import styles from "../ElementEditor.module.css";
-
-const headingLevels = Array.from({ length: 6 }, (_, index) => {
-    const level = String(index + 1);
-    return { value: level, label: `H${level}` };
-});
 
 export const HeadingEditor = ({ element }: { element: HeadingElement }) => {
     const { dispatch } = useDocumentAst();
@@ -36,7 +32,7 @@ export const HeadingEditor = ({ element }: { element: HeadingElement }) => {
                 variant="inline"
                 aria-label={m.editor_heading_level()}
                 value={String(element.level)}
-                options={headingLevels}
+                options={headingLevelOptions()}
                 onChange={(event) =>
                     dispatch({
                         type: "UPDATE_HEADING",

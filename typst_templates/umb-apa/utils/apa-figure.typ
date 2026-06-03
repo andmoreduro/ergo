@@ -23,7 +23,7 @@
 ) = {
   figure(
     [
-      #set par(first-line-indent: 0em)
+      #set par(first-line-indent: 0em, justify: false)
       #body
       #set align(left)
       #if note != none [

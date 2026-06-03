@@ -23,10 +23,11 @@ export const pageExportFileName = (
 export const saveExportDialog = async (
     format: ExportFormat,
     pageCount = 1,
+    defaultPath?: string,
 ): Promise<string | null> => {
     if (format === "pdf" || pageCount <= 1) {
         const selected = await save({
-            defaultPath: defaultExportName[format],
+            defaultPath: defaultPath ?? defaultExportName[format],
             filters: [exportFilters[format]],
         });
         return typeof selected === "string" ? selected : null;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     ensureErgprojExtension,
+    exportPdfFileNameFromProjectPath,
     projectFileBasenameFromTitle,
     projectFileNameFromTitle,
     projectPathInDirectory,
@@ -46,6 +47,17 @@ describe("project path helpers", () => {
     it("creates a default project path inside a selected POSIX folder", () => {
         expect(projectPathInDirectory("/home/ada/docs/", "paper_draft")).toBe(
             "/home/ada/docs/paper_draft.ergproj",
+        );
+    });
+
+    it("derives the PDF export name from the project file path", () => {
+        expect(
+            exportPdfFileNameFromProjectPath(
+                "C:\\Users\\ada\\Documents\\Mi Tesis.ergproj",
+            ),
+        ).toBe("Mi Tesis.pdf");
+        expect(exportPdfFileNameFromProjectPath(null)).toBe(
+            "untitled_document.pdf",
         );
     });
 });

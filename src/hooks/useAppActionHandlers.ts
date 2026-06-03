@@ -4,6 +4,8 @@ import type { ActionHandlerMap } from "../actions/runtime";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { CommandRegistry } from "../commands/registry";
 import type { CommandContext } from "../commands/types";
+import { parseHeadingInsertLevel } from "../editor/headingInsert";
+import type { ElementType, InsertElementOptions } from "../commands/editorCommands";
 import { parseInputContentBlocks } from "../editor/contentBlocks";
 import { globalCaretInContentBlocks, parseIndexedInputFieldPath } from "../editor/contentBlocksCaret";
 import {
@@ -29,6 +31,13 @@ interface UseAppActionHandlersOptions {
     commandRegistry: CommandRegistry;
     commandContext: CommandContext;
     setDocumentFocus: (focus: DocumentFocusInput) => void;
+    insertElement: (
+        elementType: ElementType,
+        options?: InsertElementOptions,
+        invocationPayload?: unknown,
+    ) => void;
+    closeProject: () => Promise<void>;
+    actionOverrides?: ActionHandlerMap;
 }
 
 const readString = (value: unknown): string | null =>
@@ -89,9 +98,29 @@ export const useAppActionHandlers = ({
     commandRegistry,
     commandContext,
     setDocumentFocus,
+    insertElement,
+    closeProject,
+    actionOverrides,
 }: UseAppActionHandlersOptions): ActionHandlerMap => {
     return useMemo<ActionHandlerMap>(() => {
-        const handlers: ActionHandlerMap = {};
+        const handlers: ActionHandlerMap = {
+            ...actionOverrides,
+        };
+
+        handlers["editor::InsertHeading"] = (invocation) => {
+            const level = parseHeadingInsertLevel(invocation.payload) ?? 1;
+            insertElement(
+                "heading",
+                { headingLevel: level },
+                invocation.payload,
+            );
+            return true;
+        };
+
+        handlers["workspace::CloseProject"] = () => {
+            void closeProject();
+            return true;
+        };
 
         handlers["editor::FocusField"] = (invocation) => {
             const target = parseFocusFieldPayload(invocation.payload);
@@ -137,6 +166,9 @@ export const useAppActionHandlers = ({
         };
 
         for (const command of commandRegistry.all()) {
+            if (handlers[command.id]) {
+                continue;
+            }
             handlers[command.id] = () => {
                 void commandRegistry.run(command.id, commandContext);
                 return true;
@@ -144,5 +176,13 @@ export const useAppActionHandlers = ({
         }
 
         return handlers;
-    }, [commandContext, commandRegistry, getState, setDocumentFocus]);
+    }, [
+        actionOverrides,
+        commandContext,
+        commandRegistry,
+        getState,
+        closeProject,
+        insertElement,
+        setDocumentFocus,
+    ]);
 };

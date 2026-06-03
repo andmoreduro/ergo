@@ -229,12 +229,20 @@ export const useProjectLifecycle = ({
             return;
         }
 
+        const defaultAst = createDefaultDocumentAST();
         setHasActiveProject(false);
         setCurrentProjectPath(null);
         dispatch({
             type: "LOAD_DOCUMENT",
-            payload: { ast: createDefaultDocumentAST() },
+            payload: { ast: defaultAst },
         });
+
+        try {
+            await waitForDocumentSync();
+            await TauriApi.syncDocumentSnapshot(defaultAst);
+        } catch {
+            // Welcome screen should still appear even if the backend reset fails.
+        }
     }, [dispatch, saveBeforeProjectBoundary]);
 
     const ensureActiveProject = useCallback(() => {

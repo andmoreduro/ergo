@@ -79,12 +79,15 @@
   city: none,
   country: none,
   year: none,
+  show-escudo: true,
 ) = context {
   set document(
     title: title,
   ) if title != none
 
-  place(top + center, umb-escudo)
+  if show-escudo {
+    place(top + center, umb-escudo)
+  }
 
   for i in range(4) {
     [~] + parbreak()
@@ -131,7 +134,12 @@
         columns: 1,
         rows: entries.len() + 1,
         row-gutter: 1fr,
-        heading(level: 1, outlined: false, bookmarked: true)[Autoridades Académicas],
+        heading(
+          level: 1,
+          outlined: false,
+          bookmarked: true,
+          numbering: none,
+        )[Autoridades Académicas],
         ..entries.map(auth => {
           let role = auth.at("role", default: none)
           block[
@@ -146,6 +154,29 @@
     )
   )
   pagebreak()
+}
+
+#let umb-abstract-block(
+  title,
+  body,
+  keywords: none,
+  keywords-label: none,
+) = {
+  heading(level: 1, outlined: false, bookmarked: true)[#title]
+  {
+    set par(first-line-indent: 0in)
+    body
+    if keywords != none and keywords != () and keywords-label != none {
+      set par(first-line-indent: first-indent-length)
+      parbreak()
+      emph[#keywords-label]
+      if type(keywords) == array {
+        keywords.join(", ")
+      } else {
+        keywords
+      }
+    }
+  }
 }
 
 #let front-matter(
@@ -173,65 +204,53 @@
     city: city,
     country: country,
     year: year,
+    show-escudo: true,
   )
 
-  umb-authorities-page(authorities)
-
-  if has-visible-content(acknowledgements) {
-    heading(level: 1, outlined: false, bookmarked: true)[Agradecimientos]
-    {
-      acknowledgements
-    }
-    pagebreak()
-  }
+  // Contra portada (required for UMB trabajos de grado; same content, no escudo).
+  umb-cover-page(
+    title: title,
+    authors: authors,
+    affiliations: affiliations,
+    degrees: degrees,
+    director: director,
+    city: city,
+    country: country,
+    year: year,
+    show-escudo: false,
+  )
 
   let show-es = has-visible-content(abstract-es)
   let show-en = has-visible-content(abstract-en)
   if show-es or show-en {
     if show-es {
-      heading(level: 1, outlined: false, bookmarked: true)[Resumen]
-      v(0.5fr)
-      {
-        set align(left)
-        set par(first-line-indent: 0in, justify: true)
-        abstract-es
-      }
-
-      if keywords-es != none and keywords-es != () {
-        v(0.5fr)
-        emph[Palabras clave: ]
-        if type(keywords-es) == array {
-          keywords-es.join(", ")
-        } else {
-          keywords-es
-        }
-      }
-
-      if show-en {
-        v(1.5fr)
-      }
+      umb-abstract-block(
+        [Resumen],
+        abstract-es,
+        keywords: keywords-es,
+        keywords-label: [Palabras clave: ],
+      )
     }
 
     if show-en {
-      heading(level: 1, outlined: false, bookmarked: true)[Abstract]
-      v(0.5fr)
-      {
-        set align(left)
-        set par(first-line-indent: 0in, justify: true)
-        abstract-en
-      }
-
-      if keywords-en != none and keywords-en != () {
-        v(0.5fr)
-        emph[Keywords: ]
-        if type(keywords-en) == array {
-          keywords-en.join(", ")
-        } else {
-          keywords-en
-        }
-      }
+      umb-abstract-block(
+        [Abstract],
+        abstract-en,
+        keywords: keywords-en,
+        keywords-label: [Keywords: ],
+      )
     }
 
+    pagebreak()
+  }
+
+  umb-authorities-page(authorities)
+
+  if has-visible-content(acknowledgements) {
+    heading(level: 1, outlined: false, bookmarked: true, numbering: none)[Agradecimientos]
+    { 
+      acknowledgements
+    }
     pagebreak()
   }
 }

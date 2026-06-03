@@ -9,7 +9,12 @@
   set document(keywords: keywords) if keywords != none
   set document(description: body)
 
-  heading(level: 1, get-terms(text.lang, text.script).Abstract, outlined: false)
+  heading(
+    level: 1,
+    get-terms(text.lang, text.script).Abstract,
+    outlined: false,
+    numbering: none,
+  )
 
   {
     set par(first-line-indent: 0in)

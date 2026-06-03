@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ErgoThemeLogo } from "../../atoms/ErgoThemeLogo/ErgoThemeLogo";
 import { MenubarMenuButton } from "../../atoms/MenubarMenuButton/MenubarMenuButton";
 import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
+import { MenuSeparator } from "../../atoms/MenuSeparator/MenuSeparator";
 import { WindowControlButton } from "../../atoms/WindowControlButton/WindowControlButton";
 import { DropdownMenu } from "../../molecules/DropdownMenu/DropdownMenu";
 import { m } from "../../../paraglide/messages.js";
@@ -16,14 +17,13 @@ export type InsertElementType =
     | "figure"
     | "equation";
 
-interface MenuAction {
-    label: string;
-    commandId?: ActionId;
-}
+type MenuEntry =
+    | { type: "item"; label: string; commandId: ActionId }
+    | { type: "separator" };
 
 interface MenuGroup {
     title: string;
-    actions: MenuAction[];
+    actions: MenuEntry[];
 }
 
 export interface MenubarProps {
@@ -39,33 +39,40 @@ const MenubarComponent = ({
 }: MenubarProps) => {
     const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
 
+    const fileMenuActions: MenuEntry[] = [
+        { type: "item", label: m.menubar_new_project(), commandId: "workspace::NewProject" },
+        { type: "item", label: m.menubar_open_project(), commandId: "workspace::OpenProject" },
+        {
+            type: "item",
+            label: m.menubar_open_recent(),
+            commandId: "workspace::OpenRecentProject",
+        },
+        ...(hasActiveProject
+            ? [
+                  {
+                      type: "item" as const,
+                      label: m.menubar_save_project(),
+                      commandId: "workspace::SaveProject" as const,
+                  },
+                  {
+                      type: "item" as const,
+                      label: m.menubar_export(),
+                      commandId: "workspace::ExportSvg" as const,
+                  },
+                  { type: "separator" as const },
+                  {
+                      type: "item" as const,
+                      label: m.menubar_close_project(),
+                      commandId: "workspace::CloseProject" as const,
+                  },
+              ]
+            : []),
+    ];
+
     const menuGroups: MenuGroup[] = [
         {
             title: m.menubar_file(),
-            actions: [
-                { label: m.menubar_new_project(), commandId: "workspace::NewProject" },
-                { label: m.menubar_open_project(), commandId: "workspace::OpenProject" },
-                {
-                    label: m.menubar_open_recent(),
-                    commandId: "workspace::OpenRecentProject",
-                },
-                ...(hasActiveProject
-                    ? [
-                          {
-                              label: m.menubar_save_project(),
-                              commandId: "workspace::SaveProject" as const,
-                          },
-                          {
-                              label: m.menubar_export(),
-                              commandId: "workspace::ExportSvg" as const,
-                          },
-                          {
-                              label: m.menubar_close_project(),
-                              commandId: "workspace::CloseProject" as const,
-                          },
-                      ]
-                    : []),
-            ],
+            actions: fileMenuActions,
         },
         ...(hasActiveProject
             ? [
@@ -73,26 +80,32 @@ const MenubarComponent = ({
                       title: m.menubar_insert(),
                       actions: [
                           {
+                              type: "item" as const,
                               label: m.menubar_insert_paragraph(),
                               commandId: "editor::InsertParagraph" as const,
                           },
                           {
+                              type: "item" as const,
                               label: m.menubar_insert_heading(),
                               commandId: "editor::InsertHeading" as const,
                           },
                           {
+                              type: "item" as const,
                               label: m.menubar_insert_table(),
                               commandId: "editor::InsertTable" as const,
                           },
                           {
+                              type: "item" as const,
                               label: m.menubar_insert_figure(),
                               commandId: "editor::InsertFigure" as const,
                           },
                           {
+                              type: "item" as const,
                               label: m.menubar_insert_equation(),
                               commandId: "editor::InsertEquation" as const,
                           },
                           {
+                              type: "item" as const,
                               label: m.menubar_insert_reference(),
                               commandId: "editor::InsertReference" as const,
                           },
@@ -104,16 +117,19 @@ const MenubarComponent = ({
             title: m.menubar_view(),
             actions: [
                 {
+                    type: "item",
                     label: m.menubar_command_palette(),
                     commandId: "view::OpenCommandPalette",
                 },
                 ...(hasActiveProject
                     ? [
                           {
+                              type: "item" as const,
                               label: m.menubar_zoom_in(),
                               commandId: "view::ZoomIn" as const,
                           },
                           {
+                              type: "item" as const,
                               label: m.menubar_zoom_out(),
                               commandId: "view::ZoomOut" as const,
                           },
@@ -124,23 +140,40 @@ const MenubarComponent = ({
         {
             title: m.menubar_settings(),
             actions: [
-                { label: m.menubar_global_settings(), commandId: "settings::OpenGlobal" },
+                {
+                    type: "item",
+                    label: m.menubar_global_settings(),
+                    commandId: "settings::OpenGlobal",
+                },
                 ...(hasActiveProject
                     ? [
                           {
+                              type: "item" as const,
                               label: m.menubar_project_settings(),
                               commandId: "settings::OpenProject" as const,
                           },
                       ]
                     : []),
-                { label: m.menubar_keymap_settings(), commandId: "settings::OpenKeymap" },
+                {
+                    type: "item",
+                    label: m.menubar_keymap_settings(),
+                    commandId: "settings::OpenKeymap",
+                },
             ],
         },
         {
             title: m.menubar_help(),
             actions: [
-                { label: m.menubar_documentation(), commandId: "help::OpenDocumentation" },
-                { label: m.menubar_about(), commandId: "help::OpenAbout" },
+                {
+                    type: "item",
+                    label: m.menubar_documentation(),
+                    commandId: "help::OpenDocumentation",
+                },
+                {
+                    type: "item",
+                    label: m.menubar_about(),
+                    commandId: "help::OpenAbout",
+                },
             ],
         },
     ];
@@ -199,25 +232,33 @@ const MenubarComponent = ({
                                     </MenubarMenuButton>
                                 }
                             >
-                                {group.actions.map((action) => (
-                                    <MenuItemButton
-                                        disabled={
-                                            !action.commandId ||
-                                            !isCommandEnabled(action.commandId)
-                                        }
-                                        key={action.label}
-                                        role="menuitem"
-                                        variant="dropdown"
-                                        onClick={() => {
-                                            setOpenMenuIndex(null);
-                                            if (action.commandId) {
-                                                onCommand(action.commandId);
+                                {group.actions.map((entry, entryIndex) => {
+                                    if (entry.type === "separator") {
+                                        return (
+                                            <MenuSeparator
+                                                key={`${group.title}-sep-${entryIndex}`}
+                                                variant="contextMenu"
+                                            />
+                                        );
+                                    }
+
+                                    return (
+                                        <MenuItemButton
+                                            disabled={
+                                                !isCommandEnabled(entry.commandId)
                                             }
-                                        }}
-                                    >
-                                        {action.label}
-                                    </MenuItemButton>
-                                ))}
+                                            key={entry.commandId}
+                                            role="menuitem"
+                                            variant="dropdown"
+                                            onClick={() => {
+                                                setOpenMenuIndex(null);
+                                                onCommand(entry.commandId);
+                                            }}
+                                        >
+                                            {entry.label}
+                                        </MenuItemButton>
+                                    );
+                                })}
                             </DropdownMenu>
                         </div>
                     );

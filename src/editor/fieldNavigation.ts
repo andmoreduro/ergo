@@ -84,6 +84,22 @@ const collectInputFieldTargets = (
             return;
         }
         if (schema.items?.type === "object" && schema.items.properties) {
+            const items = getValueAtPath(inputs, pathParts);
+            const length = Array.isArray(items) ? items.length : 0;
+            for (let index = 0; index < length; index += 1) {
+                for (const property of schema.items.properties) {
+                    if (!property.id) {
+                        continue;
+                    }
+                    collectInputFieldTargets(
+                        property,
+                        `${normalizedPath}/${index}/${property.id}`,
+                        variantId,
+                        inputs,
+                        targets,
+                    );
+                }
+            }
             return;
         }
         return;
