@@ -41,6 +41,43 @@ describe("buildEditorFieldOrder", () => {
         ]);
     });
 
+    it("includes object array entry fields such as authorities", () => {
+        const ast = createDefaultDocumentAST();
+        ast.metadata.template_id = "umb-apa";
+        ast.metadata.template_variant_id = null;
+        ast.inputs.authorities = [{ name: "Rector", role: "Rectoría" }];
+
+        const spec = {
+            editor: {
+                inputs: [
+                    { id: "title", type: "string" },
+                    {
+                        id: "authorities",
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: [
+                                { id: "name", type: "string" },
+                                { id: "role", type: "string" },
+                            ],
+                        },
+                    },
+                ],
+                groups: [{ id: "front", inputs: ["title", "authorities"] }],
+            },
+        } as unknown as Parameters<typeof buildEditorFieldOrder>[0];
+
+        const order = buildEditorFieldOrder(spec, null, ast).map(
+            (entry) => entry.fieldId,
+        );
+
+        expect(order).toEqual([
+            projectInputFieldId("/title"),
+            projectInputFieldId("/authorities/0/name"),
+            projectInputFieldId("/authorities/0/role"),
+        ]);
+    });
+
     it("walks fields forward and backward", () => {
         const order = [
             { elementId: "a", fieldId: "a:text" },

@@ -32,15 +32,61 @@
 
 /* Nested table EditorView: content-sized, not body paper (`.bodyPaper`). */
 .inner :global(.ProseMirror) {
+    --body-font-size: var(--font-size-md);
+    --heading-size-6: 1em;
+    --heading-size-5: 1.0625em;
+    --heading-size-4: 1.125em;
+    --heading-size-3: 1.1875em;
+    --heading-size-2: 1.25em;
+    --heading-size-1: 1.375em;
     flex: none;
     min-height: 0;
     padding: 0;
     background: transparent;
     box-shadow: none;
+    font-size: var(--body-font-size);
     outline: none;
     cursor: text;
     white-space: pre-wrap;
     word-wrap: break-word;
+}
+
+.inner :global(.ProseMirror) :global(p) {
+    font-size: var(--heading-size-6);
+    font-weight: var(--font-weight-normal);
+}
+
+.inner :global(.ProseMirror) :global(h1),
+.inner :global(.ProseMirror) :global(h2),
+.inner :global(.ProseMirror) :global(h3),
+.inner :global(.ProseMirror) :global(h4),
+.inner :global(.ProseMirror) :global(h5),
+.inner :global(.ProseMirror) :global(h6) {
+    font-weight: var(--font-weight-bold);
+}
+
+.inner :global(.ProseMirror) :global(h1) {
+    font-size: var(--heading-size-1);
+}
+
+.inner :global(.ProseMirror) :global(h2) {
+    font-size: var(--heading-size-2);
+}
+
+.inner :global(.ProseMirror) :global(h3) {
+    font-size: var(--heading-size-3);
+}
+
+.inner :global(.ProseMirror) :global(h4) {
+    font-size: var(--heading-size-4);
+}
+
+.inner :global(.ProseMirror) :global(h5) {
+    font-size: var(--heading-size-5);
+}
+
+.inner :global(.ProseMirror) :global(h6) {
+    font-size: var(--heading-size-6);
 }
 
 .inner :global(.ProseMirror u) {

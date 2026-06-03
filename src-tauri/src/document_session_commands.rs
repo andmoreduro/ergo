@@ -77,6 +77,20 @@ pub fn import_resource_file(
     Ok(ImportResourceResult { asset, bytes })
 }
 
+#[tauri::command]
+pub fn import_resource_bytes(
+    state: State<'_, TauriAppState>,
+    file_name: String,
+    bytes: Vec<u8>,
+) -> Result<ImportResourceResult, String> {
+    let asset = import_resource_bytes_into_vfs(&state.vfs, &file_name, bytes)?;
+    let stored = state.vfs.read_file(&asset.path)?;
+    Ok(ImportResourceResult {
+        asset,
+        bytes: stored,
+    })
+}
+
 fn is_generated_diagram_asset_path(path: &str) -> bool {
     path.starts_with("assets/diagrams/")
         && path.ends_with(".svg")
@@ -97,15 +111,37 @@ pub(crate) fn import_resource_file_into_vfs(
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| "Imported resource must have a file name".to_string())?;
+    import_resource_bytes_into_vfs(vfs, file_name, bytes)
+}
+
+pub(crate) fn import_resource_bytes_into_vfs(
+    vfs: &crate::vfs::VirtualFileSystem,
+    file_name: &str,
+    bytes: Vec<u8>,
+) -> Result<AssetEntry, String> {
     let path = unique_asset_path(vfs, file_name);
     vfs.write_file(&path, bytes);
 
     Ok(AssetEntry {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: asset_id_for_import_file_name(file_name),
         path,
         kind: kind_for_file_name(file_name).to_string(),
         caption: None,
     })
+}
+
+fn asset_id_for_import_file_name(file_name: &str) -> String {
+    let sanitized = sanitize_file_name(file_name);
+    let stem = sanitized
+        .rsplit_once('.')
+        .map(|(stem, _)| stem)
+        .unwrap_or(sanitized.as_str());
+    if let Some(id) = stem.strip_prefix("image-") {
+        if uuid::Uuid::parse_str(id).is_ok() {
+            return id.to_string();
+        }
+    }
+    uuid::Uuid::new_v4().to_string()
 }
 
 fn unique_asset_path(vfs: &crate::vfs::VirtualFileSystem, file_name: &str) -> String {
@@ -161,6 +197,37 @@ mod tests {
     use crate::vfs::VirtualFileSystem;
     use std::fs;
     use uuid::Uuid;
+
+    #[test]
+    fn import_resource_bytes_uses_uuid_from_image_prefixed_file_name() {
+        let vfs = VirtualFileSystem::new();
+        let id = "550e8400-e29b-41d4-a716-446655440000";
+        let asset = import_resource_bytes_into_vfs(
+            &vfs,
+            &format!("image-{id}.png"),
+            vec![137, 80, 78, 71],
+        )
+        .unwrap();
+
+        assert_eq!(asset.id, id);
+        assert_eq!(asset.path, format!("assets/image-{id}.png"));
+    }
+
+    #[test]
+    fn import_resource_bytes_writes_unique_assets_path() {
+        let vfs = VirtualFileSystem::new();
+        vfs.write_file("assets/pasted.png", vec![1, 2, 3]);
+
+        let asset =
+            import_resource_bytes_into_vfs(&vfs, "pasted.png", vec![137, 80, 78, 71]).unwrap();
+
+        assert_eq!(asset.kind, "image");
+        assert_eq!(asset.path, "assets/pasted-2.png");
+        assert_eq!(
+            vfs.read_file("assets/pasted-2.png").unwrap(),
+            vec![137, 80, 78, 71]
+        );
+    }
 
     #[test]
     fn import_resource_file_copies_bytes_to_unique_assets_path() {

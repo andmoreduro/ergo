@@ -52,9 +52,14 @@ import { TauriApi } from "./api/tauri";
 import type { EquationSyntax } from "./bindings/EquationSyntax";
 import type { ExportFormat } from "./bindings/ExportFormat";
 import type { RichText } from "./bindings/RichText";
+import { exportPdfFileNameFromProjectPath } from "./project/paths";
 import { pageExportFileName, saveExportDialog } from "./platform/export";
 import { CompilerClient, warmupCompiler } from "./workers/compilerClient";
-import { editorCommands, type ElementType } from "./commands/editorCommands";
+import {
+    editorCommands,
+    type ElementType,
+    type InsertElementOptions,
+} from "./commands/editorCommands";
 import { viewCommands } from "./commands/viewCommands";
 import { themeCommands } from "./commands/themeCommands";
 import { editCommands } from "./commands/editCommands";
@@ -66,6 +71,10 @@ import {
     getActiveBodyView,
     getActiveTableCellEditor,
 } from "./editor/prosemirror/activeView";
+import { tryBodyContentInsert } from "./editor/bodyContentInsert";
+import { resolveBodyInsertAnchor } from "./editor/bodyInsertAnchor";
+import { parseHeadingInsertLevel } from "./editor/headingInsert";
+import { resolveContentInsertAnchor } from "./editor/insertContext";
 import { insertBodyInlineEquation } from "./editor/prosemirror/bodyInsert";
 import { setPendingBlockEdit } from "./editor/prosemirror/pendingBlockEdit";
 import {
@@ -358,7 +367,15 @@ const AppShellContent = () => {
         [focusStore],
     );
 
-    const insertElement = useCallback((elementType: ElementType) => {
+    const insertElement = useCallback((
+        elementType: ElementType,
+        options?: InsertElementOptions,
+        invocationPayload?: unknown,
+    ) => {
+        if (tryBodyContentInsert(elementType, options, invocationPayload)) {
+            return;
+        }
+
         const state = getState();
         const focus = focusStore.getSnapshot();
         const contentSection = state.sections.find(
@@ -436,31 +453,17 @@ const AppShellContent = () => {
 
         const sectionId = contentSection.id;
         const id = elementType === "diagram" ? `diagram-${createId()}` : createId();
-        const afterElementId =
-            focus.elementId &&
-            focus.elementId !== "project"
-            && focus.elementId !== "inputs"
-                ? focus.elementId
-                : undefined;
-
-        // If the caret sits on an empty text line, the inserted element replaces
-        // it rather than stacking after it. We only treat empty paragraphs,
-        // headings, and quotes as "empty lines" — block objects, tables, and
-        // lists are not lines and are always inserted after.
-        const replaceTarget =
-            afterElementId === undefined
-                ? undefined
-                : contentSection.elements.find(
-                      (element) => element.id === afterElementId,
-                  );
-        const replaceTargetId =
-            replaceTarget &&
-            (replaceTarget.type === "Paragraph" ||
-                replaceTarget.type === "Heading" ||
-                replaceTarget.type === "Quote") &&
-            richTextPlainLength(replaceTarget.content) === 0
-                ? replaceTarget.id
-                : null;
+        const bodyView = getActiveBodyView();
+        const bodyInsertAnchor = resolveBodyInsertAnchor(bodyView);
+        const anchorElementId = bodyInsertAnchor
+            ? bodyInsertAnchor.afterElementId
+            : focus.elementId &&
+                focus.elementId !== "project" &&
+                focus.elementId !== "inputs"
+              ? focus.elementId
+              : undefined;
+        const { afterElementId, replaceElementId: replaceTargetId } =
+            resolveContentInsertAnchor(contentSection, anchorElementId);
 
         const finishInsert = (
             rustElementType:
@@ -498,9 +501,18 @@ const AppShellContent = () => {
         };
 
         if (elementType === "heading") {
+            const level =
+                options?.headingLevel ??
+                parseHeadingInsertLevel(invocationPayload) ??
+                1;
             dispatch({
                 type: "ADD_HEADING",
-                payload: { sectionId, headingId: id, afterElementId },
+                payload: {
+                    sectionId,
+                    headingId: id,
+                    afterElementId,
+                    level,
+                },
             });
             finishInsert("Heading");
             return;
@@ -623,7 +635,11 @@ const AppShellContent = () => {
             try {
                 const state = getState();
                 if (format === "pdf") {
-                    const path = await saveExportDialog("pdf");
+                    const path = await saveExportDialog(
+                        "pdf",
+                        1,
+                        exportPdfFileNameFromProjectPath(currentProjectPath),
+                    );
                     if (!path) {
                         return;
                     }
@@ -670,7 +686,7 @@ const AppShellContent = () => {
                 );
             }
         },
-        [getState],
+        [currentProjectPath, getState],
     );
 
     const commandContext = useMemo<CommandContext>(
@@ -681,13 +697,20 @@ const AppShellContent = () => {
         [focusedElementId, hasActiveProject],
     );
 
+    const handleCloseProject = useCallback(async () => {
+        await closeProject();
+        setSettingsPanel(null);
+        setCommandPaletteOpen(false);
+        cancelNewProjectDialog();
+    }, [cancelNewProjectDialog, closeProject]);
+
     const commands = useMemo<Command[]>(
         () => [
             ...workspaceCommands({
                 showNewProjectDialog,
                 openProject,
                 saveProject,
-                closeProject,
+                closeProject: handleCloseProject,
                 recentProjectsRef,
                 exportDocument,
             }),
@@ -717,7 +740,7 @@ const AppShellContent = () => {
             ...helpCommands(),
         ],
         [
-            closeProject,
+            handleCloseProject,
             canRedo,
             canUndo,
             applyRichTextMark,
@@ -737,6 +760,7 @@ const AppShellContent = () => {
         () => createCommandRegistry(commands),
         [commands],
     );
+
     const {
         filteredCommands,
         runCommand,
@@ -752,6 +776,8 @@ const AppShellContent = () => {
         commandRegistry,
         commandContext,
         setDocumentFocus,
+        insertElement,
+        closeProject: handleCloseProject,
     });
 
     const isCommandEnabled = useCallback(

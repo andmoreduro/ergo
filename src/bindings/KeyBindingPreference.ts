@@ -2,4 +2,4 @@
 import type { ActionId } from "./ActionId";
 import type { KeyStroke } from "./KeyStroke";
 
-export type KeyBindingPreference = { action_id: ActionId, context: string, sequence: Array<KeyStroke>, };
+export type KeyBindingPreference = { action_id: ActionId, context: string, sequence: Array<KeyStroke>, payload: unknown | null, };

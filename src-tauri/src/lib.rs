@@ -98,6 +98,7 @@ pub fn run() {
             document_session_commands::sync_document_events,
             document_session_commands::get_document_session_status,
             document_session_commands::import_resource_file,
+            document_session_commands::import_resource_bytes,
             document_session_commands::read_vfs_file,
             document_session_commands::write_generated_asset,
             settings::load_global_settings,

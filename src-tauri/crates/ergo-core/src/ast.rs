@@ -463,6 +463,9 @@ pub struct KeyBindingPreference {
     pub action_id: ActionId,
     pub context: String,
     pub sequence: Vec<KeyStroke>,
+    #[serde(default)]
+    #[ts(type = "unknown | null")]
+    pub payload: Option<serde_json::Value>,
 }
 
 pub fn normalize_key_name(key: &str) -> String {

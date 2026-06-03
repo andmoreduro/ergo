@@ -47,6 +47,33 @@ sequenceDiagram
 - Preview does not shift layout with compile-status chrome while typing.
 - **Undo/redo:** apply the stored `inverseEvents` / `forwardEvents` locally, then sync and mirror the full ordered event list with sequential event IDs. Destructive inverses carry restore payloads (`RestoreElement`, `RestoreTableRow`, `RestoreTableColumn`).
 
+### Body clipboard paste
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor User
+    participant PM as ProseMirror Body Editor
+    participant Paste as Clipboard Paste Handlers
+    participant API as Tauri API
+    participant Worker as WASM Worker
+    participant State as Document State
+
+    User->>PM: Paste (image on clipboard)
+    PM->>Paste: handlePaste (first matching handler)
+    Paste->>API: import_resource_bytes(file_name, bytes)
+    API-->>Paste: AssetEntry + VFS path
+    Paste->>Worker: writeFile(assets/…)
+    Paste->>State: ADD_FIGURE, ADD_ASSET, UPDATE_FIGURE
+    State-->>PM: Reconcile figure block
+```
+
+- Handlers live under `src/editor/clipboard/`; each handler exposes `canHandle` and `handle` so future formats (e.g. spreadsheet cells into tables) register without changing the ProseMirror plugin.
+- Image paste follows `TemplateSpec.typst.resources.pasted_image.behavior` (`figure` inserts a figure with `asset_id` set).
+- Asset paths use the same `assets/{name}` collision rules as `import_resource_file`.
+- Paste is handled in the body editor only; nested table-cell editors keep native text paste until a dedicated handler exists.
+
 ## 2. Archive Save And Autosave
 
 New project:

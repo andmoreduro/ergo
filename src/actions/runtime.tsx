@@ -11,13 +11,19 @@ import {
 } from "react";
 import { TauriApi } from "../api/tauri";
 import { buildActionContextSnapshot } from "../editor/buildActionContextSnapshot";
+import { resolveBodyEditorInsertShortcut } from "../editor/editorBodyShortcuts";
 import { captureBodyTabKey, getActiveBodyView } from "../editor/prosemirror/activeView";
 import { runBodyTab } from "../editor/prosemirror/bodyTabCommand";
+import {
+    isAltGrStyleChord,
+    normalizeShortcutKey,
+    resolveShortcutKey,
+    shortcutChordModifiers,
+} from "../editor/shortcutKeyFromKeyboardEvent";
 import type { ActionContextNode } from "../bindings/ActionContextNode";
 import type { ActionContextSnapshot } from "../bindings/ActionContextSnapshot";
 import type { ActionId } from "../bindings/ActionId";
 import type { ActionInvocation } from "../bindings/ActionInvocation";
-import type { KeyModifier } from "../bindings/KeyModifier";
 import type { LogicalKeyEvent } from "../bindings/LogicalKeyEvent";
 
 export type ActionHandler = (
@@ -62,39 +68,11 @@ const isInEditorColumn = (target: EventTarget | null): boolean =>
     target instanceof HTMLElement &&
     Boolean(target.closest(EDITOR_COLUMN_SELECTOR));
 
-const normalizeKey = (key: string): string => {
-    if (key === " " || key === "Spacebar") {
-        return "space";
-    }
-
-    if (key.length === 1) {
-        return key.toLocaleLowerCase();
-    }
-
-    return key.toLowerCase();
-};
-
-const eventToLogicalKeyEvent = (event: KeyboardEvent): LogicalKeyEvent => {
-    const modifiers: KeyModifier[] = [];
-    if (event.ctrlKey) {
-        modifiers.push("Control");
-    }
-    if (event.altKey) {
-        modifiers.push("Alt");
-    }
-    if (event.shiftKey) {
-        modifiers.push("Shift");
-    }
-    if (event.metaKey) {
-        modifiers.push("Meta");
-    }
-
-    return {
-        window_id: "main",
-        key: normalizeKey(event.key),
-        modifiers,
-    };
-};
+const eventToLogicalKeyEvent = (event: KeyboardEvent): LogicalKeyEvent => ({
+    window_id: "main",
+    key: resolveShortcutKey(event),
+    modifiers: shortcutChordModifiers(event),
+});
 
 export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => {
     const nodesRef = useRef(new Map<string, RegisteredContextNode>());
@@ -184,7 +162,7 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
 
             clearPendingFallback();
 
-            const tabKey = normalizeKey(event.key) === "tab";
+            const tabKey = normalizeShortcutKey(event.key) === "tab";
             const inEditorColumn = isInEditorColumn(event.target);
             if (tabKey) {
                 captureBodyTabKey(event);
@@ -238,34 +216,61 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
             // Block native ONLY inside the body surface; plain contenteditable
             // fields (captions, template inputs) keep their behavior. Tracked via
             // `preventedBySelf` so the resolver below still runs.
-            const markKey = normalizeKey(event.key);
+            const markKey = normalizeShortcutKey(event.key);
             const isMarkShortcut =
                 (event.ctrlKey || event.metaKey) &&
                 !event.altKey &&
                 !event.shiftKey &&
                 (markKey === "b" || markKey === "i" || markKey === "u");
-            const isAltGrChord = event.ctrlKey && event.altKey;
+            const isAltGrChord = isAltGrStyleChord(event);
             const bodyView = getActiveBodyView();
             const targetNode =
                 event.target instanceof Node ? event.target : null;
+            const targetEl =
+                event.target instanceof HTMLElement ? event.target : null;
             const inBodySurface =
                 bodyView !== null &&
                 targetNode !== null &&
                 bodyView.dom.contains(targetNode);
-            if (inBodySurface && (isMarkShortcut || isAltGrChord)) {
+            const inBodyEditor =
+                inBodySurface ||
+                Boolean(targetEl?.closest("[data-ergo-body-editor]"));
+            if (inBodySurface && isMarkShortcut) {
+                event.preventDefault();
+                preventedBySelf = true;
+            }
+            if ((inBodyEditor || inEditorColumn) && isAltGrChord) {
                 event.preventDefault();
                 preventedBySelf = true;
             }
 
+            const hasShortcutModifiers =
+                event.ctrlKey ||
+                event.metaKey ||
+                event.altKey ||
+                (event.getModifierState?.("AltGraph") ?? false);
+
             const isPlainTextInput =
                 targetIsEditable &&
-                !event.ctrlKey &&
-                !event.metaKey &&
-                !event.altKey &&
+                !hasShortcutModifiers &&
                 event.key.length === 1;
 
             if (isPlainTextInput) {
                 return;
+            }
+
+            if (inBodyEditor) {
+                const bodyShortcut = resolveBodyEditorInsertShortcut(event);
+                if (bodyShortcut) {
+                    event.preventDefault();
+                    preventedBySelf = true;
+                    void dispatchAction(bodyShortcut).then((handled) => {
+                        if (handled) {
+                            event.preventDefault();
+                        }
+                    });
+                    return;
+                }
             }
 
             // Resolve keys after the target (ProseMirror, inputs, …) runs so synchronous

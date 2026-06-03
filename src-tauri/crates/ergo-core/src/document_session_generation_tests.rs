@@ -872,7 +872,6 @@ fn umb_apa_source_generation_matches_spec() {
     
     let mut inputs = HashMap::new();
     inputs.insert("title".to_string(), json!("UMB APA Title"));
-    inputs.insert("running_head".to_string(), json!("Running Head Text"));
     inputs.insert("authors".to_string(), json!([
         {
             "name": "Author 1",
@@ -911,9 +910,12 @@ fn umb_apa_source_generation_matches_spec() {
             template_id: "umb-apa".to_string(),
             template_variant_id: None,
             title: "UMB APA Title".to_string(),
-            running_head: Some("Running Head Text".to_string()),
+            running_head: None,
             keywords: vec![],
-            project_settings: ProjectSettings::default(),
+            project_settings: ProjectSettings {
+                language: Some("es".to_string()),
+                ..ProjectSettings::default()
+            },
             local_overrides: GlobalSettings::default(),
         },
         dependencies: DependencyManifest { packages: vec![] },
@@ -993,8 +995,11 @@ fn umb_apa_source_generation_matches_spec() {
     assert!(main.contains("keywords-es: (\"clave1\", \"clave2\")"), "should map keywords-es:\n{main}");
     assert!(main.contains("keywords-en: (\"key1\", \"key2\")"), "should map keywords-en:\n{main}");
 
-    // running_head still flows through the document show rule in lib.typ
-    assert!(generated.lib_source.contains("running-head: [Running Head Text]"), "lib.typ should pass running-head to show rule:\n{}", generated.lib_source);
+    assert!(
+        !generated.lib_source.contains("running-head:"),
+        "UMB lib.typ should not pass running-head to the show rule:\n{}",
+        generated.lib_source
+    );
 
     // Body element includes still appear after front matter.
     let front_matter_pos = main.find("#front-matter").unwrap();
@@ -1004,6 +1009,14 @@ fn umb_apa_source_generation_matches_spec() {
     // Bibliography and appendix generation still appear in the expected order.
     let bib_pos = main.find("#bibliography").unwrap();
     assert!(body_pos < bib_pos, "body includes should precede bibliography:\n{main}");
+    assert!(
+        main.contains("#heading(level: 1, numbering: none, outlined: false)[Referencias]"),
+        "Spanish bibliography section label per guía §13:\n{main}"
+    );
+    assert!(
+        !main.contains("kind: table"),
+        "UMB default outlines omit separate table lists:\n{main}"
+    );
 }
 
 #[test]

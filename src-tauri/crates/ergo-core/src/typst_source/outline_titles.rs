@@ -7,6 +7,8 @@ pub(crate) const OUTLINE_EQUATIONS_TITLE: &str = "outline.equations_title";
 pub(crate) const OUTLINE_LISTINGS_TITLE: &str = "outline.listings_title";
 pub(crate) const OUTLINE_APPENDICES_TITLE: &str = "outline.appendices_title";
 
+pub(crate) const BIBLIOGRAPHY_SECTION_TITLE: &str = "bibliography.section_title";
+
 struct OutlineTitleSet {
     contents: &'static str,
     tables: &'static str,
@@ -14,6 +16,7 @@ struct OutlineTitleSet {
     equations: &'static str,
     listings: &'static str,
     appendices: &'static str,
+    bibliography: &'static str,
 }
 
 const EN: OutlineTitleSet = OutlineTitleSet {
@@ -23,6 +26,7 @@ const EN: OutlineTitleSet = OutlineTitleSet {
     equations: "Equations",
     listings: "Listings",
     appendices: "Appendices",
+    bibliography: "References",
 };
 
 const ES: OutlineTitleSet = OutlineTitleSet {
@@ -32,6 +36,7 @@ const ES: OutlineTitleSet = OutlineTitleSet {
     equations: "Ecuaciones",
     listings: "Listados",
     appendices: "Apéndices",
+    bibliography: "Referencias",
 };
 
 /// Primary language tag from `ProjectSettings.language` (e.g. `es-MX` → `es`).
@@ -63,8 +68,13 @@ pub(crate) fn default_outline_title(language: Option<&str>, title_key: &str) -> 
         OUTLINE_EQUATIONS_TITLE => titles.equations,
         OUTLINE_LISTINGS_TITLE => titles.listings,
         OUTLINE_APPENDICES_TITLE => titles.appendices,
+        BIBLIOGRAPHY_SECTION_TITLE => titles.bibliography,
         _ => EN.contents,
     }
+}
+
+pub(crate) fn default_bibliography_section_title(language: Option<&str>) -> &'static str {
+    default_outline_title(language, BIBLIOGRAPHY_SECTION_TITLE)
 }
 
 #[cfg(test)]

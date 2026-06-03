@@ -4,8 +4,16 @@
  * Do not put these rules on a wrapper around the mount.
  */
 .bodyPaper {
+    --body-font-size: var(--font-size-md);
+    --heading-size-6: 1em;
+    --heading-size-5: 1.0625em;
+    --heading-size-4: 1.125em;
+    --heading-size-3: 1.1875em;
+    --heading-size-2: 1.25em;
+    --heading-size-1: 1.375em;
     display: flex;
     flex-direction: column;
+    gap: 0.5em;
     /* `auto` basis sizes to content, so the paper grows past one viewport when
        the document is long; flex-grow still lets a short document fill the pane. */
     flex: 1 0 auto;
@@ -16,16 +24,112 @@
     background-color: var(--color-bg-primary);
     box-shadow: var(--shadow-content-paper);
     cursor: text;
+    font-size: var(--body-font-size);
     outline: none;
     white-space: pre-wrap;
     word-wrap: break-word;
 }
 
 .bodyPaper > :global(p),
+.bodyPaper > :global(h1),
+.bodyPaper > :global(h2),
+.bodyPaper > :global(h3),
+.bodyPaper > :global(h4),
+.bodyPaper > :global(h5),
+.bodyPaper > :global(h6),
 .bodyPaper > :global(blockquote),
 .bodyPaper > :global(ul),
 .bodyPaper > :global(ol) {
     margin: 0;
+}
+
+.bodyPaper > :global(p) {
+    font-size: var(--heading-size-6);
+    font-weight: var(--font-weight-normal);
+}
+
+.bodyPaper > :global(h1),
+.bodyPaper > :global(h2),
+.bodyPaper > :global(h3),
+.bodyPaper > :global(h4),
+.bodyPaper > :global(h5),
+.bodyPaper > :global(h6) {
+    font-weight: var(--font-weight-bold);
+}
+
+.bodyPaper > :global(h1) {
+    font-size: var(--heading-size-1);
+}
+
+.bodyPaper > :global(h2) {
+    font-size: var(--heading-size-2);
+}
+
+.bodyPaper > :global(h3) {
+    font-size: var(--heading-size-3);
+}
+
+.bodyPaper > :global(h4) {
+    font-size: var(--heading-size-4);
+}
+
+.bodyPaper > :global(h5) {
+    font-size: var(--heading-size-5);
+}
+
+.bodyPaper > :global(h6) {
+    font-size: var(--heading-size-6);
+}
+
+.bodyPaper > :global(h1),
+.bodyPaper > :global(h2),
+.bodyPaper > :global(h3),
+.bodyPaper > :global(h4),
+.bodyPaper > :global(h5),
+.bodyPaper > :global(h6) {
+    display: grid;
+    grid-template-columns: min-content minmax(0, 1fr);
+    column-gap: var(--space-2);
+    align-items: baseline;
+}
+
+.bodyPaper > :global(h1)::before,
+.bodyPaper > :global(h2)::before,
+.bodyPaper > :global(h3)::before,
+.bodyPaper > :global(h4)::before,
+.bodyPaper > :global(h5)::before,
+.bodyPaper > :global(h6)::before {
+    font-family: var(--font-family-sans);
+    font-size: var(--body-font-size);
+    font-weight: var(--font-weight-medium);
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--color-text-secondary);
+    user-select: none;
+}
+
+.bodyPaper > :global(h1)::before {
+    content: "H1";
+}
+
+.bodyPaper > :global(h2)::before {
+    content: "H2";
+}
+
+.bodyPaper > :global(h3)::before {
+    content: "H3";
+}
+
+.bodyPaper > :global(h4)::before {
+    content: "H4";
+}
+
+.bodyPaper > :global(h5)::before {
+    content: "H5";
+}
+
+.bodyPaper > :global(h6)::before {
+    content: "H6";
 }
 
 .bodyPaper > :global(blockquote) {

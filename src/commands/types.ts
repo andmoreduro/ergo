@@ -24,6 +24,7 @@ export interface KeyBinding {
     scope: CommandScope;
     context: string;
     sequence: KeyStroke[];
+    payload?: unknown;
 }
 
 export interface KeymapProfile {

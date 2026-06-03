@@ -16,6 +16,8 @@ export const createId = (): string => {
     return `local-${Date.now()}-${fallbackIdCounter}`;
 };
 
+export const emptyAuthorityEntry = () => ({ name: "", role: "" });
+
 export const createRichText = (text = ""): RichText => ({
     text,
     bold: null,
@@ -197,7 +199,6 @@ export const createDocumentAST = (
         ast.dependencies = { packages: [] };
         ast.inputs = {
             title: "Untitled Document",
-            running_head: "",
             authors: [{ name: "", affiliations: [], degrees: [] }],
             affiliations: [],
             degrees: [],
@@ -209,7 +210,7 @@ export const createDocumentAST = (
             city: "",
             country: "",
             year: new Date().getFullYear().toString(),
-            authorities: [],
+            authorities: [emptyAuthorityEntry()],
             acknowledgements: "",
             abstract_es: "",
             keywords_es: [],

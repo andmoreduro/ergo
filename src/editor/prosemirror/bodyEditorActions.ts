@@ -1,4 +1,7 @@
 import type { ActionHandlerMap } from "../../actions/runtime";
+import type { ActionInvocation } from "../../bindings/ActionInvocation";
+import type { ElementType } from "../../commands/editorCommands";
+import { tryBodyContentInsert } from "../bodyContentInsert";
 import {
     getActiveBodyView,
     getBodyAstDispatch,
@@ -30,6 +33,29 @@ const withBodyView = (
     };
 };
 
+const bodyInsertHandler =
+    (elementType: ElementType) =>
+    (invocation: ActionInvocation): boolean => {
+        if (tryBodyContentInsert(elementType, undefined, invocation.payload)) {
+            return true;
+        }
+        return false;
+    };
+
+const insertHandlers = (): ActionHandlerMap => ({
+    "editor::InsertParagraph": bodyInsertHandler("paragraph"),
+    "editor::InsertHeading": bodyInsertHandler("heading"),
+    "editor::InsertQuote": bodyInsertHandler("quote"),
+    "editor::InsertList": bodyInsertHandler("list"),
+    "editor::InsertEnumeration": bodyInsertHandler("enumeration"),
+    "editor::InsertTable": bodyInsertHandler("table"),
+    "editor::InsertEquation": bodyInsertHandler("equation"),
+    "editor::InsertBlockEquation": bodyInsertHandler("equation"),
+    "editor::InsertInlineEquation": bodyInsertHandler("inlineEquation"),
+    "editor::InsertFigure": bodyInsertHandler("figure"),
+    "editor::InsertDiagram": bodyInsertHandler("diagram"),
+});
+
 const tableCellForbiddenHandlers = (): ActionHandlerMap => {
     const handlers: ActionHandlerMap = {};
     for (const id of TABLE_CELL_FORBIDDEN_ACTION_IDS) {
@@ -39,6 +65,7 @@ const tableCellForbiddenHandlers = (): ActionHandlerMap => {
 };
 
 export const bodyEditorActionHandlers = (): ActionHandlerMap => ({
+    ...insertHandlers(),
     ...tableCellForbiddenHandlers(),
     "editor::SelectCurrentElement": withBodyView((view) =>
         selectCurrentElement(view.state, view.dispatch.bind(view)),

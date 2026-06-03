@@ -15,7 +15,7 @@ use crate::typst_source::element_content_hash;
 use crate::typst_source::{
     element_fragment, element_id, element_path, escape_typst_string, format_json_val,
     generate_lib_typst, generate_references_bib, hash_source, label_for_id, push_package_imports,
-    generate_front_matter_outlines, resolve_param_builder,
+    effective_bibliography_section_title, generate_front_matter_outlines, resolve_param_builder,
 };
 
 #[cfg(test)]
@@ -290,6 +290,14 @@ fn generate_project_sources_inner(
                     if section_spec.pagebreak_before {
                         main_builder.push_literal("#pagebreak()\n");
                     }
+                    let bib_title = effective_bibliography_section_title(
+                        document_language,
+                        outline_overrides,
+                    );
+                    main_builder.push_literal(&format!(
+                        "#heading(level: 1, numbering: none, outlined: false)[{}]\n",
+                        escape_typst_string(bib_title)
+                    ));
                     let file = section_spec.file.as_deref().unwrap_or("references.bib");
                     main_builder
                         .push_literal(&format!("#bibliography(\"{}\", full: true)\n\n", file));
