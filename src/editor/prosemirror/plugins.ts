@@ -12,6 +12,7 @@ import { regenerateElementIds } from "./elementIds";
 import { ATOM_BLOCK_NODES } from "./schema";
 import { tableBlockFocusPlugin } from "./tableBlockFocus";
 import { blockEditModePlugin } from "./blockEditMode";
+import { clipboardPastePlugin } from "./clipboardPastePlugin";
 import {
     blockOutsidePointerPlugin,
     blockSelectionGuardPlugin,
@@ -185,6 +186,7 @@ const typingKeymap = keymap(
 // toggled it back off), which the toolbar — single path — never hit.
 
 export const bodyPlugins = () => [
+    clipboardPastePlugin(),
     blockEditModePlugin(),
     // Before `typingKeymap` (baseKeymap): locked-block Tab / Ctrl+Enter / Enter
     // must run first or splitBlock and other defaults steal the keys.

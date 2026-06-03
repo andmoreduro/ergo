@@ -1,7 +1,7 @@
 use super::*;
 use crate::ast::{DocumentElement, DocumentSection};
 use crate::document_session::{DocumentSession, FieldSourceMapEntry};
-use crate::preview_sync_lookup::caret_utf16_distance_to_entry;
+use crate::preview_sync_lookup::{caret_utf16_distance_to_entry, field_entry_closest_to_caret};
 use crate::test_fixtures::preview_sync_document_ast;
 use crate::vfs::VirtualFileSystem;
 use crate::world::ErgoWorld;

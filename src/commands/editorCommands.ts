@@ -13,8 +13,12 @@ export type ElementType =
     | "enumeration"
     | "figure";
 
+export type InsertElementOptions = {
+    headingLevel?: number;
+};
+
 export interface EditorCommandDeps {
-    insertElement: (elementType: ElementType) => void;
+    insertElement: (elementType: ElementType, options?: InsertElementOptions) => void;
     applyRichTextMark: (mark: "bold" | "italic" | "underline") => void;
 }
 

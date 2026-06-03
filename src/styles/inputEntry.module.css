@@ -1,0 +1,35 @@
+/* Shared layout for template inputs with one or more grouped entries (authors, authorities, director, …). */
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: var(--border-width-sm) solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    background-color: var(--color-bg-secondary);
+}
+
+.cardWithRemove {
+    padding-inline-end: calc(var(--space-3) + var(--size-icon) + var(--space-2));
+}
+
+.removeButton {
+    position: absolute;
+    top: var(--space-2);
+    inset-inline-end: var(--space-2);
+    z-index: 1;
+}

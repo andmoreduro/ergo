@@ -1,7 +1,8 @@
 import { useCallback } from "react";
 import type { InputSchema } from "../../../bindings/InputSchema";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
-import { EditorAddButton } from "../../atoms/EditorAddButton/EditorAddButton";
+import { InputEntryAddButton } from "../InputEntryControls/InputEntryAddButton";
+import { InputEntryRemoveButton } from "../InputEntryControls/InputEntryRemoveButton";
 import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
 import { TextInput } from "../../atoms/TextInput/TextInput";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
@@ -19,6 +20,7 @@ import {
     type ListReferenceStyle,
 } from "../../../project/listReferenceId";
 import { m } from "../../../paraglide/messages.js";
+import entryStyles from "../../../styles/inputEntry.module.css";
 import styles from "./AuthorsField.module.css";
 
 type AuthorEntry = {
@@ -30,6 +32,9 @@ type AuthorEntry = {
 export interface AuthorsFieldProps {
     label: string;
     importance?: InputSchema["importance"];
+    nameLabel: string;
+    nameImportance?: InputSchema["importance"];
+    namePlaceholder?: string;
     authors: AuthorEntry[];
     affiliations: unknown[];
     degrees?: unknown[];
@@ -149,6 +154,9 @@ const AuthorRow = ({
     degrees,
     affiliationsLabel,
     degreesLabel,
+    nameLabel,
+    nameImportance,
+    namePlaceholder,
     referenceStyle,
     showDegrees,
 }: {
@@ -158,6 +166,9 @@ const AuthorRow = ({
     degrees: unknown[];
     affiliationsLabel: string;
     degreesLabel: string;
+    nameLabel: string;
+    nameImportance?: InputSchema["importance"];
+    namePlaceholder?: string;
     referenceStyle: ListReferenceStyle;
     showDegrees: boolean;
 }) => {
@@ -193,11 +204,13 @@ const AuthorRow = ({
         : [];
 
     return (
-        <div className={styles.authorBlock}>
+        <>
             <TextInput
                 {...nameBinding}
-                className={styles.nameInput}
-                placeholder={m.editor_author_name()}
+                fullWidth
+                importance={nameImportance}
+                label={nameLabel}
+                placeholder={namePlaceholder}
                 value={draft}
                 onChange={(event) => updateName(event.target.value)}
                 onKeyDown={(event) => {
@@ -234,13 +247,16 @@ const AuthorRow = ({
                     selectedReferences={degreeReferences}
                 />
             ) : null}
-        </div>
+        </>
     );
 };
 
 export const AuthorsField = ({
     label,
     importance,
+    nameLabel,
+    nameImportance,
+    namePlaceholder,
     authors,
     affiliations,
     degrees = [],
@@ -266,30 +282,48 @@ export const AuthorsField = ({
         });
     }, [authors.length, dispatch, showDegrees]);
 
+    const removeAuthor = useCallback(
+        (index: number) => {
+            dispatch({
+                type: "REMOVE_INPUT_ARRAY_ITEM",
+                payload: { path: "/authors", index },
+            });
+        },
+        [dispatch],
+    );
+
     return (
         <div className={styles.field}>
             <FieldLabel importance={importance ?? undefined}>{label}</FieldLabel>
             {authors.length > 0 && (
-                <div className={styles.authorList}>
+                <div className={entryStyles.list}>
                     {authors.map((author, index) => (
-                        <AuthorRow
-                            author={author}
-                            authorIndex={index}
-                            affiliations={affiliations}
-                            affiliationsLabel={affiliationsLabel}
-                            degrees={degrees}
-                            degreesLabel={degreesLabel}
+                        <div
+                            className={`${entryStyles.card} ${entryStyles.cardWithRemove}`}
                             key={`author-${index}`}
-                            referenceStyle={referenceStyle}
-                            showDegrees={showDegrees}
-                        />
+                        >
+                            <InputEntryRemoveButton
+                                ariaLabel={m.editor_remove_author()}
+                                onClick={() => removeAuthor(index)}
+                            />
+                            <AuthorRow
+                                author={author}
+                                authorIndex={index}
+                                affiliations={affiliations}
+                                affiliationsLabel={affiliationsLabel}
+                                degrees={degrees}
+                                degreesLabel={degreesLabel}
+                                nameImportance={nameImportance}
+                                nameLabel={nameLabel}
+                                namePlaceholder={namePlaceholder}
+                                referenceStyle={referenceStyle}
+                                showDegrees={showDegrees}
+                            />
+                        </div>
                     ))}
                 </div>
             )}
-            <EditorAddButton
-                ariaLabel={m.editor_add_author()}
-                onClick={addAuthor}
-            />
+            <InputEntryAddButton label={label} onClick={addAuthor} />
         </div>
     );
 };

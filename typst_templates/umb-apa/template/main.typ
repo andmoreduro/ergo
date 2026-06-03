@@ -1,4 +1,4 @@
-#import "../lib.typ": front-matter, appendix, appendix-outline, versatile-apa as apa-style
+#import "../lib.typ": front-matter, appendix, appendix-outline, apa-style
 
 #set document(
   title: [American Psychological Association (APA) Style Template for Typst],
@@ -8,7 +8,6 @@
 
 #show: apa-style.with(
   font-size: 12pt,
-  running-head: [APA Style Template for Typst],
 )
 
 #front-matter(
@@ -52,17 +51,7 @@
   keywords-en: ("Keyword", "One"),
 )
 
-#outline()
-#pagebreak()
-#outline(target: figure.where(kind: table), title: [Tables])
-#pagebreak()
-#outline(target: figure.where(kind: image), title: [Figures])
-#pagebreak()
-#outline(target: figure.where(kind: math.equation), title: [Equations])
-#pagebreak()
-#outline(target: figure.where(kind: raw), title: [Listings])
-#pagebreak()
-#appendix-outline(title: [Appendices])
+#outline(title: [Contents])
 #pagebreak()
 
 #include "sections/introduction.typ"

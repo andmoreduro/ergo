@@ -6,7 +6,7 @@ import { forwardRef } from "react";
  * in `ProseMirrorBodyEditor`, not on a parent wrapper.
  */
 export const ProseMirrorSurface = forwardRef<HTMLDivElement>((_props, ref) => (
-    <div ref={ref} spellCheck={false} />
+    <div ref={ref} spellCheck={false} data-ergo-body-editor="" />
 ));
 
 ProseMirrorSurface.displayName = "ProseMirrorSurface";

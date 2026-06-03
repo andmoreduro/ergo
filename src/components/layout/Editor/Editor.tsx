@@ -30,12 +30,14 @@ import { InsertReferenceDialog } from "../../organisms/InsertReferenceDialog/Ins
 import type { TargetedOutlineEntry } from "../../../editor/outlineMatching";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
 import { ProseMirrorBodyEditor } from "../../organisms/ProseMirrorBodyEditor/ProseMirrorBodyEditor";
-import { Button } from "../../atoms/Button/Button";
+import { InputEntryAddButton } from "../../molecules/InputEntryControls/InputEntryAddButton";
+import { InputEntryRemoveButton } from "../../molecules/InputEntryControls/InputEntryRemoveButton";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
 import { Textarea } from "../../atoms/Textarea/Textarea";
 import { EditorToolbar } from "../../organisms/EditorToolbar/EditorToolbar";
 import { m } from "../../../paraglide/messages.js";
+import entryStyles from "../../../styles/inputEntry.module.css";
 import styles from "./Editor.module.css";
 import type { InputSchema } from "../../../bindings/InputSchema";
 import type { TemplateSpec } from "../../../bindings/TemplateSpec";
@@ -372,8 +374,11 @@ const EditorComponent = ({
                 void dispatchAction({ id: "editor::Italic", payload: null }),
             onUnderline: () =>
                 void dispatchAction({ id: "editor::Underline", payload: null }),
-            onInsertHeading: () =>
-                void dispatchAction({ id: "editor::InsertHeading", payload: null }),
+            onInsertHeading: (level) =>
+                void dispatchAction({
+                    id: "editor::InsertHeading",
+                    payload: { level },
+                }),
             onInsertParagraph: () =>
                 void dispatchAction({ id: "editor::InsertParagraph", payload: null }),
             onInsertQuote: () =>
@@ -582,6 +587,12 @@ const templateInputSchema = (
     inputId: string,
 ): InputSchema | undefined => spec?.editor?.inputs?.find((input) => input.id === inputId);
 
+const authorItemProperty = (
+    authorSchema: InputSchema,
+    propertyId: string,
+): InputSchema | undefined =>
+    authorSchema.items?.properties?.find((property) => property.id === propertyId);
+
 const authorReferenceGroupLabel = (
     spec: TemplateSpec | null,
     authorSchema: InputSchema,
@@ -623,6 +634,7 @@ const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
     );
     const referenceStyle =
         templateId === "umb-apa" ? "lowercase-alpha" : "numeric";
+    const nameProperty = authorItemProperty(schema, "name");
 
     return (
         <AuthorsField
@@ -647,6 +659,15 @@ const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
             )}
             importance={schema.importance ?? undefined}
             label={getFieldLabel(schema, label, t)}
+            nameImportance={nameProperty?.importance ?? undefined}
+            nameLabel={
+                nameProperty ? getFieldLabel(nameProperty, undefined, t) : ""
+            }
+            namePlaceholder={
+                nameProperty
+                    ? getFieldPlaceholder(nameProperty, undefined, t)
+                    : ""
+            }
             referenceStyle={referenceStyle}
         />
     );
@@ -787,16 +808,16 @@ const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
 };
 
 const DynamicFieldObject = ({ schema, path, label }: DynamicFieldProps) => {
+    const sectionLabel = getFieldLabel(schema, label);
+
     return (
-        <div className={styles.objectContainer}>
-            {getFieldLabel(schema, label) && (
-                <div className={styles.objectHeader}>
-                    <FieldLabel importance={schema.importance ?? undefined}>
-                        {getFieldLabel(schema, label)}
-                    </FieldLabel>
-                </div>
-            )}
-            <div className={styles.objectContent}>
+        <div className={entryStyles.section}>
+            {sectionLabel ? (
+                <FieldLabel importance={schema.importance ?? undefined}>
+                    {sectionLabel}
+                </FieldLabel>
+            ) : null}
+            <div className={entryStyles.card}>
                 {(schema.properties ?? []).map((prop) => {
                     const propPath = `${path}/${prop.id}`;
                     return (
@@ -995,67 +1016,64 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
     };
 
     return (
-        <div className={styles.arrayContainer}>
-            <div className={styles.arrayHeader}>
-                <FieldLabel importance={schema.importance ?? undefined}>
-                    {getFieldLabel(schema, label)}
-                </FieldLabel>
-            </div>
-            <div className={styles.arrayList}>
-                {items.map((item: any, index: number) => {
-                    const itemPath = `${path}/${index}`;
-                    return (
-                        <div key={index} className={styles.arrayItemRow}>
-                            <div className={styles.arrayItemContent}>
-                                {schema.items?.type === "object" && schema.items.properties ? (
-                                    schema.items.properties.map((prop) => {
-                                        const propPath = `${itemPath}/${prop.id}`;
-                                        if (prop.id === "id" && prop.type === "integer") {
-                                            return (
-                                                <div key={prop.id} className={styles.badge}>
-                                                    ID: {item.id}
-                                                </div>
-                                            );
-                                        }
-
-                                        return (
-                                            <DynamicField
-                                                key={prop.id}
-                                                schema={prop}
-                                                path={propPath}
-                                                label={prop.label ?? undefined}
-                                            />
-                                        );
-                                    })
-                                ) : (
-                                    <DynamicField
-                                        schema={schema.items!}
-                                        path={itemPath}
-                                    />
-                                )}
-                            </div>
-                            <Button
-                                type="button"
-                                variant="danger"
-                                size="small"
-                                onClick={() => handleRemoveItem(index)}
+        <div className={entryStyles.section}>
+            <FieldLabel importance={schema.importance ?? undefined}>
+                {getFieldLabel(schema, label)}
+            </FieldLabel>
+            {items.length > 0 ? (
+                <div className={entryStyles.list}>
+                    {items.map((item: any, index: number) => {
+                        const itemPath = `${path}/${index}`;
+                        return (
+                            <div
+                                className={`${entryStyles.card} ${entryStyles.cardWithRemove}`}
+                                key={index}
                             >
-                                {m.editor_remove_item()}
-                            </Button>
-                        </div>
-                    );
-                })}
-            </div>
-            <Button
-                type="button"
-                variant="secondary"
-                size="small"
+                                <InputEntryRemoveButton
+                                    onClick={() => handleRemoveItem(index)}
+                                />
+                                {schema.items?.type === "object" &&
+                                    schema.items.properties ? (
+                                        schema.items.properties.map((prop) => {
+                                            const propPath = `${itemPath}/${prop.id}`;
+                                            if (
+                                                prop.id === "id" &&
+                                                prop.type === "integer"
+                                            ) {
+                                                return (
+                                                    <div
+                                                        key={prop.id}
+                                                        className={styles.badge}
+                                                    >
+                                                        ID: {item.id}
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <DynamicField
+                                                    key={prop.id}
+                                                    schema={prop}
+                                                    path={propPath}
+                                                    label={prop.label ?? undefined}
+                                                />
+                                            );
+                                        })
+                                    ) : (
+                                        <DynamicField
+                                            schema={schema.items!}
+                                            path={itemPath}
+                                        />
+                                    )}
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : null}
+            <InputEntryAddButton
+                label={label || schema.label || m.editor_array_item()}
                 onClick={handleAddItem}
-            >
-                {m.editor_add_item({
-                    label: label || schema.label || m.editor_array_item(),
-                })}
-            </Button>
+            />
         </div>
     );
 };

@@ -57,11 +57,15 @@ import {
     setBodyHistoryActions,
     setBodyParagraphInsert,
     setBodyAstDispatch,
+    setBodyClipboardPasteDeps,
     setBodyTableCommit,
     setBodyReconcileGuard,
 } from "../../../editor/prosemirror/activeView";
+import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { contentSectionFromAst } from "../../../editor/prosemirror/sectionReconcileGuard";
 import { elementIdOf } from "../../../state/documentEvents/helpers";
+import { setBodyEditorInsertDeps } from "../../../editor/bodyContentInsert";
+import { DEFAULT_GLOBAL_SETTINGS } from "../../../settings/defaults";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
 import { enterBlockEditById } from "../../../editor/prosemirror/bodyTableCommands";
 import { takePendingBlockEditIfMatches } from "../../../editor/prosemirror/pendingBlockEdit";
@@ -191,6 +195,9 @@ const ProseMirrorBodyEditorImpl = ({
         useDocumentActions();
     const { externalRevision, canUndo, canRedo } = useDocumentReconcile();
     const astStore = useDocumentAstStore();
+    const { spec: templateSpec } = useTemplateSpecContext();
+    const templateSpecRef = useRef(templateSpec);
+    templateSpecRef.current = templateSpec;
     // React only to EXTERNAL focus requests (preview click, sidebar nav). The
     // native focus this editor pushes on every keystroke is filtered out here so
     // it never re-renders the editor.
@@ -302,6 +309,27 @@ const ProseMirrorBodyEditorImpl = ({
         setBodyAstDispatch((action) => dispatchRef.current(action));
         return () => setBodyAstDispatch(null);
     }, []);
+
+    useLayoutEffect(() => {
+        setBodyEditorInsertDeps({
+            getAst: () => astStore.getSnapshot(),
+            dispatch: (action) => dispatchRef.current(action),
+            setDocumentFocus: (focus) => setFocusRef.current(focus),
+            defaultEquationSyntax:
+                DEFAULT_GLOBAL_SETTINGS.default_equation_syntax ?? "typst",
+        });
+        return () => setBodyEditorInsertDeps(null);
+    }, [astStore]);
+
+    useLayoutEffect(() => {
+        setBodyClipboardPasteDeps({
+            getAst: () => astStore.getSnapshot(),
+            getTemplateSpec: () => templateSpecRef.current,
+            dispatch: (action) => dispatchRef.current(action),
+            setDocumentFocus: (focus) => setFocusRef.current(focus),
+        });
+        return () => setBodyClipboardPasteDeps(null);
+    }, [astStore]);
 
     useLayoutEffect(() => {
         setBodyTableCommit({

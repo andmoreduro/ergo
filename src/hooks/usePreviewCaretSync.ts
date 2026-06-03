@@ -458,6 +458,26 @@ export function usePreviewCaretSync({
     };
 }
 
+const previewFieldIdsMatch = (
+    positionFieldId: string | null | undefined,
+    targetFieldId: string | null | undefined,
+): boolean => {
+    if ((positionFieldId ?? null) === (targetFieldId ?? null)) {
+        return true;
+    }
+    if (!positionFieldId || !targetFieldId) {
+        return false;
+    }
+
+    const indexed = positionFieldId.match(/^(\/[^/]+)\/\d+$/);
+    if (indexed && targetFieldId === indexed[1]) {
+        return true;
+    }
+
+    const targetIndexed = targetFieldId.match(/^(\/[^/]+)\/\d+$/);
+    return targetIndexed !== null && positionFieldId === targetIndexed[1];
+};
+
 const previewPositionMatchesTarget = (
     position: PreviewElementPosition,
     target: PreviewFocusTarget,
@@ -465,4 +485,4 @@ const previewPositionMatchesTarget = (
 ) =>
     position.sourceRevision === displayedRevision &&
     position.elementId === target.elementId &&
-    (position.fieldId ?? null) === (target.fieldId ?? null);
+    previewFieldIdsMatch(position.fieldId, target.fieldId);

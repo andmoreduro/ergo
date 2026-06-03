@@ -113,6 +113,7 @@ impl PreviewSyncState {
                     return PreviewJumpResult::Field {
                         target: focus_target_for_field_offset(
                             entry,
+                            &preview.field_source_map,
                             preview.source_revision,
                             offset,
                         ),
@@ -325,8 +326,9 @@ impl PreviewSyncState {
                 entry,
                 &source,
                 &target.element_id,
-                field_id,
                 caret_utf16_offset,
+                field_id,
+                target.caret_utf16_offset.unwrap_or(caret_utf16_offset),
                 preferred_offset,
                 target.anchor_page_number,
             )
@@ -492,12 +494,13 @@ fn roundtrip_positions_for_field_caret(
     entry: &FieldSourceMapEntry,
     source: &Source,
     element_id: &str,
-    field_id: &str,
-    caret_utf16_offset: usize,
+    roundtrip_caret_utf16_offset: usize,
+    response_field_id: &str,
+    response_caret_utf16_offset: usize,
     preferred_source_offset: usize,
     anchor_page_number: Option<usize>,
 ) -> Vec<PreviewElementPosition> {
-    let source_targets = caret_source_targets(entry, caret_utf16_offset);
+    let source_targets = caret_source_targets(entry, roundtrip_caret_utf16_offset);
     if source_targets.is_empty() {
         return Vec::new();
     }
@@ -521,8 +524,8 @@ fn roundtrip_positions_for_field_caret(
                     page_number,
                     candidate.point,
                     element_id,
-                    field_id,
-                    caret_utf16_offset,
+                    response_field_id,
+                    response_caret_utf16_offset,
                 ) {
                     continue;
                 }
@@ -530,8 +533,8 @@ fn roundtrip_positions_for_field_caret(
                 candidates.push((
                     PreviewElementPosition {
                         element_id: Some(element_id.to_string()),
-                        field_id: Some(field_id.to_string()),
-                        caret_utf16_offset: Some(caret_utf16_offset),
+                        field_id: Some(response_field_id.to_string()),
+                        caret_utf16_offset: Some(response_caret_utf16_offset),
                         page_number,
                         x_pt: candidate.point.x.to_pt(),
                         y_pt: candidate.point.y.to_pt(),
@@ -746,7 +749,12 @@ fn candidate_roundtrips_to_focus(
         return false;
     };
 
-    let target = focus_target_for_field_offset(entry, preview.source_revision, offset);
+    let target = focus_target_for_field_offset(
+        entry,
+        &preview.field_source_map,
+        preview.source_revision,
+        offset,
+    );
     target.element_id == element_id
         && target.field_id.as_deref() == Some(field_id)
         && target.caret_utf16_offset == Some(caret_utf16_offset)

@@ -88,19 +88,19 @@ pub fn resolve_key_event_with_settings(
                 event.window_id.clone(),
                 PendingSequence {
                     sequence: sequence.clone(),
-                    fallback: Some(invocation(exact.binding.action_id)),
+                    fallback: Some(invocation_from_binding(&exact.binding)),
                     expires_at: now + Duration::from_millis(u64::from(KEY_SEQUENCE_TIMEOUT_MS)),
                 },
             );
 
             ActionResolution::PendingSequence {
                 sequence,
-                fallback: Some(invocation(exact.binding.action_id)),
+                fallback: Some(invocation_from_binding(&exact.binding)),
                 timeout_ms: KEY_SEQUENCE_TIMEOUT_MS,
             }
         }
         (Some(exact), false) => ActionResolution::Matched {
-            invocation: invocation(exact.binding.action_id),
+            invocation: invocation_from_binding(&exact.binding),
         },
         (None, true) => {
             state.pending.lock().insert(
@@ -143,8 +143,11 @@ fn sort_modifiers(modifiers: &mut Vec<KeyModifier>) {
     modifiers.dedup();
 }
 
-fn invocation(id: ActionId) -> ActionInvocation {
-    ActionInvocation { id, payload: None }
+fn invocation_from_binding(binding: &KeyBindingPreference) -> ActionInvocation {
+    ActionInvocation {
+        id: binding.action_id,
+        payload: binding.payload.clone(),
+    }
 }
 
 fn matching_bindings(
@@ -213,6 +216,21 @@ mod tests {
             action_id,
             context: context.to_string(),
             sequence: parse_key_sequence(sequence).unwrap(),
+            payload: None,
+        }
+    }
+
+    fn binding_with_payload(
+        action_id: ActionId,
+        context: &str,
+        sequence: &str,
+        payload: serde_json::Value,
+    ) -> KeyBindingPreference {
+        KeyBindingPreference {
+            action_id,
+            context: context.to_string(),
+            sequence: parse_key_sequence(sequence).unwrap(),
+            payload: Some(payload),
         }
     }
 
@@ -230,6 +248,42 @@ mod tests {
         };
 
         assert!(expression.evaluate(&active));
+    }
+
+    #[test]
+    fn resolves_heading_insert_with_level_payload() {
+        let settings = KeymapSettings {
+            keymap_profile: Some("Default".to_string()),
+            keymap_bindings: vec![binding_with_payload(
+                ActionId::EditorInsertHeading,
+                "editor && !tableCell",
+                "Ctrl+Alt+Shift+3",
+                serde_json::json!({ "level": 3 }),
+            )],
+            keymap_overrides: Vec::new(),
+        };
+        let state = ActionResolverState::default();
+
+        let resolution = resolve_key_event_with_settings(
+            &state,
+            &settings,
+            LogicalKeyEvent {
+                window_id: "main".to_string(),
+                key: "3".to_string(),
+                modifiers: vec![KeyModifier::Control, KeyModifier::Alt, KeyModifier::Shift],
+            },
+            snapshot("editor", vec![node("editor", None, &["editor", "body"], &[])]),
+        );
+
+        assert!(matches!(
+            resolution,
+            ActionResolution::Matched {
+                invocation: ActionInvocation {
+                    id: ActionId::EditorInsertHeading,
+                    payload: Some(payload),
+                }
+            } if payload.get("level") == Some(&serde_json::json!(3))
+        ));
     }
 
     #[test]
@@ -494,12 +548,13 @@ mod tests {
         let settings = KeymapSettings {
             keymap_profile: Some("Default".to_string()),
             keymap_bindings: vec![
-                binding(
+                binding_with_payload(
                     ActionId::EditorInsertHeading,
                     "editor && !tableCell",
-                    "Ctrl+Alt+H",
+                    "Ctrl+Alt+Shift+2",
+                    serde_json::json!({ "level": 2 }),
                 ),
-                binding(ActionId::EditorInsertHeading, "tableCell", "Ctrl+Alt+H"),
+                binding(ActionId::EditorInsertHeading, "tableCell", "Ctrl+Alt+Shift+2"),
             ],
             keymap_overrides: Vec::new(),
         };
@@ -509,8 +564,12 @@ mod tests {
             &settings,
             LogicalKeyEvent {
                 window_id: "main".to_string(),
-                key: "h".to_string(),
-                modifiers: vec![KeyModifier::Control, KeyModifier::Alt],
+                key: "2".to_string(),
+                modifiers: vec![
+                    KeyModifier::Control,
+                    KeyModifier::Alt,
+                    KeyModifier::Shift,
+                ],
             },
             snapshot(
                 "active-table-cell",

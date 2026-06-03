@@ -2,7 +2,10 @@ import { toggleMark } from "prosemirror-commands";
 import { TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import type { DocumentEvent } from "../../bindings/DocumentEvent";
+import type { TemplateSpec } from "../../bindings/TemplateSpec";
+import type { DocumentAST } from "../../bindings/DocumentAST";
 import type { ASTAction } from "../../state/ast/actions";
+import type { DocumentFocusInput } from "../../state/DocumentContext";
 import { isBlockEditing } from "./blockEditMode";
 import { bodySchema } from "./schema";
 import { tableSchema } from "./table/tableSchema";
@@ -108,6 +111,24 @@ export const setBodyAstDispatch = (dispatch: ((action: ASTAction) => void) | nul
 
 export const getBodyAstDispatch = (): ((action: ASTAction) => void) | null =>
     bodyAstDispatch;
+
+export interface BodyClipboardPasteDeps {
+    getAst: () => DocumentAST;
+    getTemplateSpec: () => TemplateSpec | null;
+    dispatch: (action: ASTAction) => void;
+    setDocumentFocus: (focus: DocumentFocusInput) => void;
+}
+
+let bodyClipboardPasteDeps: BodyClipboardPasteDeps | null = null;
+
+export const setBodyClipboardPasteDeps = (
+    deps: BodyClipboardPasteDeps | null,
+): void => {
+    bodyClipboardPasteDeps = deps;
+};
+
+export const getBodyClipboardPasteDeps = (): BodyClipboardPasteDeps | null =>
+    bodyClipboardPasteDeps;
 
 let activeTableCellEditor: EditorView | null = null;
 

@@ -17,7 +17,7 @@ mod tables;
 pub(crate) use fragments::{element_fragment, resource_preview_typst_for_element};
 pub(crate) use hashing::{element_content_hash, hash_source};
 pub(crate) use paths::{element_id, element_path, label_for_id};
-pub(crate) use outlines::generate_front_matter_outlines;
+pub(crate) use outlines::{effective_bibliography_section_title, generate_front_matter_outlines};
 pub(crate) use references::generate_references_bib;
 
 #[cfg(test)]

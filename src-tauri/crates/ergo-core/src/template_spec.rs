@@ -908,7 +908,7 @@ mod tests {
     fn umb_apa_template_imports_lib_by_path() {
         let spec = load_bundled_template("umb-apa").expect("should parse");
         assert_eq!(spec.metadata.id, "umb-apa");
-        assert_eq!(spec.metadata.name, "UMB's APA template");
+        assert_eq!(spec.metadata.name, "UMB's APA7");
         assert_eq!(spec.typst.package.name, "/umb-apa/lib.typ");
         assert_eq!(spec.typst.package.version, "");
         
@@ -924,11 +924,30 @@ mod tests {
         
         // Assert imports
         assert!(line.contains("front-matter"), "should import front-matter");
-        assert!(line.contains("versatile-apa as apa-style"), "should import versatile-apa as apa-style");
+        assert!(line.contains("apa-style"), "should import apa-style from umb-apa lib");
+        assert!(
+            !line.contains("versatile-apa"),
+            "UMB package should not re-export versatile-apa alias: {line}"
+        );
         
         // Assert exposed inputs
         let input_ids: std::collections::HashSet<&str> = spec.editor.inputs.iter().filter_map(|input| input.id.as_deref()).collect();
-        assert!(input_ids.contains("running_head"));
+        assert!(!input_ids.contains("running_head"));
+        assert_eq!(spec.typst.default_template_overrides.len(), 4);
+        assert!(
+            spec.typst
+                .default_template_overrides
+                .iter()
+                .any(|entry| entry.key == "outline.include_tables" && entry.value == "false")
+        );
+        let show_rule = spec.typst.show_rule.as_ref().expect("show_rule");
+        assert!(
+            !show_rule
+                .params
+                .iter()
+                .any(|param| param.key == "running-head"),
+            "UMB graduate works omit running heads"
+        );
         assert!(input_ids.contains("director"));
         assert!(input_ids.contains("degrees"));
         assert!(input_ids.contains("country"));

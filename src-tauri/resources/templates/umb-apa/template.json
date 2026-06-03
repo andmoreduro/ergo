@@ -2,9 +2,9 @@
   "$schema": "../../schemas/ergo-template.schema.json",
   "metadata": {
     "id": "umb-apa",
-    "name": "UMB's APA template",
+    "name": "UMB's APA7",
     "version": "1.0.0",
-    "description": "UMB's APA 7th Edition paper, based on a bundled fork of versatile-apa with a UMB-specific cover page."
+    "description": "UMB APA 7th Edition graduate work aligned with the UMB Biblioteca guía resumida (APA 7)."
   },
   "typst": {
     "package": {
@@ -15,9 +15,15 @@
         "appendix",
         "appendix-outline",
         "apa-figure",
-        { "symbol": "versatile-apa", "alias": "apa-style" }
+        "apa-style"
       ]
     },
+    "default_template_overrides": [
+      { "key": "outline.include_tables", "value": "false" },
+      { "key": "outline.include_figures", "value": "false" },
+      { "key": "outline.include_equations", "value": "false" },
+      { "key": "outline.include_listings", "value": "false" }
+    ],
     "element_overrides": {
       "figure": {
         "wrapper": "apa-figure",
@@ -42,8 +48,7 @@
     "show_rule": {
       "function": "apa-style",
       "params": [
-        { "key": "font-size", "type": "length", "source": "settings.font_size", "default": "12pt" },
-        { "key": "running-head", "type": "content", "source": "inputs.running_head" }
+        { "key": "font-size", "type": "length", "source": "settings.font_size", "default": "12pt" }
       ]
     },
     "sections": [
@@ -78,7 +83,6 @@
   "editor": {
     "inputs": [
       { "id": "title", "type": "string", "label": "Document Title", "importance": "recommended", "default": "Untitled Document" },
-      { "id": "running_head", "type": "string", "label": "Running Head", "importance": "recommended" },
       {
         "id": "authors", "type": "array", "label": "Authors", "importance": "required",
         "items": {
@@ -129,14 +133,14 @@
         "id": "front_matter",
         "label": "Front Matter",
         "inputs": [
-          "title", "running_head", "authors", "affiliations", "degrees", "director", "city", "country", "year", "authorities", "acknowledgements", "abstract_es", "keywords_es", "abstract_en", "keywords_en"
+          "title", "authors", "affiliations", "degrees", "director", "city", "country", "year", "authorities", "acknowledgements", "abstract_es", "keywords_es", "abstract_en", "keywords_en"
         ]
       }
     ],
     "variants": [],
     "defaults": {
       "paper_size": "us-letter",
-      "language": "en",
+      "language": "es",
       "text_font": "Libertinus Serif",
       "math_font": "Libertinus Math",
       "raw_font": "DejaVu Sans Mono",
