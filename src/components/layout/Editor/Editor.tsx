@@ -38,6 +38,7 @@ import { EditorToolbar } from "../../organisms/EditorToolbar/EditorToolbar";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Editor.module.css";
 import type { InputSchema } from "../../../bindings/InputSchema";
+import type { TemplateSpec } from "../../../bindings/TemplateSpec";
 import {
     projectInputFieldId,
     simpleListComposerFieldId,
@@ -576,7 +577,37 @@ const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
     );
 };
 
+const templateInputSchema = (
+    spec: TemplateSpec | null,
+    inputId: string,
+): InputSchema | undefined => spec?.editor?.inputs?.find((input) => input.id === inputId);
+
+const authorReferenceGroupLabel = (
+    spec: TemplateSpec | null,
+    authorSchema: InputSchema,
+    propertyId: "affiliations" | "degrees",
+    targetInputId: string,
+    t: (key: string) => string,
+    fallback: string,
+): string => {
+    const targetSchema = templateInputSchema(spec, targetInputId);
+    if (targetSchema) {
+        return getFieldLabel(targetSchema, undefined, t);
+    }
+
+    const propertySchema = authorSchema.items?.properties?.find(
+        (property) => property.id === propertyId,
+    );
+    if (propertySchema) {
+        return getFieldLabel(propertySchema, undefined, t);
+    }
+
+    return fallback;
+};
+
 const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
+    const { spec } = useTemplateSpecContext();
+    const t = useTemplateTranslation(spec);
     const templateId = useDocumentAstSelector((s) => s.metadata.template_id);
     const authors = (useDocumentAstSelector((s) => getValueAtPath(s.inputs, path)) ??
         []) as Array<{
@@ -596,10 +627,26 @@ const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
     return (
         <AuthorsField
             affiliations={Array.isArray(affiliations) ? affiliations : []}
+            affiliationsLabel={authorReferenceGroupLabel(
+                spec,
+                schema,
+                "affiliations",
+                "affiliations",
+                t,
+                m.editor_affiliations(),
+            )}
             authors={authors}
             degrees={Array.isArray(degrees) ? degrees : []}
+            degreesLabel={authorReferenceGroupLabel(
+                spec,
+                schema,
+                "degrees",
+                "degrees",
+                t,
+                m.editor_degrees(),
+            )}
             importance={schema.importance ?? undefined}
-            label={getFieldLabel(schema, label)}
+            label={getFieldLabel(schema, label, t)}
             referenceStyle={referenceStyle}
         />
     );
