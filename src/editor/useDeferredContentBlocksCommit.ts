@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import type { RichText } from "../bindings/RichText";
-import { contentBlocksSignificantlyEqual } from "./contentBlocks";
+import {
+    contentBlocksSignificantlyEqual,
+    finalizeContentBlocks,
+    shouldDeferContentBlocksCommit,
+} from "./contentBlocks";
+import { normalizeRichTextContent } from "./textInput";
 
 /**
  * Multi-paragraph counterpart to `useDeferredRichTextCommit`: keeps local editor
@@ -17,8 +22,18 @@ export const useDeferredContentBlocksCommit = (
         setDraft(committed);
     }, [elementId, committedKey]);
 
-    const shouldCommit = (next: RichText[][]) =>
-        !contentBlocksSignificantlyEqual(next, committed);
+    const shouldCommit = (next: RichText[][]) => {
+        const normalized = next.map((paragraph) =>
+            normalizeRichTextContent(paragraph),
+        );
+        if (shouldDeferContentBlocksCommit(normalized, committed)) {
+            return false;
+        }
+        return !contentBlocksSignificantlyEqual(
+            finalizeContentBlocks(normalized),
+            finalizeContentBlocks(committed),
+        );
+    };
 
     return {
         content: draft,

@@ -54,3 +54,20 @@ export const contentBlocksSignificantlyEqual = (
         richTextSignificantlyEqual(paragraph, b[index] ?? []),
     );
 };
+
+/**
+ * When the only change is a trailing empty paragraph (user pressed Enter at EOL),
+ * keep it in the local draft and avoid committing — otherwise `finalizeContentBlocks`
+ * drops that paragraph and the editor snaps back to one block.
+ */
+export const shouldDeferContentBlocksCommit = (
+    normalized: RichText[][],
+    committed: RichText[][],
+): boolean => {
+    const finalizedNext = finalizeContentBlocks(normalized);
+    const finalizedCommitted = finalizeContentBlocks(committed);
+    if (!contentBlocksSignificantlyEqual(finalizedNext, finalizedCommitted)) {
+        return false;
+    }
+    return normalized.length > finalizedNext.length;
+};
