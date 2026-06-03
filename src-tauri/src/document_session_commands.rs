@@ -26,11 +26,7 @@ pub fn sync_document_events(
     state: State<'_, TauriAppState>,
     events: Vec<DocumentEvent>,
 ) -> Result<DocumentSessionStatus, String> {
-    let mut status = state.document_session.status();
-    for event in events {
-        status = state.document_session.apply_event(event)?;
-    }
-    Ok(status)
+    Ok(state.document_session.apply_events(events)?)
 }
 
 #[tauri::command]

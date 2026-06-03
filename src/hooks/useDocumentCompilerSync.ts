@@ -18,7 +18,10 @@ import { TauriApi } from "../api/tauri";
 import { CompilerClient } from "../workers/compilerClient";
 import { projectFilesToVfsEntries } from "../workers/compilerProtocol";
 import type { QueuedDocumentEvent } from "../state/DocumentContext";
-import { setActiveDocumentSync } from "./documentSyncBarrier";
+import {
+    registerBackendMirrorFlush,
+    setActiveDocumentSync,
+} from "./documentSyncBarrier";
 import {
     elapsedMs,
     nowMs,
@@ -109,6 +112,7 @@ export function useDocumentCompilerSync({
     const syncFailedRef = useRef(false);
     const failedEventCountRef = useRef(0);
     const loadedDependencyPackagesRef = useRef(new Set<string>());
+    const backendMirrorDirtyRef = useRef(false);
     const isMountedRef = useRef(false);
 
     const isNewerPreviewResult = (result: CompilationResult): boolean =>
@@ -175,22 +179,6 @@ export function useDocumentCompilerSync({
         return desiredEventsRef.current.some(
             (event) => event.id > syncedEventIdRef.current,
         );
-    };
-
-    const mirrorToBackend = (
-        mirrorAst: DocumentAST,
-        pendingEvents: QueuedDocumentEvent[],
-        isBootstrap: boolean,
-    ): Promise<unknown> => {
-        if (isBootstrap) {
-            return TauriApi.syncDocumentSnapshot(mirrorAst);
-        }
-        if (pendingEvents.length > 0) {
-            return TauriApi.syncDocumentEvents(
-                pendingEvents.map((event) => event.event),
-            );
-        }
-        return Promise.resolve();
     };
 
     const syncLatestDocumentState = async () => {
@@ -268,7 +256,8 @@ export function useDocumentCompilerSync({
                     }
                     applyPreviewResult(status, result, currentSessionId);
 
-                    await mirrorToBackend(currentAst, [], true);
+                    await TauriApi.syncDocumentSnapshot(currentAst);
+                    backendMirrorDirtyRef.current = false;
                     continue;
                 }
 
@@ -296,12 +285,6 @@ export function useDocumentCompilerSync({
 
                 latencyStartRef.current = lastEvent.timestamp;
 
-                const mirrorPromise = mirrorToBackend(
-                    currentAst,
-                    pendingEvents,
-                    false,
-                );
-
                 const compileStarted = nowMs();
                 const result = await CompilerClient.compile(
                     currentAst,
@@ -318,7 +301,7 @@ export function useDocumentCompilerSync({
                 });
                 applyPreviewResult(status, result, currentSessionId);
 
-                await mirrorPromise;
+                backendMirrorDirtyRef.current = true;
 
                 syncedEventIdRef.current = lastEvent.id;
                 ackDocumentEvents?.(lastEvent.id);
@@ -359,10 +342,32 @@ export function useDocumentCompilerSync({
     }, []);
 
     useEffect(() => {
+        const flushBackendMirror = async () => {
+            if (!backendMirrorDirtyRef.current) {
+                return;
+            }
+            const mirrorAst = desiredAstRef.current;
+            const mirrorSessionId = desiredSessionIdRef.current;
+            if (
+                mirrorAst === null ||
+                bootstrappedSessionIdRef.current !== mirrorSessionId
+            ) {
+                return;
+            }
+            await TauriApi.syncDocumentSnapshot(mirrorAst);
+            backendMirrorDirtyRef.current = false;
+        };
+
+        registerBackendMirrorFlush(flushBackendMirror);
+        return () => registerBackendMirrorFlush(null);
+    }, []);
+
+    useEffect(() => {
         if (!ast) {
             desiredAstRef.current = null;
             desiredEventsRef.current = [];
             desiredBootstrapFilesRef.current = null;
+            backendMirrorDirtyRef.current = false;
             setPreviewPages([]);
             setSourceMap([]);
             setPreviewRevision(null);
@@ -386,6 +391,7 @@ export function useDocumentCompilerSync({
         ) {
             syncFailedRef.current = false;
             if (didSessionChange) {
+                backendMirrorDirtyRef.current = false;
                 bootstrappedSessionIdRef.current = null;
                 setPreviewPages([]);
                 setPreviewRevision(null);
@@ -403,5 +409,5 @@ export function useDocumentCompilerSync({
             setIsCompiling(true);
             startDocumentSync();
         }
-    }, [ackDocumentEvents, ast, sessionId, eventsVersion, bootstrapFiles]);
+    }, [ackDocumentEvents, sessionId, eventsVersion, bootstrapFiles]);
 }

@@ -25,9 +25,6 @@ sequenceDiagram
     Worker->>Worker: compile_preview (main + resources if dirty)
     Worker->>Worker: store_preview in PreviewSyncState
     Worker-->>State: CompilationResult (pages, outline, resources)
-    State->>API: sync_document_events (backend mirror)
-    API->>Session: apply_event on backend session
-    API-->>State: Mirror accepted
     Preview->>Worker: render_svg_page for changed viewport pages
     Worker-->>Preview: Page SVG + metrics
     Preview->>Preview: Replace stable page innerHTML
@@ -35,7 +32,8 @@ sequenceDiagram
 ```
 
 - Bootstrap (open/new project): `CompilerClient.bootstrap` clears the WASM VFS and `DocumentSession`, resets compiled preview state, resets WASM fonts, awaits lazy load of non-bundled project font families (all faces per family), then compiles; `sync_document_snapshot` on the backend completes before the document sync barrier drains. The UI clears preview pages on `sessionId` change and ignores compile results from a prior session. Edits compile without reloading fonts.
-- Queued document events are acknowledged after the backend mirror accepts the same batch.
+- Queued document events are acknowledged after WASM sync and compile succeed. The Tauri backend VFS is mirrored on bootstrap (`sync_document_snapshot`) and again before save via the document sync barrier (`sync_document_snapshot` when dirty), not on every keystroke.
+- `sync_document_events` applies the full event batch with one `apply_events` call (one source regeneration), matching the WASM worker.
 - Main preview and resource previews compile in WASM via `preview_pipeline`.
 - Resource preview VFS uses the same `lib.typ` and `#show: apply` as the main document; `resources.typ` adds preview page dimensions and `#set page` / `#show page` overrides for a white background without headers or numbering. Sidebar thumbnails cap height at 40vh.
 - Compiled outline comes from `document.introspector` on the paged document using the same heading filter as the PDF bookmark panel (`bookmarked: true`, or `bookmarked: auto` with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries (e.g. front-matter sections with `outlined: false, bookmarked: true`) scroll the preview to that page.
@@ -45,7 +43,7 @@ sequenceDiagram
 - Resource thumbnails use resource-specific revisions and wait for the matching main preview revision to paint before replacing thumbnail SVG.
 - Failed compiles report localized toast notifications and keep the last successful preview-visible pages, outline, resources, source map, and preview revision.
 - Preview does not shift layout with compile-status chrome while typing.
-- **Undo/redo:** apply the stored `inverseEvents` / `forwardEvents` locally, then sync and mirror the full ordered event list with sequential event IDs. Destructive inverses carry restore payloads (`RestoreElement`, `RestoreTableRow`, `RestoreTableColumn`).
+- **Undo/redo:** apply the stored `inverseEvents` / `forwardEvents` locally, queue them for WASM `sync_events`, and mark the backend mirror dirty. Destructive inverses carry restore payloads (`RestoreElement`, `RestoreTableRow`, `RestoreTableColumn`).
 
 ### Body clipboard paste
 
