@@ -100,7 +100,9 @@ export const ParagraphsField = ({
             return;
         }
 
-        const parsed = parseRichTextParagraphsFromEditableRoot(node);
+        const parsed = parseRichTextParagraphsFromEditableRoot(node, {
+            keepTrailingEmptyParagraph: true,
+        });
         lastRenderedRef.current = renderRichTextParagraphsToEditableHtml(parsed);
         onChange(parsed);
         adjustEditorHeight();
