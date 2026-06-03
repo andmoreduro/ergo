@@ -754,3 +754,46 @@ fn test_incremental_dirty_resource_tracking() {
         .contains(&"fig-1".to_string()));
     assert!(!status_sync.dirty_resource_ids.contains(&"eq-1".to_string()));
 }
+
+#[test]
+fn apply_events_batches_vfs_writes_compared_to_sequential_apply_event() {
+    use crate::document_session::DocumentEvent;
+
+    let title_event = |title: &str| DocumentEvent::SetProjectTitle {
+        title: title.to_string(),
+    };
+
+    let vfs_sequential = Arc::new(VirtualFileSystem::new());
+    let session_sequential = DocumentSession::new(Arc::clone(&vfs_sequential));
+    session_sequential
+        .sync_snapshot(basic_document_ast("Start", ""))
+        .unwrap();
+    let revision_before_sequential = vfs_sequential.latest_revision();
+    session_sequential
+        .apply_event(title_event("One"))
+        .unwrap();
+    session_sequential
+        .apply_event(title_event("Two"))
+        .unwrap();
+    let sequential_delta = vfs_sequential.latest_revision() - revision_before_sequential;
+
+    let vfs_batch = Arc::new(VirtualFileSystem::new());
+    let session_batch = DocumentSession::new(Arc::clone(&vfs_batch));
+    session_batch
+        .sync_snapshot(basic_document_ast("Start", ""))
+        .unwrap();
+    let revision_before_batch = vfs_batch.latest_revision();
+    session_batch
+        .apply_events(vec![title_event("One"), title_event("Two")])
+        .unwrap();
+    let batch_delta = vfs_batch.latest_revision() - revision_before_batch;
+
+    assert!(
+        batch_delta < sequential_delta,
+        "expected one sync pass ({batch_delta}) to write less than two ({sequential_delta})"
+    );
+    assert_eq!(
+        persisted_ast(&vfs_batch).metadata.title,
+        "Two".to_string()
+    );
+}
