@@ -22,12 +22,14 @@ pub fn write_resource_files(
     let mut resource_source = String::new();
 
     let width_pt = template
+        .typst
         .resource_policy
         .as_ref()
         .and_then(|p| p.preview.as_ref())
         .and_then(|p| p.width_pt)
         .unwrap_or(360.0);
     let margin_pt = template
+        .typst
         .resource_policy
         .as_ref()
         .and_then(|p| p.preview.as_ref())

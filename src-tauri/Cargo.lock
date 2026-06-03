@@ -1419,6 +1419,7 @@ dependencies = [
  "typst-render",
  "typst-svg",
  "uuid",
+ "zip",
 ]
 
 [[package]]

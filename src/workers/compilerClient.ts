@@ -14,14 +14,21 @@ import type {
 } from "./compilerProtocol";
 import {
     callWorker,
+    callWorkerOn,
+    getWorker,
     loadDocumentFontsLazy,
+    resetDocumentFontsCache,
 } from "./compilerWorker";
 
-export { getWorker, loadDocumentFontsLazy, warmupCompiler } from "./compilerWorker";
+export {
+    getWorker,
+    loadDocumentFontsLazy,
+    resetDocumentFontsCache,
+    warmupCompiler,
+} from "./compilerWorker";
 
 export const CompilerClient = {
     async syncSnapshot(ast: DocumentAST): Promise<DocumentSessionStatus> {
-        void loadDocumentFontsLazy(ast);
         const reply = await callWorker(
             { type: "sync_snapshot", payload: ast },
             "sync_done",
@@ -30,10 +37,8 @@ export const CompilerClient = {
     },
 
     async syncEvents(
-        ast: DocumentAST,
         events: DocumentEvent[],
     ): Promise<DocumentSessionStatus> {
-        void loadDocumentFontsLazy(ast);
         const reply = await callWorker(
             { type: "sync_events", payload: events },
             "sync_done",
@@ -45,7 +50,10 @@ export const CompilerClient = {
         ast: DocumentAST,
         svgPageIndices: number[] = [],
     ): Promise<CompilationResult> {
-        void loadDocumentFontsLazy(ast);
+        // Keyed + coalesced: a no-op when the font set is unchanged, but a
+        // mid-session font change loads the new font before this render so the
+        // change actually takes effect (bootstrap alone won't, it's per-session).
+        await loadDocumentFontsLazy(ast);
         const reply = await callWorker(
             { type: "compile", payload: { svgPageIndices } },
             "compile_done",
@@ -56,8 +64,16 @@ export const CompilerClient = {
     async bootstrap(
         payload: BootstrapPreviewPayload,
     ): Promise<BootstrapPreviewResult> {
-        void loadDocumentFontsLazy(payload.ast);
-        const reply = await callWorker(
+        resetDocumentFontsCache();
+        const worker = await getWorker();
+        await callWorkerOn(worker, { type: "reset_fonts" }, "reset_fonts_done");
+        try {
+            await loadDocumentFontsLazy(payload.ast);
+        } catch {
+            // Preview with bundled Typst fonts only.
+        }
+        const reply = await callWorkerOn(
+            worker,
             { type: "bootstrap", payload },
             "bootstrap_done",
         );

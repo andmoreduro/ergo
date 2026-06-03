@@ -10,9 +10,19 @@ import {
 import {
     NewProjectDialog,
 } from "./components/organisms/NewProjectDialog/NewProjectDialog";
-import { DocumentProvider, useDocument } from "./state/DocumentContext";
+import {
+    DocumentProvider,
+    useDocumentActions,
+    useDocumentAstSelector,
+    useDocumentAstStore,
+    useDocumentFocusSelector,
+    useDocumentFocusStore,
+    useDocumentReconcile,
+} from "./state/DocumentContext";
 import type { TemplateOverride } from "./bindings/TemplateOverride";
 import type { TemplateVariantSpec } from "./bindings/TemplateVariantSpec";
+import type { TemplateSpec } from "./bindings/TemplateSpec";
+import { useTemplateTranslation } from "./hooks/useTemplateTranslation";
 import {
     createEnumeration,
     createEquation,
@@ -36,7 +46,7 @@ import {
 } from "./editor/fieldIds";
 import { m } from "./paraglide/messages.js";
 import { createCommandRegistry } from "./commands/registry";
-import type { Command, CommandContext } from "./commands/types";
+import type { ActionId, Command, CommandContext } from "./commands/types";
 import { workspaceCommands } from "./commands/workspaceCommands";
 import { TauriApi } from "./api/tauri";
 import type { EquationSyntax } from "./bindings/EquationSyntax";
@@ -83,18 +93,23 @@ import { CommandPalette } from "./components/organisms/CommandPalette/CommandPal
 import styles from "./App.module.css";
 
 const AppShellContent = () => {
-    const {
-        state,
-        dispatch,
-        isDirty,
-        canUndo,
-        canRedo,
-        undo,
-        redo,
-        markSaved,
-        documentFocus,
-        setDocumentFocus,
-    } = useDocument();
+    // Narrow subscriptions: the app shell must not re-render on every keystroke.
+    // Mutators are identity-stable; the live AST/focus are read imperatively in
+    // callbacks via the stores; only rarely-changing slices subscribe.
+    const { dispatch, undo, redo, markSaved, setDocumentFocus } =
+        useDocumentActions();
+    const { canUndo, canRedo, isDirty } = useDocumentReconcile();
+    const astStore = useDocumentAstStore();
+    const focusStore = useDocumentFocusStore();
+    const getState = useCallback(() => astStore.getSnapshot(), [astStore]);
+    const templateId = useDocumentAstSelector((s) => s.metadata.template_id);
+    const projectSettings = useDocumentAstSelector(
+        (s) => s.metadata.project_settings,
+    );
+    const templateVariantId = useDocumentAstSelector(
+        (s) => s.metadata.template_variant_id,
+    );
+    const focusedElementId = useDocumentFocusSelector((f) => f.elementId);
     const {
         locale,
         globalSettings,
@@ -130,36 +145,58 @@ const AppShellContent = () => {
         rememberProject,
     });
     const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
+    const [templateSpec, setTemplateSpec] = useState<TemplateSpec | null>(null);
     const [templateVariants, setTemplateVariants] = useState<TemplateVariantSpec[]>([]);
     const [templateDefaultOverrides, setTemplateDefaultOverrides] = useState<
         TemplateOverride[]
     >([]);
+    const t = useTemplateTranslation(templateSpec);
     const [previewZoom, setPreviewZoom] = useState(PREVIEW_ZOOM_DEFAULT);
     const [previewZoomMode, setPreviewZoomMode] =
         useState<PreviewZoomMode>("manual");
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [commandQuery, setCommandQuery] = useState("");
+    const [systemFonts, setSystemFonts] = useState<string[]>([]);
     const dispatchAction = useActionDispatcher();
     const recentProjects = globalSettings.recent_projects;
 
     useEffect(() => {
         if (!hasActiveProject) {
+            setTemplateSpec(null);
             setTemplateVariants([]);
             setTemplateDefaultOverrides([]);
             return;
         }
 
         let cancelled = false;
-        void TauriApi.getTemplateSpec(state.metadata.template_id).then((spec) => {
+        void TauriApi.getTemplateSpec(templateId).then((spec) => {
             if (!cancelled) {
-                setTemplateVariants(spec.variants);
-                setTemplateDefaultOverrides(spec.default_template_overrides ?? []);
+                setTemplateSpec(spec);
+                setTemplateVariants(spec.editor.variants);
+                setTemplateDefaultOverrides(spec.typst.default_template_overrides ?? []);
             }
         });
         return () => {
             cancelled = true;
         };
-    }, [hasActiveProject, state.metadata.template_id]);
+    }, [hasActiveProject, templateId]);
+    // Enumerate system fonts once a project is open, so the project settings
+    // font pickers have their option list ready before the dialog opens.
+    useEffect(() => {
+        if (!hasActiveProject || systemFonts.length > 0) {
+            return;
+        }
+        let cancelled = false;
+        void TauriApi.listSystemFontFamilies().then((fonts) => {
+            if (!cancelled) {
+                setSystemFonts(fonts);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [hasActiveProject, systemFonts.length]);
+
     const recentProjectsRef = useRef(recentProjects);
     recentProjectsRef.current = recentProjects;
 
@@ -193,13 +230,14 @@ const AppShellContent = () => {
             return true;
         }
 
-        const elementId = documentFocus.elementId;
-        const fieldId = documentFocus.fieldId;
+        const focus = focusStore.getSnapshot();
+        const elementId = focus.elementId;
+        const fieldId = focus.fieldId;
         if (!elementId || !fieldId) {
             return false;
         }
 
-        const contentSection = state.sections.find(
+        const contentSection = getState().sections.find(
             (section) => section.type === "Content",
         );
         if (!contentSection || contentSection.type !== "Content") {
@@ -216,7 +254,7 @@ const AppShellContent = () => {
         const insertAt = (content: RichText[]) =>
             insertInlineEquationAtOffset(
                 content,
-                documentFocus.caretUtf16Offset ?? richTextPlainLength(content),
+                focus.caretUtf16Offset ?? richTextPlainLength(content),
                 "x",
                 syntax,
             );
@@ -303,13 +341,7 @@ const AppShellContent = () => {
         }
 
         return false;
-    }, [
-        dispatch,
-        documentFocus.caretUtf16Offset,
-        documentFocus.elementId,
-        documentFocus.fieldId,
-        state.sections,
-    ]);
+    }, [dispatch, focusStore, getState]);
 
     const applyRichTextMark = useCallback(
         (mark: "bold" | "italic" | "underline") => {
@@ -321,12 +353,14 @@ const AppShellContent = () => {
             if (getActiveBodyView() || getActiveTableCellEditor()) {
                 return;
             }
-            applyRichTextMarkToFocusedField(mark, documentFocus.fieldId);
+            applyRichTextMarkToFocusedField(mark, focusStore.getSnapshot().fieldId);
         },
-        [documentFocus.fieldId],
+        [focusStore],
     );
 
     const insertElement = useCallback((elementType: ElementType) => {
+        const state = getState();
+        const focus = focusStore.getSnapshot();
         const contentSection = state.sections.find(
             (section) => section.type === "Content",
         );
@@ -341,8 +375,8 @@ const AppShellContent = () => {
 
         const tableCellCtx = resolveTableCellEditContext(
             state,
-            documentFocus.elementId,
-            documentFocus.fieldId,
+            focus.elementId,
+            focus.fieldId,
         );
         if (tableCellCtx) {
             if (isTableCellForbiddenInsert(elementType)) {
@@ -403,10 +437,10 @@ const AppShellContent = () => {
         const sectionId = contentSection.id;
         const id = elementType === "diagram" ? `diagram-${createId()}` : createId();
         const afterElementId =
-            documentFocus.elementId &&
-            documentFocus.elementId !== "project"
-            && documentFocus.elementId !== "inputs"
-                ? documentFocus.elementId
+            focus.elementId &&
+            focus.elementId !== "project"
+            && focus.elementId !== "inputs"
+                ? focus.elementId
                 : undefined;
 
         // If the caret sits on an empty text line, the inserted element replaces
@@ -576,19 +610,18 @@ const AppShellContent = () => {
         finishInsert("Figure");
     }, [
         dispatch,
-        documentFocus.elementId,
-        documentFocus.fieldId,
+        focusStore,
+        getState,
         ensureActiveProject,
         globalSettings.default_equation_syntax,
         insertInlineEquation,
         setDocumentFocus,
-        state,
-        state.sections,
     ]);
 
     const exportDocument = useCallback(
         async (format: ExportFormat) => {
             try {
+                const state = getState();
                 if (format === "pdf") {
                     const path = await saveExportDialog("pdf");
                     if (!path) {
@@ -637,15 +670,15 @@ const AppShellContent = () => {
                 );
             }
         },
-        [state],
+        [getState],
     );
 
     const commandContext = useMemo<CommandContext>(
         () => ({
             hasActiveProject,
-            focusedElementId: documentFocus.elementId,
+            focusedElementId,
         }),
-        [documentFocus.elementId, hasActiveProject],
+        [focusedElementId, hasActiveProject],
     );
 
     const commands = useMemo<Command[]>(
@@ -715,11 +748,16 @@ const AppShellContent = () => {
         setQuery: setCommandQuery,
     });
     const appActionHandlers = useAppActionHandlers({
-        state,
+        getState,
         commandRegistry,
         commandContext,
         setDocumentFocus,
     });
+
+    const isCommandEnabled = useCallback(
+        (commandId: ActionId) => commandRegistry.enabled(commandId, commandContext),
+        [commandRegistry, commandContext],
+    );
 
     return (
         <ActionContextProvider
@@ -740,9 +778,7 @@ const AppShellContent = () => {
                 <Menubar
                     hasActiveProject={hasActiveProject}
                     onCommand={runCommand}
-                    isCommandEnabled={(commandId) =>
-                        commandRegistry.enabled(commandId, commandContext)
-                    }
+                    isCommandEnabled={isCommandEnabled}
                 />
                 {hasActiveProject ? (
                     <ActionContextProvider id="workspace" contexts={["workspace"]}>
@@ -790,7 +826,7 @@ const AppShellContent = () => {
                         <SettingsDialog
                             panel={settingsPanel}
                             globalSettings={globalSettings}
-                            projectSettings={state.metadata.project_settings}
+                            projectSettings={projectSettings}
                             keymap={keymap}
                             conflicts={keymapConflicts}
                             keymapSettings={keymapSettings}
@@ -804,13 +840,15 @@ const AppShellContent = () => {
                             }
                             templateDefaultOverrides={templateDefaultOverrides}
                             templateVariants={templateVariants}
-                            templateVariantId={state.metadata.template_variant_id}
+                            templateVariantId={templateVariantId}
                             onTemplateVariantChange={(variantId) =>
                                 dispatch({
                                     type: "UPDATE_TEMPLATE_VARIANT",
                                     payload: { variantId },
                                 })
                             }
+                            systemFonts={systemFonts}
+                            t={t}
                             onClose={() => runCommand("settings::Close")}
                         />
                     </ActionContextProvider>

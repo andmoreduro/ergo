@@ -11,6 +11,13 @@ use tauri::State;
 static UMB_APA_PACKAGE: Dir<'_> =
     include_dir!("$CARGO_MANIFEST_DIR/../typst_templates/umb-apa");
 
+/// The bundled `versatile-apa` Typst package source (the copy under
+/// `typst_templates/versatile-apa`). Embedded at build time so a project using the
+/// `apa7` template can `#import "/versatile-apa/lib.typ"` without the package
+/// existing in any registry or cache.
+static VERSATILE_APA_PACKAGE: Dir<'_> =
+    include_dir!("$CARGO_MANIFEST_DIR/../typst_templates/versatile-apa");
+
 use crate::app_state::TauriAppState;
 use crate::ast::DocumentAST;
 
@@ -201,8 +208,14 @@ pub fn load_template_package_files(
         return Ok(files);
     }
 
+    if template_id == "apa7" {
+        let files = bundled_package_files(&VERSATILE_APA_PACKAGE, "versatile-apa");
+        mirror_project_files_to_vfs(&state, &files);
+        return Ok(files);
+    }
+
     let spec = load_bundled_template(&template_id)?;
-    let package = PackageRef::from_import(&spec.package.name, &spec.package.version)?;
+    let package = PackageRef::from_import(&spec.typst.package.name, &spec.typst.package.version)?;
     let files = crate::package_download::collect_package_files_with_deps(&package)?;
     mirror_project_files_to_vfs(&state, &files);
     Ok(files)
@@ -479,6 +492,17 @@ mod tests {
         assert!(paths.iter().any(|path| path.starts_with("umb-apa/utils/")));
         // The package's own starter document is not needed to compile a project.
         assert!(!paths.iter().any(|path| path.starts_with("umb-apa/template/")));
+    }
+
+    #[test]
+    fn bundled_versatile_apa_includes_lib_but_not_starter() {
+        let files = bundled_package_files(&VERSATILE_APA_PACKAGE, "versatile-apa");
+        let paths: HashSet<String> = files.iter().map(|file| file.path.clone()).collect();
+
+        assert!(paths.contains("versatile-apa/lib.typ"), "missing lib.typ: {paths:?}");
+        assert!(paths.iter().any(|path| path.starts_with("versatile-apa/utils/")));
+        // The package's own starter document is not needed to compile a project.
+        assert!(!paths.iter().any(|path| path.starts_with("versatile-apa/template/")));
     }
 
     #[test]

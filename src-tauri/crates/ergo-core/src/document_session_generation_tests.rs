@@ -8,7 +8,8 @@ use crate::ast::{Diagram, Figure, Paragraph, Table, TableCell};
 use crate::document_source_builder::SourceBuilder;
 use crate::template_spec::{
     CustomElementSpec, ElementOverrideSpec, ElementOverrides, ExtraFieldSpec, InputGroupSpec,
-    PackageSpec, ParamSpec, ParamType, SectionSpec, ShowRuleSpec, TemplateIdentity,
+    PackageSpec, ParamSpec, ParamType, SectionSpec, ShowRuleSpec, TemplateSpec,
+    TemplateMetadata, TypstConfig, EditorConfig,
 };
 use crate::test_fixtures::rich_text;
 use serde_json::json;
@@ -56,51 +57,56 @@ fn element_references_keep_ergo_label_tokens() {
 
 fn custom_element_template(field: ParamSpec) -> TemplateSpec {
     TemplateSpec {
-        template: TemplateIdentity {
+        metadata: TemplateMetadata {
             id: "test-template".to_string(),
             name: "Test Template".to_string(),
             version: "1.0.0".to_string(),
             description: None,
         },
-        package: PackageSpec {
-            name: "@preview/test".to_string(),
-            version: "1.0.0".to_string(),
-            imports: vec![],
-            dependencies: vec![],
+        typst: TypstConfig {
+            package: PackageSpec {
+                name: "@preview/test".to_string(),
+                version: "1.0.0".to_string(),
+                imports: vec![],
+                dependencies: vec![],
+            },
+            show_rule: Some(ShowRuleSpec {
+                function: "apply".to_string(),
+                params: vec![],
+                variants: None,
+            }),
+            sections: vec![SectionSpec {
+                id: "body".to_string(),
+                kind: SectionKind::Content,
+                label: None,
+                function: None,
+                params: vec![],
+                variants: None,
+                source: None,
+                file: None,
+                title: None,
+                show_rule: None,
+                editable: None,
+                pagebreak_before: false,
+            }],
+            element_overrides: None,
+            resource_policy: None,
+            default_template_overrides: vec![],
         },
-        variants: vec![],
-        show_rule: Some(ShowRuleSpec {
-            function: "apply".to_string(),
-            params: vec![],
-            variants: None,
-        }),
-        inputs: vec![],
-        groups: Vec::<InputGroupSpec>::new(),
-        custom_elements: vec![CustomElementSpec {
-            kind: "callout".to_string(),
-            label: "Callout".to_string(),
-            description: None,
-            function: "callout".to_string(),
-            fields: vec![field],
-        }],
-        sections: vec![SectionSpec {
-            id: "body".to_string(),
-            kind: SectionKind::Content,
-            label: None,
-            function: None,
-            params: vec![],
-            variants: None,
-            source: None,
-            file: None,
-            title: None,
-            show_rule: None,
-            editable: None,
-            pagebreak_before: false,
-        }],
-        element_overrides: None,
-        resource_policy: None,
-        defaults: None,
-        default_template_overrides: vec![],
+        editor: EditorConfig {
+            inputs: vec![],
+            groups: Vec::<InputGroupSpec>::new(),
+            variants: vec![],
+            custom_elements: vec![CustomElementSpec {
+                kind: "callout".to_string(),
+                label: "Callout".to_string(),
+                description: None,
+                function: "callout".to_string(),
+                fields: vec![field],
+            }],
+            defaults: None,
+        },
+        messages: std::collections::HashMap::new(),
     }
 }
 
@@ -334,7 +340,7 @@ fn template_with_figure_wrapper(wrapper: &str) -> TemplateSpec {
         required: false,
         variants: None,
     });
-    template.element_overrides = Some(ElementOverrides {
+    template.typst.element_overrides = Some(ElementOverrides {
         figure: Some(ElementOverrideSpec {
             function: None,
             wrapper: Some(wrapper.to_string()),
@@ -367,7 +373,7 @@ fn apa_wrapper_extra_fields() -> Vec<ExtraFieldSpec> {
 fn template_with_apa_wrapper_fields() -> TemplateSpec {
     let mut template = template_with_figure_wrapper("apa-figure");
     let fields = apa_wrapper_extra_fields();
-    let overrides = template.element_overrides.as_mut().unwrap();
+    let overrides = template.typst.element_overrides.as_mut().unwrap();
     overrides.figure.as_mut().unwrap().extra_fields = fields.clone();
     overrides.table.as_mut().unwrap().extra_fields = fields;
     template
@@ -870,16 +876,18 @@ fn umb_apa_source_generation_matches_spec() {
     inputs.insert("authors".to_string(), json!([
         {
             "name": "Author 1",
-            "affiliations": ["1"]
+            "affiliations": ["a"],
+            "degrees": ["a"]
         }
     ]));
     inputs.insert("affiliations".to_string(), json!(["Affiliation Name 1"]));
+    inputs.insert("degrees".to_string(), json!(["Ingeniero de Sistemas"]));
     inputs.insert("director".to_string(), json!({
         "name": "Director Name",
         "title": "Director Title"
     }));
-    inputs.insert("degree".to_string(), json!("PhD in Typst"));
-    inputs.insert("city".to_string(), json!("Bogota"));
+    inputs.insert("city".to_string(), json!("Bogotá"));
+    inputs.insert("country".to_string(), json!("Colombia"));
     inputs.insert("year".to_string(), json!("2026"));
     inputs.insert("authorities".to_string(), json!([
         {
@@ -892,7 +900,6 @@ fn umb_apa_source_generation_matches_spec() {
         }
     ]));
     inputs.insert("acknowledgements".to_string(), json!("Agradezco a todos."));
-    inputs.insert("author_note".to_string(), json!("Author note text."));
     inputs.insert("abstract_es".to_string(), json!("Resumen en espanol."));
     inputs.insert("keywords_es".to_string(), json!(["clave1", "clave2"]));
     inputs.insert("abstract_en".to_string(), json!("Abstract in English."));
@@ -952,6 +959,20 @@ fn umb_apa_source_generation_matches_spec() {
     assert!(!main.contains("title-page"), "main.typ should not call title-page:\n{main}");
     assert!(!main.contains("abstract-page"), "main.typ should not call abstract-page:\n{main}");
 
+    assert!(main.contains("degrees: ("), "should contain degrees map:\n{main}");
+    assert!(
+        main.contains("\"a\": [Ingeniero de Sistemas]"),
+        "should emit letter-keyed degree map:\n{main}"
+    );
+    assert!(
+        main.contains("country: [Colombia]"),
+        "should contain country:\n{main}"
+    );
+    assert!(
+        main.contains("affiliations: (\"a\",)"),
+        "should emit letter-keyed author affiliation refs:\n{main}"
+    );
+
     // director.name and director.title appear in the generated front-matter arguments.
     assert!(main.contains("director: ("), "should contain director dictionary:\n{main}");
     assert!(main.contains("name: [Director Name]"), "should contain director name:\n{main}");
@@ -975,9 +996,6 @@ fn umb_apa_source_generation_matches_spec() {
     // running_head still flows through the document show rule in lib.typ
     assert!(generated.lib_source.contains("running-head: [Running Head Text]"), "lib.typ should pass running-head to show rule:\n{}", generated.lib_source);
 
-    // author_note is passed to front matter.
-    assert!(main.contains("author-note: [Author note text.]"), "should pass author-note:\n{main}");
-
     // Body element includes still appear after front matter.
     let front_matter_pos = main.find("#front-matter").unwrap();
     let body_pos = main.find("#include \"elements/p-1.typ\"").unwrap();
@@ -986,4 +1004,44 @@ fn umb_apa_source_generation_matches_spec() {
     // Bibliography and appendix generation still appear in the expected order.
     let bib_pos = main.find("#bibliography").unwrap();
     assert!(body_pos < bib_pos, "body includes should precede bibliography:\n{main}");
+}
+
+#[test]
+fn content_blocks_input_generates_paragraphs_separated_by_parbreak() {
+    use crate::template_spec::load_bundled_template;
+
+    let template = load_bundled_template("umb-apa").expect("umb-apa template");
+    let mut ast = crate::test_fixtures::default_umb_apa_project_ast();
+    // `content_blocks` value: two paragraphs, each a `RichText[]`.
+    ast.inputs.insert(
+        "abstract_es".to_string(),
+        json!([
+            [{ "text": "First paragraph.", "bold": null, "italic": null }],
+            [{ "text": "Second paragraph.", "bold": null, "italic": null }],
+        ]),
+    );
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+    let main = &generated.main_source;
+
+    assert!(main.contains("First paragraph."), "first paragraph missing:\n{main}");
+    assert!(main.contains("Second paragraph."), "second paragraph missing:\n{main}");
+    assert!(
+        main.contains("#parbreak()"),
+        "multiple paragraphs should be separated by #parbreak():\n{main}"
+    );
+
+    // A legacy plain-string value still generates a single paragraph (no parbreak).
+    let mut legacy = crate::test_fixtures::default_umb_apa_project_ast();
+    legacy
+        .inputs
+        .insert("abstract_es".to_string(), json!("Just one paragraph."));
+    let legacy_generated =
+        generate_project_sources_incremental(&legacy, &template, &HashMap::new(), &HashMap::new());
+    assert!(
+        legacy_generated.main_source.contains("abstract-es: [Just one paragraph.]"),
+        "legacy string abstract should still generate one paragraph:\n{}",
+        legacy_generated.main_source
+    );
 }

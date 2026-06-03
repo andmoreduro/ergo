@@ -26,3 +26,5 @@ dist-ssr
 
 src/wasm-compiler/
 .ergproj/
+*.ergtemplate
+

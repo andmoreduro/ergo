@@ -196,6 +196,7 @@ impl<'a> RequiredInputFallbacks<'a> {
 
     fn schema_by_id(&self, input_id: &str) -> Option<&InputSchema> {
         self.template
+            .editor
             .inputs
             .iter()
             .find(|schema| schema.id.as_deref() == Some(input_id))

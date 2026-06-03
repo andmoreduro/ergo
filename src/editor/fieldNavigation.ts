@@ -121,13 +121,13 @@ export const collectTemplateFieldTargets = (
     }
 
     const inputsMap = new Map(
-        (spec.inputs ?? [])
+        (spec.editor?.inputs ?? [])
             .filter((input) => input.id)
             .map((input) => [input.id!, input]),
     );
     const targets: EditorFieldTarget[] = [];
 
-    for (const group of spec.groups ?? []) {
+    for (const group of spec.editor?.groups ?? []) {
         if (!appliesToVariant({ variants: group.variants } as InputSchema, variantId)) {
             continue;
         }

@@ -2,6 +2,6 @@
 import type { OutlineEntry } from "./OutlineEntry";
 
 /**
- * Ordered list of headings extracted from a compiled `PagedDocument`.
+ * Ordered list of PDF-bookmarked headings extracted from a compiled `PagedDocument`.
  */
 export type DocumentOutline = { entries: Array<OutlineEntry>, };

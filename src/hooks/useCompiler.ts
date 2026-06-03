@@ -115,6 +115,7 @@ export function useCompiler(
         pendingPreviewTelemetryRef.current = null;
         renderedTelemetryRevisionRef.current = null;
         noRenderTelemetryRevisionRef.current = null;
+        previewSvgPageIndicesRef.current = [0];
         setPreviewTelemetry(null);
         setResourcePreviewRevisions({});
         setMainPreviewPaintedRevision(null);

@@ -5,7 +5,7 @@ use tauri::{State, WebviewWindow};
 
 use crate::app_state::TauriAppState;
 use crate::ast::DocumentAST;
-use crate::font_loader::load_font_bytes_for_families;
+use crate::font_loader::{list_system_font_family_names, load_font_bytes_for_families};
 use crate::font_requirements::{families_missing_from_bundled, required_font_families};
 
 #[tauri::command]
@@ -17,6 +17,11 @@ pub fn load_fonts_for_families(families: Vec<String>) -> Result<Vec<Vec<u8>>, St
             .collect(),
     );
     load_font_bytes_for_families(&missing)
+}
+
+#[tauri::command]
+pub fn list_system_font_families() -> Vec<String> {
+    list_system_font_family_names()
 }
 
 #[tauri::command]

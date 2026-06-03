@@ -2,6 +2,7 @@ import { useTemplateSpecContext } from "../../../../state/TemplateSpecContext";
 import { useDocumentAst } from "../../../../state/DocumentContext";
 import type { CustomElementUnion } from "../types";
 import { CustomElementFieldInput } from "../fields/CustomElementFieldInput";
+import { useTemplateTranslation } from "../../../../hooks/useTemplateTranslation";
 import styles from "../ElementEditor.module.css";
 
 export const CustomElementEditor = ({
@@ -11,7 +12,8 @@ export const CustomElementEditor = ({
 }) => {
     const { dispatch } = useDocumentAst();
     const { spec: templateSpec } = useTemplateSpecContext();
-    const customElements = templateSpec?.custom_elements || [];
+    const t = useTemplateTranslation(templateSpec);
+    const customElements = templateSpec?.editor?.custom_elements || [];
     const spec = customElements.find((candidate) => candidate.kind === element.element_type);
 
     if (!spec) {
@@ -29,7 +31,7 @@ export const CustomElementEditor = ({
                     key={field.key}
                     elementId={element.id}
                     fieldKey={field.key}
-                    label={field.label || field.key}
+                    label={t(field.label || field.key)}
                     committed={String(element.fields[field.key] ?? "")}
                     dispatch={dispatch}
                 />

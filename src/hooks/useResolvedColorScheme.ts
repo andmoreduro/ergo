@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from "react";
 import {
-    ergoThemeLogoSrc,
     readResolvedColorScheme,
     type ResolvedColorScheme,
 } from "../theme/resolvedColorScheme";
@@ -26,5 +25,3 @@ export const useResolvedColorScheme = (): ResolvedColorScheme =>
         () => "light",
     );
 
-export const useErgoThemeLogoSrc = (): string =>
-    ergoThemeLogoSrc(useResolvedColorScheme());

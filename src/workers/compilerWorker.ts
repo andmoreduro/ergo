@@ -10,6 +10,7 @@ import type {
 let globalWorkerPromise: Promise<Worker> | null = null;
 let fontsLoadPromise: Promise<void> | null = null;
 let loadedFontsKey: string | null = null;
+let loadingFontsKey: string | null = null;
 
 function fontRequirementsKey(ast: DocumentAST): string {
     const settings = ast.metadata.project_settings;
@@ -102,18 +103,20 @@ export function getWorker(): Promise<Worker> {
 }
 
 /**
- * Loads system fonts into the worker in the background. Compiles can run before this
- * finishes using bundled Typst fonts; call before compile when OS fonts are required.
+ * Loads non-bundled project fonts into the WASM worker (keyed by text/math/raw settings).
+ * Intended to run once when a project is opened (`CompilerClient.bootstrap`).
  */
 export function loadDocumentFontsLazy(ast: DocumentAST): Promise<void> {
     const key = fontRequirementsKey(ast);
-    if (loadedFontsKey === key && fontsLoadPromise) {
+    if (loadedFontsKey === key) {
+        return fontsLoadPromise ?? Promise.resolve();
+    }
+    // A load for this exact font set is already in flight — share the one promise.
+    if (loadingFontsKey === key && fontsLoadPromise) {
         return fontsLoadPromise;
     }
-    if (loadedFontsKey === key) {
-        return Promise.resolve();
-    }
 
+    loadingFontsKey = key;
     fontsLoadPromise = (async () => {
         try {
             const worker = await getWorker();
@@ -128,12 +131,26 @@ export function loadDocumentFontsLazy(ast: DocumentAST): Promise<void> {
             }
             loadedFontsKey = key;
         } catch (error) {
-            fontsLoadPromise = null;
+            // Allow the next call to retry this font set.
+            if (loadingFontsKey === key) {
+                fontsLoadPromise = null;
+            }
             throw error;
+        } finally {
+            if (loadingFontsKey === key) {
+                loadingFontsKey = null;
+            }
         }
     })();
 
     return fontsLoadPromise;
+}
+
+/** Clears the per-session font load cache (call when opening a new project). */
+export function resetDocumentFontsCache(): void {
+    loadedFontsKey = null;
+    loadingFontsKey = null;
+    fontsLoadPromise = null;
 }
 
 /** Spawns the WASM worker without blocking on OS font discovery. */

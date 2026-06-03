@@ -6,12 +6,14 @@
   "scripts": {
     "build:wasm": "wasm-pack build src-tauri/crates/ergo-engine-wasm --target web --out-dir ../../../src/wasm-compiler --release",
     "build:wasm:dev": "wasm-pack build src-tauri/crates/ergo-engine-wasm --target web --out-dir ../../../src/wasm-compiler --release --no-opt",
-    "dev": "pnpm build:wasm:dev && vite",
-    "build": "pnpm build:wasm && paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && tsc && vite build",
+    "templates:package": "node scripts/package-templates.mjs",
+    "dev": "pnpm templates:package && pnpm build:wasm:dev && vite",
+    "react-devtools": "react-devtools",
+    "build": "pnpm templates:package && pnpm build:wasm && paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && vitest run",
-    "test:changed": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && vitest run --changed",
+    "test": "pnpm templates:package && paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && vitest run",
+    "test:changed": "pnpm templates:package && paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --silent && vitest run --changed",
     "icons:generate": "node scripts/generate-tauri-icons.mjs"
   },
   "dependencies": {
@@ -43,7 +45,9 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.1.7",
+    "adm-zip": "^0.5.17",
     "jsdom": "^29.1.1",
+    "react-devtools": "^6.1.5",
     "sharp": "^0.34.5",
     "typescript": "~5.6.3",
     "vite": "^6.4.2",

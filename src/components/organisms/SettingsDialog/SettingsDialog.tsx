@@ -26,6 +26,8 @@ export interface SettingsDialogProps {
     templateVariants?: TemplateVariantSpec[];
     templateVariantId?: string | null;
     onTemplateVariantChange?: (variantId: string) => void;
+    systemFonts?: string[];
+    t?: (key: string) => string;
     onClose: () => void;
 }
 
@@ -43,6 +45,8 @@ export const SettingsDialog = ({
     templateVariants,
     templateVariantId,
     onTemplateVariantChange,
+    systemFonts,
+    t,
     onClose,
 }: SettingsDialogProps) => {
     const title =
@@ -77,6 +81,8 @@ export const SettingsDialog = ({
                     templateVariants={templateVariants}
                     templateVariantId={templateVariantId}
                     onTemplateVariantChange={onTemplateVariantChange}
+                    systemFonts={systemFonts}
+                    t={t}
                 />
             )}
 

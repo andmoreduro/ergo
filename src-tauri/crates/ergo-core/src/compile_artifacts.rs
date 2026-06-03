@@ -235,6 +235,7 @@ mod tests {
     #[test]
     fn compiles_svg_from_document_session_sources() {
         let vfs = Arc::new(VirtualFileSystem::new());
+        crate::test_fixtures::populate_versatile_apa(&vfs);
         let session = DocumentSession::new(Arc::clone(&vfs));
         let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
         session
@@ -249,28 +250,13 @@ mod tests {
     }
 
     /// New project AST + bundled `apa7` template spec → canonical `.ergproj` sources → Typst compile.
-    /// Requires `@preview/versatile-apa:7.2.0` in the local Typst package cache (`typst --version`).
     #[test]
     fn new_apa7_project_from_bundled_template_compiles_to_svg() {
         use crate::document_session::{DEPENDENCY_MANIFEST_PATH, TEMPLATE_PATH};
-        use crate::package_resolver::{collect_package_files, PackageRef};
-        use crate::test_fixtures::default_apa7_project_ast;
-
-        let package = PackageRef::from_import("@preview/versatile-apa", "7.2.0").unwrap();
-        let package_files = match collect_package_files(&package) {
-            Ok(files) => files,
-            Err(error) => {
-                eprintln!(
-                    "skipping new apa7 project compile test (Typst package cache): {error}"
-                );
-                return;
-            }
-        };
+        use crate::test_fixtures::{default_apa7_project_ast, populate_versatile_apa};
 
         let vfs = Arc::new(VirtualFileSystem::new());
-        for file in package_files {
-            vfs.write_file(&file.path, file.bytes);
-        }
+        populate_versatile_apa(&vfs);
 
         let session = DocumentSession::new(Arc::clone(&vfs));
         session.sync_snapshot(default_apa7_project_ast()).unwrap();
@@ -333,6 +319,7 @@ mod tests {
         event: crate::document_session_types::DocumentEvent,
     ) {
         let vfs = Arc::new(VirtualFileSystem::new());
+        crate::test_fixtures::populate_versatile_apa(&vfs);
         let session = DocumentSession::new(Arc::clone(&vfs));
         let mut cache = SvgPageCache::new();
         let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
@@ -386,6 +373,194 @@ mod tests {
                 value: serde_json::json!("Título escrito"),
             },
         );
+    }
+
+    /// Diagnostic (run with `--ignored --nocapture`): compares per-compile cost
+    /// of the apa7 vs umb-apa default documents, simulating edits between compiles
+    /// so Typst's memoization does not hide the real cost.
+    #[test]
+    #[ignore]
+    fn diagnose_compile_cost_apa7_vs_umb_apa() {
+        use crate::ast::{DocumentElement, DocumentSection};
+        use crate::path_utils::file_id_for_virtual_path;
+        use crate::test_fixtures::{
+            default_apa7_project_ast, default_umb_apa_project_ast, populate_umb_apa,
+            populate_versatile_apa, rich_text,
+        };
+        use std::time::Instant;
+
+        // Ensure the content section has an editable paragraph (apa7's default AST
+        // ships with an empty body — without this the "edit" would be a no-op and
+        // every recompile would be a memoization cache hit rather than real work).
+        fn ensure_body_paragraph(ast: &mut DocumentAST) {
+            use crate::ast::Paragraph;
+            for section in &mut ast.sections {
+                if let DocumentSection::Content(content) = section {
+                    if !content
+                        .elements
+                        .iter()
+                        .any(|e| matches!(e, DocumentElement::Paragraph(_)))
+                    {
+                        content.elements.push(DocumentElement::Paragraph(Paragraph {
+                            id: "p-1".to_string(),
+                            content: vec![rich_text("Body paragraph text.")],
+                        }));
+                    }
+                    return;
+                }
+            }
+        }
+
+        fn set_body_paragraph_text(ast: &mut DocumentAST, text: &str) {
+            for section in &mut ast.sections {
+                if let DocumentSection::Content(content) = section {
+                    for element in &mut content.elements {
+                        if let DocumentElement::Paragraph(p) = element {
+                            p.content = vec![rich_text(text)];
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        fn measure(label: &str, populate: impl Fn(&VirtualFileSystem), mut base_ast: DocumentAST) {
+            ensure_body_paragraph(&mut base_ast);
+            let vfs = Arc::new(VirtualFileSystem::new());
+            populate(&vfs);
+            let session = DocumentSession::new(Arc::clone(&vfs));
+            let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
+            let mut cache = SvgPageCache::new();
+
+            // Warm up (first compile compiles everything + populates caches).
+            session.sync_snapshot(base_ast.clone()).unwrap();
+            let warm_start = Instant::now();
+            let document = compile_document(&world).unwrap();
+            let warm_ms = warm_start.elapsed().as_secs_f64() * 1000.0;
+            let page_count = document.pages.len();
+            let svgs = render_svgs_incremental(&document, &mut cache);
+            let total_svg_bytes: usize = svgs.iter().map(|s| s.len()).sum();
+            let max_page_bytes = svgs.iter().map(|s| s.len()).max().unwrap_or(0);
+
+            // Simulate typing: change the body paragraph each iteration and recompile.
+            const ITERS: usize = 12;
+            let mut compile_total_ms = 0.0;
+            let mut render_total_ms = 0.0;
+            for i in 0..ITERS {
+                let mut ast = base_ast.clone();
+                set_body_paragraph_text(&mut ast, &format!("Body paragraph edit number {i}."));
+                session.sync_snapshot(ast).unwrap();
+
+                let c0 = Instant::now();
+                let doc = compile_document(&world).unwrap();
+                compile_total_ms += c0.elapsed().as_secs_f64() * 1000.0;
+
+                let r0 = Instant::now();
+                let _ = render_svgs_incremental(&doc, &mut cache);
+                render_total_ms += r0.elapsed().as_secs_f64() * 1000.0;
+            }
+
+            println!(
+                "[{label}] pages={page_count} warm_compile={warm_ms:.1}ms \
+                 avg_edit_compile={:.1}ms avg_edit_svg_render={:.1}ms \
+                 total_svg={}KB largest_page_svg={}KB",
+                compile_total_ms / ITERS as f64,
+                render_total_ms / ITERS as f64,
+                total_svg_bytes / 1024,
+                max_page_bytes / 1024,
+            );
+        }
+
+        // Fairness: give apa7 a fully populated front matter so it renders a real
+        // title/abstract page (not a blank one), matching umb-apa's filled inputs.
+        let full_apa7 = {
+            let mut ast = default_apa7_project_ast();
+            ast.inputs
+                .insert("title".into(), serde_json::json!("A Fully Populated Title"));
+            ast.inputs.insert(
+                "authors".into(),
+                serde_json::json!([{ "name": "Author One", "affiliations": [0] }]),
+            );
+            ast.inputs
+                .insert("affiliations".into(), serde_json::json!(["University of Somewhere"]));
+            ast.inputs.insert(
+                "abstract_text".into(),
+                serde_json::json!("This is an abstract with several sentences of content. \
+                    It describes the study, methods, and findings in enough words to fill a page."),
+            );
+            ast.inputs
+                .insert("author_note".into(), serde_json::json!("Author note paragraph."));
+            ast.inputs.insert("course".into(), serde_json::json!("PSY 101"));
+            ast.inputs
+                .insert("instructor".into(), serde_json::json!("Dr. Instructor"));
+            ast.inputs
+                .insert("due_date".into(), serde_json::json!("June 3, 2026"));
+            ast.inputs
+                .insert("keywords".into(), serde_json::json!(["alpha", "beta"]));
+            ast
+        };
+
+        measure("apa7-empty-fm", populate_versatile_apa, default_apa7_project_ast());
+        measure("apa7-full-fm", populate_versatile_apa, full_apa7);
+        measure("umb-apa", populate_umb_apa, default_umb_apa_project_ast());
+
+        // Isolation: hold the body element as the only thing that changes per edit
+        // (like a real keystroke), and compare the full umb-apa main.typ against
+        // variants with the front-matter call or the outlines stripped out.
+        fn measure_variant(label: &str, main_src: &str, vfs: &Arc<VirtualFileSystem>) {
+            vfs.write_source("main.typ", main_src.to_string());
+            let world = ErgoWorld::new(Arc::clone(vfs), file_id_for_virtual_path("main.typ"));
+            // warm
+            let _ = compile_document(&world);
+            const ITERS: usize = 12;
+            let mut total = 0.0;
+            for i in 0..ITERS {
+                vfs.write_source(
+                    "elements/p-1.typ",
+                    format!("Body paragraph edit number {i}.\n"),
+                );
+                let t = Instant::now();
+                let _ = compile_document(&world).unwrap();
+                total += t.elapsed().as_secs_f64() * 1000.0;
+            }
+            println!("[isolate:{label}] avg_edit_compile={:.1}ms", total / ITERS as f64);
+        }
+
+        {
+            let vfs = Arc::new(VirtualFileSystem::new());
+            populate_umb_apa(&vfs);
+            let session = DocumentSession::new(Arc::clone(&vfs));
+            session.sync_snapshot(default_umb_apa_project_ast()).unwrap();
+            let full = vfs.read_source("main.typ").unwrap();
+
+            // Strip the `#front-matter( ... )` call (it ends right before the outlines).
+            let no_frontmatter = match (full.find("#front-matter("), full.find("#outline(")) {
+                (Some(fm), Some(ol)) if fm < ol => {
+                    let mut s = full.clone();
+                    s.replace_range(fm..ol, "");
+                    s
+                }
+                _ => full.clone(),
+            };
+
+            // Strip every `#outline(...)`/`#appendix-outline(...)` + following pagebreak block.
+            let mut no_outlines = String::new();
+            for line in full.lines() {
+                let t = line.trim_start();
+                if t.starts_with("#outline(")
+                    || t.starts_with("#appendix-outline(")
+                    || t == "#pagebreak()"
+                {
+                    continue;
+                }
+                no_outlines.push_str(line);
+                no_outlines.push('\n');
+            }
+
+            measure_variant("full", &full, &vfs);
+            measure_variant("no-frontmatter", &no_frontmatter, &vfs);
+            measure_variant("no-outlines", &no_outlines, &vfs);
+        }
     }
 
     #[test]
