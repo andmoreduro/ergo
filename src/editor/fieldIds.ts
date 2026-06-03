@@ -100,9 +100,11 @@ export const editorFocusIdsForBackendField = (
     fieldId: string | null,
 ) => {
     if (elementId === backendInputsElementId && fieldId?.startsWith("/")) {
+        const indexed = fieldId.match(/^(\/[^/]+)\/\d+$/);
+        const editorPath = indexed ? indexed[1] : fieldId;
         return {
             elementId: projectInputElementId,
-            fieldId: projectInputFieldId(fieldId),
+            fieldId: projectInputFieldId(editorPath),
         };
     }
 

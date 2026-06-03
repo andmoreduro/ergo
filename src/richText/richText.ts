@@ -255,8 +255,14 @@ const paragraphIsEmpty = (paragraph: RichText[]): boolean =>
  * block child (`<div>`/`<p>`, as browsers produce on Enter) is one paragraph;
  * loose inline nodes are grouped into a paragraph. Nested blocks are flattened.
  */
+export type ParseRichTextParagraphsOptions = {
+    /** Keep a trailing empty block while editing (finalize on commit instead). */
+    keepTrailingEmptyParagraph?: boolean;
+};
+
 export const parseRichTextParagraphsFromEditableRoot = (
     root: HTMLElement,
+    options?: ParseRichTextParagraphsOptions,
 ): RichText[][] => {
     const paragraphs: RichText[][] = [];
     let inlineBuffer: Node[] = [];
@@ -286,13 +292,15 @@ export const parseRichTextParagraphsFromEditableRoot = (
     });
     flushInline();
 
-    // Drop a single trailing empty paragraph (browsers leave a trailing block),
-    // but always keep at least one paragraph.
-    while (
-        paragraphs.length > 1 &&
-        paragraphIsEmpty(paragraphs[paragraphs.length - 1] ?? [])
-    ) {
-        paragraphs.pop();
+    if (!options?.keepTrailingEmptyParagraph) {
+        // Drop a single trailing empty paragraph (browsers leave a trailing block),
+        // but always keep at least one paragraph.
+        while (
+            paragraphs.length > 1 &&
+            paragraphIsEmpty(paragraphs[paragraphs.length - 1] ?? [])
+        ) {
+            paragraphs.pop();
+        }
     }
 
     return paragraphs.length > 0 ? paragraphs : [[]];
