@@ -2,6 +2,7 @@ export interface PreviewTelemetry {
     totalLatencyMs: number;
     queuedToSyncMs: number;
     workerSyncMs: number;
+    /** Worker compile trip (Typst + optional SVG inlining). */
     compileMs: number;
     /** Compile result → first visible page's SVG written into the DOM. */
     svgRenderMs: number;
@@ -26,7 +27,8 @@ export interface PreviewTelemetry {
     /**
      * Of svgRenderMs: the `renderSvgPage` worker round-trip (Typst → SVG). Zero
      * for a page whose SVG the compile trip already inlined (the common case for
-     * the visible page) — that render cost is folded into `compileMs` instead.
+     * the visible page) — that cost is included in `compileMs` when the compile
+     * trip inlines SVG for visible changed pages.
      */
     workerRenderMs: number;
     /** Of svgRenderMs: the `innerHTML =` parse of that SVG string. */

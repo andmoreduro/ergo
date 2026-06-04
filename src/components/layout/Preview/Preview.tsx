@@ -10,14 +10,12 @@ import {
     type RefObject,
     type SetStateAction,
 } from "react";
-import { usePreviewCaretSync } from "../../../hooks/usePreviewCaretSync";
+import { usePreviewSync } from "../../../hooks/usePreviewSync";
 import { usePreviewZoomInput } from "../../../hooks/usePreviewZoomInput";
 import {
-    caretStyleForPageMetrics,
     pageSurfaceLayoutStyle,
     previewPageDisplaySizeStyle,
     setPreviewPageMetrics,
-    syntheticCaretCue,
     type PagePtMetrics,
     type PreviewPageMetrics,
 } from "../../../preview/previewPageMetrics";
@@ -30,9 +28,8 @@ import {
 } from "../../../hooks/previewTelemetry";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { isDebugMenuEnabled } from "../../../config/debug";
-import { useDocumentFocus, useDocumentFocusSelector } from "../../../state/DocumentContext";
+import { useDocumentFocusSelector } from "../../../state/DocumentContext";
 import type { useCompiler } from "../../../hooks/useCompiler";
-import type { PreviewElementPosition } from "../../../bindings/PreviewElementPosition";
 import { useActionDispatcher } from "../../../actions/runtime";
 import type { ExportFormat } from "../../../bindings/ExportFormat";
 import { m } from "../../../paraglide/messages.js";
@@ -96,7 +93,6 @@ export const Preview = ({
     onExport,
     scrollRef,
 }: PreviewProps) => {
-    const { documentFocus } = useDocumentFocus();
     const dispatchAction = useActionDispatcher();
     const {
         previewPages,
@@ -156,29 +152,13 @@ export const Preview = ({
         [focusElementId, sourceMap],
     );
 
-    const {
-        highlightedPosition,
-        handlePreviewClick,
-        scrollCaretAfterPageRender,
-        syncCaretScrollToLayout,
-    } = usePreviewCaretSync({
+    const { handlePreviewClick } = usePreviewSync({
         scrollRef: previewScrollRef,
-        documentFocus,
         previewRevision,
+        previewPages,
         dispatchAction,
     });
 
-    // Stable per-page callbacks so memoized `PreviewPageSvg` instances aren't
-    // re-rendered just because the parent re-rendered (e.g. on every caret move).
-    // The page passes its own number back, and the focus-dependent
-    // `scrollCaretAfterPageRender` is reached through a ref so its identity churn
-    // doesn't leak into the props.
-    const scrollCaretRef = useRef(scrollCaretAfterPageRender);
-    scrollCaretRef.current = scrollCaretAfterPageRender;
-    const handlePageRendered = useCallback(
-        (pageNumber: number) => scrollCaretRef.current(pageNumber),
-        [],
-    );
     const handlePageMetrics = useCallback(
         (pageNumber: number, metrics: PagePtMetrics) =>
             setRenderedPageMetrics((current) => ({
@@ -343,8 +323,7 @@ export const Preview = ({
         () => ({ widthPt: 612, heightPt: 792 }),
         [],
     );
-    const activePageNumber =
-        highlightedPosition?.pageNumber ?? previewPages[0]?.page_number ?? null;
+    const activePageNumber = previewPages[0]?.page_number ?? null;
     const activePageSize =
         previewPageSizes[
             previewPages.findIndex((page) => page.page_number === activePageNumber)
@@ -408,10 +387,6 @@ export const Preview = ({
         effectiveZoom,
         manualZoomFromInteraction,
     );
-
-    useLayoutEffect(() => {
-        syncCaretScrollToLayout(effectiveZoom);
-    }, [syncCaretScrollToLayout, effectiveZoom]);
 
     const [isZoomMenuOpen, setZoomMenuOpen] = useState(false);
     const [isExportMenuOpen, setExportMenuOpen] = useState(false);
@@ -621,15 +596,8 @@ export const Preview = ({
                                         pageIndex={index}
                                         pageNumber={pageNumber}
                                         previewRevision={previewRevision}
-                                        highlightedPosition={
-                                            highlightedPosition?.pageNumber ===
-                                            pageNumber
-                                                ? highlightedPosition
-                                                : null
-                                        }
                                         zoom={effectiveZoom}
                                         previewScrollRef={previewScrollRef}
-                                        onPageRendered={handlePageRendered}
                                         onPagePainted={onFirstPagePainted}
                                         onPageMetrics={handlePageMetrics}
                                         onPageSvg={handlePageSvg}
@@ -678,8 +646,6 @@ interface PreviewPageSvgProps {
     previewRevision: number;
     zoom: number;
     previewScrollRef: RefObject<HTMLElement | null>;
-    highlightedPosition: PreviewElementPosition | null;
-    onPageRendered: (pageNumber: number) => void;
     onPagePainted: (paintInfo: PagePaintInfo) => void;
     onPageMetrics: (pageNumber: number, metrics: PagePtMetrics) => void;
     onPageSvg: (pageNumber: number, renderedPage: RenderedSvgPage) => void;
@@ -702,8 +668,6 @@ const PreviewPageSvgComponent = ({
     previewRevision,
     zoom,
     previewScrollRef,
-    highlightedPosition,
-    onPageRendered,
     onPagePainted,
     onPageMetrics,
     onPageSvg,
@@ -711,6 +675,8 @@ const PreviewPageSvgComponent = ({
 }: PreviewPageSvgProps) => {
     const pageRef = useRef<HTMLDivElement>(null);
     const svgRef = useRef<HTMLDivElement>(null);
+    const onPagePaintedRef = useRef(onPagePainted);
+    onPagePaintedRef.current = onPagePainted;
     const renderRequestIdRef = useRef(0);
     const hasRenderedRef = useRef(false);
     const lastRenderedRevisionRef = useRef<number | null>(null);
@@ -725,10 +691,6 @@ const PreviewPageSvgComponent = ({
     const [pageMetrics, setPageMetrics] = useState<PagePtMetrics | null>(
         initialMetrics,
     );
-    const needsCaretRender =
-        highlightedPosition?.pageNumber === pageNumber &&
-        highlightedPosition.caretCue !== null;
-
     useEffect(() => {
         if (initialMetrics) {
             setPageMetrics(initialMetrics);
@@ -737,7 +699,6 @@ const PreviewPageSvgComponent = ({
 
     const isInViewport = useInViewport(pageRef, {
         rootRef: previewScrollRef,
-        forceVisible: needsCaretRender,
     });
 
     // Report visibility so the next compile inlines this page's SVG while it's
@@ -766,7 +727,7 @@ const PreviewPageSvgComponent = ({
             const lastRender = lastRenderRef.current;
             const renderedThisRevision = lastRender?.revision === previewRevision;
             cancelPaint = afterNextPaint(() =>
-                onPagePainted({
+                onPagePaintedRef.current({
                     effectStartAt,
                     domWrittenAt,
                     workerRenderMs: renderedThisRevision
@@ -790,7 +751,6 @@ const PreviewPageSvgComponent = ({
                 hasRenderedRef.current = true;
                 lastRenderedRevisionRef.current = cachedPage.revision;
             }
-            onPageRendered(pageNumber);
             reportPaint();
             return () => cancelPaint?.();
         }
@@ -817,7 +777,6 @@ const PreviewPageSvgComponent = ({
             });
             hasRenderedRef.current = true;
             lastRenderedRevisionRef.current = previewRevision;
-            onPageRendered(pageNumber);
             reportPaint();
             return () => cancelPaint?.();
         }
@@ -857,7 +816,6 @@ const PreviewPageSvgComponent = ({
                 });
                 hasRenderedRef.current = true;
                 lastRenderedRevisionRef.current = previewRevision;
-                onPageRendered(pageNumber);
                 reportPaint();
             })
             .catch((err) => {
@@ -875,25 +833,12 @@ const PreviewPageSvgComponent = ({
         isInViewport,
         onPageMetrics,
         onPagePainted,
-        onPageRendered,
         onPageSvg,
         pageIndex,
         pageNumber,
         previewRevision,
     ]);
 
-    const caretStyle =
-        highlightedPosition &&
-        highlightedPosition.pageNumber === pageNumber &&
-        pageMetrics
-            ? caretStyleForPageMetrics(
-                  {
-                      xPt: highlightedPosition.xPt,
-                      caretCue: syntheticCaretCue(highlightedPosition),
-                  },
-                  pageMetrics,
-              )
-            : null;
     const surfaceLayout = pageSurfaceLayoutStyle(zoom, pageMetrics);
     const svgStyle = pageMetrics
         ? previewPageDisplaySizeStyle(
@@ -932,14 +877,6 @@ const PreviewPageSvgComponent = ({
                     data-preview-page-content="svg"
                     style={svgStyle}
                 />
-                {caretStyle && (
-                    <span
-                        key={`${highlightedPosition?.sourceRevision}-${highlightedPosition?.elementId}-${highlightedPosition?.fieldId}-${highlightedPosition?.caretUtf16Offset}-${caretStyle.left}-${caretStyle.top}`}
-                        className={styles.syncCaret}
-                        data-preview-sync-caret="true"
-                        style={caretStyle}
-                    />
-                )}
             </div>
         </div>
     );
@@ -947,10 +884,8 @@ const PreviewPageSvgComponent = ({
 
 /**
  * Memoized so the page list (one instance per page) doesn't re-render on every
- * parent render. With stable callbacks and a per-page `highlightedPosition`,
- * only the page under the caret re-renders when the caret moves — not all pages.
- * Unchanged pages ignore global `previewRevision` bumps so compile updates
- * only reconcile pages whose SVG actually changed.
+ * parent render. Unchanged pages ignore global `previewRevision` bumps so
+ * compile updates only reconcile pages whose SVG actually changed.
  */
 const previewPageSvgPropsAreEqual = (
     prev: PreviewPageSvgProps,
@@ -964,10 +899,7 @@ const previewPageSvgPropsAreEqual = (
         prev.cachedPage !== next.cachedPage ||
         prev.inlineSvg !== next.inlineSvg ||
         prev.initialMetrics !== next.initialMetrics ||
-        prev.highlightedPosition !== next.highlightedPosition ||
         prev.previewScrollRef !== next.previewScrollRef ||
-        prev.onPageRendered !== next.onPageRendered ||
-        prev.onPagePainted !== next.onPagePainted ||
         prev.onPageMetrics !== next.onPageMetrics ||
         prev.onPageSvg !== next.onPageSvg ||
         prev.onPageVisibilityChange !== next.onPageVisibilityChange

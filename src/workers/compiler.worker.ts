@@ -68,10 +68,17 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             }
             case "compile": {
                 if (!compiler) return;
+                const compileStarted = performance.now();
                 const result = compiler.compile_preview(
                     message.payload.svgPageIndices,
                 );
-                reply({ type: "compile_done", result, id });
+                const compileFinished = performance.now();
+                reply({
+                    type: "compile_done",
+                    result,
+                    compileMs: Math.round(compileFinished - compileStarted),
+                    id,
+                });
                 break;
             }
             case "bootstrap": {
@@ -189,15 +196,6 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                     BigInt(message.payload.sourceRevision),
                 );
                 reply({ type: "jump_done", result, id });
-                break;
-            }
-            case "positions_for_focus": {
-                if (!compiler) return;
-                const result = compiler.positions_for_focus(
-                    message.payload.target,
-                    BigInt(message.payload.sourceRevision),
-                );
-                reply({ type: "positions_done", result, id });
                 break;
             }
             case "export_pdf": {

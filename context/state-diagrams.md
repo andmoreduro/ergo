@@ -66,7 +66,7 @@ stateDiagram-v2
 
 `PreviewSyncState` updates on successful main compile. Resource document may be cached (comemo) until `dirty_resource_ids` changes.
 
-While **Retained**, `PreviewSyncState` serves `jump_from_click` and `positions_for_focus` for the displayed revision; **Unavailable** when the requested revision does not match the retained preview. Caret-specific `positions_for_focus` responses are exact roundtrip sync points. Same-field `NoMatch` for the retained revision leaves the last exact caret visible until a retained revision resolves the focused caret or focus identity changes.
+While **Retained**, `PreviewSyncState` serves `jump_from_click` for the displayed revision; **Unavailable** when the requested revision does not match the retained preview. Forward preview sync scrolls to the changed page nearest the viewport anchor after compile; the UI does not call `positions_for_focus`.
 
 ## 4. Preview Page Renderer Lifecycle
 
@@ -80,13 +80,11 @@ stateDiagram-v2
     Rendering --> Showing : SVG innerHTML written
     Showing --> Rendering : changed visible page
     Showing --> Rendering : dirty resource thumbnail after main page paint
-    Showing --> ResolvingSync : click or focus change
-    ResolvingSync --> Showing : positions resolved
     Showing --> Empty : close project
 ```
 
 No visible compile-status UI may resize the preview pane during typing.
-The WASM worker renders main preview pages and resource thumbnails as serialized SVG markup plus compiled Typst page-frame metrics. React writes SVG into stable containers with `innerHTML`; unchanged pages keep their existing SVG content while changed visible pages are replaced in place. The stored metrics drive page layout, click mapping, and caret overlays.
+The WASM worker renders main preview pages and resource thumbnails as serialized SVG markup plus compiled Typst page-frame metrics. React writes SVG into stable containers with `innerHTML`; unchanged pages keep their existing SVG content while changed visible pages are replaced in place. The stored metrics drive page layout and click mapping.
 Main preview pages have render priority for a revision. Resource thumbnails use resource-specific revisions and write SVG after the main preview has painted that resource revision.
 
 ## 5. Key Sequence Resolver Lifecycle

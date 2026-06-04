@@ -38,7 +38,7 @@ sequenceDiagram
 - Main preview and resource previews compile in WASM via `preview_pipeline`.
 - Resource preview VFS uses the same `lib.typ` and `#show: apply` as the main document; `resources.typ` adds preview page dimensions and `#set page` / `#show page` overrides for a white background without headers or numbering. Sidebar thumbnails cap height at 40vh.
 - Compiled outline comes from `document.introspector` on the paged document using the same heading filter as the PDF bookmark panel (`bookmarked: true`, or `bookmarked: auto` with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries (e.g. front-matter sections with `outlined: false, bookmarked: true`) scroll the preview to that page.
-- Main preview pages use `render_svg_page`; the worker returns serialized SVG markup and compiled page-frame metrics for layout, click mapping, and caret overlays.
+- Main preview pages use `render_svg_page`; the worker returns serialized SVG markup and compiled page-frame metrics for layout and click mapping.
 - Main preview pages render only viewport pages whose content changed; unchanged visible pages keep their existing `innerHTML`. Zoom updates page layout without requesting a page rerender.
 - Resource thumbnails use `render_resource_svg_page` and write SVG markup into stable thumbnail containers.
 - Resource thumbnails use resource-specific revisions and wait for the matching main preview revision to paint before replacing thumbnail SVG.
@@ -200,7 +200,7 @@ sequenceDiagram
 
     actor User
     participant Preview as Preview Pages
-    participant Hook as usePreviewCaretSync
+    participant Hook as usePreviewSync
     participant Worker as WASM Worker
     participant Sync as PreviewSyncState
     participant Runtime as Action Runtime
@@ -212,26 +212,22 @@ sequenceDiagram
     Hook->>Runtime: editor::FocusField
 ```
 
-Forward (editor focus → preview caret):
+Forward (compile → preview scroll):
 
 ```mermaid
 sequenceDiagram
     autonumber
 
-    participant Editor as Form Editor
-    participant Hook as usePreviewCaretSync
-    participant Worker as WASM Worker
-    participant Sync as PreviewSyncState
+    participant Compiler as WASM Compile
+    participant Preview as Preview Pages
+    participant Hook as usePreviewSync
 
-    Editor->>Hook: DocumentFocusState change
-    Hook->>Worker: positions_for_focus(target, displayed_revision)
-    Worker->>Sync: exact caret roundtrip or field anchor lookup
-    Sync-->>Preview: PreviewElementPosition[]
+    Compiler->>Preview: CompileResult with changed page fingerprints
+    Preview->>Hook: previewRevision + changed pages
+    Hook->>Preview: scroll to closest changed page (viewport anchor)
 ```
 
 - Requests use the **displayed** preview revision, not the newest in-flight compile.
 - Backward sync prefers `FieldSourceMapEntry`, then element `SourceMapEntry`.
-- Forward sync with `caretUtf16Offset` uses exact roundtrip validation: the rendered preview point must map back through `jump_from_click` to the same form field and UTF-16 caret offset. Unresolved caret targets return `NoMatch`.
-- Forward sync without `caretUtf16Offset` may use field or element anchoring. Approximate candidate selection prefers the page nearest the current preview anchor, then vertical position.
-- Template project inputs use field ids `project-input-` + JSON pointer; backend `field_id` uses the pointer (e.g. `/title`).
+- Forward sync scrolls the preview to the changed page nearest the current viewport anchor after a compile. Manual preview scrolling suppresses auto-scroll until the next compile revision.
 - `editor::FocusField` is a stable action shared by preview clicks and sidebar navigation.
