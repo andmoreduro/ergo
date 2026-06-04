@@ -56,6 +56,9 @@ interface EditorFieldRegistryValue {
     restoreFocusAfterBlur: (blurredFieldId: string) => void;
 }
 
+/** Latest pointerdown target for blur recovery (SVG preview has no relatedTarget). */
+const lastPointerDownTargetRef: { current: EventTarget | null } = { current: null };
+
 export const EditorFieldRegistryProvider = ({
     children,
 }: {
@@ -140,11 +143,17 @@ export const EditorFieldRegistryProvider = ({
     useLayoutEffect(() => {
         const onPointerDown = (event: PointerEvent) => {
             const target = event.target;
+            lastPointerDownTargetRef.current = target;
+
             if (target instanceof HTMLElement && target.closest("[data-editor-field-id]")) {
                 const fieldId = target
                     .closest<HTMLElement>("[data-editor-field-id]")
                     ?.dataset.editorFieldId;
                 activeFieldIdRef.current = fieldId ?? null;
+                return;
+            }
+
+            if (target instanceof HTMLElement && isEditorFocusLoseExempt(target)) {
                 return;
             }
 
@@ -288,9 +297,9 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
         [updateNativeFocus],
     );
 
-    // Typing must not publish document focus — that re-renders Preview and
-    // triggers a caret worker lookup on every keystroke. Caret sync runs on
-    // focus, selection, click, and after each compile (previewRevision bump).
+    // Typing must not publish document focus — that would re-render Preview on
+    // every keystroke. Focus updates run on focus, selection, click, and
+    // programmatic navigation (preview click, outline, sidebar).
     const onInput = useCallback(() => {
         registry?.recordFieldFocus(fieldId);
     }, [fieldId, registry]);
@@ -302,6 +311,7 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
 
     useLayoutEffect(() => {
         const node = nodeRef.current;
+        const fromPreview = programmaticFocus.focusSource === "preview";
         if (
             !node ||
             programmaticFocus.fieldId !== fieldId ||
@@ -312,7 +322,8 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
             // equation source would otherwise have its caret yanked to the mapped
             // offset on every keystroke). External focus only needs applying when
             // the field is not the active element (preview click, nav, insert).
-            document.activeElement === node
+            // Preview clicks on the same field still move the caret.
+            (document.activeElement === node && !fromPreview)
         ) {
             return;
         }
@@ -439,7 +450,8 @@ export const useEditorFocusLostRecovery = (
 
                 if (
                     isEditorFocusLoseExempt(event.relatedTarget) ||
-                    isEditorFocusLoseExempt(document.activeElement)
+                    isEditorFocusLoseExempt(document.activeElement) ||
+                    isEditorFocusLoseExempt(lastPointerDownTargetRef.current)
                 ) {
                     return;
                 }

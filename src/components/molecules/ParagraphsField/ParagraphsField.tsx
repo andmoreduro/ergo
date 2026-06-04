@@ -7,6 +7,7 @@ import {
     type RefCallback,
     type SyntheticEvent,
 } from "react";
+import { useAutoHeight } from "../../atoms/useAutoHeight";
 import type { RichText } from "../../../bindings/RichText";
 import { FieldLabel, type FieldImportance } from "../../atoms/FieldLabel/FieldLabel";
 import { RichTextEditable } from "../../atoms/RichTextEditable/RichTextEditable";
@@ -50,14 +51,7 @@ export const ParagraphsField = ({
     const isComposingRef = useRef(false);
     const lastRenderedRef = useRef("");
 
-    const adjustEditorHeight = useCallback(() => {
-        const node = editorRef.current;
-        if (!node) {
-            return;
-        }
-        node.style.height = "auto";
-        node.style.height = `${node.scrollHeight}px`;
-    }, []);
+    const adjustEditorHeight = useAutoHeight(editorRef);
 
     const setRef = useCallback<RefCallback<HTMLDivElement>>(
         (node) => {

@@ -8,7 +8,7 @@ use ergo_core::document_session::DocumentSession;
 use ergo_core::document_session_types::{DocumentEvent, DocumentSessionStatus};
 use ergo_core::path_utils::file_id_for_virtual_path;
 use ergo_core::preview_pipeline::{apply_document_events, compile_preview_success};
-use ergo_core::preview_sync::{PreviewFocusTarget, PreviewSyncState};
+use ergo_core::preview_sync::PreviewSyncState;
 use ergo_core::resource_watch::RESOURCE_WATCH_MAIN;
 use ergo_core::vfs::VirtualFileSystem;
 use ergo_core::world::{ErgoWorld, WorldSourceSnapshot};
@@ -432,14 +432,6 @@ impl ErgoPreviewEngine {
     ) -> ergo_core::preview_sync_types::PreviewJumpResult {
         self.sync_state
             .jump_from_click(page_number, x_pt, y_pt, source_revision)
-    }
-
-    pub fn positions_for_focus(
-        &self,
-        target: &PreviewFocusTarget,
-        source_revision: u64,
-    ) -> ergo_core::preview_sync_types::PreviewElementPositionsResult {
-        self.sync_state.positions_for_focus(target, source_revision)
     }
 
     pub fn export_pdf(&mut self) -> Result<Vec<u8>, String> {

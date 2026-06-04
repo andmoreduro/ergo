@@ -106,20 +106,6 @@
     height: 100%;
 }
 
-.syncCaret {
-    position: absolute;
-    width: var(--border-width-md);
-    height: var(--border-width-md);
-    min-width: var(--border-width-md);
-    min-height: var(--border-width-md);
-    background-color: var(--color-primary);
-    border-radius: 50%;
-    opacity: 0.95;
-    pointer-events: none;
-    z-index: 2;
-    box-shadow: var(--shadow-ring-caret);
-}
-
 .error {
     flex-shrink: 0;
     padding: var(--space-1) var(--space-2);

@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { focusScrollIdentity, previewAnchorPageFromScroll } from "./previewScroll";
+import {
+    closestChangedPageNumber,
+    previewAnchorPageFromScroll,
+} from "./previewScroll";
 
-describe("focusScrollIdentity", () => {
-    it("ignores caret offset so typing does not retrigger auto-scroll", () => {
-        const base = focusScrollIdentity(4, "heading-1", "heading-1:text");
-        expect(base).toBe(focusScrollIdentity(4, "heading-1", "heading-1:text"));
-        expect(base).not.toBe(
-            focusScrollIdentity(4, "heading-1", "heading-1:other"),
-        );
+describe("closestChangedPageNumber", () => {
+    it("returns the smallest page when there is no anchor", () => {
+        expect(closestChangedPageNumber([3, 1, 7], null)).toBe(1);
+    });
+
+    it("returns the changed page nearest the anchor", () => {
+        expect(closestChangedPageNumber([1, 5, 9], 4)).toBe(5);
+        expect(closestChangedPageNumber([1, 5, 9], 8)).toBe(9);
+        expect(closestChangedPageNumber([1, 5, 9], 6)).toBe(5);
+    });
+
+    it("returns null when no pages changed", () => {
+        expect(closestChangedPageNumber([], 2)).toBeNull();
     });
 });
 
