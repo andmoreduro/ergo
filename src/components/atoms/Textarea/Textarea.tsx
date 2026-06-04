@@ -1,4 +1,5 @@
-import { TextareaHTMLAttributes, forwardRef, useId, memo, useLayoutEffect, useRef } from 'react';
+import { TextareaHTMLAttributes, forwardRef, useId, memo, useRef } from 'react';
+import { useAutoHeight } from '../useAutoHeight';
 import { FieldLabel, type FieldImportance } from '../FieldLabel/FieldLabel';
 import styles from './Textarea.module.css';
 
@@ -61,17 +62,7 @@ export const Textarea = memo(forwardRef<HTMLTextAreaElement, TextareaProps>(
       }
     };
 
-    const adjustHeight = () => {
-      const textarea = localRef.current;
-      if (textarea) {
-        textarea.style.height = 'auto';
-        textarea.style.height = `${textarea.scrollHeight}px`;
-      }
-    };
-
-    useLayoutEffect(() => {
-      adjustHeight();
-    }, [props.value, props.defaultValue]);
+    const adjustHeight = useAutoHeight(localRef, [props.value, props.defaultValue]);
 
     const containerClassNames = [
       styles.container,

@@ -285,21 +285,20 @@ export function useDocumentCompilerSync({
 
                 latencyStartRef.current = lastEvent.timestamp;
 
-                const compileStarted = nowMs();
-                const result = await CompilerClient.compile(
+                const compileOutput = await CompilerClient.compile(
                     currentAst,
                     previewSvgPageIndicesRef.current,
                 );
                 const compileFinished = nowMs();
                 setPendingPreviewTelemetry({
-                    revision: result.source_revision,
+                    revision: compileOutput.result.source_revision,
                     startedAt: lastEvent.timestamp,
                     compileResultAt: compileFinished,
                     queuedToSyncMs: elapsedMs(lastEvent.timestamp, syncStarted),
                     workerSyncMs: elapsedMs(syncStarted, syncFinished),
-                    compileMs: elapsedMs(compileStarted, compileFinished),
+                    compileMs: compileOutput.compileMs,
                 });
-                applyPreviewResult(status, result, currentSessionId);
+                applyPreviewResult(status, compileOutput.result, currentSessionId);
 
                 backendMirrorDirtyRef.current = true;
 

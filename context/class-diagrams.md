@@ -322,7 +322,6 @@ classDiagram
             +render_svg_page(pageIndex)
             +render_resource_svg_page(pageNumber)
             +jump_from_click(page, x_pt, y_pt, revision)
-            +positions_for_focus(target, revision)
             +export_pdf()
             +export_all_png(pixelPerPt)
             +export_all_svg()

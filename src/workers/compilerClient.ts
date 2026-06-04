@@ -3,8 +3,6 @@ import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import type { CompilationResult } from "../bindings/CompilationResult";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { PreviewJumpResult } from "../bindings/PreviewJumpResult";
-import type { PreviewFocusTarget } from "../bindings/PreviewFocusTarget";
-import type { PreviewElementPositionsResult } from "../bindings/PreviewElementPositionsResult";
 import type {
     BootstrapPreviewPayload,
     BootstrapPreviewResult,
@@ -26,6 +24,11 @@ export {
     resetDocumentFontsCache,
     warmupCompiler,
 } from "./compilerWorker";
+
+export type CompilePreviewResponse = {
+    result: CompilationResult;
+    compileMs: number;
+};
 
 export const CompilerClient = {
     async syncSnapshot(ast: DocumentAST): Promise<DocumentSessionStatus> {
@@ -49,7 +52,7 @@ export const CompilerClient = {
     async compile(
         ast: DocumentAST,
         svgPageIndices: number[] = [],
-    ): Promise<CompilationResult> {
+    ): Promise<CompilePreviewResponse> {
         // Keyed + coalesced: a no-op when the font set is unchanged, but a
         // mid-session font change loads the new font before this render so the
         // change actually takes effect (bootstrap alone won't, it's per-session).
@@ -58,7 +61,10 @@ export const CompilerClient = {
             { type: "compile", payload: { svgPageIndices } },
             "compile_done",
         );
-        return reply.result;
+        return {
+            result: reply.result,
+            compileMs: reply.compileMs,
+        };
     },
 
     async bootstrap(
@@ -159,20 +165,6 @@ export const CompilerClient = {
                 payload: { pageNumber, xPt, yPt, sourceRevision },
             },
             "jump_done",
-        );
-        return reply.result;
-    },
-
-    async positionsForFocus(
-        target: PreviewFocusTarget,
-        sourceRevision: number,
-    ): Promise<PreviewElementPositionsResult> {
-        const reply = await callWorker(
-            {
-                type: "positions_for_focus",
-                payload: { target, sourceRevision },
-            },
-            "positions_done",
         );
         return reply.result;
     },

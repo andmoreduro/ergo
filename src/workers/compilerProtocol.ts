@@ -2,9 +2,7 @@ import type { DocumentAST } from "../bindings/DocumentAST";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import type { CompilationResult } from "../bindings/CompilationResult";
-import type { PreviewFocusTarget } from "../bindings/PreviewFocusTarget";
 import type { PreviewJumpResult } from "../bindings/PreviewJumpResult";
-import type { PreviewElementPositionsResult } from "../bindings/PreviewElementPositionsResult";
 import type { ProjectFile } from "../bindings/ProjectFile";
 
 export type VfsFileEntry = { path: string; bytes: Uint8Array };
@@ -55,10 +53,6 @@ export type WorkerRequest =
               sourceRevision: number;
           };
       }
-    | {
-          type: "positions_for_focus";
-          payload: { target: PreviewFocusTarget; sourceRevision: number };
-      }
     | { type: "export_pdf" }
     | { type: "export_png_pages"; payload: { pixelPerPt: number } }
     | { type: "export_svg_pages" };
@@ -86,7 +80,7 @@ export type WorkerResponse =
     | { type: "reset_fonts_done" }
     | { type: "load_fonts_done" }
     | { type: "sync_done"; status: DocumentSessionStatus }
-    | { type: "compile_done"; result: CompilationResult }
+    | { type: "compile_done"; result: CompilationResult; compileMs: number }
     | { type: "bootstrap_done"; payload: BootstrapPreviewResult }
     | { type: "render_done"; payload: RenderPagePayload }
     | { type: "render_svg_done"; payload: RenderSvgPagePayload }
@@ -96,7 +90,6 @@ export type WorkerResponse =
     | { type: "write_source_done" }
     | { type: "apply_patch_done" }
     | { type: "jump_done"; result: PreviewJumpResult }
-    | { type: "positions_done"; result: PreviewElementPositionsResult }
     | { type: "export_pdf_done"; bytes: Uint8Array }
     | { type: "export_png_pages_done"; pages: Uint8Array[] }
     | { type: "export_svg_pages_done"; pages: string[] }

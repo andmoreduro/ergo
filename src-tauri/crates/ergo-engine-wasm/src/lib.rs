@@ -11,15 +11,12 @@ use wasm_bindgen::prelude::*;
 
 use ergo_core::ast::DocumentAST;
 use ergo_core::document_session_types::{DocumentEvent, DocumentSessionStatus};
-use ergo_core::preview_sync::PreviewFocusTarget;
 
 /// Serialize a sync status for the main thread, dropping `field_source_map`.
 ///
-/// The field map is consumed only inside the worker (preview caret/field sync via
-/// `PreviewSyncState`); the main thread reads `source_revision`, `source_map`, and
-/// `dirty_resource_ids` only. Shipping the whole document's field ranges across the
-/// `serde_wasm_bindgen` boundary and the `postMessage` structured clone on every
-/// keystroke is pure overhead that grows with field count.
+/// The field map is consumed inside the worker for backward preview sync
+/// (`jump_from_click`); the main thread reads `source_revision`, `source_map`, and
+/// `dirty_resource_ids` only.
 fn status_to_js(mut status: DocumentSessionStatus) -> Result<JsValue, JsValue> {
     status.field_source_map = Vec::new();
     serde_wasm_bindgen::to_value(&status).map_err(|error| JsValue::from_str(&error.to_string()))
@@ -262,18 +259,6 @@ impl ErgoWasmCompiler {
         let result = self
             .engine
             .jump_from_click(page_number, x_pt, y_pt, source_revision);
-        serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
-    }
-
-    #[wasm_bindgen]
-    pub fn positions_for_focus(
-        &self,
-        target: JsValue,
-        source_revision: u64,
-    ) -> Result<JsValue, JsValue> {
-        let target: PreviewFocusTarget = serde_wasm_bindgen::from_value(target)
-            .map_err(|error| JsValue::from_str(&error.to_string()))?;
-        let result = self.engine.positions_for_focus(&target, source_revision);
         serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
