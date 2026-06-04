@@ -1,4 +1,5 @@
 use std::fmt;
+use std::path::Path;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 
@@ -10,7 +11,7 @@ use ergo_core::document_session_types::DocumentEvent;
 use ergo_core::test_fixtures::basic_document_ast;
 use serde::Serialize;
 
-use crate::engine::ErgoPreviewEngine;
+use crate::engine::{ErgoPreviewEngine, VfsFileEntry};
 
 const DEFAULT_PIXEL_PER_PT: f32 = 2.0;
 
@@ -20,6 +21,10 @@ pub enum WasmPreviewScenario {
     SmallDocument,
     TypingTitle,
     LargeDocument,
+    /// Incremental body typing inside a multi-page document: snapshot once, then
+    /// emit one `UpdateParagraphText` per iteration. Mirrors the real per-keystroke
+    /// hot path on a large project (the latency-growth case being diagnosed).
+    TypingBodyLarge,
 }
 
 impl WasmPreviewScenario {
@@ -28,6 +33,7 @@ impl WasmPreviewScenario {
             Self::SmallDocument => "small-document",
             Self::TypingTitle => "typing-title",
             Self::LargeDocument => "large-document",
+            Self::TypingBodyLarge => "typing-body-large",
         }
     }
 }
@@ -46,8 +52,9 @@ impl FromStr for WasmPreviewScenario {
             "small" | "small-document" => Ok(Self::SmallDocument),
             "typing" | "typing-title" => Ok(Self::TypingTitle),
             "large" | "large-document" => Ok(Self::LargeDocument),
+            "typing-body" | "typing-body-large" => Ok(Self::TypingBodyLarge),
             _ => Err(format!(
-                "Unknown scenario '{value}'. Use small-document, typing-title, or large-document."
+                "Unknown scenario '{value}'. Use small-document, typing-title, large-document, or typing-body-large."
             )),
         }
     }
@@ -113,6 +120,10 @@ pub fn run_wasm_preview_profile(
 ) -> Result<WasmPreviewProfileReport, String> {
     let iteration_count = options.iterations.max(1);
     let mut engine = ErgoPreviewEngine::new();
+    // The bundled templates import their Typst library by path (e.g.
+    // `versatile-apa/lib.typ`); without these files the preview compile fails with
+    // "file not found". The native profiler reads them straight off disk.
+    load_bundled_template_packages(&engine);
     let mut iterations = Vec::with_capacity(iteration_count);
     let mut total = WasmPreviewTiming::default();
 
@@ -158,21 +169,30 @@ fn run_iteration(
         WasmPreviewScenario::TypingTitle if iteration == 0 => basic_document_ast("Érgo", ""),
         WasmPreviewScenario::TypingTitle => {
             let title = typing_title(iteration);
-            let (_, sync_ms) =
-                measure(|| engine.sync_events(vec![DocumentEvent::SetProjectTitle { title }]))?;
-            let (result, compile_ms) = measure(|| Ok(engine.compile_preview()))?;
-            let (rendered, render_ms) =
-                measure(|| render_changed_pages(engine, &result, pixel_per_pt))?;
-            return Ok((
-                WasmPreviewTiming {
-                    sync_ms,
-                    compile_ms,
-                    render_canvas_ms: render_ms,
-                    total_ms: duration_ms(started.elapsed()),
+            return measure_incremental_edit(
+                engine,
+                started,
+                DocumentEvent::SetProjectTitle { title },
+                pixel_per_pt,
+            );
+        }
+        WasmPreviewScenario::TypingBodyLarge if iteration == 0 => large_document_ast(0),
+        WasmPreviewScenario::TypingBodyLarge => {
+            // One growing paragraph edit per iteration — the per-keystroke hot path
+            // on a multi-page document.
+            let text = format!(
+                "Párrafo 1 con texto suficiente para renderizar una página académica de prueba. {}",
+                "x".repeat(iteration)
+            );
+            return measure_incremental_edit(
+                engine,
+                started,
+                DocumentEvent::UpdateParagraphText {
+                    element_id: "paragraph-1".to_string(),
+                    text,
                 },
-                page_count(&result),
-                rendered,
-            ));
+                pixel_per_pt,
+            );
         }
         WasmPreviewScenario::LargeDocument => large_document_ast(iteration),
     };
@@ -191,6 +211,73 @@ fn run_iteration(
         page_count(&result),
         rendered,
     ))
+}
+
+/// Sync one event, compile, and render the changed pages — the per-keystroke
+/// preview cycle. Shared by the title-typing and body-typing scenarios.
+fn measure_incremental_edit(
+    engine: &mut ErgoPreviewEngine,
+    started: Instant,
+    event: DocumentEvent,
+    pixel_per_pt: f32,
+) -> Result<(WasmPreviewTiming, usize, usize), String> {
+    let (_, sync_ms) = measure(|| engine.sync_events(vec![event]))?;
+    let (result, compile_ms) = measure(|| Ok(engine.compile_preview()))?;
+    let (rendered, render_ms) = measure(|| render_changed_pages(engine, &result, pixel_per_pt))?;
+    Ok((
+        WasmPreviewTiming {
+            sync_ms,
+            compile_ms,
+            render_canvas_ms: render_ms,
+            total_ms: duration_ms(started.elapsed()),
+        },
+        page_count(&result),
+        rendered,
+    ))
+}
+
+/// Mount the bundled template Typst packages (`versatile-apa`, `umb-apa`) into the
+/// engine VFS, replicating the app's path-based mount (`<name>/…`, skipping the
+/// package's own `template/` starter). Reads from the repo's `typst_templates/`.
+fn load_bundled_template_packages(engine: &ErgoPreviewEngine) {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../typst_templates");
+    for mount in ["versatile-apa", "umb-apa"] {
+        let base = root.join(mount);
+        let mut files = Vec::new();
+        collect_package_dir(&base, &base, mount, &mut files);
+        if !files.is_empty() {
+            engine.write_vfs_files(files);
+        }
+    }
+}
+
+fn collect_package_dir(base: &Path, current: &Path, mount: &str, out: &mut Vec<VfsFileEntry>) {
+    let Ok(entries) = std::fs::read_dir(current) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_package_dir(base, &path, mount, out);
+            continue;
+        }
+        if !path.is_file() {
+            continue;
+        }
+        let Ok(relative) = path.strip_prefix(base) else {
+            continue;
+        };
+        let relative = relative.to_string_lossy().replace('\\', "/");
+        if relative.starts_with("template/") {
+            continue;
+        }
+        if let Ok(bytes) = std::fs::read(&path) {
+            out.push(VfsFileEntry {
+                path: format!("{mount}/{relative}"),
+                bytes,
+            });
+        }
+    }
 }
 
 fn page_count(result: &ergo_core::compilation_types::CompilationResult) -> usize {
