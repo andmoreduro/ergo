@@ -71,12 +71,21 @@
     display: flex;
     justify-content: center;
     width: max-content;
+    /* Skip layout and paint for off-screen pages so editing one page never
+       repaints the whole stack of (heavy) SVG pages — only the pages actually on
+       screen cost anything. `contain-intrinsic-size` is set inline per page (from
+       its display dimensions) so off-screen pages still reserve their scroll
+       space and scrolling/jumping stays accurate. */
+    content-visibility: auto;
 }
 
 .pageSurface {
     position: relative;
     background-color: var(--color-bg-primary);
     outline: var(--border-width-sm) solid var(--color-border);
+    /* Each page is its own layout + paint boundary, so rewriting one page's SVG
+       repaints only that page instead of invalidating the shared preview layer. */
+    contain: layout paint;
 }
 
 .zoomMenuRoot {

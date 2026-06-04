@@ -106,6 +106,20 @@ export const Preview = ({
         previewSvgPageIndicesRef,
     } = compiler;
 
+    // Timestamp when React starts rendering Preview for a given revision (a ref
+    // write during render is safe — idempotent per revision). Lets telemetry split
+    // the schedule gap into defer (compile result → this render) vs commit (this
+    // render → the page effect).
+    const previewRenderAtRef = useRef<{ revision: number; at: number } | null>(
+        null,
+    );
+    if (
+        previewRevision !== null &&
+        previewRenderAtRef.current?.revision !== previewRevision
+    ) {
+        previewRenderAtRef.current = { revision: previewRevision, at: nowMs() };
+    }
+
     // Depend on the stable `markMainPreviewPainted`, NOT the whole `compiler`
     // object: `compiler` changes identity whenever telemetry updates, which would
     // churn this callback → re-run the page effect → re-finalize telemetry in a
@@ -115,7 +129,12 @@ export const Preview = ({
             if (previewRevision === null) {
                 return;
             }
-            markMainPreviewPainted(previewRevision, paintInfo);
+            const renderAt = previewRenderAtRef.current;
+            markMainPreviewPainted(previewRevision, {
+                ...paintInfo,
+                previewRenderAt:
+                    renderAt?.revision === previewRevision ? renderAt.at : null,
+            });
         },
         [markMainPreviewPainted, previewRevision],
     );
@@ -634,7 +653,8 @@ export const Preview = ({
                             sync: compiler.previewTelemetry.workerSyncMs,
                             compile: compiler.previewTelemetry.compileMs,
                             render: compiler.previewTelemetry.svgRenderMs,
-                            schedule: compiler.previewTelemetry.scheduleMs,
+                            defer: compiler.previewTelemetry.deferMs,
+                            commit: compiler.previewTelemetry.commitMs,
                             worker: compiler.previewTelemetry.workerRenderMs,
                             dom: compiler.previewTelemetry.domWriteMs,
                             raster: compiler.previewTelemetry.rasterMs,
@@ -884,11 +904,20 @@ const PreviewPageSvgComponent = ({
           )
         : undefined;
 
+    // Reserve the page's box for `content-visibility: auto` so off-screen pages
+    // keep their scroll height without being laid out or painted.
+    const pageContainStyle = surfaceLayout
+        ? {
+              containIntrinsicSize: `${surfaceLayout.width} ${surfaceLayout.minHeight}`,
+          }
+        : undefined;
+
     return (
         <div
             ref={pageRef}
             className={styles.page}
             data-preview-page-number={pageNumber}
+            style={pageContainStyle}
         >
             <div
                 className={styles.pageSurface}
