@@ -6,6 +6,14 @@ export interface PreviewTelemetry {
     /** Compile result → first visible page's SVG written into the DOM. */
     svgRenderMs: number;
     /**
+     * Of svgRenderMs: the wait from the compile result arriving to the page's
+     * render effect actually starting — React scheduling latency (the preview
+     * update runs as a low-priority `startTransition`, and the SVG write is a
+     * passive effect flushed after paint). Large values here mean the main thread
+     * is starving the preview update, not that rendering the SVG is slow.
+     */
+    scheduleMs: number;
+    /**
      * Of svgRenderMs: the `renderSvgPage` worker round-trip (Typst → SVG). Zero
      * for a page whose SVG the compile trip already inlined (the common case for
      * the visible page) — that render cost is folded into `compileMs` instead.
@@ -19,6 +27,8 @@ export interface PreviewTelemetry {
 
 /** Sub-timings a page reports when it finishes writing its SVG to the DOM. */
 export interface PagePaintInfo {
+    /** When the page's render effect began running (after React scheduled it). */
+    effectStartAt: number;
     domWrittenAt: number;
     workerRenderMs: number;
     domWriteMs: number;
