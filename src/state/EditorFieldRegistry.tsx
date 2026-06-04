@@ -6,7 +6,6 @@ import {
     useMemo,
     useRef,
     type FocusEventHandler,
-    type KeyboardEventHandler,
     type MouseEventHandler,
     type ReactNode,
     type RefCallback,
@@ -28,7 +27,11 @@ import {
     projectInputElementId,
 } from "../editor/fieldIds";
 import { caretPlainOffsetFromSelection } from "../richText/richText";
-import { useDocument } from "./DocumentContext";
+import {
+    useDocumentActions,
+    useDocumentFocusSelector,
+    type DocumentFocusState,
+} from "./DocumentContext";
 
 export const EditorFieldRegistryContext =
     createContext<EditorFieldRegistryValue | null>(null);
@@ -191,7 +194,6 @@ export interface EditorFieldBinding<T extends EditorFieldElement> {
     onBlur: FocusEventHandler<T>;
     onInput: (event: SyntheticEvent<T>) => void;
     onSelect: (event: SyntheticEvent<T>) => void;
-    onKeyUp: KeyboardEventHandler<T>;
     onClick: MouseEventHandler<T>;
     "data-editor-element-id": string;
     "data-editor-field-id": string;
@@ -205,7 +207,16 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
     fieldId: string;
 }): EditorFieldBinding<T> => {
     const registry = useContext(EditorFieldRegistryContext);
-    const { documentFocus, setDocumentFocus } = useDocument();
+    const { setDocumentFocus } = useDocumentActions();
+    const programmaticFocus = useDocumentFocusSelector(
+        (focus) => ({
+            requestId: focus.requestId,
+            fieldId: focus.fieldId,
+            focusSource: focus.focusSource,
+            caretUtf16Offset: focus.caretUtf16Offset,
+        }),
+        programmaticFocusEqual,
+    );
     const nodeRef = useRef<T | null>(null);
     const lastAppliedRequestRef = useRef<number | null>(null);
     const isApplyingProgrammaticFocusRef = useRef(false);
@@ -277,15 +288,12 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
         [updateNativeFocus],
     );
 
-    const onInput = useCallback(
-        (event: SyntheticEvent<T>) => updateNativeFocus(event.currentTarget),
-        [updateNativeFocus],
-    );
-
-    const onKeyUp = useCallback<KeyboardEventHandler<T>>(
-        (event) => updateNativeFocus(event.currentTarget),
-        [updateNativeFocus],
-    );
+    // Typing must not publish document focus — that re-renders Preview and
+    // triggers a caret worker lookup on every keystroke. Caret sync runs on
+    // focus, selection, click, and after each compile (previewRevision bump).
+    const onInput = useCallback(() => {
+        registry?.recordFieldFocus(fieldId);
+    }, [fieldId, registry]);
 
     const onClick = useCallback<MouseEventHandler<T>>(
         (event) => updateNativeFocus(event.currentTarget),
@@ -296,9 +304,9 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
         const node = nodeRef.current;
         if (
             !node ||
-            documentFocus.fieldId !== fieldId ||
-            documentFocus.focusSource === "native" ||
-            lastAppliedRequestRef.current === documentFocus.requestId ||
+            programmaticFocus.fieldId !== fieldId ||
+            programmaticFocus.focusSource === "native" ||
+            lastAppliedRequestRef.current === programmaticFocus.requestId ||
             // The field is already focused — this is the echo of our own edit
             // round-tripping back through the AST (a deferred-draft field like the
             // equation source would otherwise have its caret yanked to the mapped
@@ -309,7 +317,7 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
             return;
         }
 
-        lastAppliedRequestRef.current = documentFocus.requestId;
+        lastAppliedRequestRef.current = programmaticFocus.requestId;
         isApplyingProgrammaticFocusRef.current = true;
         if (programmaticFocusTimeoutRef.current !== null) {
             window.clearTimeout(programmaticFocusTimeoutRef.current);
@@ -319,15 +327,21 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
             node.scrollIntoView?.({ block: "center", behavior: "smooth" });
             node.focus();
 
-            if (typeof documentFocus.caretUtf16Offset === "number") {
+            if (typeof programmaticFocus.caretUtf16Offset === "number") {
                 if (isTextSelectionField(node)) {
                     const caret = Math.max(
                         0,
-                        Math.min(documentFocus.caretUtf16Offset, node.value.length),
+                        Math.min(
+                            programmaticFocus.caretUtf16Offset,
+                            node.value.length,
+                        ),
                     );
                     node.setSelectionRange(caret, caret);
                 } else if (node instanceof HTMLDivElement) {
-                    restoreRichTextCaret(node, documentFocus.caretUtf16Offset);
+                    restoreRichTextCaret(
+                        node,
+                        programmaticFocus.caretUtf16Offset,
+                    );
                 }
             }
         } finally {
@@ -336,7 +350,7 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
                 programmaticFocusTimeoutRef.current = null;
             }, 0);
         }
-    }, [documentFocus, fieldId]);
+    }, [fieldId, programmaticFocus]);
 
     return {
         ref,
@@ -344,12 +358,27 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
         onBlur,
         onInput,
         onSelect,
-        onKeyUp,
         onClick,
         "data-editor-element-id": elementId,
         "data-editor-field-id": fieldId,
     };
 };
+
+interface ProgrammaticFocusSlice {
+    requestId: number;
+    fieldId: string | null;
+    focusSource: DocumentFocusState["focusSource"];
+    caretUtf16Offset: number | null;
+}
+
+const programmaticFocusEqual = (
+    a: ProgrammaticFocusSlice,
+    b: ProgrammaticFocusSlice,
+): boolean =>
+    a.requestId === b.requestId &&
+    a.fieldId === b.fieldId &&
+    a.focusSource === b.focusSource &&
+    a.caretUtf16Offset === b.caretUtf16Offset;
 
 const caretOffsetFromNode = (node: EditorFieldElement): number | null => {
     if (isTextSelectionField(node)) {

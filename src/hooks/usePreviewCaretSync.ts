@@ -20,6 +20,7 @@ import {
     previewAnchorPageFromScroll,
     schedulePreviewCaretScroll,
 } from "../preview/previewScroll";
+import { caretFetchKey } from "../preview/caretSyncKeys";
 import { CompilerClient } from "../workers/compilerClient";
 import type { ActionInvocation } from "../bindings/ActionInvocation";
 import type { DocumentFocusState } from "../state/DocumentContext";
@@ -303,15 +304,14 @@ export function usePreviewCaretSync({
             target.fieldId,
         );
         const identityChanged = focusScrollIdentityRef.current !== identity;
-        const caretFetchKey = `${previewRevision}:${target.elementId}:${target.fieldId ?? ""}:${target.caretUtf16Offset ?? ""}`;
-        const caretFetchUnchanged =
-            lastCaretFetchKeyRef.current === caretFetchKey;
+        const fetchKey = caretFetchKey(previewRevision, target, documentFocus);
+        const caretFetchUnchanged = lastCaretFetchKeyRef.current === fetchKey;
 
         if (caretFetchUnchanged && !documentFocus.forcePreviewScroll) {
             return;
         }
 
-        lastCaretFetchKeyRef.current = caretFetchKey;
+        lastCaretFetchKeyRef.current = fetchKey;
 
         const shouldScroll =
             documentFocus.forcePreviewScroll || identityChanged;
@@ -333,11 +333,11 @@ export function usePreviewCaretSync({
     }, [
         clearHighlightedPosition,
         documentFocus.anchorPageNumber,
-        documentFocus.caretUtf16Offset,
         documentFocus.elementId,
         documentFocus.fieldId,
         documentFocus.forcePreviewScroll,
         documentFocus.focusSource,
+        documentFocus.requestId,
         previewRevision,
         scheduleHighlightedPositionRequest,
         scrollRef,

@@ -30,7 +30,7 @@ import {
 } from "../../../hooks/previewTelemetry";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { isDebugMenuEnabled } from "../../../config/debug";
-import { useDocumentFocus } from "../../../state/DocumentContext";
+import { useDocumentFocus, useDocumentFocusSelector } from "../../../state/DocumentContext";
 import type { useCompiler } from "../../../hooks/useCompiler";
 import type { PreviewElementPosition } from "../../../bindings/PreviewElementPosition";
 import { useActionDispatcher } from "../../../actions/runtime";
@@ -150,8 +150,10 @@ export const Preview = ({
         Record<number, RenderedSvgPage>
     >({});
     const renderedSvgPagesRef = useRef<Record<number, RenderedSvgPage>>({});
-    const activeSource = sourceMap.find(
-        (entry) => entry.elementId === documentFocus.elementId,
+    const focusElementId = useDocumentFocusSelector((focus) => focus.elementId);
+    const activeSource = useMemo(
+        () => sourceMap.find((entry) => entry.elementId === focusElementId),
+        [focusElementId, sourceMap],
     );
 
     const {
@@ -947,5 +949,35 @@ const PreviewPageSvgComponent = ({
  * Memoized so the page list (one instance per page) doesn't re-render on every
  * parent render. With stable callbacks and a per-page `highlightedPosition`,
  * only the page under the caret re-renders when the caret moves — not all pages.
+ * Unchanged pages ignore global `previewRevision` bumps so compile updates
+ * only reconcile pages whose SVG actually changed.
  */
-const PreviewPageSvg = memo(PreviewPageSvgComponent);
+const previewPageSvgPropsAreEqual = (
+    prev: PreviewPageSvgProps,
+    next: PreviewPageSvgProps,
+): boolean => {
+    if (
+        prev.pageIndex !== next.pageIndex ||
+        prev.pageNumber !== next.pageNumber ||
+        prev.zoom !== next.zoom ||
+        prev.changed !== next.changed ||
+        prev.cachedPage !== next.cachedPage ||
+        prev.inlineSvg !== next.inlineSvg ||
+        prev.initialMetrics !== next.initialMetrics ||
+        prev.highlightedPosition !== next.highlightedPosition ||
+        prev.previewScrollRef !== next.previewScrollRef ||
+        prev.onPageRendered !== next.onPageRendered ||
+        prev.onPagePainted !== next.onPagePainted ||
+        prev.onPageMetrics !== next.onPageMetrics ||
+        prev.onPageSvg !== next.onPageSvg ||
+        prev.onPageVisibilityChange !== next.onPageVisibilityChange
+    ) {
+        return false;
+    }
+    if (prev.changed && prev.previewRevision !== next.previewRevision) {
+        return false;
+    }
+    return true;
+};
+
+const PreviewPageSvg = memo(PreviewPageSvgComponent, previewPageSvgPropsAreEqual);
