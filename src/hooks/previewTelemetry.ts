@@ -7,12 +7,22 @@ export interface PreviewTelemetry {
     svgRenderMs: number;
     /**
      * Of svgRenderMs: the wait from the compile result arriving to the page's
-     * render effect actually starting — React scheduling latency (the preview
-     * update runs as a low-priority `startTransition`, and the SVG write is a
-     * passive effect flushed after paint). Large values here mean the main thread
-     * is starving the preview update, not that rendering the SVG is slow.
+     * render effect actually starting. Split into `deferMs` + `commitMs`.
      */
     scheduleMs: number;
+    /**
+     * Of scheduleMs: compile result → React begins rendering the Preview tree for
+     * this revision. Large here = React's async scheduler is not getting to the
+     * update promptly (busy main thread / concurrent deferral), which a
+     * synchronous flush would bypass.
+     */
+    deferMs: number;
+    /**
+     * Of scheduleMs: React begins rendering Preview → the page's render effect
+     * runs (render + commit of the Preview subtree). Large here = the render
+     * itself is expensive, so the fix is reducing per-keystroke render work.
+     */
+    commitMs: number;
     /**
      * Of svgRenderMs: the `renderSvgPage` worker round-trip (Typst → SVG). Zero
      * for a page whose SVG the compile trip already inlined (the common case for
@@ -29,6 +39,11 @@ export interface PreviewTelemetry {
 export interface PagePaintInfo {
     /** When the page's render effect began running (after React scheduled it). */
     effectStartAt: number;
+    /**
+     * When React began rendering the Preview tree for this revision (filled in by
+     * the Preview parent, not the page). Splits the schedule gap into defer/commit.
+     */
+    previewRenderAt?: number | null;
     domWrittenAt: number;
     workerRenderMs: number;
     domWriteMs: number;
