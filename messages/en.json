@@ -101,7 +101,7 @@
   "titlebar_close": "Close",
   "workspace_form_editor": "Form Editor",
   "workspace_live_preview": "Live Preview",
-  "preview_telemetry": "Latency: {latency}ms · Queue: {queue}ms · Sync: {sync}ms · Compile: {compile}ms · Render: {render}ms (worker {worker} · dom {dom}) · Raster: {raster}ms",
+  "preview_telemetry": "Latency: {latency}ms · Queue: {queue}ms · Sync: {sync}ms · Compile: {compile}ms · Render: {render}ms (schedule {schedule} · worker {worker} · dom {dom}) · Raster: {raster}ms",
   "preview_compile_failed_toast": "Preview compile failed: {message}",
   "workspace_preview_placeholder": "Live Preview content placeholder...",
   "preview_required_fields_intro": "Fill in all required fields to see a live preview:",

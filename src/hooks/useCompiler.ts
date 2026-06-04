@@ -155,6 +155,10 @@ export function useCompiler(
                     pendingTelemetry.compileResultAt,
                     domWrittenAt,
                 ),
+                scheduleMs: elapsedMs(
+                    pendingTelemetry.compileResultAt,
+                    paintInfo?.effectStartAt ?? domWrittenAt,
+                ),
                 workerRenderMs: paintInfo?.workerRenderMs ?? 0,
                 domWriteMs: paintInfo?.domWriteMs ?? 0,
                 rasterMs: elapsedMs(domWrittenAt, paintedAt),

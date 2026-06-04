@@ -634,6 +634,7 @@ export const Preview = ({
                             sync: compiler.previewTelemetry.workerSyncMs,
                             compile: compiler.previewTelemetry.compileMs,
                             render: compiler.previewTelemetry.svgRenderMs,
+                            schedule: compiler.previewTelemetry.scheduleMs,
                             worker: compiler.previewTelemetry.workerRenderMs,
                             dom: compiler.previewTelemetry.domWriteMs,
                             raster: compiler.previewTelemetry.rasterMs,
@@ -725,6 +726,7 @@ const PreviewPageSvgComponent = ({
     }, [isInViewport, onPageVisibilityChange, pageIndex]);
 
     useEffect(() => {
+        const effectStartAt = nowMs();
         const element = svgRef.current;
         if (!element || !isInViewport) {
             return;
@@ -743,6 +745,7 @@ const PreviewPageSvgComponent = ({
             const renderedThisRevision = lastRender?.revision === previewRevision;
             cancelPaint = afterNextPaint(() =>
                 onPagePainted({
+                    effectStartAt,
                     domWrittenAt,
                     workerRenderMs: renderedThisRevision
                         ? lastRender!.workerRenderMs
