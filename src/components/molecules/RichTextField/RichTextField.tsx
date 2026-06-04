@@ -25,7 +25,6 @@ export interface RichTextFieldBinding {
     onBlur: FocusEventHandler<HTMLDivElement>;
     onInput: (event: SyntheticEvent<HTMLDivElement>) => void;
     onSelect: (event: SyntheticEvent<HTMLDivElement>) => void;
-    onKeyUp: KeyboardEventHandler<HTMLDivElement>;
     onClick: MouseEventHandler<HTMLDivElement>;
     "data-editor-element-id": string;
     "data-editor-field-id": string;
