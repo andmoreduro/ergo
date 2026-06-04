@@ -116,7 +116,7 @@ cargo run --release -p ergo-engine-wasm --bin wasm_preview_profile -- --scenario
 cargo run --release -p ergo-engine-wasm --bin wasm_preview_profile -- --scenario large-document --iterations 100 --json
 ```
 
-Available scenarios are `small-document`, `typing-title`, and `large-document`. Release builds are required for meaningful profiler captures. Integration test: `cargo nextest run -p ergo-engine-wasm wasm_preview_profile`.
+Available scenarios are `small-document`, `typing-title`, `large-document`, and `typing-body-large` (incremental per-keystroke body edit inside a multi-page document — the realistic large-project latency case). The profiler loads the bundled `versatile-apa`/`umb-apa` template packages from `typst_templates/` into its VFS so scenarios compile without a Typst package cache. Release builds are required for meaningful profiler captures. Integration test: `cargo nextest run -p ergo-engine-wasm wasm_preview_profile`.
 
 ## Critical: paraglide compile must run first
 

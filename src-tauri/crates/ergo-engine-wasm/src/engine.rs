@@ -166,7 +166,7 @@ pub struct ErgoPreviewEngine {
 impl ErgoPreviewEngine {
     pub fn new() -> Self {
         let vfs = Arc::new(VirtualFileSystem::new());
-        let session = DocumentSession::new(Arc::clone(&vfs));
+        let session = DocumentSession::new_preview(Arc::clone(&vfs));
         let preview_world = make_world(Arc::clone(&vfs), "main.typ");
         let resource_world = make_world(Arc::clone(&vfs), RESOURCE_WATCH_MAIN);
         Self {
@@ -231,10 +231,9 @@ impl ErgoPreviewEngine {
         apply_document_events(&self.session, events)
     }
 
-    pub fn run_compile_preview(&mut self) -> (DocumentSessionStatus, CompilationResult) {
+    pub fn run_compile_preview(&mut self) -> CompilationResult {
         self.sync_worlds_if_needed();
         let source_revision = self.vfs.latest_revision();
-        let status = self.session.status();
 
         let cached_resource_document = self.resource_document.as_deref();
         match compile_preview_success(
@@ -247,11 +246,14 @@ impl ErgoPreviewEngine {
                 let source_snapshot = WorldSourceSnapshot::from_vfs(&self.vfs);
                 let document = Arc::new(success.document);
 
+                // Clone the maps once (straight into `store_preview`) instead of
+                // cloning the whole status and then the maps again.
+                let (source_map, field_source_map) = self.session.preview_sync_maps();
                 self.sync_state.store_preview(
                     source_revision,
                     Arc::clone(&document),
-                    status.source_map.clone(),
-                    status.field_source_map.clone(),
+                    source_map,
+                    field_source_map,
                     source_snapshot,
                 );
 
@@ -263,7 +265,7 @@ impl ErgoPreviewEngine {
                     self.resource_document = Some(Arc::new(resource_document));
                 }
 
-                let result = CompilationResult {
+                CompilationResult {
                     source_revision,
                     status: CompilationStatus::Succeeded,
                     preview_pages: Some(preview_pages),
@@ -271,26 +273,22 @@ impl ErgoPreviewEngine {
                     diagnostics: Vec::new(),
                     outline: Some(success.outline),
                     resources: success.resources,
-                };
-                (status, result)
+                }
             }
-            Err(error) => {
-                let result = CompilationResult {
-                    source_revision,
-                    status: CompilationStatus::Failed,
-                    preview_pages: None,
-                    export_path: None,
-                    diagnostics: vec![error.to_string()],
-                    outline: None,
-                    resources: None,
-                };
-                (status, result)
-            }
+            Err(error) => CompilationResult {
+                source_revision,
+                status: CompilationStatus::Failed,
+                preview_pages: None,
+                export_path: None,
+                diagnostics: vec![error.to_string()],
+                outline: None,
+                resources: None,
+            },
         }
     }
 
     pub fn compile_preview(&mut self) -> CompilationResult {
-        self.run_compile_preview().1
+        self.run_compile_preview()
     }
 
     /// Compile, then inline the rendered SVG of the requested pages into their
@@ -298,7 +296,7 @@ impl ErgoPreviewEngine {
     /// Only changed pages are rendered (an unchanged page is served from the
     /// client-side cache), mirroring the page view's own re-render condition.
     pub fn compile_preview_with_svg(&mut self, svg_page_indices: &[usize]) -> CompilationResult {
-        let mut result = self.run_compile_preview().1;
+        let mut result = self.run_compile_preview();
         self.inline_svg_pages(&mut result, svg_page_indices);
         result
     }
@@ -327,7 +325,7 @@ impl ErgoPreviewEngine {
     /// caches so a shorter document cannot inherit extra pages from the prior compile.
     pub fn reset_for_new_project(&mut self) {
         self.vfs.clear();
-        self.session = DocumentSession::new(Arc::clone(&self.vfs));
+        self.session = DocumentSession::new_preview(Arc::clone(&self.vfs));
         self.sync_worlds_if_needed();
         self.preview_world = make_world(Arc::clone(&self.vfs), "main.typ");
         self.resource_world = make_world(Arc::clone(&self.vfs), RESOURCE_WATCH_MAIN);

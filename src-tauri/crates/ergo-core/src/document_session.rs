@@ -38,10 +38,26 @@ pub struct DocumentSession {
     vfs: Arc<VirtualFileSystem>,
     inner: Mutex<DocumentSessionInner>,
     status_snapshot: RwLock<DocumentSessionStatus>,
+    /// Whether to materialize the `.ergproj/*.json` sidecar files (document state,
+    /// source maps, settings, manifest, template) into the VFS on every sync. The
+    /// backend needs them for archive packing; the WASM preview session does not —
+    /// Typst never imports them — so it skips the per-keystroke JSON encode + Source
+    /// reparse of the whole AST. See [`DocumentSession::new_preview`].
+    write_sidecar_files: bool,
 }
 
 impl DocumentSession {
     pub fn new(vfs: Arc<VirtualFileSystem>) -> Self {
+        Self::with_sidecar_files(vfs, true)
+    }
+
+    /// Preview-only session for the WASM/compile path: skips the `.ergproj/*.json`
+    /// sidecar writes that only the archive layer reads.
+    pub fn new_preview(vfs: Arc<VirtualFileSystem>) -> Self {
+        Self::with_sidecar_files(vfs, false)
+    }
+
+    fn with_sidecar_files(vfs: Arc<VirtualFileSystem>, write_sidecar_files: bool) -> Self {
         Self {
             vfs,
             inner: Mutex::new(DocumentSessionInner::default()),
@@ -54,6 +70,7 @@ impl DocumentSession {
                 fragment_count: 0,
                 dirty_resource_ids: Vec::new(),
             }),
+            write_sidecar_files,
         }
     }
 
@@ -202,29 +219,34 @@ impl DocumentSession {
         write_source_if_changed(&self.vfs, LIB_PATH, &generated.lib_source);
         write_source_if_changed(&self.vfs, REFERENCES_PATH, &generated.references_source);
 
-        write_json_source(&self.vfs, DOCUMENT_STATE_PATH, &ast)?;
-        write_json_source(&self.vfs, DEPENDENCY_MANIFEST_PATH, &ast.dependencies)?;
-        write_json_source(
-            &self.vfs,
-            PROJECT_SETTINGS_PATH,
-            &ast.metadata.project_settings,
-        )?;
-        write_source_if_changed(
-            &self.vfs,
-            TEMPLATE_PATH,
-            &serde_json::json!({
-                "template_id": ast.metadata.template_id,
-                "template_variant_id": ast.metadata.template_variant_id,
-                "title": ast.metadata.title,
-            })
-            .to_string(),
-        );
-        write_json_source(&self.vfs, SOURCE_MAP_PATH, &generated.source_map)?;
-        write_json_source(
-            &self.vfs,
-            FIELD_SOURCE_MAP_PATH,
-            &generated.field_source_map,
-        )?;
+        // Sidecar `.ergproj/*.json` files exist only for archive packing; Typst never
+        // imports them. The preview session skips them so a keystroke does not pay for
+        // a full-AST JSON encode plus a `Source` reparse of each blob.
+        if self.write_sidecar_files {
+            write_json_source(&self.vfs, DOCUMENT_STATE_PATH, &ast)?;
+            write_json_source(&self.vfs, DEPENDENCY_MANIFEST_PATH, &ast.dependencies)?;
+            write_json_source(
+                &self.vfs,
+                PROJECT_SETTINGS_PATH,
+                &ast.metadata.project_settings,
+            )?;
+            write_source_if_changed(
+                &self.vfs,
+                TEMPLATE_PATH,
+                &serde_json::json!({
+                    "template_id": ast.metadata.template_id,
+                    "template_variant_id": ast.metadata.template_variant_id,
+                    "title": ast.metadata.title,
+                })
+                .to_string(),
+            );
+            write_json_source(&self.vfs, SOURCE_MAP_PATH, &generated.source_map)?;
+            write_json_source(
+                &self.vfs,
+                FIELD_SOURCE_MAP_PATH,
+                &generated.field_source_map,
+            )?;
+        }
 
         inner.ast = Some(ast);
         inner.fragments = generated.fragments;
@@ -249,6 +271,13 @@ impl DocumentSession {
 
     pub fn status(&self) -> DocumentSessionStatus {
         self.status_snapshot.read().clone()
+    }
+
+    /// Clone just the source map and field source map for `PreviewSyncState`,
+    /// avoiding a full [`DocumentSessionStatus`] clone on the compile hot path.
+    pub fn preview_sync_maps(&self) -> (Vec<SourceMapEntry>, Vec<FieldSourceMapEntry>) {
+        let status = self.status_snapshot.read();
+        (status.source_map.clone(), status.field_source_map.clone())
     }
 
     pub fn ast(&self) -> Option<DocumentAST> {
