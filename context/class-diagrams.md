@@ -380,7 +380,7 @@ classDiagram
 
 ## Model Notes
 
-- Frontend `DocumentContext` holds `local_ast`, queued `DocumentEvent`s, undo entries `{ forward_event, inverse_event }`, `DocumentFocusState`, and the action context tree; it applies the same event shape for live edits, undo, redo, worker sync, and backend mirror sync.
+- Frontend `DocumentContext` holds `local_ast`, queued `DocumentEvent`s, undo entries `{ forward_event, inverse_event }`, `DocumentFocusState`, and the action context tree. All committed AST mutations apply `DocumentEvent`s via `applyDocumentEvents` (body commits events directly; `dispatch(ASTAction)` derives events then commits the same `COMMIT_EVENTS` path). Undo, redo, worker sync, and backend mirror use the same event shape.
 - `DocumentEvent` variants are defined in `document_session_types` and exported to TypeScript; the diagram omits the full enum list.
 - `GeneratedFragment` is an in-memory cache entry, not a persisted archive file.
 - `FieldSourceMapEntry` maps Typst byte ranges to editor field IDs with UTF-16 segments for browser selection APIs.

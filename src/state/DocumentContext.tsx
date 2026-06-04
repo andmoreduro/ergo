@@ -11,15 +11,14 @@ import {
     useSyncExternalStore,
 } from "react";
 import { astReducer } from "./ast/reducer";
-import { shouldCommitAstAction } from "./ast/commitPolicy";
 import type { ASTAction } from "./ast/actions";
+import { historyEntryForAstAction } from "./commitAstAction";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { ProjectFile } from "../bindings/ProjectFile";
 import type { DocumentEvent as BackendDocumentEvent } from "../bindings/DocumentEvent";
 import { createDefaultDocumentAST } from "./ast/defaults";
 import {
     applyDocumentEvents,
-    createDocumentEventHistoryEntry,
     type DocumentEventHistoryEntry,
 } from "./documentEvents";
 import { clearBodyReconcileSkip } from "../editor/prosemirror/activeView";
@@ -59,8 +58,9 @@ interface DocumentSessionState {
     documentFocus: DocumentFocusState;
     /**
      * Bumps on AST mutations that did NOT originate from a ProseMirror body
-     * commit (`APPLY_AST_ACTION`, `UNDO`, `REDO`, `LOAD_DOCUMENT`) — i.e. changes
-     * the body editor must reconcile into its doc. Body typing (`COMMIT_EVENTS`)
+     * commit (`dispatch` on metadata/structure, `UNDO`, `REDO`, `LOAD_DOCUMENT`) —
+     * i.e. changes the body editor must reconcile into its doc. Body typing
+     * (`COMMIT_EVENTS` without `bumpExternalRevision`)
      * deliberately does not bump it, so the body editor can drive its reconcile
      * off this counter instead of re-rendering on every keystroke.
      */
@@ -73,6 +73,8 @@ type DocumentSessionAction =
           type: "COMMIT_EVENTS";
           forward: BackendDocumentEvent[];
           inverse: BackendDocumentEvent[];
+          /** When true, bumps `externalRevision` so the body editor reconciles. */
+          bumpExternalRevision?: boolean;
       }
     | { type: "UNDO" }
     | { type: "REDO" }
@@ -232,6 +234,31 @@ const queueDocumentEvents = (
         timestamp,
     }));
 
+const commitHistoryEntry = (
+    state: DocumentSessionState,
+    historyEntry: DocumentEventHistoryEntry,
+    historyLimit: number,
+    bumpExternalRevision: boolean,
+): DocumentSessionState => ({
+    ...state,
+    ast: applyDocumentEvents(state.ast, historyEntry.forwardEvents),
+    past: [...state.past, historyEntry].slice(-historyLimit),
+    future: [],
+    events: [
+        ...state.events,
+        ...queueDocumentEvents(
+            historyEntry.forwardEvents,
+            state.nextEventId,
+            historyEntry.timestamp,
+        ),
+    ],
+    nextEventId: state.nextEventId + historyEntry.forwardEvents.length,
+    isDirty: true,
+    externalRevision: bumpExternalRevision
+        ? state.externalRevision + 1
+        : state.externalRevision,
+});
+
 const createSessionReducer =
     (historyLimit: number) =>
     (
@@ -293,29 +320,18 @@ const createSessionReducer =
                 return state;
             }
 
-            const nextAst = applyDocumentEvents(state.ast, action.forward);
             const historyEntry: DocumentEventHistoryEntry = {
                 forwardEvents: action.forward,
                 inverseEvents: action.inverse,
                 timestamp: Date.now(),
             };
 
-            return {
-                ...state,
-                ast: nextAst,
-                past: [...state.past, historyEntry].slice(-historyLimit),
-                future: [],
-                events: [
-                    ...state.events,
-                    ...queueDocumentEvents(
-                        action.forward,
-                        state.nextEventId,
-                        historyEntry.timestamp,
-                    ),
-                ],
-                nextEventId: state.nextEventId + action.forward.length,
-                isDirty: true,
-            };
+            return commitHistoryEntry(
+                state,
+                historyEntry,
+                historyLimit,
+                action.bumpExternalRevision ?? false,
+            );
         }
 
         if (action.type === "MARK_SAVED") {
@@ -344,55 +360,15 @@ const createSessionReducer =
             };
         }
 
+        if (action.action.type !== "LOAD_DOCUMENT") {
+            return state;
+        }
+
         const nextAST = astReducer(state.ast, action.action);
-
-        if (
-            action.action.type !== "LOAD_DOCUMENT" &&
-            nextAST !== state.ast &&
-            !shouldCommitAstAction(state.ast, action.action, nextAST)
-        ) {
-            return state;
-        }
-
-        if (action.action.type === "LOAD_DOCUMENT") {
-            return {
-                ...createInitialSessionState(nextAST, state.sessionId + 1),
-                ast: nextAST,
-                bootstrapFiles: action.action.payload.projectFiles ?? null,
-                externalRevision: state.externalRevision + 1,
-            };
-        }
-
-        if (nextAST === state.ast) {
-            return state;
-        }
-
-        const historyEntry = createDocumentEventHistoryEntry(
-            state.ast,
-            action.action,
-            nextAST,
-        );
-        const eventAppliedAst = applyDocumentEvents(
-            state.ast,
-            historyEntry.forwardEvents,
-        );
-
         return {
-            ...state,
-            ast: eventAppliedAst,
-            past: [...state.past, historyEntry].slice(-historyLimit),
-            future: [],
-            events: [
-                ...state.events,
-                ...queueDocumentEvents(
-                    historyEntry.forwardEvents,
-                    state.nextEventId,
-                    historyEntry.timestamp,
-                ),
-            ],
-            nextEventId:
-                state.nextEventId + historyEntry.forwardEvents.length,
-            isDirty: true,
+            ...createInitialSessionState(nextAST, state.sessionId + 1),
+            ast: nextAST,
+            bootstrapFiles: action.action.payload.projectFiles ?? null,
             externalRevision: state.externalRevision + 1,
         };
     };
@@ -450,11 +426,24 @@ export const DocumentProvider = ({
         getSnapshot: () => focusRef.current,
     }).current;
 
-    const dispatch = useCallback(
-        (action: ASTAction) =>
-            sessionDispatch({ type: "APPLY_AST_ACTION", action }),
-        [],
-    );
+    const dispatch = useCallback((action: ASTAction) => {
+        if (action.type === "LOAD_DOCUMENT") {
+            sessionDispatch({ type: "APPLY_AST_ACTION", action });
+            return;
+        }
+
+        const historyEntry = historyEntryForAstAction(astRef.current, action);
+        if (!historyEntry) {
+            return;
+        }
+
+        sessionDispatch({
+            type: "COMMIT_EVENTS",
+            forward: historyEntry.forwardEvents,
+            inverse: historyEntry.inverseEvents,
+            bumpExternalRevision: true,
+        });
+    }, []);
     const commitDocumentEvents = useCallback(
         (forward: BackendDocumentEvent[], inverse: BackendDocumentEvent[]) =>
             sessionDispatch({ type: "COMMIT_EVENTS", forward, inverse }),
