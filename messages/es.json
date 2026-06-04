@@ -101,7 +101,7 @@
     "titlebar_close": "Cerrar",
     "workspace_form_editor": "Editor de formulario",
     "workspace_live_preview": "Vista previa en vivo",
-    "preview_telemetry": "Latencia: {latency}ms · Cola: {queue}ms · Sinc.: {sync}ms · Compilar: {compile}ms · Render: {render}ms (agenda {schedule} · worker {worker} · dom {dom}) · Rasterizado: {raster}ms",
+    "preview_telemetry": "Latencia: {latency}ms · Cola: {queue}ms · Sinc.: {sync}ms · Compilar: {compile}ms · Render: {render}ms (defer {defer} · commit {commit} · worker {worker} · dom {dom}) · Rasterizado: {raster}ms",
     "preview_compile_failed_toast": "No se pudo compilar la vista previa: {message}",
     "workspace_preview_placeholder": "Marcador de posición de la vista previa...",
     "preview_required_fields_intro": "Completa todos los campos obligatorios para ver la vista previa:",
