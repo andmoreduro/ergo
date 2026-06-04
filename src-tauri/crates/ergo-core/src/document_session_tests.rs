@@ -44,6 +44,47 @@ fn generates_main_and_section_files() {
 }
 
 #[test]
+fn preview_session_skips_sidecar_json_but_keeps_compiled_sources_and_maps() {
+    let vfs = Arc::new(VirtualFileSystem::new());
+    let session = DocumentSession::new_preview(Arc::clone(&vfs));
+
+    let status = session
+        .sync_snapshot(basic_document_ast("Título con ñ", ""))
+        .unwrap();
+
+    // Compiled inputs are still materialized.
+    assert!(vfs.read_source("main.typ").is_ok());
+    assert!(vfs.read_source("lib.typ").is_ok());
+    assert!(vfs.read_source("elements/heading-1.typ").is_ok());
+
+    // Sidecar `.ergproj/*.json` files are not written by the preview session.
+    assert!(vfs.read_source(DOCUMENT_STATE_PATH).is_err());
+    assert!(vfs.read_source(SOURCE_MAP_PATH).is_err());
+    assert!(vfs.read_source(FIELD_SOURCE_MAP_PATH).is_err());
+
+    // The maps still live in the returned status for the worker's preview sync.
+    assert!(status
+        .source_map
+        .iter()
+        .any(|entry| entry.element_id == "heading-1"));
+    assert!(!status.field_source_map.is_empty());
+}
+
+#[test]
+fn default_session_writes_sidecar_json_for_archive_io() {
+    let vfs = Arc::new(VirtualFileSystem::new());
+    let session = DocumentSession::new(Arc::clone(&vfs));
+
+    session
+        .sync_snapshot(basic_document_ast("Título con ñ", ""))
+        .unwrap();
+
+    assert!(vfs.read_source(DOCUMENT_STATE_PATH).is_ok());
+    assert!(vfs.read_source(SOURCE_MAP_PATH).is_ok());
+    assert!(vfs.read_source(FIELD_SOURCE_MAP_PATH).is_ok());
+}
+
+#[test]
 fn generates_compile_safe_defaults_for_empty_template_inputs() {
     let vfs = Arc::new(VirtualFileSystem::new());
     let session = DocumentSession::new(Arc::clone(&vfs));

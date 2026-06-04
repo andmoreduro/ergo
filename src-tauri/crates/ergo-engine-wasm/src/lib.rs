@@ -10,8 +10,20 @@ pub use profile::{
 use wasm_bindgen::prelude::*;
 
 use ergo_core::ast::DocumentAST;
-use ergo_core::document_session_types::DocumentEvent;
+use ergo_core::document_session_types::{DocumentEvent, DocumentSessionStatus};
 use ergo_core::preview_sync::PreviewFocusTarget;
+
+/// Serialize a sync status for the main thread, dropping `field_source_map`.
+///
+/// The field map is consumed only inside the worker (preview caret/field sync via
+/// `PreviewSyncState`); the main thread reads `source_revision`, `source_map`, and
+/// `dirty_resource_ids` only. Shipping the whole document's field ranges across the
+/// `serde_wasm_bindgen` boundary and the `postMessage` structured clone on every
+/// keystroke is pure overhead that grows with field count.
+fn status_to_js(mut status: DocumentSessionStatus) -> Result<JsValue, JsValue> {
+    status.field_source_map = Vec::new();
+    serde_wasm_bindgen::to_value(&status).map_err(|error| JsValue::from_str(&error.to_string()))
+}
 
 use engine::ErgoPreviewEngine as Engine;
 use engine::PageImage as EnginePageImage;
@@ -154,7 +166,7 @@ impl ErgoWasmCompiler {
             .engine
             .sync_snapshot(ast)
             .map_err(|error| JsValue::from_str(&error))?;
-        serde_wasm_bindgen::to_value(&status).map_err(|error| JsValue::from_str(&error.to_string()))
+        status_to_js(status)
     }
 
     #[wasm_bindgen]
@@ -165,7 +177,7 @@ impl ErgoWasmCompiler {
             .engine
             .apply_event(event)
             .map_err(|error| JsValue::from_str(&error))?;
-        serde_wasm_bindgen::to_value(&status).map_err(|error| JsValue::from_str(&error.to_string()))
+        status_to_js(status)
     }
 
     #[wasm_bindgen]
@@ -176,7 +188,7 @@ impl ErgoWasmCompiler {
             .engine
             .sync_events(events)
             .map_err(|error| JsValue::from_str(&error))?;
-        serde_wasm_bindgen::to_value(&status).map_err(|error| JsValue::from_str(&error.to_string()))
+        status_to_js(status)
     }
 
     #[wasm_bindgen]
@@ -202,10 +214,12 @@ impl ErgoWasmCompiler {
 
         let input: BootstrapPreviewInput = serde_wasm_bindgen::from_value(input)
             .map_err(|error| JsValue::from_str(&error.to_string()))?;
-        let output = self
+        let mut output = self
             .engine
             .bootstrap_preview(input.ast, input.files)
             .map_err(|error| JsValue::from_str(&error))?;
+        // Worker-only; see `status_to_js`.
+        output.status.field_source_map = Vec::new();
         serde_wasm_bindgen::to_value(&output).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 

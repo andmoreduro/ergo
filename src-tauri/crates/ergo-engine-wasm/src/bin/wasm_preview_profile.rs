@@ -88,7 +88,9 @@ fn print_help() {
     );
     println!();
     println!("Options:");
-    println!("  --scenario <name>       small-document | typing-title | large-document");
+    println!(
+        "  --scenario <name>       small-document | typing-title | large-document | typing-body-large"
+    );
     println!("  --iterations <count>    Number of preview cycles (default: 100)");
     println!("  --pixel-per-pt <value>  Canvas raster density (default: 2.0)");
     println!("  --json                  Emit JSON report");
