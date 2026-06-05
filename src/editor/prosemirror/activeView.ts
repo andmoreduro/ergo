@@ -54,22 +54,6 @@ export const consumeBodyTabShiftKey = (): boolean => {
     return shift;
 };
 
-/** AST undo/redo for the focused body editor (not ProseMirror's history). */
-export interface BodyHistoryActions {
-    undo: () => void;
-    redo: () => void;
-    canUndo: () => boolean;
-    canRedo: () => boolean;
-}
-
-let bodyHistory: BodyHistoryActions | null = null;
-
-export const setBodyHistoryActions = (actions: BodyHistoryActions | null) => {
-    bodyHistory = actions;
-};
-
-export const getBodyHistoryActions = (): BodyHistoryActions | null => bodyHistory;
-
 let clearPmReconcileSkip: (() => void) | null = null;
 
 export const setBodyReconcileGuard = (clear: (() => void) | null): void => {

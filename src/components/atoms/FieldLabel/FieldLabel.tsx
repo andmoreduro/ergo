@@ -4,16 +4,7 @@ import styles from "./FieldLabel.module.css";
 
 export type FieldImportance = Importance;
 
-const importanceTitle = (importance: FieldImportance): string => {
-    switch (importance) {
-        case "required":
-            return m.field_importance_required();
-        case "recommended":
-            return m.field_importance_recommended();
-        case "optional":
-            return m.field_importance_optional();
-    }
-};
+const requiredTitle = () => m.field_importance_required();
 
 export interface FieldLabelProps {
     htmlFor?: string;
@@ -28,17 +19,17 @@ export const FieldLabel = ({
     importance,
     className = "",
 }: FieldLabelProps) => {
-    const markerTitle = importance ? importanceTitle(importance) : undefined;
+    const required = importance === "required";
+    const markerTitle = required ? requiredTitle() : undefined;
     const Tag = htmlFor ? "label" : "span";
 
     return (
         <Tag
             {...(htmlFor ? { htmlFor } : {})}
             className={[styles.label, className].filter(Boolean).join(" ")}
-            title={markerTitle}
         >
             {children}
-            {importance === "required" && (
+            {required ? (
                 <span
                     className={styles.requiredMarker}
                     title={markerTitle}
@@ -46,16 +37,7 @@ export const FieldLabel = ({
                 >
                     *
                 </span>
-            )}
-            {importance === "recommended" && (
-                <span
-                    className={styles.recommendedMarker}
-                    title={markerTitle}
-                    aria-label={markerTitle}
-                >
-                    *
-                </span>
-            )}
+            ) : null}
         </Tag>
     );
 };

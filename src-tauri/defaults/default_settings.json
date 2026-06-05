@@ -9,5 +9,6 @@
   "autosave_interval_ms": 30000,
   "autosave_on_window_blur": true,
   "autosave_on_app_close": true,
-  "autosave_on_project_close": true
+  "autosave_on_project_close": true,
+  "zotero_translation_server_enabled": false
 }

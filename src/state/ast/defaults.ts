@@ -1,8 +1,15 @@
-import { plainTemplateOutlineDisabledOverrides } from "../../settings/templateOverrides";
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentAST } from "../../bindings/DocumentAST";
+import type { TemplateSpec } from "../../bindings/TemplateSpec";
+import {
+    defaultTemplateVariantId,
+    projectSettingsFromTemplate,
+} from "../../settings/projectSettingsFromTemplate";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
+import { createListItem } from "./listItem";
+
+export { createListItem } from "./listItem";
 import type { TableCell } from "../../bindings/TableCell";
 
 let fallbackIdCounter = 0;
@@ -18,6 +25,20 @@ export const createId = (): string => {
 
 export const emptyAuthorityEntry = () => ({ name: "", role: "" });
 
+export const emptyInputEquation = () => ({ syntax: "typst" as const, source: "" });
+
+export const emptySymbolEntry = () => ({
+    symbol: emptyInputEquation(),
+    term: "",
+    unit: emptyInputEquation(),
+    definition: emptyInputEquation(),
+});
+
+export const emptyAbbreviationEntry = () => ({
+    abbreviation: "",
+    term: "",
+});
+
 export const createRichText = (text = ""): RichText => ({
     text,
     bold: null,
@@ -27,6 +48,8 @@ export const createRichText = (text = ""): RichText => ({
     reference_id: null,
     equation_source: null,
     equation_syntax: "typst",
+    quote_attribution_text: null,
+    quote_attribution_reference_id: null,
 });
 
 export const createHeading = (
@@ -56,6 +79,8 @@ export const createQuote = (
     type: "Quote",
     id,
     content: text ? [createRichText(text)] : [],
+    attribution_text: null,
+    attribution_reference_id: null,
 });
 
 export const createList = (
@@ -63,7 +88,7 @@ export const createList = (
 ): DocumentElement => ({
     type: "List",
     id,
-    items: [[createRichText("")]],
+    items: [createListItem()],
 });
 
 export const createEnumeration = (
@@ -71,7 +96,7 @@ export const createEnumeration = (
 ): DocumentElement => ({
     type: "Enumeration",
     id,
-    items: [[createRichText("")]],
+    items: [createListItem()],
 });
 
 export const createEmptyCell = (): TableCell => ({
@@ -138,9 +163,35 @@ export const DEFAULT_PROJECT_TEMPLATE_ID = "apa7";
 export const UMB_APA_TEMPLATE_ID = "umb-apa";
 export const NO_TEMPLATE_ID = "none";
 
+const createLocalOverrides = () => ({
+    default_font: null,
+    default_font_size: null,
+    theme_mode: "system",
+    locale: "en",
+    recent_projects: [],
+    keymap_profile: "Default",
+    keymap_overrides: [],
+    history_limit: 100,
+    autosave_enabled: true,
+    autosave_interval_ms: 30_000,
+    autosave_on_window_blur: true,
+    autosave_on_app_close: true,
+    autosave_on_project_close: true,
+    default_equation_syntax: "typst" as const,
+});
+
 export const createDocumentAST = (
     templateId: string = DEFAULT_PROJECT_TEMPLATE_ID,
+    templateSpec?: TemplateSpec | null,
 ): DocumentAST => {
+    const projectSettings = projectSettingsFromTemplate(templateSpec, {
+        noneTemplate: templateId === NO_TEMPLATE_ID,
+    });
+    const templateVariantId =
+        templateId === NO_TEMPLATE_ID
+            ? null
+            : defaultTemplateVariantId(templateSpec);
+
     if (templateId === NO_TEMPLATE_ID) {
         return {
             version: "1.0",
@@ -150,32 +201,8 @@ export const createDocumentAST = (
                 title: "Untitled Document",
                 running_head: null,
                 keywords: [],
-                project_settings: {
-                    paper_size: "us-letter",
-                    language: "en",
-                    text_font: "Libertinus Serif",
-                    math_font: "Libertinus Math",
-                    raw_font: "DejaVu Sans Mono",
-                    font_size: 11,
-                    table_stroke_width: 0.5,
-                    template_overrides: plainTemplateOutlineDisabledOverrides(),
-                },
-                local_overrides: {
-                    default_font: null,
-                    default_font_size: null,
-                    theme_mode: "system",
-                    locale: "en",
-                    recent_projects: [],
-                    keymap_profile: "Default",
-                    keymap_overrides: [],
-                    history_limit: 100,
-                    autosave_enabled: true,
-                    autosave_interval_ms: 30_000,
-                    autosave_on_window_blur: true,
-                    autosave_on_app_close: true,
-                    autosave_on_project_close: true,
-                    default_equation_syntax: "typst",
-                },
+                project_settings: projectSettings,
+                local_overrides: createLocalOverrides(),
             },
             dependencies: { packages: [] },
             references: [],
@@ -193,17 +220,22 @@ export const createDocumentAST = (
     }
 
     if (templateId === "umb-apa") {
-        const ast = createDefaultDocumentAST();
+        const ast = createDefaultDocumentAST(templateSpec);
         ast.metadata.template_id = "umb-apa";
-        ast.metadata.template_variant_id = null;
+        ast.metadata.template_variant_id = templateVariantId;
         ast.dependencies = { packages: [] };
         ast.inputs = {
             title: "Untitled Document",
-            authors: [{ name: "", affiliations: [], degrees: [] }],
+            authors: [{ name: "", affiliations: [], titles: [] }],
             affiliations: [],
-            degrees: [],
+            titles: [],
+            faculties: [],
             author_note: "",
-            director: {
+            advisor: {
+                name: "",
+                title: "",
+            },
+            co_advisor: {
                 name: "",
                 title: "",
             },
@@ -211,7 +243,10 @@ export const createDocumentAST = (
             country: "",
             year: new Date().getFullYear().toString(),
             authorities: [emptyAuthorityEntry()],
+            dedication: "",
             acknowledgements: "",
+            symbols: [],
+            abbreviations: [],
             abstract_es: "",
             keywords_es: [],
             abstract_en: "",
@@ -219,44 +254,24 @@ export const createDocumentAST = (
         };
         return ast;
     }
-    const ast = createDefaultDocumentAST();
+    const ast = createDefaultDocumentAST(templateSpec);
+    ast.metadata.template_id = templateId;
+    ast.metadata.template_variant_id = templateVariantId;
     return ast;
 };
 
-export const createDefaultDocumentAST = (): DocumentAST => ({
+export const createDefaultDocumentAST = (
+    templateSpec?: TemplateSpec | null,
+): DocumentAST => ({
     version: "1.0",
     metadata: {
         template_id: DEFAULT_PROJECT_TEMPLATE_ID,
-        template_variant_id: "student",
+        template_variant_id: defaultTemplateVariantId(templateSpec) ?? "student",
         title: "Untitled Document",
         running_head: null,
         keywords: [],
-        project_settings: {
-            paper_size: "us-letter",
-            language: "en",
-            text_font: "Libertinus Serif",
-            math_font: "Libertinus Math",
-            raw_font: "DejaVu Sans Mono",
-            font_size: 11,
-            table_stroke_width: 0.5,
-            template_overrides: [],
-        },
-        local_overrides: {
-            default_font: null,
-            default_font_size: null,
-            theme_mode: "system",
-            locale: "en",
-            recent_projects: [],
-            keymap_profile: "Default",
-            keymap_overrides: [],
-            history_limit: 100,
-            autosave_enabled: true,
-            autosave_interval_ms: 30_000,
-            autosave_on_window_blur: true,
-            autosave_on_app_close: true,
-            autosave_on_project_close: true,
-            default_equation_syntax: "typst",
-        },
+        project_settings: projectSettingsFromTemplate(templateSpec),
+        local_overrides: createLocalOverrides(),
     },
     dependencies: {
         packages: [

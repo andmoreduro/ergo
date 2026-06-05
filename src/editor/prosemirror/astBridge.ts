@@ -3,16 +3,26 @@ import type { Transaction } from "prosemirror-state";
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
-import { createRichText } from "../../state/ast/defaults";
+import type { ListItem } from "../../bindings/ListItem";
+import { createListItem, createRichText } from "../../state/ast/defaults";
+import {
+    quoteAttributionFromNodeAttrs,
+    quoteAttributionFromRichText,
+    quoteElementFromQuoteNode,
+    quoteNodeAttributionAttrs,
+    richTextQuoteAttributionFields,
+} from "../quoteAttribution";
 import {
     ATOM_BLOCK_NODES,
     INLINE_EQUATION_NODE,
+    INLINE_QUOTE_NODE,
     REFERENCE_NODE,
     type BodySchema,
 } from "./schema";
 
 const REFERENCE_KIND = "reference";
 const INLINE_EQUATION_KIND = "inlineEquation";
+const INLINE_QUOTE_KIND = "quote";
 
 // ---------------------------------------------------------------------------
 // Field-offset width — must match Rust `push_rich_text_field` accumulation
@@ -27,6 +37,9 @@ const spanWidth = (span: RichText): number => {
     if (span.kind === INLINE_EQUATION_KIND) {
         return (span.equation_source ?? "").length;
     }
+    if (span.kind === INLINE_QUOTE_KIND) {
+        return span.text.length;
+    }
     return span.text.length;
 };
 
@@ -36,6 +49,9 @@ export const richTextFieldLength = (content: readonly RichText[]): number =>
 
 const atomNodeWidth = (node: PMNode): number => {
     if (node.type.name === INLINE_EQUATION_NODE) {
+        return (node.attrs.source ?? "").length;
+    }
+    if (node.type.name === INLINE_QUOTE_NODE) {
         return (node.attrs.source ?? "").length;
     }
     return 0; // reference (and any other inline atom) is zero width
@@ -68,6 +84,18 @@ export const richTextToInlineNodes = (
                     source: span.equation_source ?? span.text,
                     syntax: span.equation_syntax,
                     label: span.text,
+                }),
+            );
+            continue;
+        }
+        if (span.kind === INLINE_QUOTE_KIND) {
+            nodes.push(
+                schema.nodes.inlineQuote.create({
+                    source: span.text,
+                    label: span.text,
+                    attributionText: span.quote_attribution_text ?? "",
+                    attributionReferenceId:
+                        span.quote_attribution_reference_id ?? "",
                 }),
             );
             continue;
@@ -126,6 +154,16 @@ const collectRichTextFromNode = (node: PMNode, spans: RichText[]): void => {
         });
         return;
     }
+    if (node.type.name === INLINE_QUOTE_NODE) {
+        spans.push({
+            ...createRichText(node.attrs.source ?? node.attrs.label ?? ""),
+            kind: INLINE_QUOTE_KIND,
+            ...richTextQuoteAttributionFields(
+                quoteAttributionFromNodeAttrs(node.attrs),
+            ),
+        });
+        return;
+    }
     if (node.isText) {
         spans.push(textSpanFromNode(node));
         return;
@@ -170,6 +208,9 @@ export const fieldCaretOffsetFromNode = (
     const fragment = fieldNode.content;
     for (let i = 0; i < fragment.childCount; i += 1) {
         const child = fragment.child(i);
+        if (skipListItemBlockChild(fieldNode, child)) {
+            continue;
+        }
         const size = child.nodeSize;
         if (posInContent <= pm + size) {
             if (child.isText) {
@@ -194,6 +235,9 @@ export const pmPosForFieldCaret = (
     const fragment = fieldNode.content;
     for (let i = 0; i < fragment.childCount; i += 1) {
         const child = fragment.child(i);
+        if (skipListItemBlockChild(fieldNode, child)) {
+            continue;
+        }
         if (child.isText) {
             const width = child.nodeSize;
             if (utf16Target <= utf16 + width) {
@@ -224,16 +268,65 @@ const ATOM_NODE_BY_TYPE: Record<string, string> = {
     Custom: "custom",
 };
 
+const skipListItemBlockChild = (parent: PMNode, child: PMNode): boolean =>
+    parent.type.name === "list_item" && child.type.name === "list";
+
+export const listItemParagraph = (itemNode: PMNode): PMNode | null => {
+    let paragraph: PMNode | null = null;
+    itemNode.forEach((child) => {
+        if (child.type.name === "paragraph") {
+            paragraph = child;
+        }
+    });
+    return paragraph;
+};
+
+export const listItemToNode = (
+    schema: BodySchema,
+    item: ListItem,
+    ordered: boolean,
+): PMNode => {
+    const children = [
+        schema.nodes.paragraph.create(
+            { elementId: "" },
+            richTextToInlineNodes(schema, item.content),
+        ),
+    ];
+    if (item.children.length > 0) {
+        const nestedItems = item.children.map((child) =>
+            listItemToNode(schema, child, ordered),
+        );
+        children.push(
+            schema.nodes.list.create({ elementId: "", ordered }, nestedItems),
+        );
+    }
+    return schema.nodes.list_item.create(null, children);
+};
+
+export const listItemFromNode = (itemNode: PMNode): ListItem => {
+    const paragraph = listItemParagraph(itemNode);
+    const content = paragraph
+        ? fragmentToRichText(paragraph.content)
+        : [createRichText("")];
+    const children: ListItem[] = [];
+    itemNode.forEach((child) => {
+        if (child.type.name === "list") {
+            child.forEach((nestedItem) => {
+                children.push(listItemFromNode(nestedItem));
+            });
+        }
+    });
+    return { content, children };
+};
+
 const listNode = (
     schema: BodySchema,
     id: string,
     ordered: boolean,
-    items: RichText[][],
+    items: ListItem[],
 ): PMNode => {
-    const source = items.length > 0 ? items : [[]];
-    const listItems = source.map((item) =>
-        schema.nodes.list_item.create(null, richTextToInlineNodes(schema, item)),
-    );
+    const source = items.length > 0 ? items : [createListItem()];
+    const listItems = source.map((item) => listItemToNode(schema, item, ordered));
     return schema.nodes.list.create({ elementId: id, ordered }, listItems);
 };
 
@@ -254,7 +347,10 @@ export const elementToNode = (
             );
         case "Quote":
             return schema.nodes.quote.create(
-                { elementId: element.id },
+                {
+                    elementId: element.id,
+                    ...quoteNodeAttributionAttrs(element),
+                },
                 richTextToInlineNodes(schema, element.content),
             );
         case "List":
@@ -293,14 +389,13 @@ export const nodeToElement = (node: PMNode): DocumentElement => {
                 content: fragmentToRichText(node.content),
             };
         case "quote":
-            return {
-                type: "Quote",
-                id: node.attrs.elementId,
-                content: fragmentToRichText(node.content),
-            };
+            return quoteElementFromQuoteNode(
+                node,
+                fragmentToRichText(node.content),
+            );
         case "list": {
-            const items: RichText[][] = [];
-            node.content.forEach((item) => items.push(fragmentToRichText(item.content)));
+            const items: ListItem[] = [];
+            node.content.forEach((item) => items.push(listItemFromNode(item)));
             return node.attrs.ordered
                 ? { type: "Enumeration", id: node.attrs.elementId, items }
                 : { type: "List", id: node.attrs.elementId, items };

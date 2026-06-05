@@ -3,7 +3,8 @@ import {
     applyDocumentEvents,
     createDocumentEventHistoryEntry,
 } from "./documentEvents";
-import { createDefaultDocumentAST, createRichText } from "./ast/defaults";
+import { createRichText } from "./ast/defaults";
+import { createTestDocumentAST } from "../test/documentAstFixture";
 import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
 import type { DocumentAST } from "../bindings/DocumentAST";
@@ -18,7 +19,7 @@ const contentSectionId = (ast: DocumentAST): string => {
 
 describe("document event conversion", () => {
     it("maps UPDATE_PROJECT_TITLE to forward and inverse sync events", () => {
-        const previousAst = createDefaultDocumentAST();
+        const previousAst = createTestDocumentAST();
         const action: ASTAction = {
             type: "UPDATE_PROJECT_TITLE",
             payload: { title: "Borrador con ñ" },
@@ -38,7 +39,7 @@ describe("document event conversion", () => {
     });
 
     it("keeps history entries free of AST snapshots", () => {
-        const previousAst = createDefaultDocumentAST();
+        const previousAst = createTestDocumentAST();
         const action: ASTAction = {
             type: "UPDATE_PROJECT_TITLE",
             payload: { title: "Borrador con ñ" },
@@ -52,7 +53,7 @@ describe("document event conversion", () => {
     });
 
     it("maps REMOVE_ELEMENT to forward and restore inverse events", () => {
-        let previousAst = createDefaultDocumentAST();
+        let previousAst = createTestDocumentAST();
         const sectionId = contentSectionId(previousAst);
         previousAst = astReducer(previousAst, {
             type: "ADD_PARAGRAPH",
@@ -97,6 +98,8 @@ describe("document event conversion", () => {
                         reference_id: null,
                         equation_source: null,
                         equation_syntax: "typst",
+                        quote_attribution_text: null,
+                        quote_attribution_reference_id: null,
                     },
                 ],
             },
@@ -129,7 +132,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "UPDATE_PROJECT_TITLE",
             setup: () => ({
-                ast: createDefaultDocumentAST(),
+                ast: createTestDocumentAST(),
                 action: {
                     type: "UPDATE_PROJECT_TITLE",
                     payload: { title: "Nuevo Título con ñ" },
@@ -139,17 +142,17 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "UPDATE_INPUT",
             setup: () => ({
-                ast: createDefaultDocumentAST(),
+                ast: createTestDocumentAST(),
                 action: {
                     type: "UPDATE_INPUT",
-                    payload: { path: "/abstract_text", value: "New abstract text" },
+                    payload: { path: "/notes", value: "New note text" },
                 },
             }),
         },
         {
             name: "UPDATE_INPUT title metadata",
             setup: () => ({
-                ast: createDefaultDocumentAST(),
+                ast: createTestDocumentAST(),
                 action: {
                     type: "UPDATE_INPUT",
                     payload: { path: "/title", value: "Title from input" },
@@ -159,7 +162,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "INSERT_INPUT_ARRAY_ITEM",
             setup: () => ({
-                ast: createDefaultDocumentAST(),
+                ast: createTestDocumentAST(),
                 action: {
                     type: "INSERT_INPUT_ARRAY_ITEM",
                     payload: {
@@ -180,7 +183,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "UPDATE_PARAGRAPH_TEXT",
             setup: () => {
-                const base = createDefaultDocumentAST();
+                const base = createTestDocumentAST();
                 const sectionId = contentSectionId(base);
                 const ast = astReducer(base, {
                     type: "ADD_PARAGRAPH",
@@ -201,7 +204,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "UPDATE_HEADING",
             setup: () => {
-                const base = createDefaultDocumentAST();
+                const base = createTestDocumentAST();
                 const sectionId = contentSectionId(base);
                 const ast = astReducer(base, {
                     type: "ADD_HEADING",
@@ -223,7 +226,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "ADD_PARAGRAPH",
             setup: () => {
-                const ast = createDefaultDocumentAST();
+                const ast = createTestDocumentAST();
                 return {
                     ast,
                     action: {
@@ -239,7 +242,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "REMOVE_ELEMENT",
             setup: () => {
-                const base = createDefaultDocumentAST();
+                const base = createTestDocumentAST();
                 const sectionId = contentSectionId(base);
                 const ast = astReducer(base, {
                     type: "ADD_PARAGRAPH",
@@ -257,7 +260,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "UPDATE_TABLE_CELL",
             setup: () => {
-                const base = createDefaultDocumentAST();
+                const base = createTestDocumentAST();
                 const sectionId = contentSectionId(base);
                 const ast = astReducer(base, {
                     type: "ADD_TABLE",
@@ -286,7 +289,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "ADD_TABLE_ROW",
             setup: () => {
-                const base = createDefaultDocumentAST();
+                const base = createTestDocumentAST();
                 const sectionId = contentSectionId(base);
                 const ast = astReducer(base, {
                     type: "ADD_TABLE",
@@ -304,7 +307,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "UPDATE_ELEMENT_EXTRA_FIELD",
             setup: () => {
-                const base = createDefaultDocumentAST();
+                const base = createTestDocumentAST();
                 const sectionId = contentSectionId(base);
                 const ast = astReducer(base, {
                     type: "ADD_FIGURE",
@@ -326,7 +329,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         {
             name: "UPDATE_DIAGRAM",
             setup: () => {
-                const base = createDefaultDocumentAST();
+                const base = createTestDocumentAST();
                 const sectionId = contentSectionId(base);
                 const ast = astReducer(base, {
                     type: "ADD_DIAGRAM",
@@ -357,7 +360,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
     });
 
     it("round-trips reference add, update, and remove", () => {
-        const ast = createDefaultDocumentAST();
+        const ast = createTestDocumentAST();
         const reference = {
             id: "ref-1",
             citation_key: "garcia2024",
@@ -391,7 +394,7 @@ describe("applyDocumentEventToAst round-trip parity", () => {
     });
 
     it("round-trips asset add, update, and remove", () => {
-        const ast = createDefaultDocumentAST();
+        const ast = createTestDocumentAST();
         const asset = {
             id: "asset-1",
             path: "assets/chart.png",

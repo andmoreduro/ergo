@@ -1,0 +1,28 @@
+.button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--size-control) * 0.55);
+    height: calc(var(--size-control) * 0.55);
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    box-shadow: var(--shadow-ring-subtle);
+}
+
+.button:hover,
+.button:focus-visible {
+    outline: none;
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
+}
+
+.button svg {
+    width: 0.75rem;
+    height: 0.75rem;
+    flex-shrink: 0;
+}

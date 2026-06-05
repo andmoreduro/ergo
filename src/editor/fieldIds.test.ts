@@ -8,19 +8,19 @@ import {
 describe("editorFocusIdsForBackendField", () => {
     it("maps backend template input paths to project input field ids", () => {
         expect(
-            editorFocusIdsForBackendField("inputs", "/abstract_text"),
+            editorFocusIdsForBackendField("inputs", "/summary"),
         ).toEqual({
             elementId: "project",
-            fieldId: "project-input-/abstract_text",
+            fieldId: "project-input-/summary",
         });
     });
 
     it("collapses indexed content_blocks paths to the editor field id", () => {
         expect(
-            editorFocusIdsForBackendField("inputs", "/abstract_es/2"),
+            editorFocusIdsForBackendField("inputs", "/blocks/2"),
         ).toEqual({
             elementId: "project",
-            fieldId: "project-input-/abstract_es",
+            fieldId: "project-input-/blocks",
         });
     });
 

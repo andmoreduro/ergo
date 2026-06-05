@@ -2,7 +2,13 @@ import type { Node as PMNode } from "prosemirror-model";
 import { EditorState, NodeSelection, TextSelection } from "prosemirror-state";
 import { EditorView, type NodeView } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
-import { baseKeymap, splitBlock, toggleMark } from "prosemirror-commands";
+import {
+    baseKeymap,
+    chainCommands,
+    splitBlock,
+    toggleMark,
+} from "prosemirror-commands";
+import { deleteEmptyListItem, splitListItem } from "../listEnter";
 import { columnResizing, tableEditing } from "prosemirror-tables";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import { runBodyTab } from "../bodyTabCommand";
@@ -14,6 +20,8 @@ import {
 import { isBlockEditing, setBlockEditing } from "../blockEditMode";
 import { clearBlockUiState, setBlockUiState } from "../blockUiState";
 import {
+    arrowBetweenCellBlocks,
+    defaultFirstCellFocusTarget,
     isTableEscapeSelection,
     selectionInChildTableForFocus,
     tableCellCoordsFromChildState,
@@ -25,6 +33,9 @@ import {
 } from "../table/tableFocusRegistry";
 import { getTableFocusPush } from "../table/tableFocusBridge";
 import { setActiveTableCellCoords } from "../table/tableStructureBridge";
+import { tableCellBoundaryPlugin } from "../table/tableCellBoundary";
+import { findPlugin } from "../../find/prosemirrorFindPlugin";
+import { textMarkStatePlugin } from "../textMarkStatePlugin";
 import { tableSchema } from "../table/tableSchema";
 import { subDocToTable, tableToSubDoc, type TableElement } from "../table/tableSubBridge";
 import {
@@ -38,6 +49,9 @@ import {
 } from "./TableBlockChrome";
 import type { NodeViewPortalRegistry } from "./nodeViewPortals";
 import elementStyles from "../../../components/organisms/ElementEditor/ElementEditor.module.css";
+import { inlineEquationNavigationPlugin } from "../inlineEquationPlugin";
+import { createInlineEquationNodeView } from "./inlineEquationNodeView";
+import { createInlineQuoteNodeView } from "./inlineQuoteNodeView";
 import styles from "./tableBlockNodeView.module.css";
 import "./tableBlockNodeView.global.css";
 
@@ -53,9 +67,10 @@ const tableFromNode = (node: PMNode): TableElement => {
     return element;
 };
 
-/** Enter adds a block inside the cell; row/column inserts use action shortcuts. */
-const tableCellEnterKeymap = keymap({
-    Enter: splitBlock,
+/** List-aware Enter/Backspace inside a table cell. */
+const tableCellListKeymap = keymap({
+    Enter: chainCommands(splitListItem, splitBlock),
+    Backspace: chainCommands(deleteEmptyListItem, baseKeymap.Backspace),
     "Shift-Enter": (state, dispatch) => {
         const type = tableSchema.nodes.hard_break;
         if (!type || !dispatch) {
@@ -71,17 +86,36 @@ const swallowTabKeymap = keymap({
     "Shift-Tab": () => true,
 });
 
+const childNavigationKeymap = keymap({
+    ArrowUp: arrowBetweenCellBlocks(-1),
+    ArrowDown: arrowBetweenCellBlocks(1),
+});
+
 const childPlugins = () => [
+    inlineEquationNavigationPlugin(),
     keymap({
         ...Object.fromEntries(
-            Object.entries(baseKeymap).filter(([key]) => !/^Arrow/.test(key)),
+            Object.entries(baseKeymap).filter(([key]) => {
+                if (/^(Mod-|Ctrl-|Alt-)/.test(key)) {
+                    return true;
+                }
+                return (
+                    !/^(Arrow(?:Up|Down|Left|Right))$/.test(key) &&
+                    key !== "Enter" &&
+                    key !== "Backspace"
+                );
+            }),
         ),
         "Mod-u": toggleMark(tableSchema.marks.underline),
     }),
+    childNavigationKeymap,
     columnResizing({ defaultCellMinWidth: 96 }),
     tableEditing(),
-    tableCellEnterKeymap,
+    tableCellListKeymap,
     swallowTabKeymap,
+    tableCellBoundaryPlugin(),
+    findPlugin(),
+    textMarkStatePlugin(),
 ];
 
 export const createTableBlockNodeView = (
@@ -194,11 +228,8 @@ export const createTableBlockNodeView = (
 
     const focusChildAtFirstCell = () => {
         const doc = childView.state.doc;
-        const selection = selectionInChildTableForFocus(doc, {
-            elementId: elementId(),
-            fieldId: `${elementId()}:cell:0:0`,
-            caretUtf16Offset: 0,
-        });
+        const target = defaultFirstCellFocusTarget(doc, elementId());
+        const selection = selectionInChildTableForFocus(doc, target);
         if (selection) {
             childView.dispatch(childView.state.tr.setSelection(selection));
         }
@@ -210,21 +241,28 @@ export const createTableBlockNodeView = (
             doc: tableToSubDoc(tableSchema, tableFromNode(currentNode)),
             plugins: childPlugins(),
         }),
+        nodeViews: {
+            inlineEquation: createInlineEquationNodeView(registry, {
+                tableId: elementId(),
+            }),
+            inlineQuote: createInlineQuoteNodeView(registry, {
+                tableId: elementId(),
+            }),
+        },
         editable: () => isBlockEditing(view.state, elementId()),
         dispatchTransaction(tr) {
             const next = childView.state.apply(tr);
 
             // Arrow navigation off the table's outer edge escapes the cells onto
-            // a NodeSelection of the whole table. Don't apply it (the caret would
-            // vanish and typing would replace the table) — exit fine-grained mode
-            // and lock the whole block instead, matching Escape.
+            // a NodeSelection of the whole table (or a doc-level caret outside
+            // cells). Keep the previous in-cell selection — exiting to a body
+            // NodeSelection would let the next keystroke replace the table.
             if (
                 !applyingExternalRef &&
                 tr.selectionSet &&
                 !tr.docChanged &&
                 isTableEscapeSelection(next)
             ) {
-                exitToLockedWholeBlock();
                 return;
             }
 
@@ -312,11 +350,10 @@ export const createTableBlockNodeView = (
                   fieldId: target.fieldId,
                   caretUtf16Offset: target.caretUtf16Offset,
               })
-            : selectionInChildTableForFocus(childView.state.doc, {
-                  elementId: target.elementId,
-                  fieldId: `${target.elementId}:cell:0:0`,
-                  caretUtf16Offset: 0,
-              });
+            : selectionInChildTableForFocus(
+                  childView.state.doc,
+                  defaultFirstCellFocusTarget(childView.state.doc, target.elementId),
+              );
         if (selection) {
             childView.dispatch(childView.state.tr.setSelection(selection));
         }

@@ -9,6 +9,7 @@ mod fragments;
 mod hashing;
 mod outline_titles;
 mod paths;
+mod quote_attribution;
 mod references;
 mod outlines;
 mod rich_text;
@@ -155,14 +156,18 @@ fn push_project_page_settings(ast: &DocumentAST, builder: &mut SourceBuilder) {
 
 fn push_project_text_settings(ast: &DocumentAST, builder: &mut SourceBuilder) {
     let settings = &ast.metadata.project_settings;
-    if let Some(font) = &settings.text_font {
+    let text_font = crate::font_availability::effective_font_family(
+        settings.text_font.as_deref(),
+        crate::font_availability::FontRole::Text,
+    );
+    if settings.text_font.is_some() {
         let size_str = settings
             .font_size
             .map(|s| format!(", size: {}pt", s))
             .unwrap_or_default();
         builder.push_literal(&format!(
             "  #set text(font: \"{}\"{})\n",
-            escape_typst_string(font),
+            escape_typst_string(&text_font),
             size_str
         ));
     } else if let Some(size) = settings.font_size {
@@ -194,9 +199,61 @@ pub(crate) fn resolve_param_builder(
 
     match parts[0] {
         "settings" => resolve_setting_param(parts[1], ast, builder),
+        "options" => resolve_option_param(parts[1], param, ast, builder),
         "inputs" | "cover_page" | "metadata" => {
             resolve_input_param(parts[1], param, ast, fallbacks, builder)
         }
+        _ => false,
+    }
+}
+
+fn resolve_option_param(
+    option_id: &str,
+    param: &ParamSpec,
+    ast: &DocumentAST,
+    builder: &mut SourceBuilder,
+) -> bool {
+    let key = format!("option.{option_id}");
+    let Some(raw) = ast
+        .metadata
+        .project_settings
+        .template_overrides
+        .iter()
+        .find(|entry| entry.key == key)
+        .map(|entry| entry.value.as_str())
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return false;
+    };
+
+    match &param.param_type {
+        ParamType::Boolean => {
+            let enabled = raw.trim().eq_ignore_ascii_case("true");
+            builder.push_literal(&enabled.to_string());
+            true
+        }
+        ParamType::String => {
+            builder.push_literal(&format!("\"{}\"", escape_typst_string(raw.trim())));
+            true
+        }
+        ParamType::Integer => raw
+            .trim()
+            .parse::<i64>()
+            .ok()
+            .map(|value| {
+                builder.push_literal(&value.to_string());
+                true
+            })
+            .unwrap_or(false),
+        ParamType::Float => raw
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .map(|value| {
+                builder.push_literal(&value.to_string());
+                true
+            })
+            .unwrap_or(false),
         _ => false,
     }
 }
@@ -435,6 +492,12 @@ fn resolve_input_param(
             }
         }
         ParamType::StringArray => resolve_string_array_param(key, &val, builder),
+        ParamType::Equation => push_equation_json_value(
+            builder,
+            &format!("/{key}"),
+            &val,
+            false,
+        ),
         ParamType::Dictionary => {
             if val.is_object() {
                 let obj = val.as_object().unwrap();
@@ -444,14 +507,17 @@ fn resolve_input_param(
                 sorted_keys.sort();
                 for prop_key in sorted_keys {
                     let prop_val = obj.get(prop_key).unwrap();
-                    let prop_str = prop_val.as_str().unwrap_or("");
                     if !first {
                         builder.push_literal(",\n");
                     }
                     first = false;
-                    builder.push_literal(&format!("    {prop_key}: ["));
-                    builder.push_escaped_field("inputs", &format!("/{key}/{prop_key}"), prop_str, 0);
-                    builder.push_literal("]");
+                    builder.push_literal(&format!("    {prop_key}: "));
+                    push_dictionary_field_value(
+                        builder,
+                        &format!("/{key}/{prop_key}"),
+                        prop_key,
+                        prop_val,
+                    );
                 }
                 builder.push_literal("\n  )");
                 true
@@ -473,14 +539,17 @@ fn resolve_input_param(
                         sorted_keys.sort();
                         for prop_key in sorted_keys {
                             let prop_val = obj.get(prop_key).unwrap();
-                            let prop_str = prop_val.as_str().unwrap_or("");
                             if !first {
                                 builder.push_literal(",\n");
                             }
                             first = false;
-                            builder.push_literal(&format!("      {prop_key}: ["));
-                            builder.push_escaped_field("inputs", &format!("/{key}/{idx}/{prop_key}"), prop_str, 0);
-                            builder.push_literal("]");
+                            builder.push_literal(&format!("      {prop_key}: "));
+                            push_dictionary_field_value(
+                                builder,
+                                &format!("/{key}/{idx}/{prop_key}"),
+                                prop_key,
+                                prop_val,
+                            );
                         }
                     }
                     builder.push_literal("\n    )");
@@ -503,6 +572,66 @@ fn resolve_input_param(
         }
         ParamType::DegreeMap => resolve_degree_map_param(&val, builder),
     }
+}
+
+fn equation_field_is_block(prop_key: &str) -> bool {
+    prop_key == "definition"
+}
+
+fn push_dictionary_field_value(
+    builder: &mut SourceBuilder,
+    field_path: &str,
+    prop_key: &str,
+    prop_val: &serde_json::Value,
+) {
+    if push_equation_json_value(builder, field_path, prop_val, equation_field_is_block(prop_key)) {
+        return;
+    }
+    let prop_str = prop_val.as_str().unwrap_or("");
+    builder.push_literal("[");
+    builder.push_escaped_field("inputs", field_path, prop_str, 0);
+    builder.push_literal("]");
+}
+
+fn push_equation_json_value(
+    builder: &mut SourceBuilder,
+    field_path: &str,
+    val: &serde_json::Value,
+    block: bool,
+) -> bool {
+    let Some(obj) = val.as_object() else {
+        return false;
+    };
+    let Some(source) = obj.get("source").and_then(|value| value.as_str()) else {
+        return false;
+    };
+    if source.trim().is_empty() {
+        builder.push_literal("none");
+        return true;
+    }
+    let syntax = obj
+        .get("syntax")
+        .and_then(|value| value.as_str())
+        .unwrap_or("typst");
+    let normalized = rich_text::normalize_math_source(source);
+    if normalized.is_empty() {
+        builder.push_literal("none");
+        return true;
+    }
+    match syntax {
+        "latex" => {
+            let function = if block { "mitex" } else { "mi" };
+            builder.push_literal(&format!("#{function}(\""));
+            builder.push_escaped_field("inputs", field_path, &normalized, 0);
+            builder.push_literal("\")");
+        }
+        _ => {
+            builder.push_literal(&format!("#math.equation(block: {}, $", block));
+            builder.push_raw_field("inputs", field_path, &normalized, 0);
+            builder.push_literal("$)");
+        }
+    }
+    true
 }
 
 fn resolve_string_array_param(
@@ -598,13 +727,17 @@ fn resolve_author_list_param(
                         &mut has_field,
                     );
                 }
-                if let Some(degree_refs) = obj.get("degrees").and_then(|v| v.as_array()) {
+                if let Some(title_refs) = obj
+                    .get("titles")
+                    .or_else(|| obj.get("degrees"))
+                    .and_then(|v| v.as_array())
+                {
                     push_author_reference_list(
                         obj,
                         builder,
                         idx,
-                        "degrees",
-                        degree_refs,
+                        "titles",
+                        title_refs,
                         &mut has_field,
                     );
                 }
@@ -704,7 +837,7 @@ fn push_author_reference_list(
 }
 
 fn resolve_degree_map_param(val: &serde_json::Value, builder: &mut SourceBuilder) -> bool {
-    resolve_affiliation_map_param(val, builder, true, "degrees")
+    resolve_affiliation_map_param(val, builder, true, "titles")
 }
 
 fn resolve_affiliation_map_param(
@@ -792,5 +925,81 @@ pub(crate) fn format_json_val(val: &serde_json::Value, param_type: &ParamType) -
         (ParamType::Integer, serde_json::Value::Number(n)) => Some(n.to_string()),
         (ParamType::Float, serde_json::Value::Number(n)) => Some(n.to_string()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod option_param_tests {
+    use super::*;
+    use crate::ast::{
+        DependencyManifest, DocumentAST, GlobalSettings, ProjectMetadata, ProjectSettings,
+        TemplateOverride,
+    };
+    use crate::template_spec::{ParamSpec, ParamType};
+    use std::collections::HashMap;
+
+    fn ast_with_option(option_id: &str, value: &str) -> DocumentAST {
+        DocumentAST {
+            version: "1.0".to_string(),
+            metadata: ProjectMetadata {
+                template_id: "test".to_string(),
+                template_variant_id: None,
+                title: "Test".to_string(),
+                running_head: None,
+                keywords: vec![],
+                project_settings: ProjectSettings {
+                    template_overrides: vec![TemplateOverride {
+                        key: format!("option.{option_id}"),
+                        value: value.to_string(),
+                    }],
+                    ..ProjectSettings::default()
+                },
+                local_overrides: GlobalSettings::default(),
+            },
+            dependencies: DependencyManifest { packages: vec![] },
+            references: vec![],
+            assets: vec![],
+            inputs: HashMap::new(),
+            sections: vec![],
+        }
+    }
+
+    #[test]
+    fn resolve_option_param_emits_boolean_and_string() {
+        let boolean_param = ParamSpec {
+            key: "flag".to_string(),
+            param_type: ParamType::Boolean,
+            source: Some("options.my_flag".to_string()),
+            label: None,
+            default: None,
+            required: false,
+            variants: None,
+        };
+        let mut builder = SourceBuilder::default();
+        assert!(resolve_option_param(
+            "my_flag",
+            &boolean_param,
+            &ast_with_option("my_flag", "true"),
+            &mut builder,
+        ));
+        assert_eq!(builder.source, "true");
+
+        let string_param = ParamSpec {
+            key: "mode".to_string(),
+            param_type: ParamType::String,
+            source: Some("options.mode".to_string()),
+            label: None,
+            default: None,
+            required: false,
+            variants: None,
+        };
+        let mut builder = SourceBuilder::default();
+        assert!(resolve_option_param(
+            "mode",
+            &string_param,
+            &ast_with_option("mode", "draft"),
+            &mut builder,
+        ));
+        assert_eq!(builder.source, "\"draft\"");
     }
 }

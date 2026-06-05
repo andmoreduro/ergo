@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+    isHistoryRedoShortcut,
+    isHistoryUndoShortcut,
+} from "./historyShortcuts";
+import {
     isAltGrStyleChord,
     keyFromKeyboardCode,
     resolveShortcutKey,
     shouldUsePhysicalShortcutKey,
     shortcutChordModifiers,
 } from "./shortcutKeyFromKeyboardEvent";
+
+const ctrl = {
+    ctrlKey: true,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+} as const;
 
 describe("resolveShortcutKey", () => {
     it("uses physical key for Ctrl+Alt chords (AltGr layouts)", () => {
@@ -110,5 +121,18 @@ describe("isAltGrStyleChord", () => {
                 getModifierState: (key) => key === "AltGraph",
             } as KeyboardEvent),
         ).toBe(true);
+    });
+});
+
+describe("history shortcut chords", () => {
+    it("detects undo and redo chords used by the action runtime", () => {
+        expect(isHistoryUndoShortcut(ctrl, "z")).toBe(true);
+        expect(isHistoryUndoShortcut({ ...ctrl, shiftKey: true }, "z")).toBe(
+            false,
+        );
+        expect(isHistoryRedoShortcut({ ...ctrl, shiftKey: true }, "z")).toBe(
+            true,
+        );
+        expect(isHistoryRedoShortcut(ctrl, "y")).toBe(true);
     });
 });

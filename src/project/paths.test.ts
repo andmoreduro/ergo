@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
     ensureErgprojExtension,
     exportPdfFileNameFromProjectPath,
+    formatRecentProjectDisplay,
+    twoLineLabelsForProjectPath,
     projectFileBasenameFromTitle,
     projectFileNameFromTitle,
     projectPathInDirectory,
@@ -59,5 +61,30 @@ describe("project path helpers", () => {
         expect(exportPdfFileNameFromProjectPath(null)).toBe(
             "untitled_document.pdf",
         );
+    });
+
+    it("formats recent project display labels from a path", () => {
+        expect(
+            formatRecentProjectDisplay(
+                "C:\\Users\\ada\\Documents\\mi_tesis.ergproj",
+            ),
+        ).toEqual({
+            projectPath: "C:\\Users\\ada\\Documents\\mi_tesis.ergproj",
+            projectName: "mi tesis",
+            fileName: "mi_tesis.ergproj",
+            directoryPath: "C:\\Users\\ada\\Documents",
+        });
+    });
+
+    it("builds two-line list picker labels from a project path", () => {
+        expect(
+            twoLineLabelsForProjectPath(
+                "C:\\Users\\ada\\Documents\\mi_tesis.ergproj",
+            ),
+        ).toEqual({
+            primary: "mi tesis (mi_tesis.ergproj)",
+            secondary: "C:\\Users\\ada\\Documents",
+            title: "C:\\Users\\ada\\Documents\\mi_tesis.ergproj",
+        });
     });
 });

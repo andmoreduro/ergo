@@ -48,6 +48,16 @@ export const clearBlockUiState = (elementId: string): void => {
 export const getBlockUiState = (elementId: string): BlockUiState =>
     states.get(elementId) ?? DEFAULT;
 
+export const getEditingBlockElementId = (): string | null => {
+    for (const [elementId, state] of states) {
+        if (state.editing) {
+            return elementId;
+        }
+    }
+
+    return null;
+};
+
 export const subscribeBlockUiState = (
     elementId: string,
     listener: () => void,

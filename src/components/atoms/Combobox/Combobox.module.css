@@ -17,16 +17,23 @@
 
 .input {
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-md);
+    font-size: var(--choice-control-font-size);
     color: var(--color-text-primary);
     background-color: var(--color-bg-primary);
     border: var(--border-width-sm) solid var(--color-border);
-    border-radius: var(--border-radius-md);
-    padding: var(--space-2) var(--space-6) var(--space-2) var(--space-3);
+    border-radius: var(--choice-control-radius);
+    padding: var(--choice-control-padding-block)
+        var(--choice-control-padding-inline-end)
+        var(--choice-control-padding-block)
+        var(--choice-control-padding-inline-start);
     transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
     outline: none;
     width: 100%;
     cursor: text;
+}
+
+.inputSelect {
+    cursor: pointer;
 }
 
 .input:hover:not(:disabled) {
@@ -38,6 +45,15 @@
     box-shadow: var(--shadow-ring-focus);
 }
 
+.inputError {
+    border-color: var(--color-danger);
+}
+
+.inputError:focus-visible {
+    border-color: var(--color-danger);
+    box-shadow: var(--shadow-ring-focus-danger);
+}
+
 .disabled {
     background-color: var(--color-bg-secondary);
     color: var(--color-text-secondary);
@@ -47,7 +63,7 @@
 
 .chevron {
     position: absolute;
-    right: var(--space-3);
+    right: var(--choice-control-chevron-inset);
     pointer-events: none;
     color: var(--color-text-secondary);
     display: flex;
@@ -57,7 +73,7 @@
 
 .listbox {
     position: absolute;
-    top: calc(100% + var(--space-1));
+    top: calc(100% + var(--popover-list-gap));
     left: 0;
     z-index: 1000;
     /* Block flow (not flex): a flex column would shrink the many option rows to
@@ -66,21 +82,21 @@
     width: 100%;
     max-height: var(--height-scroll-md);
     margin: 0;
-    padding: var(--space-1);
+    padding: var(--popover-list-padding);
     list-style: none;
     border: var(--border-width-sm) solid var(--color-border);
     border-radius: var(--border-radius-sm);
     background: var(--color-bg-primary);
     box-shadow: var(--shadow-md);
     color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
+    font-size: var(--popover-item-font-size);
     overflow-y: auto;
     scrollbar-gutter: auto;
 }
 
 .option {
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--border-radius-sm);
+    padding: var(--popover-item-padding-block) var(--popover-item-padding-inline);
+    border-radius: var(--popover-item-radius);
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
@@ -92,12 +108,12 @@
 }
 
 .selected {
-    font-weight: var(--font-weight-medium);
-    color: var(--color-primary);
+    font-weight: var(--popover-item-selected-weight);
+    color: var(--popover-item-selected-color);
 }
 
 .empty {
-    padding: var(--space-1) var(--space-2);
+    padding: var(--popover-item-padding-block) var(--popover-item-padding-inline);
     color: var(--color-text-secondary);
     font-style: italic;
 }

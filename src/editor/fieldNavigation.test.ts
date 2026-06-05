@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildEditorFieldOrder, findNextEditorField, findPreviousEditorField } from "./fieldNavigation";
-import { createDefaultDocumentAST } from "../state/ast/defaults";
+import { buildEditorFieldOrder } from "./fieldNavigation";
+import { createTestDocumentAST } from "../test/documentAstFixture";
 import {
     projectInputFieldId,
     simpleListComposerFieldId,
@@ -8,7 +8,7 @@ import {
 
 describe("buildEditorFieldOrder", () => {
     it("orders title, author names, composers, and list item fields", () => {
-        const ast = createDefaultDocumentAST();
+        const ast = createTestDocumentAST();
         ast.inputs.affiliations = ["North University", "Lab B"];
         const spec = {
             editor: {
@@ -27,7 +27,7 @@ describe("buildEditorFieldOrder", () => {
             },
         } as unknown as Parameters<typeof buildEditorFieldOrder>[0];
 
-        const order = buildEditorFieldOrder(spec, "student", ast).map(
+        const order = buildEditorFieldOrder(spec, null, ast).map(
             (entry) => entry.fieldId,
         );
 
@@ -41,18 +41,16 @@ describe("buildEditorFieldOrder", () => {
         ]);
     });
 
-    it("includes object array entry fields such as authorities", () => {
-        const ast = createDefaultDocumentAST();
-        ast.metadata.template_id = "umb-apa";
-        ast.metadata.template_variant_id = null;
-        ast.inputs.authorities = [{ name: "Rector", role: "Rectoría" }];
+    it("includes object-array entry fields from the input schema", () => {
+        const ast = createTestDocumentAST();
+        ast.inputs.signatories = [{ name: "Ada", role: "Chair" }];
 
         const spec = {
             editor: {
                 inputs: [
                     { id: "title", type: "string" },
                     {
-                        id: "authorities",
+                        id: "signatories",
                         type: "array",
                         items: {
                             type: "object",
@@ -63,7 +61,7 @@ describe("buildEditorFieldOrder", () => {
                         },
                     },
                 ],
-                groups: [{ id: "front", inputs: ["title", "authorities"] }],
+                groups: [{ id: "front", inputs: ["title", "signatories"] }],
             },
         } as unknown as Parameters<typeof buildEditorFieldOrder>[0];
 
@@ -73,21 +71,9 @@ describe("buildEditorFieldOrder", () => {
 
         expect(order).toEqual([
             projectInputFieldId("/title"),
-            projectInputFieldId("/authorities/0/name"),
-            projectInputFieldId("/authorities/0/role"),
+            projectInputFieldId("/signatories/0/name"),
+            projectInputFieldId("/signatories/0/role"),
         ]);
-    });
-
-    it("walks fields forward and backward", () => {
-        const order = [
-            { elementId: "a", fieldId: "a:text" },
-            { elementId: "b", fieldId: "b:text" },
-        ];
-
-        expect(findNextEditorField(order, "a:text")?.fieldId).toBe("b:text");
-        expect(findNextEditorField(order, "b:text")).toBeNull();
-        expect(findPreviousEditorField(order, "b:text")?.fieldId).toBe("a:text");
-        expect(findPreviousEditorField(order, "a:text")).toBeNull();
     });
 
 });

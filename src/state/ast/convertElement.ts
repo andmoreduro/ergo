@@ -57,6 +57,7 @@ const richTextFromElement = (element: DocumentElement): RichText[] => {
 export const convertElement = (
     element: DocumentElement,
     targetKind: ConvertibleElementKind,
+    options?: { headingLevel?: number },
 ): DocumentElement => {
     const id = element.id;
     const content = richTextFromElement(element);
@@ -66,7 +67,12 @@ export const convertElement = (
         case "Paragraph":
             return { type: "Paragraph", id, content };
         case "Heading":
-            return { type: "Heading", id, level: 2, content };
+            return {
+                type: "Heading",
+                id,
+                level: options?.headingLevel ?? 2,
+                content,
+            };
         case "Equation":
             return createEquation(id, plain);
         case "Table":

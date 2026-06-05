@@ -27,8 +27,10 @@ export const diagramSourceFieldId = (elementId: string) =>
 export const diagramCaptionFieldId = (elementId: string) =>
     `${elementId}:caption`;
 
-export const listItemFieldId = (elementId: string, itemIndex: number) =>
-    `${elementId}:item:${itemIndex}`;
+export const listItemFieldId = (elementId: string, itemPath: number | number[]) => {
+    const path = typeof itemPath === "number" ? [itemPath] : itemPath;
+    return `${elementId}:item:${path.join(":")}`;
+};
 
 export const tableCellFieldId = (
     elementId: string,

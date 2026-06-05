@@ -17,10 +17,6 @@ describe("regenerateElementIds", () => {
         const next = regenerateElementIds(figure);
         expect(next.id).not.toBe("fig1");
         expect(next.type === "Figure" && next.asset_id).toBe("asset-1");
-    });
-
-    it("regenerates nested element ids", () => {
-        const next = regenerateElementIds(figure);
         expect(next.type === "Figure" && next.content.id).not.toBe("p-inner");
     });
 

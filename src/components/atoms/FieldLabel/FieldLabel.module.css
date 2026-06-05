@@ -12,8 +12,3 @@
     color: var(--color-danger);
     font-weight: var(--font-weight-bold);
 }
-
-.recommendedMarker {
-    color: var(--color-warning);
-    font-weight: var(--font-weight-bold);
-}

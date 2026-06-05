@@ -30,6 +30,8 @@ describe("useTemplateTranslation", () => {
             variants: [],
             custom_elements: [],
             defaults: null,
+            quote_policy: null,
+            options: [],
         },
         messages: {
             es: {

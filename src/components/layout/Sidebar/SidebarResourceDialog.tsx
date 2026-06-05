@@ -9,13 +9,14 @@ export const SidebarResourceDialog = ({
     children,
     cancelAction,
     confirmAction,
+    headerAction,
 }: {
     title: string;
     children: ReactNode;
     cancelAction: DialogActionButton;
     confirmAction: DialogActionButton;
-}) => {
-    const submit = (event: FormEvent<HTMLFormElement>) => {
+    headerAction?: ReactNode;
+}) => {    const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         confirmAction.onClick?.();
     };
@@ -26,6 +27,7 @@ export const SidebarResourceDialog = ({
             size="lg"
             title={title}
             titleId="resource-dialog-title"
+            headerAction={headerAction}
             cancelAction={cancelAction}
             confirmAction={{
                 ...confirmAction,

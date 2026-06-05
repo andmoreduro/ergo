@@ -33,6 +33,20 @@
     height: 100%;
 }
 
+.menuItemRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    width: 100%;
+}
+
+.menuShortcut {
+    color: var(--color-text-secondary);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+}
+
 .menuItem {
     position: relative;
     display: flex;

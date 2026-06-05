@@ -6,4 +6,8 @@ export type GlobalSettings = { default_font: string | null, default_font_size: n
 /**
  * Syntax applied to newly inserted equations.
  */
-default_equation_syntax: EquationSyntax | null, };
+default_equation_syntax: EquationSyntax | null, 
+/**
+ * Runs the Zotero translation server in a fixed-name Docker container on localhost.
+ */
+zotero_translation_server_enabled: boolean | null, };

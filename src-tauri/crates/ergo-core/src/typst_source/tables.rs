@@ -9,12 +9,16 @@ pub(crate) fn sanitize_table_column_size(value: &str) -> String {
     }
 }
 
+/// Maps editor placement values to Typst `figure` placement arguments.
+///
+/// Érgo uses `"here"` for in-flow placement; Typst expects `none`. Omitting the
+/// argument would inherit template defaults (e.g. APA sets `placement: auto`).
 pub(crate) fn typst_placement_arg(value: &str) -> Option<&'static str> {
     match value.trim() {
         "top" => Some("top"),
         "bottom" => Some("bottom"),
         "auto" => Some("auto"),
-        "here" | "" => None,
+        "here" | "" => Some("none"),
         _ => None,
     }
 }
@@ -42,5 +46,28 @@ pub(crate) fn table_cell_open(col_span: Option<i32>, row_span: Option<i32>) -> S
         "[".to_string()
     } else {
         format!("table.cell({})[", attrs.join(", "))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::typst_placement_arg;
+
+    #[test]
+    fn here_maps_to_typst_none() {
+        assert_eq!(typst_placement_arg("here"), Some("none"));
+        assert_eq!(typst_placement_arg(""), Some("none"));
+    }
+
+    #[test]
+    fn floating_placements_map_directly() {
+        assert_eq!(typst_placement_arg("top"), Some("top"));
+        assert_eq!(typst_placement_arg("bottom"), Some("bottom"));
+        assert_eq!(typst_placement_arg("auto"), Some("auto"));
+    }
+
+    #[test]
+    fn unknown_placement_is_omitted() {
+        assert_eq!(typst_placement_arg("h"), None);
     }
 }

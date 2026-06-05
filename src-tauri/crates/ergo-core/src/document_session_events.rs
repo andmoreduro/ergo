@@ -544,6 +544,17 @@ fn insert_element_at(
 }
 
 fn remove_element(ast: &mut DocumentAST, element_id: &str) -> Result<(), String> {
+    let generated_asset_id = crate::generated_assets::generated_diagram_asset_path_for_element(
+        ast,
+        element_id,
+    )
+    .and_then(|path| {
+        ast.assets
+            .iter()
+            .find(|entry| entry.path == path)
+            .map(|entry| entry.id.clone())
+    });
+
     for section in &mut ast.sections {
         match section {
             DocumentSection::Content(content) => {
@@ -553,6 +564,9 @@ fn remove_element(ast: &mut DocumentAST, element_id: &str) -> Result<(), String>
                     .position(|element| element_id_of(element) == element_id)
                 {
                     content.elements.remove(index);
+                    if let Some(asset_id) = generated_asset_id {
+                        let _ = remove_asset(ast, &asset_id);
+                    }
                     return Ok(());
                 }
             }
@@ -746,6 +760,7 @@ pub(crate) fn rich_text_from_string(text: String) -> Vec<RichText> {
         reference_id: None,
         equation_source: None,
         equation_syntax: EquationSyntax::Typst,
+        ..Default::default()
     }]
 }
 

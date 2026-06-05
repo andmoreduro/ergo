@@ -1,8 +1,11 @@
 use crate::action_context::{parse_context_expression, ActiveContext};
 use crate::action_keymap::effective_bindings;
 use crate::ast::{
-    normalize_key_name, ActionId, KeyBindingPreference, KeyModifier, KeyStroke, KeymapSettings,
+    normalize_key_name, KeyBindingPreference, KeyModifier, KeyStroke, KeymapSettings,
 };
+
+#[cfg(test)]
+use crate::ast::ActionId;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -10,10 +13,11 @@ use std::time::{Duration, Instant};
 const KEY_SEQUENCE_TIMEOUT_MS: u32 = 900;
 
 pub use crate::action_catalog::action_catalog;
+pub use crate::context_glossary::context_glossary;
 pub use crate::action_keymap::validate_keymap;
 pub use crate::action_types::{
     ActionContextNode, ActionContextSnapshot, ActionDescriptor, ActionInvocation, ActionResolution,
-    KeymapConflict, KeymapValidationResult, LogicalKeyEvent,
+    ContextDescriptor, KeymapConflict, KeymapValidationResult, LogicalKeyEvent,
 };
 
 #[derive(Default)]
@@ -261,6 +265,7 @@ mod tests {
                 serde_json::json!({ "level": 3 }),
             )],
             keymap_overrides: Vec::new(),
+            ..Default::default()
         };
         let state = ActionResolverState::default();
 
@@ -296,6 +301,7 @@ mod tests {
                 "Ctrl+Shift+P",
             )],
             keymap_overrides: Vec::new(),
+            ..Default::default()
         };
         let state = ActionResolverState::default();
 
@@ -331,6 +337,7 @@ mod tests {
                 "Ctrl+O Ctrl+R",
             )],
             keymap_overrides: Vec::new(),
+            ..Default::default()
         };
         let state = ActionResolverState::default();
         let context = snapshot("app", vec![node("app", None, &["app"], &[])]);
@@ -377,6 +384,7 @@ mod tests {
                 binding(ActionId::WorkspaceOpenRecentProject, "app", "Ctrl+O Ctrl+R"),
             ],
             keymap_overrides: Vec::new(),
+            ..Default::default()
         };
         let state = ActionResolverState::default();
 
@@ -413,6 +421,7 @@ mod tests {
                 "Ctrl+O Ctrl+R",
             )],
             keymap_overrides: Vec::new(),
+            ..Default::default()
         };
         let state = ActionResolverState::default();
         let context = snapshot("app", vec![node("app", None, &["app"], &[])]);
@@ -465,6 +474,7 @@ mod tests {
                 ),
             ],
             keymap_overrides: Vec::new(),
+            ..Default::default()
         };
         let state = ActionResolverState::default();
         let resolution = resolve_key_event_with_settings(
@@ -506,6 +516,7 @@ mod tests {
                 "Ctrl+Alt+P",
             )],
             keymap_overrides: Vec::new(),
+            ..Default::default()
         };
         let state = ActionResolverState::default();
         let resolution = resolve_key_event_with_settings(
@@ -557,6 +568,7 @@ mod tests {
                 binding(ActionId::EditorInsertHeading, "tableCell", "Ctrl+Alt+Shift+2"),
             ],
             keymap_overrides: Vec::new(),
+            ..Default::default()
         };
         let state = ActionResolverState::default();
         let resolution = resolve_key_event_with_settings(
@@ -614,6 +626,7 @@ mod tests {
                 "Ctrl+Alt+P",
             )],
             keymap_overrides: Vec::new(),
+            ..Default::default()
         };
         let state = ActionResolverState::default();
         let resolution = resolve_key_event_with_settings(
@@ -647,6 +660,7 @@ mod tests {
                 binding(ActionId::EditUndo, "workspace && !input", "Ctrl+S"),
             ],
             keymap_overrides: Vec::new(),
+            ..Default::default()
         };
 
         let validation = validate_keymap(&settings);

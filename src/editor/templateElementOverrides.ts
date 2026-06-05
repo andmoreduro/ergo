@@ -11,6 +11,14 @@ export const usesStandardTypstFigureWrapper = (
     spec: ElementOverrideSpec | null | undefined,
 ): boolean => elementFigureWrapperName(spec) === "figure";
 
+/** Wrappers that delegate `placement` to Typst's `figure` (via `#figure` or `#apa-figure`). */
+export const tableEditorSupportsPlacement = (
+    spec: ElementOverrideSpec | null | undefined,
+): boolean => {
+    const wrapper = elementFigureWrapperName(spec);
+    return wrapper === "figure" || wrapper === "apa-figure";
+};
+
 const templateExtraFields = (
     spec: ElementOverrideSpec | null | undefined,
 ): ExtraFieldSpec[] => spec?.extra_fields ?? [];

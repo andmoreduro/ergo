@@ -1,0 +1,18 @@
+.button {
+    width: 100%;
+    min-width: 0;
+}
+
+.primary,
+.secondary {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.secondary {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}

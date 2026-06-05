@@ -5,6 +5,7 @@ import { tableSchema } from "./tableSchema";
 import { tableToSubDoc } from "./tableSubBridge";
 import { richTextFieldId } from "../../fieldIds";
 import {
+    defaultFirstCellFocusTarget,
     isTableEscapeSelection,
     parseTableCellFieldId,
     selectionInChildTableForFocus,
@@ -37,6 +38,14 @@ const singleCellTable = {
 };
 
 describe("tableCellFocus", () => {
+    it("places the caret in the first paragraph when targeting cell 0:0", () => {
+        const doc = tableToSubDoc(tableSchema, singleCellTable);
+        const target = defaultFirstCellFocusTarget(doc, "t1");
+        expect(target.fieldId).toBe(richTextFieldId("cell-p"));
+        const selection = selectionInChildTableForFocus(doc, target);
+        expect(selection?.from).toBeGreaterThan(2);
+    });
+
     it("parses table cell field ids", () => {
         expect(parseTableCellFieldId("t1:cell:2:3", "t1")).toEqual({
             row: 2,
@@ -106,11 +115,18 @@ describe("tableCellFocus", () => {
 
     it("flags a whole-table NodeSelection as an escaped selection", () => {
         const doc = tableToSubDoc(tableSchema, singleCellTable);
-        // `prosemirror-tables` arrow navigation off the outer edge lands here:
-        // a NodeSelection on the table at sub-doc position 0.
+        let tablePos = -1;
+        doc.descendants((node, pos) => {
+            if (tablePos < 0 && node.type.name === "table") {
+                tablePos = pos;
+            }
+        });
+        expect(tablePos).toBeGreaterThanOrEqual(0);
+        const tableSelection = NodeSelection.create(doc, tablePos);
+        expect(tableSelection.node.type.name).toBe("table");
         const escaped = EditorState.create({
             doc,
-            selection: NodeSelection.create(doc, 0),
+            selection: tableSelection,
         });
         expect(isTableEscapeSelection(escaped)).toBe(true);
     });

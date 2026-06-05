@@ -11,7 +11,7 @@ use crate::template_spec::{
     PackageSpec, ParamSpec, ParamType, SectionSpec, ShowRuleSpec, TemplateSpec,
     TemplateMetadata, TypstConfig, EditorConfig,
 };
-use crate::test_fixtures::rich_text;
+use crate::test_fixtures::{list_item, rich_text};
 use serde_json::json;
 
 #[test]
@@ -32,6 +32,7 @@ fn bibliography_references_emit_citation_key_not_element_label() {
         reference_id: Some("bib-ref-1".to_string()),
         equation_source: None,
         equation_syntax: EquationSyntax::Typst,
+        ..Default::default()
     }];
 
     push_rich_text_field(
@@ -105,6 +106,8 @@ fn custom_element_template(field: ParamSpec) -> TemplateSpec {
                 fields: vec![field],
             }],
             defaults: None,
+            quote_policy: None,
+            options: vec![],
         },
         messages: std::collections::HashMap::new(),
     }
@@ -166,14 +169,15 @@ fn native_quote_list_diagram_and_latex_equations_emit_typst() {
             DocumentElement::Quote(Quote {
                 id: "quote-1".to_string(),
                 content: vec![rich_text("quoted text")],
+                ..Default::default()
             }),
             DocumentElement::List(List {
                 id: "list-1".to_string(),
-                items: vec![vec![rich_text("first item")]],
+                items: vec![list_item("first item")],
             }),
             DocumentElement::Enumeration(Enumeration {
                 id: "enum-1".to_string(),
-                items: vec![vec![rich_text("numbered item")]],
+                items: vec![list_item("numbered item")],
             }),
             DocumentElement::Equation(Equation {
                 id: "equation-1".to_string(),
@@ -206,6 +210,114 @@ fn native_quote_list_diagram_and_latex_equations_emit_typst() {
     let diagram_source = &generated.fragments["diagram-1"].source;
     assert!(diagram_source.contains("#figure("));
     assert!(diagram_source.contains("image(\"../assets/diagrams/diagram-1.svg\")"));
+}
+
+#[test]
+fn nested_list_items_emit_nested_typst() {
+    let template = custom_element_template(ParamSpec {
+        key: "body".to_string(),
+        param_type: ParamType::Content,
+        source: None,
+        label: None,
+        default: None,
+        required: false,
+        variants: None,
+    });
+    let mut parent = list_item("one");
+    parent.children = vec![list_item("nested")];
+    let mut ast = ast_with_custom_field("body", json!("Paper body"));
+    ast.sections = vec![DocumentSection::Content(ContentSection {
+        id: "body".to_string(),
+        is_optional: false,
+        elements: vec![DocumentElement::List(List {
+            id: "list-1".to_string(),
+            items: vec![parent, list_item("two")],
+        })],
+    })];
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+    let source = &generated.fragments["list-1"].source;
+    assert!(source.contains("#list("));
+    assert!(source.contains("nested"));
+    assert!(
+        !source.contains("#list(\n    )"),
+        "must not emit empty nested lists:\n{source}"
+    );
+    assert!(
+        source.contains("], [two]"),
+        "top-level list items must be comma-separated:\n{source}"
+    );
+    assert!(
+        source.contains("marker: [◦]"),
+        "first nested bullet level uses open-circle marker:\n{source}"
+    );
+}
+
+#[test]
+fn nested_enumeration_emits_depth_indent_and_numbering() {
+    let template = custom_element_template(ParamSpec {
+        key: "body".to_string(),
+        param_type: ParamType::Content,
+        source: None,
+        label: None,
+        default: None,
+        required: false,
+        variants: None,
+    });
+    let mut parent = list_item("one");
+    parent.children = vec![list_item("nested")];
+    let mut ast = ast_with_custom_field("body", json!("Paper body"));
+    ast.sections = vec![DocumentSection::Content(ContentSection {
+        id: "body".to_string(),
+        is_optional: false,
+        elements: vec![DocumentElement::Enumeration(Enumeration {
+            id: "enum-1".to_string(),
+            items: vec![parent],
+        })],
+    })];
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+    let source = &generated.fragments["enum-1"].source;
+    assert!(
+        source.contains("indent: 1.25em"),
+        "nested enum must indent deeper than the parent:\n{source}"
+    );
+    assert!(
+        source.contains("numbering: \"a.\""),
+        "first nested enum level uses lowercase letters:\n{source}"
+    );
+}
+
+#[test]
+fn adjacent_list_items_emit_commas_between_brackets() {
+    let template = custom_element_template(ParamSpec {
+        key: "body".to_string(),
+        param_type: ParamType::Content,
+        source: None,
+        label: None,
+        default: None,
+        required: false,
+        variants: None,
+    });
+    let mut ast = ast_with_custom_field("body", json!("Paper body"));
+    ast.sections = vec![DocumentSection::Content(ContentSection {
+        id: "body".to_string(),
+        is_optional: false,
+        elements: vec![DocumentElement::List(List {
+            id: "list-1".to_string(),
+            items: vec![list_item("alpha"), list_item("beta")],
+        })],
+    })];
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+    let source = &generated.fragments["list-1"].source;
+    assert!(
+        source.contains("[alpha], [beta]"),
+        "expected comma-separated list items:\n{source}"
+    );
 }
 
 #[test]
@@ -421,6 +533,7 @@ fn ast_with_table_and_figure() -> DocumentAST {
                             reference_id: None,
                             equation_source: None,
                             equation_syntax: EquationSyntax::Typst,
+                            ..Default::default()
                         }],
                     }),
                     caption: "Caption".to_string(),
@@ -455,6 +568,85 @@ fn tables_and_figures_default_to_standard_figure_wrapper() {
     let figure_source = &generated.fragments["figure-1"].source;
     assert!(figure_source.contains("#figure("));
     assert!(figure_source.contains("placement: bottom"));
+}
+
+#[test]
+fn default_here_placement_emits_typst_none() {
+    let template = template_with_apa_wrapper_fields();
+    let mut ast = ast_with_table_and_figure();
+    if let DocumentSection::Content(section) = &mut ast.sections[0] {
+        if let DocumentElement::Figure(figure) = &mut section.elements[1] {
+            figure.placement = "here".to_string();
+        }
+    }
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+
+    let figure_source = &generated.fragments["figure-1"].source;
+    assert!(
+        figure_source.contains("placement: none"),
+        "here must override template figure(placement: auto):\n{figure_source}"
+    );
+
+    let table_source = &generated.fragments["table-1"].source;
+    assert!(
+        table_source.contains("placement: none"),
+        "default table placement must emit none:\n{table_source}"
+    );
+}
+
+#[test]
+fn umb_apa_diagram_here_emits_placement_on_apa_figure() {
+    use crate::ast::Diagram;
+    use crate::template_spec::load_bundled_template;
+
+    let template = load_bundled_template("umb-apa").expect("umb-apa template");
+    let ast = DocumentAST {
+        version: "1.0".to_string(),
+        metadata: ProjectMetadata {
+            template_id: "umb-apa".to_string(),
+            template_variant_id: None,
+            title: "Diagram placement".to_string(),
+            running_head: None,
+            keywords: vec![],
+            project_settings: ProjectSettings::default(),
+            local_overrides: GlobalSettings::default(),
+        },
+        dependencies: DependencyManifest { packages: vec![] },
+        references: vec![],
+        assets: vec![AssetEntry {
+            id: "diagram-1".to_string(),
+            path: "assets/diagrams/diagram-1.svg".to_string(),
+            kind: "image".to_string(),
+            caption: None,
+        }],
+        inputs: HashMap::new(),
+        sections: vec![DocumentSection::Content(ContentSection {
+            id: "body".to_string(),
+            is_optional: false,
+            elements: vec![DocumentElement::Diagram(Diagram {
+                id: "diagram-1".to_string(),
+                mermaid_source: "flowchart TD\nA-->B".to_string(),
+                asset_id: Some("diagram-1".to_string()),
+                caption: "Flow".to_string(),
+                placement: "here".to_string(),
+                extra_fields: HashMap::new(),
+            })],
+        })],
+    };
+
+    let generated =
+        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
+    let diagram_source = &generated.fragments["diagram-1"].source;
+    assert!(
+        diagram_source.contains("#apa-figure("),
+        "diagram must use apa-figure:\n{diagram_source}"
+    );
+    assert!(
+        diagram_source.contains("placement: none"),
+        "here must emit placement: none on apa-figure:\n{diagram_source}"
+    );
 }
 
 #[test]
@@ -511,6 +703,7 @@ fn table_cell_multiline_elements_emit_paragraph_break() {
                             reference_id: None,
                             equation_source: None,
                             equation_syntax: EquationSyntax::Typst,
+                            ..Default::default()
                         }],
                     }),
                     DocumentElement::Paragraph(Paragraph {
@@ -524,6 +717,7 @@ fn table_cell_multiline_elements_emit_paragraph_break() {
                             reference_id: None,
                             equation_source: None,
                             equation_syntax: EquationSyntax::Typst,
+                            ..Default::default()
                         }],
                     }),
                 ],
@@ -876,14 +1070,19 @@ fn umb_apa_source_generation_matches_spec() {
         {
             "name": "Author 1",
             "affiliations": ["a"],
-            "degrees": ["a"]
+            "titles": ["a"]
         }
     ]));
     inputs.insert("affiliations".to_string(), json!(["Affiliation Name 1"]));
-    inputs.insert("degrees".to_string(), json!(["Ingeniero de Sistemas"]));
-    inputs.insert("director".to_string(), json!({
-        "name": "Director Name",
-        "title": "Director Title"
+    inputs.insert("titles".to_string(), json!(["Ingeniero de Sistemas"]));
+    inputs.insert("faculties".to_string(), json!(["Facultad de Ingeniería"]));
+    inputs.insert("advisor".to_string(), json!({
+        "name": "Advisor Name",
+        "title": "Advisor Title"
+    }));
+    inputs.insert("co_advisor".to_string(), json!({
+        "name": "Co-advisor Name",
+        "title": "Co-advisor Title"
     }));
     inputs.insert("city".to_string(), json!("Bogotá"));
     inputs.insert("country".to_string(), json!("Colombia"));
@@ -942,6 +1141,7 @@ fn umb_apa_source_generation_matches_spec() {
                             reference_id: None,
                             equation_source: None,
                             equation_syntax: EquationSyntax::Typst,
+                            ..Default::default()
                         }],
                     })
                 ],
@@ -961,7 +1161,7 @@ fn umb_apa_source_generation_matches_spec() {
     assert!(!main.contains("title-page"), "main.typ should not call title-page:\n{main}");
     assert!(!main.contains("abstract-page"), "main.typ should not call abstract-page:\n{main}");
 
-    assert!(main.contains("degrees: ("), "should contain degrees map:\n{main}");
+    assert!(main.contains("titles: ("), "should contain titles map:\n{main}");
     assert!(
         main.contains("\"a\": [Ingeniero de Sistemas]"),
         "should emit letter-keyed degree map:\n{main}"
@@ -975,10 +1175,11 @@ fn umb_apa_source_generation_matches_spec() {
         "should emit letter-keyed author affiliation refs:\n{main}"
     );
 
-    // director.name and director.title appear in the generated front-matter arguments.
-    assert!(main.contains("director: ("), "should contain director dictionary:\n{main}");
-    assert!(main.contains("name: [Director Name]"), "should contain director name:\n{main}");
-    assert!(main.contains("title: [Director Title]"), "should contain director title:\n{main}");
+    assert!(main.contains("advisor: ("), "should contain advisor dictionary:\n{main}");
+    assert!(main.contains("name: [Advisor Name]"), "should contain advisor name:\n{main}");
+    assert!(main.contains("co-advisor: ("), "should contain co-advisor dictionary:\n{main}");
+    assert!(main.contains("name: [Co-advisor Name]"), "should contain co-advisor name:\n{main}");
+    assert!(main.contains("faculties: ("), "should contain faculties array:\n{main}");
 
     // Every authority emits a name and role.
     assert!(main.contains("authorities: ("), "should contain authorities array:\n{main}");
@@ -1010,8 +1211,12 @@ fn umb_apa_source_generation_matches_spec() {
     let bib_pos = main.find("#bibliography").unwrap();
     assert!(body_pos < bib_pos, "body includes should precede bibliography:\n{main}");
     assert!(
-        main.contains("#heading(level: 1, numbering: none, outlined: false)[Referencias]"),
-        "Spanish bibliography section label per guía §13:\n{main}"
+        main.contains("#bibliography(\"references.bib\", full: true, title: text(\"Referencias\"))"),
+        "Spanish bibliography title via Typst bibliography element per guía §13:\n{main}"
+    );
+    assert!(
+        !main.contains("#heading(level: 1, numbering: none, outlined: false)[Referencias]"),
+        "bibliography title must not duplicate as a separate heading:\n{main}"
     );
     assert!(
         !main.contains("kind: table"),

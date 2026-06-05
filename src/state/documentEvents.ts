@@ -13,6 +13,7 @@ import {
     equationElement,
     diagramElement,
     figureElement,
+    generatedDiagramAssetForElement,
     getValueAtPath,
     headingElement,
     insertAt,
@@ -196,8 +197,8 @@ export const applyDocumentEventToAst = (
                 return { ...section, elements };
             });
 
-        case "removeElement":
-            return mapSections(ast, (section) =>
+        case "removeElement": {
+            const withoutElement = mapSections(ast, (section) =>
                 section.type === "Content"
                     ? {
                           ...section,
@@ -207,6 +208,17 @@ export const applyDocumentEventToAst = (
                       }
                     : section,
             );
+            const generatedAsset = generatedDiagramAssetForElement(ast, event.element_id);
+            if (!generatedAsset) {
+                return withoutElement;
+            }
+            return {
+                ...withoutElement,
+                assets: withoutElement.assets.filter(
+                    (asset) => asset.id !== generatedAsset.id,
+                ),
+            };
+        }
 
         case "updateParagraphText":
             return mapContentElements(ast, event.element_id, (element) =>
@@ -555,6 +567,9 @@ const documentEventFromAction = (
         case "UPDATE_QUOTE_CONTENT":
             return replaceElementWith(nextAst, action.payload.quoteId, "insertElement");
 
+        case "UPDATE_QUOTE_ATTRIBUTION":
+            return replaceElementWith(nextAst, action.payload.quoteId, "insertElement");
+
         case "UPDATE_DIAGRAM":
             return {
                 type: "updateDiagram",
@@ -875,6 +890,9 @@ const inverseDocumentEventFromAction = (
         case "UPDATE_QUOTE_CONTENT":
             return replaceElementWith(previousAst, action.payload.quoteId, "restoreElement");
 
+        case "UPDATE_QUOTE_ATTRIBUTION":
+            return replaceElementWith(previousAst, action.payload.quoteId, "restoreElement");
+
         case "UPDATE_DIAGRAM": {
             const diagram = diagramElement(previousAst, action.payload.diagramId);
             return {
@@ -1069,12 +1087,27 @@ const inverseDocumentEventFromAction = (
 
         case "REMOVE_ELEMENT": {
             const location = elementLocation(previousAst, action.payload.elementId);
-            return {
-                type: "restoreElement",
-                section_id: location.section.id,
-                index: location.index,
-                element: location.element,
-            };
+            const events: DocumentEvent[] = [
+                {
+                    type: "restoreElement",
+                    section_id: location.section.id,
+                    index: location.index,
+                    element: location.element,
+                },
+            ];
+            const generatedAsset = generatedDiagramAssetForElement(
+                previousAst,
+                action.payload.elementId,
+            );
+            if (generatedAsset) {
+                const assetLoc = assetLocation(previousAst, generatedAsset.id);
+                events.push({
+                    type: "restoreAsset",
+                    index: assetLoc.index,
+                    asset: assetLoc.asset,
+                });
+            }
+            return events;
         }
 
         default:

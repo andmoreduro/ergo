@@ -12,9 +12,13 @@ fn export_typescript_bindings() {
     let config = Config::default().with_out_dir(out_dir);
 
     ergo_lib::action_types::ActionDescriptor::export_all(&config).unwrap();
+    ergo_lib::action_types::ContextDescriptor::export_all(&config).unwrap();
     ergo_lib::action_types::ActionResolution::export_all(&config).unwrap();
     ergo_lib::archive::OpenProjectResult::export_all(&config).unwrap();
     ergo_lib::ast::DocumentAST::export_all(&config).unwrap();
+    ergo_lib::ast::GlobalSettings::export_all(&config).unwrap();
+    ergo_lib::ast::KeymapProfileRecord::export_all(&config).unwrap();
+    ergo_lib::ast::KeymapSettings::export_all(&config).unwrap();
     ergo_lib::compilation_types::CompilationResult::export_all(&config).unwrap();
     ergo_lib::compilation_types::ExportFormat::export_all(&config).unwrap();
     ergo_lib::document_outline::DocumentOutline::export_all(&config).unwrap();
@@ -22,7 +26,10 @@ fn export_typescript_bindings() {
     ergo_lib::document_session_commands::ImportResourceResult::export_all(&config).unwrap();
     ergo_lib::document_session_types::DocumentEvent::export_all(&config).unwrap();
     ergo_lib::document_session_types::DocumentSessionStatus::export_all(&config).unwrap();
+    ergo_lib::font_availability::FontAvailability::export_all(&config).unwrap();
+    ergo_lib::font_availability::ProjectFontAvailability::export_all(&config).unwrap();
     ergo_lib::preview_sync_types::PreviewElementPositionsResult::export_all(&config).unwrap();
     ergo_lib::preview_sync_types::PreviewJumpResult::export_all(&config).unwrap();
     ergo_lib::template_spec::TemplateSpec::export_all(&config).unwrap();
+    ergo_lib::translation_server::TranslationServerStatus::export_all(&config).unwrap();
 }

@@ -85,6 +85,47 @@ const inlineNodes: Record<string, NodeSpec> = {
             node.attrs.label || node.attrs.source,
         ],
     },
+
+    inlineQuote: {
+        group: "inline",
+        inline: true,
+        atom: true,
+        attrs: {
+            source: { default: "" },
+            label: { default: "" },
+            attributionText: { default: "" },
+            attributionReferenceId: { default: "" },
+        },
+        parseDOM: [
+            {
+                tag: "span[data-inline-quote-source]",
+                getAttrs: (dom) => {
+                    const el = dom as HTMLElement;
+                    const source = el.getAttribute("data-inline-quote-source") ?? "";
+                    return {
+                        source,
+                        label: el.textContent ?? source,
+                        attributionText:
+                            el.getAttribute("data-inline-quote-attribution-text") ?? "",
+                        attributionReferenceId:
+                            el.getAttribute("data-inline-quote-attribution-reference-id") ??
+                            "",
+                    };
+                },
+            },
+        ],
+        toDOM: (node) => [
+            "span",
+            {
+                contenteditable: "false",
+                "data-inline-quote-source": node.attrs.source,
+                "data-inline-quote-attribution-text": node.attrs.attributionText,
+                "data-inline-quote-attribution-reference-id":
+                    node.attrs.attributionReferenceId,
+            },
+            node.attrs.label || node.attrs.source,
+        ],
+    },
 };
 
 const cellBlockNodes: Record<string, NodeSpec> = {
@@ -100,11 +141,20 @@ const cellBlockNodes: Record<string, NodeSpec> = {
         group: "cellblock",
         content: "inline*",
         defining: true,
-        attrs: { elementId: { default: "" } },
+        attrs: {
+            elementId: { default: "" },
+            attributionText: { default: "" },
+            attributionReferenceId: { default: "" },
+        },
         parseDOM: [{ tag: "blockquote" }],
         toDOM: (node) => [
             "blockquote",
-            { "data-element-id": node.attrs.elementId },
+            {
+                "data-element-id": node.attrs.elementId,
+                "data-quote-attribution-text": node.attrs.attributionText,
+                "data-quote-attribution-reference-id":
+                    node.attrs.attributionReferenceId,
+            },
             0,
         ],
     },
@@ -125,7 +175,7 @@ const cellBlockNodes: Record<string, NodeSpec> = {
     },
 
     list_item: {
-        content: "inline*",
+        content: "paragraph list?",
         defining: true,
         parseDOM: [{ tag: "li" }],
         toDOM: () => ["li", 0],

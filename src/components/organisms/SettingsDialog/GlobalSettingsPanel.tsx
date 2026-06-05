@@ -1,5 +1,9 @@
+import { useCallback, useEffect, useState } from "react";
+
+import { TauriApi } from "../../../api/tauri";
 import type { EquationSyntax } from "../../../bindings/EquationSyntax";
 import type { GlobalSettings } from "../../../bindings/GlobalSettings";
+import type { TranslationServerStatus } from "../../../bindings/TranslationServerStatus";
 import { m } from "../../../paraglide/messages.js";
 import { locales } from "../../../paraglide/runtime.js";
 import type { Locale } from "../../../paraglide/runtime.js";
@@ -10,6 +14,40 @@ import { FormField } from "../../molecules/FormField/FormField";
 import styles from "./SettingsDialog.module.css";
 import { toOptionalNumber } from "./settingsDialogUtils";
 
+const TRANSLATION_SERVER_STATUS_POLL_MS = 3000;
+
+const translationServerStatusLabel = (status: TranslationServerStatus | null) => {
+    if (!status) {
+        return null;
+    }
+
+    if (!status.docker_available) {
+        return m.settings_zotero_translation_server_docker_unavailable();
+    }
+
+    if (status.running) {
+        return m.settings_zotero_translation_server_status_running();
+    }
+
+    return m.settings_zotero_translation_server_status_stopped();
+};
+
+const translationServerStatusClassName = (status: TranslationServerStatus | null) => {
+    if (!status) {
+        return styles.settingStatus;
+    }
+
+    if (!status.docker_available) {
+        return `${styles.settingStatus} ${styles.settingStatusWarning}`;
+    }
+
+    if (status.running) {
+        return `${styles.settingStatus} ${styles.settingStatusRunning}`;
+    }
+
+    return `${styles.settingStatus} ${styles.settingStatusStopped}`;
+};
+
 export interface GlobalSettingsPanelProps {
     settings: GlobalSettings;
     onChange: (settings: GlobalSettings) => void;
@@ -18,7 +56,37 @@ export interface GlobalSettingsPanelProps {
 export const GlobalSettingsPanel = ({
     settings,
     onChange,
-}: GlobalSettingsPanelProps) => (
+}: GlobalSettingsPanelProps) => {
+    const [translationServerStatus, setTranslationServerStatus] =
+        useState<TranslationServerStatus | null>(null);
+
+    const refreshTranslationServerStatus = useCallback(async () => {
+        try {
+            const status = await TauriApi.getTranslationServerStatus();
+            setTranslationServerStatus(status);
+        } catch {
+            setTranslationServerStatus(null);
+        }
+    }, []);
+
+    useEffect(() => {
+        void refreshTranslationServerStatus();
+        const intervalId = window.setInterval(() => {
+            void refreshTranslationServerStatus();
+        }, TRANSLATION_SERVER_STATUS_POLL_MS);
+
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, [
+        refreshTranslationServerStatus,
+        settings.zotero_translation_server_enabled,
+    ]);
+
+    const zoteroEnabled = settings.zotero_translation_server_enabled ?? false;
+    const statusLabel = translationServerStatusLabel(translationServerStatus);
+
+    return (
     <div className={styles.settingsList}>
         <section className={styles.settingsGroup}>
             <h3>{m.settings_group_appearance()}</h3>
@@ -175,6 +243,31 @@ export const GlobalSettingsPanel = ({
             </div>
         </section>
         <section className={styles.settingsGroup}>
+            <h3>{m.settings_group_references()}</h3>
+            <div className={styles.fieldGrid}>
+                <div className={styles.fieldCheckbox}>
+                    <Checkbox
+                        checked={zoteroEnabled}
+                        label={m.settings_zotero_translation_server_enabled()}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                zotero_translation_server_enabled: event.target.checked,
+                            })
+                        }
+                    />
+                </div>
+                <p className={styles.settingHint}>
+                    {m.settings_zotero_translation_server_docker_required()}
+                </p>
+                {statusLabel ? (
+                    <p className={translationServerStatusClassName(translationServerStatus)}>
+                        {statusLabel}
+                    </p>
+                ) : null}
+            </div>
+        </section>
+        <section className={styles.settingsGroup}>
             <h3>{m.settings_group_advanced()}</h3>
             <div className={styles.fieldGrid}>
                 <FormField label={m.settings_history_limit()}>
@@ -195,4 +288,5 @@ export const GlobalSettingsPanel = ({
             </div>
         </section>
     </div>
-);
+    );
+};

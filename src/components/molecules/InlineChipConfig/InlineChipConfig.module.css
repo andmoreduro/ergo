@@ -1,0 +1,31 @@
+.anchor {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 2;
+    transform: translate(35%, -35%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+:global([data-inline-chip-shell]:hover) .anchor,
+:global([data-inline-chip-shell]:focus-within) .anchor,
+.anchor:hover,
+.anchor:has([aria-expanded="true"]) {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.trigger {
+    background: transparent;
+    box-shadow: none;
+}
+
+:global([data-inline-chip-shell]:hover) .trigger,
+:global([data-inline-chip-shell]:focus-within) .trigger,
+.anchor:hover .trigger,
+.trigger[aria-expanded="true"] {
+    background: var(--color-bg-secondary);
+    box-shadow: var(--shadow-ring-subtle);
+}

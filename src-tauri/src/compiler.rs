@@ -5,6 +5,10 @@ use tauri::{State, WebviewWindow};
 
 use crate::app_state::TauriAppState;
 use crate::ast::DocumentAST;
+use crate::ast::ProjectSettings;
+use crate::font_availability::{
+    check_project_font_availability, resolve_project_settings_fonts, ProjectFontAvailability,
+};
 use crate::font_loader::{list_system_font_family_names, load_font_bytes_for_families};
 use crate::font_requirements::{families_missing_from_bundled, required_font_families};
 
@@ -26,9 +30,22 @@ pub fn list_system_font_families() -> Vec<String> {
 
 #[tauri::command]
 pub fn load_fonts_for_document(ast: DocumentAST) -> Result<Vec<Vec<u8>>, String> {
-    let required = required_font_families(&ast);
+    let resolved = resolve_project_settings_fonts(&ast.metadata.project_settings);
+    let mut resolved_ast = ast;
+    resolved_ast.metadata.project_settings = resolved;
+    let required = required_font_families(&resolved_ast);
     let missing = families_missing_from_bundled(&required);
     load_font_bytes_for_families(&missing)
+}
+
+#[tauri::command]
+pub fn check_project_fonts(settings: ProjectSettings) -> ProjectFontAvailability {
+    check_project_font_availability(&settings)
+}
+
+#[tauri::command]
+pub fn resolve_project_fonts(settings: ProjectSettings) -> ProjectSettings {
+    resolve_project_settings_fonts(&settings)
 }
 
 #[tauri::command]

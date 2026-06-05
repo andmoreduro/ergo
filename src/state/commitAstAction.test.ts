@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { applyDocumentEvents } from "./documentEvents";
 import { historyEntryForAstAction } from "./commitAstAction";
-import { createDefaultDocumentAST } from "./ast/defaults";
+import { createTestDocumentAST } from "../test/documentAstFixture";
 import { astReducer } from "./ast/reducer";
 
 describe("historyEntryForAstAction", () => {
     it("applies forward events as the canonical AST update", () => {
-        const ast = createDefaultDocumentAST();
+        const ast = createTestDocumentAST();
         const action = {
             type: "UPDATE_PROJECT_TITLE" as const,
             payload: { title: "Título con ñ" },
@@ -21,7 +21,7 @@ describe("historyEntryForAstAction", () => {
     });
 
     it("returns null when commit policy rejects the action", () => {
-        const ast = createDefaultDocumentAST();
+        const ast = createTestDocumentAST();
         const section = ast.sections.find((entry) => entry.type === "Content");
         if (!section || section.type !== "Content") {
             throw new Error("content section missing");

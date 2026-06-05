@@ -624,3 +624,28 @@ export const restoreCaretAtPlainOffset = (
 export const placeCaretAtEnd = (root: HTMLElement): void => {
     restoreCaretAtPlainOffset(root, plainTextLengthInEditable(root));
 };
+
+/** Select a plain-text character range inside a contenteditable root. */
+export const selectPlainTextRange = (
+    root: HTMLElement,
+    start: number,
+    end: number,
+): void => {
+    restoreCaretAtPlainOffset(root, start);
+    const selection = document.getSelection();
+    if (!selection?.rangeCount) {
+        return;
+    }
+    const range = selection.getRangeAt(0);
+    const anchorNode = range.startContainer;
+    const anchorOffset = range.startOffset;
+    restoreCaretAtPlainOffset(root, end);
+    if (!selection.rangeCount) {
+        return;
+    }
+    const endRange = selection.getRangeAt(0);
+    range.setStart(anchorNode, anchorOffset);
+    range.setEnd(endRange.startContainer, endRange.startOffset);
+    selection.removeAllRanges();
+    selection.addRange(range);
+};

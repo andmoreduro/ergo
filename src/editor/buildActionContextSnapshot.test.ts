@@ -32,4 +32,34 @@ describe("buildActionContextSnapshot", () => {
 
         mount.remove();
     });
+
+    it("adds inlineElement context for inline quote hosts", () => {
+        const host = document.createElement("span");
+        host.setAttribute("data-inline-quote-host", "");
+        const input = document.createElement("input");
+        host.appendChild(input);
+        document.body.appendChild(host);
+
+        const getSnapshot = (): ActionContextSnapshot => ({
+            window_id: "main",
+            focused_context_id: "body-section",
+            nodes: [
+                {
+                    id: "body-section",
+                    parent_id: "editor",
+                    contexts: ["body", "editor"],
+                    attributes: {},
+                },
+            ],
+        });
+
+        const snapshot = buildActionContextSnapshot(input, getSnapshot);
+        expect(snapshot.focused_context_id).toBe("active-inline-element");
+        expect(
+            snapshot.nodes.find((node) => node.id === "active-inline-element")
+                ?.contexts,
+        ).toEqual(["inlineElement"]);
+
+        host.remove();
+    });
 });

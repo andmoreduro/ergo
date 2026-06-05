@@ -12,14 +12,29 @@ import {
 import { TauriApi } from "../api/tauri";
 import { buildActionContextSnapshot } from "../editor/buildActionContextSnapshot";
 import { resolveBodyEditorInsertShortcut } from "../editor/editorBodyShortcuts";
+import {
+    isHistoryRedoShortcut,
+    isHistoryUndoShortcut,
+} from "../editor/historyShortcuts";
 import { captureBodyTabKey, getActiveBodyView } from "../editor/prosemirror/activeView";
 import { runBodyTab } from "../editor/prosemirror/bodyTabCommand";
+import { isActiveTableCellEditing } from "../editor/prosemirror/table/tableCellInsertPolicy";
 import {
     isAltGrStyleChord,
     normalizeShortcutKey,
     resolveShortcutKey,
     shortcutChordModifiers,
 } from "../editor/shortcutKeyFromKeyboardEvent";
+import {
+    isElementSettingsShortcut,
+    isFindNavShortcut,
+    isFindShortcut,
+    isMarkShortcut,
+    isTableCellNavShortcut,
+    isTableMergeShortcut,
+    isTableSplitShortcut,
+    isZoomShortcut,
+} from "../editor/nativeChordGuards";
 import type { ActionContextNode } from "../bindings/ActionContextNode";
 import type { ActionContextSnapshot } from "../bindings/ActionContextSnapshot";
 import type { ActionId } from "../bindings/ActionId";
@@ -156,6 +171,10 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
         };
 
         const handleKeyDown = (event: KeyboardEvent) => {
+            const markKey = normalizeShortcutKey(event.key);
+            const isUndoShortcut = isHistoryUndoShortcut(event, markKey);
+            const isRedoShortcut = isHistoryRedoShortcut(event, markKey);
+
             if (typeof TauriApi.resolveKeyEvent !== "function") {
                 return;
             }
@@ -200,6 +219,14 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
             // below can still run — its `defaultPrevented` bail is meant to detect a
             // synchronous downstream handler (ProseMirror/input), not our own call.
             let preventedBySelf = false;
+            if (
+                isFindShortcut(event, markKey) ||
+                isFindNavShortcut(event, markKey) ||
+                isElementSettingsShortcut(event, markKey)
+            ) {
+                event.preventDefault();
+                preventedBySelf = true;
+            }
             if (!targetIsEditable && (event.ctrlKey || event.metaKey || event.altKey)) {
                 event.preventDefault();
                 preventedBySelf = true;
@@ -216,12 +243,6 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
             // Block native ONLY inside the body surface; plain contenteditable
             // fields (captions, template inputs) keep their behavior. Tracked via
             // `preventedBySelf` so the resolver below still runs.
-            const markKey = normalizeShortcutKey(event.key);
-            const isMarkShortcut =
-                (event.ctrlKey || event.metaKey) &&
-                !event.altKey &&
-                !event.shiftKey &&
-                (markKey === "b" || markKey === "i" || markKey === "u");
             const isAltGrChord = isAltGrStyleChord(event);
             const bodyView = getActiveBodyView();
             const targetNode =
@@ -235,7 +256,24 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
             const inBodyEditor =
                 inBodySurface ||
                 Boolean(targetEl?.closest("[data-ergo-body-editor]"));
-            if (inBodySurface && isMarkShortcut) {
+            if (inBodySurface && isMarkShortcut(event, markKey)) {
+                event.preventDefault();
+                preventedBySelf = true;
+            }
+            if (inBodySurface && (isUndoShortcut || isRedoShortcut)) {
+                event.preventDefault();
+                preventedBySelf = true;
+            }
+            if (
+                isActiveTableCellEditing() &&
+                (isTableCellNavShortcut(event, markKey) ||
+                    isTableMergeShortcut(event, markKey) ||
+                    isTableSplitShortcut(event, markKey))
+            ) {
+                event.preventDefault();
+                preventedBySelf = true;
+            }
+            if (isZoomShortcut(event, markKey)) {
                 event.preventDefault();
                 preventedBySelf = true;
             }
@@ -413,6 +451,11 @@ export const ActionContextProvider = ({
 export const useActionDispatcher = () => {
     const runtime = useContext(ActionRuntimeContext);
     return runtime?.dispatchAction ?? (async () => false);
+};
+
+export const useSetFocusedActionContext = () => {
+    const runtime = useContext(ActionRuntimeContext);
+    return runtime?.setFocusedContext ?? (() => undefined);
 };
 
 export const useActiveActionContext = () => {

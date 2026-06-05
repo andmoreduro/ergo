@@ -88,11 +88,13 @@ impl SourceBuilder {
         fallback_caret_utf16_offset: usize,
     ) {
         let mut escaped = String::new();
+        let mut at_line_start = true;
         for character in generated.chars() {
-            if should_escape_typst_text_character(character) {
+            if should_escape_typst_text_character(character, at_line_start) {
                 escaped.push('\\');
             }
             escaped.push(character);
+            at_line_start = character == '\n';
         }
         self.push_generated_field_marker(
             element_id,
@@ -143,13 +145,15 @@ impl SourceBuilder {
         let byte_start = self.source.len();
         let mut segments = Vec::new();
         let mut utf16_offset = field_utf16_start;
+        let mut at_line_start = true;
 
         for character in value.chars() {
             let source_byte_start = self.source.len();
-            if escape && should_escape_typst_text_character(character) {
+            if escape && should_escape_typst_text_character(character, at_line_start) {
                 self.source.push('\\');
             }
             self.source.push(character);
+            at_line_start = character == '\n';
             let source_byte_end = self.source.len();
             let next_utf16_offset = utf16_offset + character.len_utf16();
             segments.push(FieldTextSegment {
@@ -172,9 +176,60 @@ impl SourceBuilder {
     }
 }
 
-fn should_escape_typst_text_character(character: char) -> bool {
-    matches!(
+fn should_escape_typst_text_character(character: char, at_line_start: bool) -> bool {
+    if matches!(
         character,
         '\\' | '#' | '$' | '%' | '&' | '_' | '^' | '{' | '}' | '[' | ']'
-    )
+            | '@' | '*' | '<' | '>' | '`' | '~'
+    ) {
+        return true;
+    }
+
+    at_line_start && matches!(character, '=' | '-' | '+' | '/' | ':')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escapes_typst_markup_characters() {
+        assert!(should_escape_typst_text_character('#', false));
+        assert!(should_escape_typst_text_character('@', false));
+        assert!(!should_escape_typst_text_character('=', false));
+        assert!(!should_escape_typst_text_character('-', false));
+    }
+
+    #[test]
+    fn escapes_line_start_markup_characters() {
+        assert!(should_escape_typst_text_character('=', true));
+        assert!(should_escape_typst_text_character('-', true));
+        assert!(should_escape_typst_text_character('+', true));
+    }
+
+    #[test]
+    fn push_escaped_field_escapes_leading_equals_sign() {
+        let mut builder = SourceBuilder::default();
+        builder.push_escaped_field("el-1", "el-1:text", "= not a heading", 0);
+        assert_eq!(builder.source, "\\= not a heading");
+    }
+
+    #[test]
+    fn push_escaped_field_preserves_midline_equals_sign() {
+        let mut builder = SourceBuilder::default();
+        builder.push_escaped_field("el-1", "el-1:text", "x = y", 0);
+        assert_eq!(builder.source, "x = y");
+    }
+
+    #[test]
+    fn push_escaped_field_escapes_equals_after_linebreak_segment() {
+        let mut builder = SourceBuilder::default();
+        builder.push_escaped_field("el-1", "el-1:text", "first line", 0);
+        builder.push_literal("#linebreak()");
+        builder.push_escaped_field("el-1", "el-1:text", "= second line", 11);
+        assert_eq!(
+            builder.source,
+            "first line#linebreak()\\= second line"
+        );
+    }
 }

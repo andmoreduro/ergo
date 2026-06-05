@@ -47,11 +47,20 @@ const baseNodes: Record<string, NodeSpec> = {
         group: "block",
         content: "inline*",
         defining: true,
-        attrs: { elementId: { default: "" } },
+        attrs: {
+            elementId: { default: "" },
+            attributionText: { default: "" },
+            attributionReferenceId: { default: "" },
+        },
         parseDOM: [{ tag: "blockquote" }],
         toDOM: (node) => [
             "blockquote",
-            { "data-element-id": node.attrs.elementId },
+            {
+                "data-element-id": node.attrs.elementId,
+                "data-quote-attribution-text": node.attrs.attributionText,
+                "data-quote-attribution-reference-id":
+                    node.attrs.attributionReferenceId,
+            },
             0,
         ],
     },
@@ -72,7 +81,7 @@ const baseNodes: Record<string, NodeSpec> = {
     },
 
     list_item: {
-        content: "inline*",
+        content: "paragraph list?",
         defining: true,
         parseDOM: [{ tag: "li" }],
         toDOM: () => ["li", 0],
@@ -143,6 +152,47 @@ const baseNodes: Record<string, NodeSpec> = {
                 contenteditable: "false",
                 "data-inline-equation-source": node.attrs.source,
                 "data-inline-equation-syntax": node.attrs.syntax,
+            },
+            node.attrs.label || node.attrs.source,
+        ],
+    },
+
+    inlineQuote: {
+        group: "inline",
+        inline: true,
+        atom: true,
+        attrs: {
+            source: { default: "" },
+            label: { default: "" },
+            attributionText: { default: "" },
+            attributionReferenceId: { default: "" },
+        },
+        parseDOM: [
+            {
+                tag: "span[data-inline-quote-source]",
+                getAttrs: (dom) => {
+                    const el = dom as HTMLElement;
+                    const source = el.getAttribute("data-inline-quote-source") ?? "";
+                    return {
+                        source,
+                        label: el.textContent ?? source,
+                        attributionText:
+                            el.getAttribute("data-inline-quote-attribution-text") ?? "",
+                        attributionReferenceId:
+                            el.getAttribute("data-inline-quote-attribution-reference-id") ??
+                            "",
+                    };
+                },
+            },
+        ],
+        toDOM: (node) => [
+            "span",
+            {
+                contenteditable: "false",
+                "data-inline-quote-source": node.attrs.source,
+                "data-inline-quote-attribution-text": node.attrs.attributionText,
+                "data-inline-quote-attribution-reference-id":
+                    node.attrs.attributionReferenceId,
             },
             node.attrs.label || node.attrs.source,
         ],
@@ -257,13 +307,18 @@ export type BodySchema = typeof bodySchema;
 /** Inline atom node type names whose field-offset width differs from PM size 1. */
 export const REFERENCE_NODE = "reference";
 export const INLINE_EQUATION_NODE = "inlineEquation";
+export const INLINE_QUOTE_NODE = "inlineQuote";
+
+export const INLINE_EDITABLE_ATOM_NODES = new Set([
+    INLINE_EQUATION_NODE,
+    INLINE_QUOTE_NODE,
+]);
 
 /** Node type names that hold a single rich-text field as inline content. */
 export const TEXT_FIELD_NODES = new Set([
     "paragraph",
     "heading",
     "quote",
-    "list_item",
 ]);
 
 /** Block atom node type names backed by an embedded element editor. */

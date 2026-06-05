@@ -16,6 +16,7 @@
 
 #let apa-figure(
   body,
+  placement: none,
   ..args,
   note: none,
   specific-note: none,
@@ -35,6 +36,7 @@
       #parbreak()
       #probability-note
     ],
+    placement: placement,
     ..args,
   )
 }

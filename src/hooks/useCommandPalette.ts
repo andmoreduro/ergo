@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { TauriApi } from "../api/tauri";
+import { formatActionCatalogLabel } from "../actions/actionMessages";
 import type { ActionDescriptor } from "../bindings/ActionDescriptor";
 import type { ActionId } from "../bindings/ActionId";
 import type { ActionInvocation } from "../bindings/ActionInvocation";
@@ -44,34 +45,40 @@ export const useCommandPalette = ({
     }, []);
 
     const paletteCommands = useMemo<Command[]>(() => {
+        const fromDescriptor = (descriptor: ActionDescriptor): Command => {
+            const registered = commandRegistry.get(descriptor.id);
+            return {
+                id: descriptor.id,
+                label: formatActionCatalogLabel(
+                    descriptor.id,
+                    descriptor.description_key,
+                ),
+                scope: registered?.scope ?? "global",
+                run: registered?.run ?? (() => undefined),
+                isEnabled: registered?.isEnabled,
+            };
+        };
+
         if (actionCatalog.length === 0) {
             return commandRegistry.all();
         }
 
-        return actionCatalog.map((descriptor) => {
-            const command = commandRegistry.get(descriptor.id);
-            if (command) {
-                return command;
-            }
-
-            return {
-                id: descriptor.id,
-                label: descriptor.id,
-                scope: "global",
-                isEnabled: () => false,
-                run: () => undefined,
-            };
-        });
+        return actionCatalog.map(fromDescriptor);
     }, [actionCatalog, commandRegistry]);
 
     const deferredQuery = useDeferredValue(query);
-    const filteredCommands = useMemo(
-        () =>
-            paletteCommands.filter((command) =>
-                command.label.toLowerCase().includes(deferredQuery.toLowerCase()),
-            ),
-        [deferredQuery, paletteCommands],
-    );
+    const filteredCommands = useMemo(() => {
+        const needle = deferredQuery.trim().toLowerCase();
+        if (!needle) {
+            return paletteCommands;
+        }
+
+        return paletteCommands.filter(
+            (command) =>
+                command.label.toLowerCase().includes(needle) ||
+                command.id.toLowerCase().includes(needle),
+        );
+    }, [deferredQuery, paletteCommands]);
 
     const runCommand = useCallback(
         (actionId: ActionId) => {

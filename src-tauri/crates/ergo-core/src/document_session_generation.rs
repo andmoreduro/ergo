@@ -294,13 +294,12 @@ fn generate_project_sources_inner(
                         document_language,
                         outline_overrides,
                     );
-                    main_builder.push_literal(&format!(
-                        "#heading(level: 1, numbering: none, outlined: false)[{}]\n",
-                        escape_typst_string(bib_title)
-                    ));
                     let file = section_spec.file.as_deref().unwrap_or("references.bib");
-                    main_builder
-                        .push_literal(&format!("#bibliography(\"{}\", full: true)\n\n", file));
+                    main_builder.push_literal(&format!(
+                        "#bibliography(\"{}\", full: true, title: text(\"{}\"))\n\n",
+                        escape_typst_string(file),
+                        escape_typst_string(bib_title),
+                    ));
                 }
             }
             SectionKind::Appendix => {

@@ -27,6 +27,28 @@ const contextToScope = (context: string): CommandScope => {
     return "global";
 };
 
+export const lookupActionShortcut = (
+    keymap: KeymapProfile,
+    actionId: ActionId,
+    preferredContext?: string,
+): string | null => {
+    const bindings = keymap.bindings.filter(
+        (binding) => binding.commandId === actionId && binding.keys.trim() !== "",
+    );
+    if (bindings.length === 0) {
+        return null;
+    }
+    if (preferredContext) {
+        const preferred = bindings.find(
+            (binding) => binding.context === preferredContext,
+        );
+        if (preferred) {
+            return preferred.keys;
+        }
+    }
+    return bindings[0]?.keys ?? null;
+};
+
 export const formatKeySequence = (sequence: KeyStroke[]): string =>
     sequence
         .map((stroke) => {

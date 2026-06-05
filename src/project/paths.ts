@@ -35,6 +35,57 @@ export const projectBaseNameFromPath = (projectPath: string): string => {
     return stripErgprojExtension(fileName);
 };
 
+export const projectFileNameFromPath = (projectPath: string): string => {
+    const segments = projectPath.split(/[/\\]/);
+    return segments[segments.length - 1] ?? projectPath;
+};
+
+export const projectDirectoryFromPath = (projectPath: string): string => {
+    const separator = projectPath.includes("\\") ? "\\" : "/";
+    const segments = projectPath.split(/[/\\]/);
+    if (segments.length <= 1) {
+        return "";
+    }
+    return segments.slice(0, -1).join(separator);
+};
+
+/** Human-readable project title derived from the `.ergproj` file basename. */
+export const displayProjectNameFromPath = (projectPath: string): string =>
+    projectBaseNameFromPath(projectPath).replace(/_/g, " ");
+
+export type RecentProjectDisplay = {
+    projectPath: string;
+    projectName: string;
+    fileName: string;
+    directoryPath: string;
+};
+
+export const formatRecentProjectDisplay = (
+    projectPath: string,
+): RecentProjectDisplay => {
+    const fileName = projectFileNameFromPath(projectPath);
+    const directoryPath = projectDirectoryFromPath(projectPath);
+    return {
+        projectPath,
+        projectName: displayProjectNameFromPath(projectPath),
+        fileName,
+        directoryPath,
+    };
+};
+
+/** Primary/secondary labels for a project path in two-line list pickers. */
+export const twoLineLabelsForProjectPath = (
+    projectPath: string,
+): { primary: string; secondary: string; title: string } => {
+    const { projectName, fileName, directoryPath } =
+        formatRecentProjectDisplay(projectPath);
+    return {
+        primary: `${projectName} (${fileName})`,
+        secondary: directoryPath || projectPath,
+        title: projectPath,
+    };
+};
+
 const sanitizeExportBaseName = (baseName: string): string =>
     baseName
         .replace(INVALID_FILE_NAME_CHARACTERS, " ")

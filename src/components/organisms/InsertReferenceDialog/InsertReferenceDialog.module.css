@@ -33,6 +33,10 @@
     list-style: none;
 }
 
+.listItemHighlighted {
+    background-color: var(--color-bg-tertiary);
+}
+
 .resourcePreviewSlot {
     width: 100%;
     min-width: 0;

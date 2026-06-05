@@ -1,151 +1,470 @@
 {
+
   "$schema": "../../schemas/ergo-template.schema.json",
+
   "metadata": {
+
     "id": "umb-apa",
+
     "name": "UMB's APA7",
+
     "version": "1.0.0",
+
     "description": "UMB APA 7th Edition graduate work aligned with the UMB Biblioteca guía resumida (APA 7)."
+
   },
+
   "typst": {
+
     "package": {
+
       "name": "/umb-apa/lib.typ",
+
       "version": "",
+
       "imports": [
+
         "front-matter",
+
+        "umb-outlines",
+
+        "symbols-page",
+
+        "abbreviations-page",
+
         "appendix",
+
         "appendix-outline",
+
         "apa-figure",
+
         "apa-style"
+
       ]
+
     },
+
     "default_template_overrides": [
-      { "key": "outline.include_tables", "value": "false" },
-      { "key": "outline.include_figures", "value": "false" },
+
+      { "key": "outline.include_tables", "value": "true" },
+
+      { "key": "outline.include_figures", "value": "true" },
+
       { "key": "outline.include_equations", "value": "false" },
+
       { "key": "outline.include_listings", "value": "false" }
+
     ],
+
     "element_overrides": {
+
       "figure": {
+
         "wrapper": "apa-figure",
+
         "extra_fields": [
+
           { "key": "width", "type": "length", "label": "Image width" },
+
           { "key": "caption", "type": "content", "label": "Caption" },
+
+          { "key": "source", "type": "content", "label": "Source" },
+
           { "key": "note", "type": "content", "label": "Note" },
+
           { "key": "specific-note", "type": "content", "label": "Specific note" },
+
           { "key": "probability-note", "type": "content", "label": "Probability note (significance symbols, e.g. * p < .05)" }
+
         ]
+
       },
+
       "table": {
+
         "wrapper": "apa-figure",
+
         "extra_fields": [
+
           { "key": "caption", "type": "content", "label": "Caption" },
+
           { "key": "note", "type": "content", "label": "Note" },
+
           { "key": "specific-note", "type": "content", "label": "Specific note" },
+
           { "key": "probability-note", "type": "content", "label": "Probability note (significance symbols, e.g. * p < .05)" }
+
         ]
+
       }
+
     },
+
     "show_rule": {
+
       "function": "apa-style",
+
       "params": [
+
         { "key": "font-size", "type": "length", "source": "settings.font_size", "default": "12pt" }
+
       ]
+
     },
+
     "sections": [
+
       {
+
         "id": "front-matter",
+
         "kind": "function_call",
+
         "function": "front-matter",
+
         "label": "Front Matter",
+
         "params": [
+
           { "key": "title", "type": "content", "source": "inputs.title" },
+
           { "key": "authors", "type": "author_list", "source": "inputs.authors" },
+
           { "key": "affiliations", "type": "affiliation_map", "source": "inputs.affiliations" },
-          { "key": "degrees", "type": "degree_map", "source": "inputs.degrees" },
-          { "key": "director", "type": "dictionary", "source": "inputs.director" },
+
+          { "key": "titles", "type": "degree_map", "source": "inputs.titles" },
+
+          { "key": "advisor", "type": "dictionary", "source": "inputs.advisor" },
+
+          { "key": "co-advisor", "type": "dictionary", "source": "inputs.co_advisor" },
+
+          { "key": "faculties", "type": "string_array", "source": "inputs.faculties" },
+
           { "key": "city", "type": "content", "source": "inputs.city" },
+
           { "key": "country", "type": "content", "source": "inputs.country" },
+
           { "key": "year", "type": "content", "source": "inputs.year" },
+
           { "key": "authorities", "type": "dictionary", "source": "inputs.authorities" },
+
+          { "key": "dedication", "type": "content_array", "source": "inputs.dedication" },
+
           { "key": "acknowledgements", "type": "content_array", "source": "inputs.acknowledgements" },
+
           { "key": "abstract-es", "type": "content_array", "source": "inputs.abstract_es" },
+
           { "key": "keywords-es", "type": "string_array", "source": "inputs.keywords_es" },
+
           { "key": "abstract-en", "type": "content_array", "source": "inputs.abstract_en" },
-          { "key": "keywords-en", "type": "string_array", "source": "inputs.keywords_en" }
+
+          { "key": "keywords-en", "type": "string_array", "source": "inputs.keywords_en" },
+
+          { "key": "escudo-style", "type": "string", "source": "options.cover_escudo", "default": "badge" }
+
         ]
+
       },
+
       { "id": "front-matter-outlines", "kind": "outlines", "label": "Outlines" },
+
+      {
+
+        "id": "symbols",
+
+        "kind": "function_call",
+
+        "function": "symbols-page",
+
+        "label": "List of symbols",
+
+        "params": [
+
+          { "key": "symbols", "type": "dictionary", "source": "inputs.symbols" }
+
+        ]
+
+      },
+
+      {
+
+        "id": "abbreviations",
+
+        "kind": "function_call",
+
+        "function": "abbreviations-page",
+
+        "label": "List of abbreviations",
+
+        "params": [
+
+          { "key": "abbreviations", "type": "dictionary", "source": "inputs.abbreviations" }
+
+        ]
+
+      },
+
       { "id": "body", "kind": "content", "label": "Body" },
+
       { "id": "references", "kind": "bibliography", "label": "References", "file": "references.bib", "title": "References", "pagebreak_before": true },
+
       { "id": "appendices", "kind": "appendix", "label": "Appendices", "show_rule": "appendix" }
+
     ]
+
   },
+
   "editor": {
+
     "inputs": [
-      { "id": "title", "type": "string", "label": "Document Title", "importance": "recommended", "default": "Untitled Document" },
+
+      { "id": "title", "type": "string", "label": "Document Title", "importance": "optional", "default": "Untitled Document" },
+
       {
+
         "id": "authors", "type": "array", "label": "Authors", "importance": "required",
+
         "items": {
+
           "id": "author", "type": "object", "label": "Author",
+
           "properties": [
+
             { "id": "name", "type": "string", "label": "Name", "importance": "required" },
+
             {
-              "id": "affiliations", "type": "array", "label": "Author's affiliations", "importance": "recommended",
+
+              "id": "affiliations", "type": "array", "label": "Author's affiliations", "importance": "optional",
+
               "items": { "type": "reference", "target": "affiliations", "label": "Affiliation Reference" }
+
             },
+
             {
-              "id": "degrees", "type": "array", "label": "Author's degrees", "importance": "recommended",
-              "items": { "type": "reference", "target": "degrees", "label": "Degree Reference" }
+
+              "id": "titles", "type": "array", "label": "Author's degrees", "importance": "optional",
+
+              "items": { "type": "reference", "target": "titles", "label": "Degree Reference" }
+
             }
+
           ]
+
         }
+
       },
-      { "id": "affiliations", "type": "simple_list", "label": "Affiliations", "importance": "recommended", "items": { "type": "content", "label": "Affiliation" } },
-      { "id": "degrees", "type": "simple_list", "label": "Degrees", "importance": "recommended", "items": { "type": "content", "label": "Degree" } },
+
+      { "id": "affiliations", "type": "simple_list", "label": "Affiliations", "importance": "optional", "items": { "type": "content", "label": "Affiliation" } },
+
+      { "id": "titles", "type": "simple_list", "label": "Degrees", "importance": "optional", "items": { "type": "content", "label": "Degree" } },
+
+      { "id": "faculties", "type": "simple_list", "label": "Faculties", "importance": "optional", "items": { "type": "string", "label": "Faculty" } },
+
       {
-        "id": "director", "type": "object", "label": "Director", "importance": "recommended",
+
+        "id": "advisor", "type": "object", "label": "Advisor", "importance": "optional",
+
         "properties": [
-          { "id": "name", "type": "string", "label": "Name", "importance": "recommended" },
-          { "id": "title", "type": "string", "label": "Title", "importance": "recommended" }
+
+          { "id": "name", "type": "string", "label": "Name", "importance": "optional" },
+
+          { "id": "title", "type": "string", "label": "Title", "importance": "optional" }
+
         ]
+
       },
-      { "id": "city", "type": "string", "label": "City", "importance": "recommended" },
-      { "id": "country", "type": "string", "label": "Country", "importance": "recommended" },
-      { "id": "year", "type": "string", "label": "Year", "importance": "recommended" },
+
       {
-        "id": "authorities", "type": "array", "label": "Authorities", "importance": "recommended",
+
+        "id": "co_advisor", "type": "object", "label": "Co-advisor", "importance": "optional",
+
+        "properties": [
+
+          { "id": "name", "type": "string", "label": "Name", "importance": "optional" },
+
+          { "id": "title", "type": "string", "label": "Title", "importance": "optional" }
+
+        ]
+
+      },
+
+      { "id": "city", "type": "string", "label": "City", "importance": "optional" },
+
+      { "id": "country", "type": "string", "label": "Country", "importance": "optional" },
+
+      { "id": "year", "type": "string", "label": "Year", "importance": "optional" },
+
+      {
+
+        "id": "authorities", "type": "array", "label": "Authorities", "importance": "optional",
+
         "items": {
+
           "id": "authority", "type": "object", "label": "Authority",
+
           "properties": [
+
             { "id": "name", "type": "string", "label": "Name", "importance": "required" },
+
             { "id": "role", "type": "string", "label": "Role", "importance": "required" }
+
           ]
+
         }
+
       },
-      { "id": "acknowledgements", "type": "content_blocks", "label": "Acknowledgements", "importance": "recommended" },
-      { "id": "abstract_es", "type": "content_blocks", "label": "Abstract (ES)", "importance": "recommended" },
-      { "id": "keywords_es", "type": "simple_list", "label": "Keywords (ES)", "importance": "recommended", "items": { "type": "string", "label": "Keyword" } },
-      { "id": "abstract_en", "type": "content_blocks", "label": "Abstract (EN)", "importance": "recommended" },
-      { "id": "keywords_en", "type": "simple_list", "label": "Keywords (EN)", "importance": "recommended", "items": { "type": "string", "label": "Keyword" } }
-    ],
-    "groups": [
+
+      { "id": "dedication", "type": "content_blocks", "label": "Dedication", "importance": "optional" },
+
+      { "id": "acknowledgements", "type": "content_blocks", "label": "Acknowledgements", "importance": "optional" },
+
       {
-        "id": "front_matter",
-        "label": "Front Matter",
-        "inputs": [
-          "title", "authors", "affiliations", "degrees", "director", "city", "country", "year", "authorities", "acknowledgements", "abstract_es", "keywords_es", "abstract_en", "keywords_en"
-        ]
-      }
+
+        "id": "symbols", "type": "array", "label": "List of symbols", "importance": "optional",
+
+        "items": {
+
+          "id": "symbol_entry", "type": "object", "label": "Symbol",
+
+          "properties": [
+
+            { "id": "symbol", "type": "equation", "label": "Symbol", "importance": "optional" },
+
+            { "id": "term", "type": "string", "label": "Term", "importance": "optional" },
+
+            { "id": "unit", "type": "equation", "label": "Unit", "importance": "optional" },
+
+            { "id": "definition", "type": "equation", "label": "Definition", "importance": "optional" }
+
+          ]
+
+        }
+
+      },
+
+      {
+
+        "id": "abbreviations", "type": "array", "label": "List of abbreviations", "importance": "optional",
+
+        "items": {
+
+          "id": "abbreviation_entry", "type": "object", "label": "Abbreviation",
+
+          "properties": [
+
+            { "id": "abbreviation", "type": "string", "label": "Abbreviation", "importance": "optional" },
+
+            { "id": "term", "type": "string", "label": "Term", "importance": "optional" }
+
+          ]
+
+        }
+
+      },
+
+      { "id": "abstract_es", "type": "content_blocks", "label": "Abstract (ES)", "importance": "optional" },
+
+      { "id": "keywords_es", "type": "simple_list", "label": "Keywords (ES)", "importance": "optional", "items": { "type": "string", "label": "Keyword" } },
+
+      { "id": "abstract_en", "type": "content_blocks", "label": "Abstract (EN)", "importance": "optional" },
+
+      { "id": "keywords_en", "type": "simple_list", "label": "Keywords (EN)", "importance": "optional", "items": { "type": "string", "label": "Keyword" } }
+
     ],
+
+    "groups": [
+
+      {
+
+        "id": "front_matter",
+
+        "label": "Front Matter",
+
+        "inputs": [
+
+          "title", "authors", "affiliations", "titles", "faculties", "advisor", "co_advisor", "city", "country", "year", "authorities", "dedication", "acknowledgements", "abstract_es", "keywords_es", "abstract_en", "keywords_en"
+
+        ]
+
+      },
+
+      {
+
+        "id": "symbols_abbreviations",
+
+        "label": "Symbols and abbreviations",
+
+        "inputs": ["symbols", "abbreviations"]
+
+      }
+
+    ],
+
     "variants": [],
+
     "defaults": {
+
       "paper_size": "us-letter",
+
       "language": "es",
+
       "text_font": "Libertinus Serif",
+
       "math_font": "Libertinus Math",
+
       "raw_font": "DejaVu Sans Mono",
+
       "font_size": 12.0,
+
       "table_stroke_width": 0.5
-    }
+
+    },
+
+    "quote_policy": 40,
+
+    "options": [
+
+      {
+
+        "id": "cover_escudo",
+
+        "label": "Cover emblem",
+
+        "description": "Emblem at the top of the title page.",
+
+        "kind": "choice",
+
+        "default": "badge",
+
+        "choices": [
+
+          {
+
+            "value": "badge",
+
+            "label": "University badge",
+
+            "description": "The university shield only."
+
+          },
+
+          {
+
+            "value": "badge-banner",
+
+            "label": "Badge with banner",
+
+            "description": "Shield on the left with the institutional graduation message on the right."
+
+          }
+
+        ]
+
+      }
+
+    ]
+
   }
+
 }
+

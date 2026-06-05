@@ -74,6 +74,27 @@ impl ContextExpression {
         }
     }
 
+    /// Collects every context name and attribute key the expression references,
+    /// regardless of negation. Used to validate catalog/keymap contexts against
+    /// the glossary so a typo (`!tabelCell`) fails a test instead of silently
+    /// never matching.
+    #[cfg(test)]
+    pub(crate) fn collect_referenced_names(&self, out: &mut HashSet<String>) {
+        match self {
+            ContextExpression::Context(name) => {
+                out.insert(name.clone());
+            }
+            ContextExpression::Equals(key, _) => {
+                out.insert(key.clone());
+            }
+            ContextExpression::Not(inner) => inner.collect_referenced_names(out),
+            ContextExpression::And(left, right) | ContextExpression::Or(left, right) => {
+                left.collect_referenced_names(out);
+                right.collect_referenced_names(out);
+            }
+        }
+    }
+
     pub(crate) fn specificity(&self) -> usize {
         match self {
             ContextExpression::Context(_) => 1,

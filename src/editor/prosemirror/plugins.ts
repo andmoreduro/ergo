@@ -1,11 +1,17 @@
 import { keymap } from "prosemirror-keymap";
-import { baseKeymap } from "prosemirror-commands";
+import {
+    baseKeymap,
+    chainCommands,
+    splitBlock,
+} from "prosemirror-commands";
 import { Plugin, type EditorState, type Transaction } from "prosemirror-state";
 import type { Node as PMNode } from "prosemirror-model";
 import { dropCursor } from "prosemirror-dropcursor";
 import { createId } from "../../state/ast/defaults";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import { bodyKeyboardPlugin } from "./bodyKeyboardPlugin";
+import { deleteEmptyListItem, splitListItem } from "./listEnter";
+import { inlineEquationNavigationPlugin } from "./inlineEquationPlugin";
 import { selectCurrentOrAllElements } from "./bodySelection";
 import { elementPointerSelectPlugin } from "./elementPointerSelect";
 import { regenerateElementIds } from "./elementIds";
@@ -18,6 +24,8 @@ import {
     blockSelectionGuardPlugin,
     clickBelowLastBlockPlugin,
 } from "./blockSelectionGuard";
+import { findPlugin } from "../find/prosemirrorFindPlugin";
+import { textMarkStatePlugin } from "./textMarkStatePlugin";
 
 /**
  * Flag set on the transaction `idNormalizer` appends when it reassigns one or
@@ -174,11 +182,16 @@ const atomElementIdSync = new Plugin({
 const selectionKeymap = keymap({ "Mod-a": selectCurrentOrAllElements });
 
 /** Typing shortcuts without arrow keys — those go through the action runtime. */
-const typingKeymap = keymap(
-    Object.fromEntries(
-        Object.entries(baseKeymap).filter(([key]) => !/^Arrow/.test(key)),
+const typingKeymap = keymap({
+    Enter: chainCommands(splitListItem, splitBlock),
+    Backspace: chainCommands(deleteEmptyListItem, baseKeymap.Backspace),
+    ...Object.fromEntries(
+        Object.entries(baseKeymap).filter(
+            ([key]) =>
+                !/^Arrow/.test(key) && key !== "Enter" && key !== "Backspace",
+        ),
     ),
-);
+});
 // Note: Mod-b / Mod-i / Mod-u are intentionally NOT registered here. baseKeymap
 // carries none of them, so bold/italic/underline all flow through the action
 // runtime (editor::Bold/Italic/Underline -> applyBodyMark). Registering Mod-u
@@ -190,6 +203,7 @@ export const bodyPlugins = () => [
     blockEditModePlugin(),
     // Before `typingKeymap` (baseKeymap): locked-block Tab / Ctrl+Enter / Enter
     // must run first or splitBlock and other defaults steal the keys.
+    inlineEquationNavigationPlugin(),
     bodyKeyboardPlugin(),
     // Must run before `tableEditing()` so a click outside an editing block is
     // turned into a sanctioned exit (edit-mode off + caret at the click) before
@@ -205,4 +219,6 @@ export const bodyPlugins = () => [
     atomElementPreserver,
     idNormalizer,
     atomElementIdSync,
+    findPlugin(),
+    textMarkStatePlugin(),
 ];
