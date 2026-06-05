@@ -6,8 +6,10 @@ import {
 } from "prosemirror-state";
 import type { Node as PMNode, ResolvedPos } from "prosemirror-model";
 import type { DocumentElement } from "../../bindings/DocumentElement";
-import { listItemFieldId, richTextFieldId } from "../fieldIds";
-import { fieldCaretOffsetFromNode, pmPosForFieldCaret } from "./astBridge";
+import { listItemFieldId, quoteContentFieldId, richTextFieldId } from "../fieldIds";
+import { parseListItemFieldPath } from "../listFieldPath";
+import { listItemPathFromPosition } from "./listPath";
+import { fieldCaretOffsetFromNode, listItemParagraph, pmPosForFieldCaret } from "./astBridge";
 import { isBlockEditing } from "./blockEditMode";
 import { ATOM_BLOCK_NODES, TABLE_BLOCK_NODE, TEXT_FIELD_NODES } from "./schema";
 import { isTableCellFieldId } from "./table/tableCellFocus";
@@ -24,19 +26,56 @@ const fieldIdentityAtHead = (
     const name = $head.parent.type.name;
 
     if (name === "paragraph" || name === "heading" || name === "quote") {
+        if (name === "paragraph") {
+            for (let depth = $head.depth - 1; depth > 0; depth -= 1) {
+                if ($head.node(depth).type.name === "list_item") {
+                    for (let listDepth = depth - 1; listDepth > 0; listDepth -= 1) {
+                        if ($head.node(listDepth).type.name === "list") {
+                            const elementId = $head.node(listDepth).attrs
+                                .elementId as string;
+                            if (elementId) {
+                                return {
+                                    elementId,
+                                    fieldId: listItemFieldId(
+                                        elementId,
+                                        listItemPathFromPosition($head),
+                                    ),
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
         const elementId = $head.parent.attrs.elementId;
-        return elementId
-            ? { elementId, fieldId: richTextFieldId(elementId) }
-            : null;
+        if (!elementId) {
+            return null;
+        }
+        if (name === "quote") {
+            return { elementId, fieldId: quoteContentFieldId(elementId) };
+        }
+        return { elementId, fieldId: richTextFieldId(elementId) };
     }
 
     if (name === "list_item") {
-        const list = $head.node($head.depth - 1);
-        const itemIndex = $head.index($head.depth - 1);
-        const elementId = list.attrs.elementId;
-        return elementId
-            ? { elementId, fieldId: listItemFieldId(elementId, itemIndex) }
-            : null;
+        for (let depth = $head.depth; depth > 0; depth -= 1) {
+            if ($head.node(depth).type.name === "list") {
+                const elementId = $head.node(depth).attrs.elementId as string;
+                if (elementId) {
+                    const paragraph = listItemParagraph($head.parent);
+                    if (!paragraph) {
+                        return null;
+                    }
+                    return {
+                        elementId,
+                        fieldId: listItemFieldId(
+                            elementId,
+                            listItemPathFromPosition($head),
+                        ),
+                    };
+                }
+            }
+        }
     }
 
     return null;
@@ -98,6 +137,42 @@ interface FieldLocation {
     contentStart: number;
 }
 
+export const locateListItemField = (
+    listNode: PMNode,
+    listStart: number,
+    indices: readonly number[],
+): FieldLocation | null => {
+    let node = listNode;
+    let pos = listStart;
+    for (let depth = 0; depth < indices.length; depth += 1) {
+        const index = indices[depth];
+        if (node.type.name !== "list" || index >= node.childCount) {
+            return null;
+        }
+        pos = childPosition(node, pos, index);
+        const itemNode = node.child(index);
+        if (depth === indices.length - 1) {
+            const paragraph = listItemParagraph(itemNode);
+            if (!paragraph) {
+                return null;
+            }
+            return { fieldNode: paragraph, contentStart: pos + 2 };
+        }
+        let nestedList: PMNode | null = null;
+        itemNode.forEach((child) => {
+            if (child.type.name === "list") {
+                nestedList = child;
+            }
+        });
+        if (!nestedList) {
+            return null;
+        }
+        pos = pos + itemNode.nodeSize - nestedList.nodeSize - 1;
+        node = nestedList;
+    }
+    return null;
+};
+
 const locateField = (
     blockNode: PMNode,
     blockPos: number,
@@ -108,37 +183,35 @@ const locateField = (
         return { fieldNode: blockNode, contentStart: blockPos + 1 };
     }
 
-    const remainder = fieldId.slice(elementId.length + 1);
-    const parts = remainder.split(":");
+    if (
+        fieldId === quoteContentFieldId(elementId) &&
+        blockNode.type.name === "quote"
+    ) {
+        return { fieldNode: blockNode, contentStart: blockPos + 1 };
+    }
 
-    if (parts[0] === "item") {
-        const itemIndex = Number(parts[1]);
-        if (!Number.isInteger(itemIndex) || itemIndex >= blockNode.childCount) {
-            return null;
-        }
-        const itemPos = childPosition(blockNode, blockPos + 1, itemIndex);
-        return {
-            fieldNode: blockNode.child(itemIndex),
-            contentStart: itemPos + 1,
-        };
+    const itemPath = parseListItemFieldPath(fieldId, elementId);
+    if (itemPath && blockNode.type.name === "list") {
+        return locateListItemField(blockNode, blockPos + 1, itemPath);
     }
 
     return null;
 };
 
 /** Build a selection that places the caret at a focus target inside the doc. */
-export const selectionForFocusTarget = (
+const pmPosForFocusTarget = (
     doc: PMNode,
     target: BodyFocusTarget,
-): Selection | null => {
+    utf16Offset: number,
+): number | null => {
     if (isTableCellFieldId(target.fieldId, target.elementId)) {
         return null;
     }
 
-    let result: Selection | null = null;
+    let result: number | null = null;
 
     doc.descendants((node, pos) => {
-        if (result) {
+        if (result != null) {
             return false;
         }
 
@@ -147,7 +220,7 @@ export const selectionForFocusTarget = (
             node.attrs.elementId === target.elementId &&
             target.fieldId === null
         ) {
-            result = NodeSelection.create(doc, pos);
+            result = pos;
             return false;
         }
 
@@ -155,7 +228,7 @@ export const selectionForFocusTarget = (
             const atomElementId =
                 node.attrs.element?.id ?? (node.attrs.elementId as string);
             if (atomElementId === target.elementId) {
-                result = NodeSelection.create(doc, pos);
+                result = pos;
                 return false;
             }
         }
@@ -172,13 +245,12 @@ export const selectionForFocusTarget = (
                     location.contentStart +
                     pmPosForFieldCaret(
                         location.fieldNode,
-                        target.caretUtf16Offset ?? 0,
+                        utf16Offset,
                     );
-                const clamped = Math.min(
+                result = Math.min(
                     caret,
                     location.contentStart + location.fieldNode.content.size,
                 );
-                result = TextSelection.create(doc, clamped);
             }
             return false;
         }
@@ -187,4 +259,64 @@ export const selectionForFocusTarget = (
     });
 
     return result;
+};
+
+/** Build a selection that places the caret at a focus target inside the doc. */
+export const selectionForFocusTarget = (
+    doc: PMNode,
+    target: BodyFocusTarget,
+): Selection | null => {
+    if (isTableCellFieldId(target.fieldId, target.elementId)) {
+        return null;
+    }
+
+    if (target.fieldId === null) {
+        let blockSelection: Selection | null = null;
+        doc.descendants((node, pos) => {
+            if (blockSelection) {
+                return false;
+            }
+            if (
+                node.type.name === TABLE_BLOCK_NODE &&
+                node.attrs.elementId === target.elementId
+            ) {
+                blockSelection = NodeSelection.create(doc, pos);
+                return false;
+            }
+            if (ATOM_BLOCK_NODES.has(node.type.name)) {
+                const atomElementId =
+                    node.attrs.element?.id ?? (node.attrs.elementId as string);
+                if (atomElementId === target.elementId) {
+                    blockSelection = NodeSelection.create(doc, pos);
+                    return false;
+                }
+            }
+            return node.isBlock;
+        });
+        if (blockSelection) {
+            return blockSelection;
+        }
+    }
+
+    const caret =
+        target.caretUtf16Offset == null ? 0 : target.caretUtf16Offset;
+    const pos = pmPosForFocusTarget(doc, target, caret);
+    return pos == null ? null : TextSelection.create(doc, pos);
+};
+
+/** Build a text selection spanning UTF-16 offsets inside a focus target field. */
+export const selectionForFocusRange = (
+    doc: PMNode,
+    target: BodyFocusTarget,
+    endUtf16Offset: number,
+): Selection | null => {
+    const startOffset = target.caretUtf16Offset ?? 0;
+    const from = pmPosForFocusTarget(doc, target, startOffset);
+    const to = pmPosForFocusTarget(doc, target, endUtf16Offset);
+    if (from == null || to == null) {
+        return null;
+    }
+    const anchor = Math.min(from, to);
+    const head = Math.max(from, to);
+    return TextSelection.create(doc, anchor, head);
 };

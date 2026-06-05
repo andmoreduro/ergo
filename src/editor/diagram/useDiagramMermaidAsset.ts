@@ -5,10 +5,8 @@ import { CompilerClient } from "../../workers/compilerClient";
 import { useFigureImagePreview } from "../../components/organisms/ElementEditor/figure/useFigureImagePreview";
 import { useDocumentAst } from "../../state/DocumentContext";
 import { m } from "../../paraglide/messages.js";
+import { diagramAssetPath } from "./diagramAsset";
 import { renderMermaidSvg } from "./renderMermaidSvg";
-
-export const diagramAssetPath = (diagramId: string) =>
-    `assets/diagrams/${diagramId}.svg`;
 
 const DIAGRAM_RENDER_DEBOUNCE_MS = 350;
 

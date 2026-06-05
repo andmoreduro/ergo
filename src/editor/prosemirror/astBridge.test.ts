@@ -3,7 +3,7 @@ import { EditorState } from "prosemirror-state";
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
-import { createRichText, createTable } from "../../state/ast/defaults";
+import { createListItem, createQuote, createRichText, createTable } from "../../state/ast/defaults";
 import { bodySchema } from "./schema";
 import { tableSchema } from "./table/tableSchema";
 import {
@@ -32,6 +32,11 @@ const inlineEquation = (label: string, source: string): RichText => ({
     equation_syntax: "typst",
 });
 
+const inlineQuote = (text: string): RichText => ({
+    ...createRichText(text),
+    kind: "quote",
+});
+
 const paragraphField = (content: RichText[]) =>
     bodySchema.nodes.paragraph.create(
         { elementId: "p1" },
@@ -57,47 +62,39 @@ describe("richTextFieldLength", () => {
 
 describe("RichText ↔ PM fragment round-trip", () => {
     const roundTrip = (content: RichText[]) =>
-        fragmentToRichText(
-            paragraphField(content).content,
-        );
+        fragmentToRichText(paragraphField(content).content);
 
-    it("preserves plain text", () => {
-        const content = [createRichText("hello world")];
-        expect(roundTrip(content)).toEqual(content);
-    });
-
-    it("preserves marks and merges adjacent same-mark text", () => {
-        const content = [
-            { ...createRichText("bold"), bold: true },
-            { ...createRichText("plain") },
+    it("preserves rich text spans through PM round-trip", () => {
+        const cases: RichText[][] = [
+            [createRichText("hello world")],
+            [
+                { ...createRichText("bold"), bold: true },
+                { ...createRichText("plain") },
+            ],
+            [
+                { ...createRichText("under"), underline: true },
+                { ...createRichText("plain") },
+            ],
+            [
+                createRichText("see "),
+                reference("Doe2020", "ref-1"),
+                createRichText(" now"),
+            ],
+            [
+                createRichText("let "),
+                inlineEquation("α", "\\alpha"),
+                createRichText(" hold"),
+            ],
+            [
+                createRichText("As "),
+                inlineQuote("they said"),
+                createRichText(" noted"),
+            ],
         ];
-        expect(roundTrip(content)).toEqual(content);
-    });
 
-    it("preserves underline marks", () => {
-        const content = [
-            { ...createRichText("under"), underline: true },
-            { ...createRichText("plain") },
-        ];
-        expect(roundTrip(content)).toEqual(content);
-    });
-
-    it("preserves reference spans (zero width)", () => {
-        const content = [
-            createRichText("see "),
-            reference("Doe2020", "ref-1"),
-            createRichText(" now"),
-        ];
-        expect(roundTrip(content)).toEqual(content);
-    });
-
-    it("preserves inline equation spans (source retained)", () => {
-        const content = [
-            createRichText("let "),
-            inlineEquation("α", "\\alpha"),
-            createRichText(" hold"),
-        ];
-        expect(roundTrip(content)).toEqual(content);
+        for (const content of cases) {
+            expect(roundTrip(content)).toEqual(content);
+        }
     });
 
     it("collects hard breaks inside table cell paragraphs", () => {
@@ -118,47 +115,31 @@ describe("RichText ↔ PM fragment round-trip", () => {
 });
 
 describe("field caret offset ↔ PM position", () => {
-    it("treats a reference as zero width", () => {
-        const node = paragraphField([
+    it("maps reference and equation atoms to field caret offsets", () => {
+        const referenceNode = paragraphField([
             createRichText("ab"),
             reference("Doe2020", "r1"),
             createRichText("cd"),
         ]);
-        // PM positions: 0 a b(2) ref(3) c d(5)
-        expect(fieldCaretOffsetFromNode(node, 0)).toBe(0);
-        expect(fieldCaretOffsetFromNode(node, 2)).toBe(2); // before ref
-        expect(fieldCaretOffsetFromNode(node, 3)).toBe(2); // after ref (0 width)
-        expect(fieldCaretOffsetFromNode(node, 4)).toBe(3); // 1 into "cd"
-        expect(fieldCaretOffsetFromNode(node, 5)).toBe(4); // end
-    });
+        expect(fieldCaretOffsetFromNode(referenceNode, 2)).toBe(2);
+        expect(fieldCaretOffsetFromNode(referenceNode, 3)).toBe(2);
+        expect(fieldCaretOffsetFromNode(referenceNode, 4)).toBe(3);
 
-    it("treats an inline equation as its source width", () => {
-        const node = paragraphField([
-            createRichText("x"),
-            inlineEquation("α", "\\alpha"), // source width 6
-            createRichText("y"),
-        ]);
-        // PM positions: 0 x(1) eq(2) y(3)
-        expect(fieldCaretOffsetFromNode(node, 1)).toBe(1); // before eq
-        expect(fieldCaretOffsetFromNode(node, 2)).toBe(7); // after eq (1 + 6)
-        expect(fieldCaretOffsetFromNode(node, 3)).toBe(8); // end
-    });
-
-    it("inverts back to the originating PM position at atom boundaries", () => {
-        const node = paragraphField([
+        const equationNode = paragraphField([
             createRichText("x"),
             inlineEquation("α", "\\alpha"),
             createRichText("y"),
         ]);
-        expect(pmPosForFieldCaret(node, 1)).toBe(1); // before eq
-        expect(pmPosForFieldCaret(node, 7)).toBe(2); // after eq
-        expect(pmPosForFieldCaret(node, 8)).toBe(3); // end
+        expect(fieldCaretOffsetFromNode(equationNode, 1)).toBe(1);
+        expect(fieldCaretOffsetFromNode(equationNode, 2)).toBe(7);
+        expect(fieldCaretOffsetFromNode(equationNode, 3)).toBe(8);
     });
 
     it("round-trips every PM position through field offset and back", () => {
         const node = paragraphField([
             createRichText("ab"),
             reference("Doe2020", "r1"),
+            inlineEquation("α", "\\alpha"),
             createRichText("cd"),
         ]);
         for (let pos = 0; pos <= node.content.size; pos += 1) {
@@ -196,47 +177,62 @@ describe("DocumentElement ↔ PM node round-trip", () => {
     const roundTrip = (element: Parameters<typeof elementToNode>[1]) =>
         nodeToElement(elementToNode(bodySchema, element));
 
-    it("round-trips a paragraph", () => {
-        const element = {
-            type: "Paragraph" as const,
-            id: "p1",
-            content: [createRichText("hello")],
-        };
-        expect(roundTrip(element)).toEqual(element);
-    });
+    it("round-trips basic block elements", () => {
+        const elements = [
+            {
+                type: "Paragraph" as const,
+                id: "p1",
+                content: [createRichText("hello")],
+            },
+            {
+                type: "Heading" as const,
+                id: "h1",
+                level: 3,
+                content: [createRichText("Title")],
+            },
+            createQuote("quoted", "q1"),
+        ];
 
-    it("round-trips a heading with level", () => {
-        const element = {
-            type: "Heading" as const,
-            id: "h1",
-            level: 3,
-            content: [createRichText("Title")],
-        };
-        expect(roundTrip(element)).toEqual(element);
-    });
-
-    it("round-trips a quote", () => {
-        const element = {
-            type: "Quote" as const,
-            id: "q1",
-            content: [createRichText("quoted")],
-        };
-        expect(roundTrip(element)).toEqual(element);
+        for (const element of elements) {
+            expect(roundTrip(element)).toEqual(element);
+        }
     });
 
     it("round-trips a list and an enumeration", () => {
         const list = {
             type: "List" as const,
             id: "l1",
-            items: [[createRichText("one")], [createRichText("two")]],
+            items: [
+                createListItem("one"),
+                createListItem("two"),
+            ],
         };
         const enumeration = {
             type: "Enumeration" as const,
             id: "e1",
-            items: [[createRichText("first")]],
+            items: [createListItem("first")],
         };
         expect(roundTrip(list)).toEqual(list);
         expect(roundTrip(enumeration)).toEqual(enumeration);
+    });
+
+    it("round-trips nested list items", () => {
+        const list = {
+            type: "List" as const,
+            id: "l1",
+            items: [
+                {
+                    content: [createRichText("Entry")],
+                    children: [
+                        {
+                            content: [createRichText("Nested")],
+                            children: [],
+                        },
+                    ],
+                },
+            ],
+        };
+        expect(roundTrip(list)).toEqual(list);
     });
 
     it("round-trips a table", () => {
@@ -291,7 +287,25 @@ describe("ContentSection ↔ PM document round-trip", () => {
                 {
                     type: "List" as const,
                     id: "l1",
-                    items: [[createRichText("item")]],
+                    items: [createListItem("item")],
+                },
+            ],
+        };
+        const doc = sectionToDoc(bodySchema, section);
+        expect(docToElements(doc)).toEqual(section.elements);
+    });
+
+    it("round-trips block quote attribution", () => {
+        const section = {
+            id: "s1",
+            is_optional: false,
+            elements: [
+                {
+                    type: "Quote" as const,
+                    id: "q1",
+                    content: [createRichText("quoted text")],
+                    attribution_text: "(Smith, 2020, p. 4)",
+                    attribution_reference_id: null,
                 },
             ],
         };
@@ -335,16 +349,17 @@ describe("changedTopLevelRange", () => {
         return pos + 1; // inside the block's content
     };
 
-    it("reports the single block an in-place edit touched", () => {
-        const state = threeParagraphState();
-        const tr = state.tr.insertText("x", contentStartOf(state, 1) + 1);
-        expect(changedTopLevelRange(tr)).toEqual([1, 1]);
-    });
+    it("reports the touched top-level block for in-place edits", () => {
+        const cases: Array<[number, readonly [number, number]]> = [
+            [1, [1, 1]],
+            [0, [0, 0]],
+        ];
 
-    it("reports the first block when edited at the front", () => {
-        const state = threeParagraphState();
-        const tr = state.tr.insertText("x", contentStartOf(state, 0) + 1);
-        expect(changedTopLevelRange(tr)).toEqual([0, 0]);
+        for (const [index, expected] of cases) {
+            const state = threeParagraphState();
+            const tr = state.tr.insertText("x", contentStartOf(state, index) + 1);
+            expect(changedTopLevelRange(tr)).toEqual(expected);
+        }
     });
 
     it("returns null for multi-step transactions (caller re-derives all)", () => {

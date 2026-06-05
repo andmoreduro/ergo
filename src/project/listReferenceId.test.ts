@@ -7,7 +7,7 @@ describe("listReferenceId", () => {
         expect(listReferenceId(1)).toBe("2");
     });
 
-    it("uses lowercase letters for umb-apa style", () => {
+    it("uses lowercase letters for lowercase-alpha style", () => {
         expect(listReferenceId(0, "lowercase-alpha")).toBe("a");
         expect(listReferenceId(1, "lowercase-alpha")).toBe("b");
     });

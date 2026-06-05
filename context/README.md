@@ -11,7 +11,8 @@ Each file has one abstraction level. Use this index to find a topic without read
 | Object message graph (edit loop only) | `collaboration-diagrams.md` | Collaboration |
 | Lifecycles and state machines | `state-diagrams.md` | State |
 | Install layout, `.ergproj`, config paths | `distribution-diagram.md` | Distribution |
-| Feature scope and priority | `user-stories.md`, `user-story-map.md` | — |
+| Product requirements (imperative scope) | `requirements.md` | — |
+| Product capability catalog and journey map | `user-stories.md`, `user-story-map.md` | — |
 
 ## Sequence diagram map (`sequence-diagrams.md`)
 
@@ -33,9 +34,10 @@ Save, export, open, and keymap are **not** in `collaboration-diagrams.md` (only 
 |---|--------|
 | 1 | `DocumentAST` root: metadata, references, assets |
 | 2 | Sections and elements |
-| 3 | Actions and keymap |
-| 4 | Backend `DocumentSession`, VFS, source maps |
-| 5 | WASM `ErgoPreviewEngine`, `PreviewSyncState`, compile results |
+| 3 | Template specification (`TemplateSpec`, `EditorConfig`, `QuotePolicySpec`) |
+| 4 | Actions and keymap |
+| 5 | Backend `DocumentSession`, VFS, source maps |
+| 6 | WASM `ErgoPreviewEngine`, `PreviewSyncState`, compile results |
 
 ## State diagram map (`state-diagrams.md`)
 

@@ -19,10 +19,20 @@ pub struct ActionInvocation {
 pub struct ActionDescriptor {
     pub id: ActionId,
     pub label_key: String,
+    pub description_key: String,
     pub category: String,
     pub default_context: String,
     pub allows_keybinding: bool,
     pub requires_project: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ContextDescriptor {
+    pub name: String,
+    pub description_key: String,
+    #[serde(default)]
+    pub attribute_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

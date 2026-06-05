@@ -10,6 +10,7 @@ import { focusWrapperPrimary } from "../wrapperTabCycle";
 import { ATOM_BLOCK_NODES, BLOCK_ELEMENT_NODES, TABLE_BLOCK_NODE } from "./schema";
 import { isTableBlockFocused, tableBlockGapFocus } from "./tableBlockFocus";
 import { isBlockEditing, setBlockEditing } from "./blockEditMode";
+import { tryInlineEquationNavigation } from "./inlineEquationPlugin";
 
 const BLOCK_SELECTABLE = new Set([TABLE_BLOCK_NODE, ...ATOM_BLOCK_NODES]);
 
@@ -434,6 +435,10 @@ export const runBodyNavigate = (
     view: EditorView,
     direction: "up" | "down" | "left" | "right",
 ): boolean => {
+    if (tryInlineEquationNavigation(view, direction)) {
+        return true;
+    }
+
     const { state } = view;
     if (isTableBlockFocused(state)) {
         const blockDir =

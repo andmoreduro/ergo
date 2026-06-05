@@ -24,6 +24,10 @@ export interface ComboboxProps {
     /** Text shown when the filter matches no options. */
     noResultsLabel?: string;
     disabled?: boolean;
+    /** When false, the control behaves like a select (no type-to-filter). */
+    filterable?: boolean;
+    /** Highlights the trigger border as invalid. */
+    error?: boolean;
     /** Span the full width of the container. */
     fullWidth?: boolean;
     id?: string;
@@ -44,6 +48,8 @@ export const Combobox = ({
     placeholder,
     noResultsLabel,
     disabled = false,
+    filterable = true,
+    error = false,
     fullWidth = false,
     id,
     "aria-label": ariaLabel,
@@ -61,6 +67,9 @@ export const Combobox = ({
     const [highlighted, setHighlighted] = useState(0);
 
     const filtered = useMemo(() => {
+        if (!filterable) {
+            return options;
+        }
         const needle = query.trim().toLowerCase();
         if (!needle) {
             return options;
@@ -68,7 +77,7 @@ export const Combobox = ({
         return options.filter((option) =>
             option.toLowerCase().includes(needle),
         );
-    }, [query, options]);
+    }, [filterable, query, options]);
 
     const closeDropdown = useCallback(() => {
         setOpen(false);
@@ -114,7 +123,7 @@ export const Combobox = ({
         }
         const list = listRef.current;
         const node = list?.children[highlighted] as HTMLElement | undefined;
-        node?.scrollIntoView({ block: "nearest" });
+        node?.scrollIntoView?.({ block: "nearest" });
     }, [open, highlighted]);
 
     const moveHighlight = (delta: number) => {
@@ -134,6 +143,10 @@ export const Combobox = ({
     };
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (!filterable && event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+            return;
+        }
+
         switch (event.key) {
             case "ArrowDown":
                 event.preventDefault();
@@ -150,7 +163,17 @@ export const Combobox = ({
                 }
                 break;
             case "Enter":
-                if (open && filtered[highlighted]) {
+            case " ":
+                if (event.ctrlKey || event.metaKey) {
+                    break;
+                }
+                if (!open) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openDropdown();
+                    break;
+                }
+                if (event.key === "Enter" && filtered[highlighted]) {
                     event.preventDefault();
                     commit(filtered[highlighted]);
                 }
@@ -160,6 +183,11 @@ export const Combobox = ({
                     // Swallow so the surrounding dialog does not also close.
                     event.preventDefault();
                     event.stopPropagation();
+                    closeDropdown();
+                }
+                break;
+            case "Tab":
+                if (open) {
                     closeDropdown();
                 }
                 break;
@@ -175,7 +203,12 @@ export const Combobox = ({
         .filter(Boolean)
         .join(" ");
 
-    const inputClassNames = [styles.input, disabled ? styles.disabled : ""]
+    const inputClassNames = [
+        styles.input,
+        !filterable ? styles.inputSelect : "",
+        error ? styles.inputError : "",
+        disabled ? styles.disabled : "",
+    ]
         .filter(Boolean)
         .join(" ");
 
@@ -200,20 +233,24 @@ export const Combobox = ({
                     role="combobox"
                     autoComplete="off"
                     spellCheck={false}
+                    readOnly={!filterable}
                     disabled={disabled}
                     placeholder={placeholder}
                     aria-label={ariaLabel}
+                    aria-invalid={error || undefined}
                     aria-expanded={open}
                     aria-controls={listboxId}
-                    aria-autocomplete="list"
+                    aria-autocomplete={filterable ? "list" : "none"}
                     aria-activedescendant={activeOptionId}
-                    value={open ? query : value}
+                    value={open && filterable ? query : value}
                     onChange={(event) => {
+                        if (!filterable) {
+                            return;
+                        }
                         setQuery(event.target.value);
                         setOpen(true);
                         setHighlighted(0);
                     }}
-                    onFocus={openDropdown}
                     onMouseDown={() => {
                         if (!open) {
                             openDropdown();

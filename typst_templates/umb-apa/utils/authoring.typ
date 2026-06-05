@@ -279,7 +279,7 @@
         ()
       }
       let degree-markers = if show-degree-markers {
-        reference-markers(author, enumerated-degrees, field: "degrees")
+        reference-markers(author, enumerated-degrees, field: "titles")
       } else {
         ()
       }

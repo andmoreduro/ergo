@@ -16,18 +16,23 @@
     (
       name: [Author Name],
       affiliations: ("a",),
-      degrees: ("a",),
+      titles: ("a",),
     ),
   ),
   affiliations: (
     "a": [Affiliation Name 1],
   ),
-  degrees: (
+  titles: (
     "a": [Degree Name],
   ),
-  director: (
-    name: [Director Name],
-    title: [Director Title],
+  faculties: ("Facultad de Ingeniería",),
+  advisor: (
+    name: [Advisor Name],
+    title: [Advisor Title],
+  ),
+  co-advisor: (
+    name: [Co-advisor Name],
+    title: [Co-advisor Title],
   ),
   city: [Bogotá],
   country: [Colombia],

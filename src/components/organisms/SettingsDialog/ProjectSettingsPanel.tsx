@@ -1,4 +1,8 @@
+import { useEffect, useState } from "react";
+import type { FontAvailability } from "../../../bindings/FontAvailability";
 import type { ProjectSettings } from "../../../bindings/ProjectSettings";
+import type { ProjectFontAvailability } from "../../../bindings/ProjectFontAvailability";
+import type { TemplateOptionSpec } from "../../../bindings/TemplateOptionSpec";
 import type { TemplateVariantSpec } from "../../../bindings/TemplateVariantSpec";
 import { m } from "../../../paraglide/messages.js";
 import {
@@ -25,7 +29,12 @@ import { Combobox } from "../../atoms/Combobox/Combobox";
 import { Select } from "../../atoms/Select/Select";
 import { TextInput } from "../../atoms/TextInput/TextInput";
 import { FormField } from "../../molecules/FormField/FormField";
+import { TemplateOptionField } from "../../molecules/TemplateOptionField/TemplateOptionField";
 import styles from "./SettingsDialog.module.css";
+import {
+    checkProjectFontAvailability,
+    fontUnavailableMessage,
+} from "../../../settings/projectFontNotifications";
 import { toOptionalNumber } from "./settingsDialogUtils";
 
 import type { TemplateOverride } from "../../../bindings/TemplateOverride";
@@ -56,6 +65,7 @@ export interface ProjectSettingsPanelProps {
     settings: ProjectSettings;
     onChange: (settings: ProjectSettings) => void;
     templateDefaultOverrides?: TemplateOverride[];
+    templateOptions?: TemplateOptionSpec[];
     templateVariants?: TemplateVariantSpec[];
     templateVariantId?: string | null;
     onTemplateVariantChange?: (variantId: string) => void;
@@ -106,16 +116,40 @@ const outlineSetting = (
     );
 };
 
+const fontUnavailableNotice = (entry: FontAvailability | undefined) =>
+    entry?.requested && !entry.available ? (
+        <p className={styles.fontUnavailable} role="alert">
+            {fontUnavailableMessage(entry)}
+        </p>
+    ) : null;
+
 export const ProjectSettingsPanel = ({
     settings,
     onChange,
     templateDefaultOverrides = [],
+    templateOptions = [],
     templateVariants = [],
     templateVariantId = null,
     onTemplateVariantChange,
     systemFonts = [],
     t,
-}: ProjectSettingsPanelProps) => (
+}: ProjectSettingsPanelProps) => {
+    const [fontAvailability, setFontAvailability] =
+        useState<ProjectFontAvailability | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        void checkProjectFontAvailability(settings).then((availability) => {
+            if (!cancelled) {
+                setFontAvailability(availability);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [settings.text_font, settings.math_font, settings.raw_font]);
+
+    return (
     <div className={styles.settingsList}>
         <section className={styles.settingsGroup}>
             <h3>{m.settings_group_template()}</h3>
@@ -196,6 +230,15 @@ export const ProjectSettingsPanel = ({
                     OUTLINE_INCLUDE_OVERRIDE_KEYS.appendices,
                     OUTLINE_TITLE_OVERRIDE_KEYS.appendices,
                 )}
+                {templateOptions.map((option) => (
+                    <TemplateOptionField
+                        key={option.id}
+                        spec={option}
+                        settings={settings}
+                        onChange={onChange}
+                        t={t}
+                    />
+                ))}
             </div>
         </section>
         <section className={styles.settingsGroup}>
@@ -258,6 +301,7 @@ export const ProjectSettingsPanel = ({
                             })
                         }
                     />
+                    {fontUnavailableNotice(fontAvailability?.textFont)}
                 </FormField>
                 <FormField label={m.settings_math_font()}>
                     <Combobox
@@ -274,6 +318,7 @@ export const ProjectSettingsPanel = ({
                             })
                         }
                     />
+                    {fontUnavailableNotice(fontAvailability?.mathFont)}
                 </FormField>
                 <FormField label={m.settings_monospace_font()}>
                     <Combobox
@@ -290,6 +335,7 @@ export const ProjectSettingsPanel = ({
                             })
                         }
                     />
+                    {fontUnavailableNotice(fontAvailability?.rawFont)}
                 </FormField>
                 <FormField label={m.settings_font_size()}>
                     <TextInput
@@ -313,4 +359,5 @@ export const ProjectSettingsPanel = ({
             <div className={styles.fieldGrid} />
         </section>
     </div>
-);
+    );
+};

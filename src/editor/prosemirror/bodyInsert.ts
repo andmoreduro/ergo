@@ -1,5 +1,8 @@
 import type { EditorView } from "prosemirror-view";
+import { TextSelection } from "prosemirror-state";
 import { getActiveBodyView, getActiveTableCellEditor } from "./activeView";
+import { focusInlineEquationAfterInsert } from "./inlineEquationFocus";
+import { focusInlineQuoteAfterInsert } from "./inlineQuoteFocus";
 import { bodySchema } from "./schema";
 import { tableSchema } from "./table/tableSchema";
 
@@ -45,6 +48,41 @@ export const insertBodyInlineEquation = (
         label: source,
     });
     view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView());
-    view.focus();
+    focusInlineEquationAfterInsert(view);
+    return true;
+};
+
+/** Insert an inline quotation atom at the current text selection. */
+export const insertBodyInlineQuote = (source = ""): boolean => {
+    const view = focusedTextView();
+    if (!view) {
+        return false;
+    }
+    const schema =
+        view.state.schema === tableSchema ? tableSchema : bodySchema;
+    const selectionBefore = view.state.selection;
+    if (!view.hasFocus()) {
+        view.focus();
+    }
+    if (
+        view.state.selection.from !== selectionBefore.from ||
+        view.state.selection.to !== selectionBefore.to
+    ) {
+        view.dispatch(
+            view.state.tr.setSelection(
+                TextSelection.create(
+                    view.state.doc,
+                    selectionBefore.from,
+                    selectionBefore.to,
+                ),
+            ),
+        );
+    }
+    const node = schema.nodes.inlineQuote.create({
+        source,
+        label: source,
+    });
+    view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView());
+    focusInlineQuoteAfterInsert(view);
     return true;
 };

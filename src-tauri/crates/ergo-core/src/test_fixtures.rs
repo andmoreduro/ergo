@@ -1,8 +1,8 @@
 #![allow(irrefutable_let_patterns)]
 use crate::ast::{
-    ContentSection, DependencyManifest, DocumentAST, DocumentElement, DocumentSection, Package,
-    EquationSyntax, GlobalSettings, Heading, Paragraph, ProjectMetadata, ProjectSettings, RichText,
-    TableCell,
+    ContentSection, DependencyManifest, DocumentAST, DocumentElement, DocumentSection, ListItem,
+    Package, EquationSyntax, GlobalSettings, Heading, Paragraph, ProjectMetadata, ProjectSettings,
+    RichText, TableCell,
 };
 
 pub fn table_cell_from_text(text: &str) -> TableCell {
@@ -26,6 +26,15 @@ pub fn rich_text(text: &str) -> RichText {
         reference_id: None,
         equation_source: None,
         equation_syntax: EquationSyntax::Typst,
+        quote_attribution_text: None,
+        quote_attribution_reference_id: None,
+    }
+}
+
+pub fn list_item(text: &str) -> ListItem {
+    ListItem {
+        content: vec![rich_text(text)],
+        children: vec![],
     }
 }
 
@@ -123,13 +132,18 @@ pub fn default_umb_apa_project_ast() -> DocumentAST {
     inputs.insert("title".to_string(), serde_json::json!("UMB APA Title"));
     inputs.insert(
         "authors".to_string(),
-        serde_json::json!([{ "name": "Author 1", "affiliations": ["a"], "degrees": ["a"] }]),
+        serde_json::json!([{ "name": "Author 1", "affiliations": ["a"], "titles": ["a"] }]),
     );
     inputs.insert("affiliations".to_string(), serde_json::json!(["Affiliation Name 1"]));
-    inputs.insert("degrees".to_string(), serde_json::json!(["Ingeniero de Sistemas"]));
+    inputs.insert("titles".to_string(), serde_json::json!(["Ingeniero de Sistemas"]));
+    inputs.insert("faculties".to_string(), serde_json::json!(["Facultad de Ingeniería"]));
     inputs.insert(
-        "director".to_string(),
-        serde_json::json!({ "name": "Director Name", "title": "Director Title" }),
+        "advisor".to_string(),
+        serde_json::json!({ "name": "Advisor Name", "title": "Advisor Title" }),
+    );
+    inputs.insert(
+        "co_advisor".to_string(),
+        serde_json::json!({ "name": "Co-advisor Name", "title": "Co-advisor Title" }),
     );
     inputs.insert("city".to_string(), serde_json::json!("Bogotá"));
     inputs.insert("country".to_string(), serde_json::json!("Colombia"));

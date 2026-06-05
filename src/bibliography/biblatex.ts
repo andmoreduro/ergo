@@ -1,90 +1,75 @@
 import type { ReferenceEntry } from "../bindings/ReferenceEntry";
 import type { FieldImportance } from "../components/atoms/FieldLabel/FieldLabel";
 import {
-    bibliographySecondaryField,
-    entryFieldRule,
+    authorsFromBiblatex,
+    authorsToBiblatex,
+    emptyReferenceAuthor,
+    formatAuthorsForCitation,
+    type ReferenceAuthor,
+} from "./biblatexAuthors";
+import {
+    FORM_MANAGED_BIBLATEX_FIELDS,
+    referenceFieldsForEntryType,
+    type BibliographyValidationCode,
+    type ReferenceFieldKey,
+} from "./biblatexEntryFields";
+import {
+    bibliographyEntryTypeOptions,
     normalizeBibliographyEntryType,
     type BibliographyEntryType,
 } from "./biblatexEntryTypes";
+import { parseBiblatexEntry, serializeBiblatexEntry } from "./biblatexParse";
 
 export type { BibliographyEntryType } from "./biblatexEntryTypes";
+export type { ReferenceAuthor } from "./biblatexAuthors";
 export {
     bibliographyEntryTypeLabel,
     bibliographyEntryTypeOptions,
-    bibliographySecondaryField,
-    bibliographySecondaryFieldLabel,
 } from "./biblatexEntryTypes";
+export {
+    referenceFieldLabel,
+    referenceFieldsForEntryType,
+    type ReferenceFieldKey,
+} from "./biblatexEntryFields";
+
+export type ReferenceFormFields = Partial<Record<ReferenceFieldKey, string>>;
 
 export interface ReferenceFormValue {
     entryType: BibliographyEntryType;
-    title: string;
-    authors: string;
-    year: string;
-    containerTitle: string;
-    publisher: string;
-    doi: string;
-    url: string;
+    authors: ReferenceAuthor[];
+    fields: ReferenceFormFields;
+    /** BibLaTeX fields not covered by the structured form. */
+    extraFields: Record<string, string>;
 }
 
 export const emptyReferenceFormValue = (): ReferenceFormValue => ({
     entryType: "article",
-    title: "",
-    authors: "",
-    year: "",
-    containerTitle: "",
-    publisher: "",
-    doi: "",
-    url: "",
+    authors: [],
+    fields: {},
+    extraFields: {},
 });
-
-const FIELD_NAMES = [
-    "author",
-    "title",
-    "year",
-    "journaltitle",
-    "booktitle",
-    "publisher",
-    "doi",
-    "url",
-    "institution",
-] as const;
 
 const sanitizeCitationKey = (value: string): string =>
     value.trim().replace(/\s+/g, "-").replace(/[{},\\]/g, "");
 
-const escapeBiblatexValue = (value: string): string =>
-    value.replace(/\\/g, "\\\\").replace(/[{}]/g, (match) => `\\${match}`);
-
-const unescapeBiblatexValue = (value: string): string =>
-    value.replace(/\\([{}\\])/g, "$1");
-
-const authorsToBiblatex = (value: string): string =>
-    value
-        .split(/\r?\n|;/)
-        .map((author) => author.trim())
-        .filter(Boolean)
-        .join(" and ");
-
-const authorsFromBiblatex = (value: string): string =>
-    value
-        .split(/\s+and\s+/)
-        .map((author) => author.trim())
-        .filter(Boolean)
-        .join("\n");
-
-const authorFamilyName = (author: string): string => {
-    const trimmed = author.trim();
-    if (!trimmed) {
-        return "";
-    }
-
-    if (trimmed.includes(",")) {
-        return trimmed.split(",")[0].trim();
-    }
-
-    const parts = trimmed.split(/\s+/);
-    return parts[parts.length - 1] ?? "";
+const yearFromDateField = (date: string): string => {
+    const match = date.trim().match(/^(\d{4})/);
+    return match?.[1] ?? "";
 };
+
+const updateDateYear = (date: string, year: string): string => {
+    const trimmed = date.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return `${year}${trimmed.slice(4)}`;
+    }
+    if (/^\d{4}/.test(trimmed)) {
+        return trimmed.replace(/^\d{4}/, year);
+    }
+    return year;
+};
+
+const fieldValue = (form: ReferenceFormValue, key: ReferenceFieldKey): string =>
+    form.fields[key]?.trim() ?? "";
 
 /** BibLaTeX key used in `references.bib` and Typst `@key` citations. Always derived from the entry id. */
 export const defaultCitationKey = (id: string): string => {
@@ -92,119 +77,82 @@ export const defaultCitationKey = (id: string): string => {
     return fromId.length > 0 ? fromId : "ref";
 };
 
-export type BibliographyValidationCode =
-    | "title"
-    | "authors"
-    | "year"
-    | "journal"
-    | "booktitle"
-    | "publisher";
+export type { BibliographyValidationCode } from "./biblatexEntryFields";
 
-/** Minimum fields Typst/biblatex need for a resolvable citation. */
+/** Partial entries are allowed; BibLaTeX serialization never needs blocking validation. */
 export const validateReferenceForm = (
-    form: ReferenceFormValue,
-): BibliographyValidationCode | null => {
-    if (!form.title.trim()) {
-        return "title";
-    }
-    if (!form.authors.trim()) {
-        return "authors";
-    }
-    if (!form.year.trim()) {
-        return "year";
-    }
+    _form: ReferenceFormValue,
+): BibliographyValidationCode | null => null;
 
-    const rule = entryFieldRule(form.entryType);
-    if (rule.needsJournal && !form.containerTitle.trim()) {
-        return "journal";
-    }
-    if (rule.needsBooktitle && !form.containerTitle.trim()) {
-        return "booktitle";
-    }
-    if (rule.needsPublisher && !form.publisher.trim()) {
-        return "publisher";
-    }
+export const referenceAuthorFieldImportance = (): FieldImportance | undefined =>
+    undefined;
 
-    return null;
-};
-
-export const bibliographyFieldImportance = (
-    form: ReferenceFormValue,
-    field: keyof ReferenceFormValue,
+export const referenceFormFieldImportance = (
+    entryType: BibliographyEntryType,
+    field: ReferenceFieldKey,
 ): FieldImportance | undefined => {
-    if (field === "entryType") {
-        return "required";
-    }
-    if (field === "title" || field === "authors" || field === "year") {
-        return "required";
-    }
-
-    const rule = entryFieldRule(form.entryType);
-    if (field === "containerTitle") {
-        if (rule.needsJournal || rule.needsBooktitle) {
-            return "required";
-        }
+    const spec = referenceFieldsForEntryType(entryType).find(
+        (candidate) => candidate.key === field,
+    );
+    if (!spec || spec.importance !== "required") {
         return undefined;
     }
-    if (field === "publisher" && rule.needsPublisher) {
-        return "required";
-    }
-    if (field === "url" && rule.urlRecommended) {
-        return "recommended";
-    }
-    if (field === "doi" || field === "url") {
-        return "optional";
-    }
-    return undefined;
+    return "required";
 };
 
-const readEntryHeader = (biblatex: string): BibliographyEntryType | null => {
-    const match = biblatex.match(/^\s*@([a-zA-Z]+)\s*\{\s*([^,\s]+)\s*,/);
-    if (!match) {
-        return null;
-    }
-
-    return normalizeBibliographyEntryType(match[1]);
-};
-
-const readBiblatexFields = (biblatex: string): Record<string, string> => {
-    const fields: Record<string, string> = {};
-
-    for (const field of FIELD_NAMES) {
-        const pattern = new RegExp(`${field}\\s*=\\s*\\{([^}]*)\\}`, "i");
-        const match = biblatex.match(pattern);
-        if (match) {
-            fields[field] = unescapeBiblatexValue(match[1].trim());
+const extraFieldsFromMap = (fields: Map<string, string>): Record<string, string> => {
+    const extra: Record<string, string> = {};
+    for (const [key, value] of fields) {
+        if (!FORM_MANAGED_BIBLATEX_FIELDS.has(key)) {
+            extra[key] = value;
         }
+    }
+    return extra;
+};
+
+const fieldsMapFromForm = (form: ReferenceFormValue): Map<string, string> => {
+    const fields = new Map<string, string>(Object.entries(form.extraFields));
+
+    for (const key of FORM_MANAGED_BIBLATEX_FIELDS) {
+        fields.delete(key);
+    }
+
+    const author = authorsToBiblatex(form.authors);
+    if (author) {
+        fields.set("author", author);
+    }
+
+    const year = fieldValue(form, "year");
+    const date = fieldValue(form, "date");
+
+    for (const spec of referenceFieldsForEntryType(form.entryType)) {
+        const value = fieldValue(form, spec.key);
+        if (!value) {
+            continue;
+        }
+
+        if (spec.key === "year") {
+            if (date) {
+                fields.set("date", updateDateYear(date, value));
+            } else {
+                fields.set("year", value);
+            }
+            continue;
+        }
+
+        if (spec.key === "date") {
+            fields.set("date", value);
+            continue;
+        }
+
+        fields.set(spec.key, value);
+    }
+
+    if (date && !fields.has("date")) {
+        fields.set("date", year ? updateDateYear(date, year) : date);
     }
 
     return fields;
-};
-
-const biblatexFieldsFromForm = (form: ReferenceFormValue): Array<[string, string]> => {
-    const rule = entryFieldRule(form.entryType);
-    const fields: Array<[string, string]> = [
-        ["author", authorsToBiblatex(form.authors)],
-        ["title", form.title.trim()],
-        ["year", form.year.trim()],
-    ];
-
-    if (rule.needsJournal) {
-        fields.push(["journaltitle", form.containerTitle.trim()]);
-    } else if (rule.needsBooktitle) {
-        fields.push(["booktitle", form.containerTitle.trim()]);
-    } else if (rule.needsPublisher) {
-        fields.push(["publisher", form.publisher.trim()]);
-    }
-
-    if (form.doi.trim()) {
-        fields.push(["doi", form.doi.trim()]);
-    }
-    if (form.url.trim()) {
-        fields.push(["url", form.url.trim()]);
-    }
-
-    return fields.filter(([, value]) => value.length > 0);
 };
 
 export const referenceFromFormValue = (
@@ -212,64 +160,135 @@ export const referenceFromFormValue = (
     form: ReferenceFormValue,
 ): ReferenceEntry => {
     const citationKey = defaultCitationKey(id);
-    const fields = biblatexFieldsFromForm(form);
-
-    const fieldLines = fields.map(
-        ([key, value], index) =>
-            `  ${key} = {${escapeBiblatexValue(value)}}${
-                index === fields.length - 1 ? "" : ","
-            }`,
-    );
+    const fields = fieldsMapFromForm(form);
 
     return {
         id,
         citation_key: citationKey,
-        biblatex: `@${form.entryType}{${citationKey},\n${fieldLines.join("\n")}\n}`,
+        biblatex: serializeBiblatexEntry(form.entryType, citationKey, fields),
     };
+};
+
+const formFieldsFromMap = (
+    entryType: BibliographyEntryType,
+    fields: Map<string, string>,
+): ReferenceFormFields => {
+    const formFields: ReferenceFormFields = {};
+    const specs = referenceFieldsForEntryType(entryType);
+
+    for (const spec of specs) {
+        const raw = fields.get(spec.key);
+        if (!raw) {
+            continue;
+        }
+        formFields[spec.key] = raw;
+    }
+
+    const year =
+        fields.get("year") ?? yearFromDateField(fields.get("date") ?? "");
+    if (year) {
+        formFields.year = year;
+    }
+
+    return formFields;
 };
 
 export const formValueFromReference = (
     reference: ReferenceEntry,
 ): ReferenceFormValue => {
-    const entryType = readEntryHeader(reference.biblatex) ?? "misc";
-    const fields = readBiblatexFields(reference.biblatex);
-    const secondary = bibliographySecondaryField(entryType);
+    const parsed = parseBiblatexEntry(reference.biblatex);
+    if (!parsed) {
+        return emptyReferenceFormValue();
+    }
+
+    return formValueFromParsedBiblatex(parsed.entryType, parsed.fields);
+};
+
+const normalizeImportedBibtexFields = (fields: Map<string, string>): Map<string, string> => {
+    const normalized = new Map(fields);
+
+    if (normalized.has("journal") && !normalized.has("journaltitle")) {
+        normalized.set("journaltitle", normalized.get("journal") ?? "");
+        normalized.delete("journal");
+    }
+
+    if (normalized.has("school") && !normalized.has("institution")) {
+        normalized.set("institution", normalized.get("school") ?? "");
+        normalized.delete("school");
+    }
+
+    if (normalized.has("address") && !normalized.has("location")) {
+        normalized.set("location", normalized.get("address") ?? "");
+        normalized.delete("address");
+    }
+
+    return normalized;
+};
+
+const formValueFromParsedBiblatex = (
+    rawEntryType: string,
+    rawFields: Map<string, string>,
+): ReferenceFormValue => {
+    const fields = normalizeImportedBibtexFields(rawFields);
+    const entryType = normalizeBibliographyEntryType(rawEntryType);
+    const author = fields.get("author") ?? "";
 
     return {
         entryType,
-        title: fields.title ?? "",
-        authors: fields.author ? authorsFromBiblatex(fields.author) : "",
-        year: fields.year ?? "",
-        containerTitle:
-            secondary === "containerTitle"
-                ? (fields.journaltitle ?? fields.booktitle ?? "")
-                : "",
-        publisher: fields.publisher ?? "",
-        doi: fields.doi ?? "",
-        url: fields.url ?? "",
+        authors: author ? authorsFromBiblatex(author) : [],
+        fields: formFieldsFromMap(entryType, fields),
+        extraFields: extraFieldsFromMap(fields),
     };
 };
 
+/** Converts BibTeX/BibLaTeX returned by the translation server into a form draft. */
+export const formValueFromLookupBiblatex = (
+    biblatex: string,
+): ReferenceFormValue | null => {
+    const parsed = parseBiblatexEntry(biblatex.trim());
+    if (!parsed) {
+        return null;
+    }
+
+    return formValueFromParsedBiblatex(parsed.entryType, parsed.fields);
+};
+
+const citationContainer = (form: ReferenceFormValue): string =>
+    fieldValue(form, "journaltitle") ||
+    fieldValue(form, "booktitle") ||
+    fieldValue(form, "publisher") ||
+    fieldValue(form, "institution") ||
+    "";
+
 export const formatReferenceCitation = (reference: ReferenceEntry): string => {
     const form = formValueFromReference(reference);
-    const authors = form.authors
-        .split(/\r?\n/)
-        .map(authorFamilyName)
-        .filter(Boolean)
-        .join("; ");
-    const lead = [authors, form.year ? `(${form.year})` : ""]
-        .filter(Boolean)
-        .join(" ");
-    const title = form.title.trim();
-    const rule = entryFieldRule(form.entryType);
-    const container = rule.needsJournal || rule.needsBooktitle
-        ? form.containerTitle.trim()
-        : rule.needsPublisher
-          ? form.publisher.trim()
-          : "";
+    const authors = formatAuthorsForCitation(form.authors);
+    const year = fieldValue(form, "year");
+    const lead = [authors, year ? `(${year})` : ""].filter(Boolean).join(" ");
+    const title = fieldValue(form, "title");
+    const container = citationContainer(form);
 
     return [lead, title, container]
         .filter(Boolean)
         .map((part) => (part.endsWith(".") ? part : `${part}.`))
         .join(" ");
 };
+
+/** Sort bibliography sidebar entries by localized citation label. */
+export const compareBibliographyEntries = (
+    left: ReferenceEntry,
+    right: ReferenceEntry,
+    locale: string,
+): number =>
+    formatReferenceCitation(left).localeCompare(formatReferenceCitation(right), locale, {
+        sensitivity: "base",
+    });
+
+export const sortedBibliographyEntryTypeLabels = (
+    locale: string,
+): Array<{ value: BibliographyEntryType; label: string }> =>
+    [...bibliographyEntryTypeOptions()].sort((left, right) =>
+        left.label.localeCompare(right.label, locale, { sensitivity: "base" }),
+    );
+
+export { emptyReferenceAuthor };

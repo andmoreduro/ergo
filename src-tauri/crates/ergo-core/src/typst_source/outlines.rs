@@ -70,11 +70,23 @@ fn outline_line(target: Option<&str>, title: Option<&str>) -> String {
     format!("#outline({args})\n#pagebreak()\n")
 }
 
+fn umb_outlines_bool_arg(included: bool) -> &'static str {
+    if included { "true" } else { "false" }
+}
+
+fn umb_outlines_title_arg(title: &str) -> String {
+    format!("title: {}", outline_title_arg(title))
+}
+
 pub(crate) fn generate_front_matter_outlines(
     template: &TemplateSpec,
     document_language: Option<&str>,
     overrides: &[TemplateOverride],
 ) -> String {
+    if template_spec_exports_symbol(template, "umb-outlines") {
+        return generate_umb_outlines(template, document_language, overrides);
+    }
+
     let mut out = String::new();
 
     if outline_included(template, overrides, OUTLINE_INCLUDE_CONTENTS) {
@@ -152,6 +164,82 @@ fn appendix_outline_line(title: &str) -> String {
     format!(
         "#appendix-outline(title: {})\n#pagebreak()\n",
         outline_title_arg(title)
+    )
+}
+
+fn generate_umb_outlines(
+    template: &TemplateSpec,
+    document_language: Option<&str>,
+    overrides: &[TemplateOverride],
+) -> String {
+    let include_contents = outline_included(template, overrides, OUTLINE_INCLUDE_CONTENTS);
+    let include_tables = outline_included(template, overrides, OUTLINE_INCLUDE_TABLES);
+    let include_figures = outline_included(template, overrides, OUTLINE_INCLUDE_FIGURES);
+    let include_equations = outline_included(template, overrides, OUTLINE_INCLUDE_EQUATIONS);
+    let include_listings = outline_included(template, overrides, OUTLINE_INCLUDE_LISTINGS);
+    let include_appendices = outline_included(template, overrides, OUTLINE_INCLUDE_APPENDICES)
+        && template_spec_exports_symbol(template, "appendix-outline");
+
+    let contents_title = effective_outline_title(
+        overrides,
+        OUTLINE_CONTENTS_TITLE,
+        document_language,
+    );
+    let tables_title = effective_outline_title(
+        overrides,
+        OUTLINE_TABLES_TITLE,
+        document_language,
+    );
+    let figures_title = effective_outline_title(
+        overrides,
+        OUTLINE_FIGURES_TITLE,
+        document_language,
+    );
+    let equations_title = effective_outline_title(
+        overrides,
+        OUTLINE_EQUATIONS_TITLE,
+        document_language,
+    );
+    let listings_title = effective_outline_title(
+        overrides,
+        OUTLINE_LISTINGS_TITLE,
+        document_language,
+    );
+    let appendices_title = effective_outline_title(
+        overrides,
+        OUTLINE_APPENDICES_TITLE,
+        document_language,
+    );
+
+    format!(
+        concat!(
+            "#umb-outlines(\n",
+            "  include-contents: {include_contents},\n",
+            "  contents-{contents_title},\n",
+            "  include-tables: {include_tables},\n",
+            "  tables-{tables_title},\n",
+            "  include-figures: {include_figures},\n",
+            "  figures-{figures_title},\n",
+            "  include-equations: {include_equations},\n",
+            "  equations-{equations_title},\n",
+            "  include-listings: {include_listings},\n",
+            "  listings-{listings_title},\n",
+            "  include-appendices: {include_appendices},\n",
+            "  appendices-{appendices_title},\n",
+            ")\n\n",
+        ),
+        include_contents = umb_outlines_bool_arg(include_contents),
+        contents_title = umb_outlines_title_arg(contents_title),
+        include_tables = umb_outlines_bool_arg(include_tables),
+        tables_title = umb_outlines_title_arg(tables_title),
+        include_figures = umb_outlines_bool_arg(include_figures),
+        figures_title = umb_outlines_title_arg(figures_title),
+        include_equations = umb_outlines_bool_arg(include_equations),
+        equations_title = umb_outlines_title_arg(equations_title),
+        include_listings = umb_outlines_bool_arg(include_listings),
+        listings_title = umb_outlines_title_arg(listings_title),
+        include_appendices = umb_outlines_bool_arg(include_appendices),
+        appendices_title = umb_outlines_title_arg(appendices_title),
     )
 }
 

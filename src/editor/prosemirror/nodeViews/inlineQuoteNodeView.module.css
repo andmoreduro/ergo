@@ -1,0 +1,40 @@
+.host {
+    display: inline;
+    vertical-align: baseline;
+}
+
+.chipShell {
+    position: relative;
+    display: inline;
+    max-width: 100%;
+}
+
+.wrappingChip {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    vertical-align: baseline;
+}
+
+.host :global(textarea) {
+    min-width: 2ch;
+    min-height: 1lh;
+    padding: 0;
+    margin: 0;
+    border: none;
+    resize: none;
+    overflow: hidden;
+    field-sizing: content;
+    line-height: 1.6;
+}
+
+.quoteMark {
+    color: var(--color-text-secondary);
+    font-family: var(--font-family-serif, inherit);
+    line-height: 1.6;
+    user-select: none;
+}

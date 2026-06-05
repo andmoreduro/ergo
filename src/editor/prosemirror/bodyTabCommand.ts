@@ -7,6 +7,7 @@ import { blockEditIds, isBlockEditing } from "./blockEditMode";
 import { handleWrapperTabKeyDown } from "../wrapperTabCycle";
 
 import { enterLockedWholeBlock } from "./bodyTableCommands";
+import { runListTab } from "./listIndent";
 
 
 
@@ -194,7 +195,9 @@ export const runBodyTab = (view: EditorView, key: BodyTabKeyState): boolean => {
 
     }
 
-
+    if (runListTab(view, key.shiftKey)) {
+        return true;
+    }
 
     if (key.shiftKey) {
 

@@ -1,6 +1,7 @@
 import type { ContentSection } from "../bindings/ContentSection";
 import type { DocumentElement } from "../bindings/DocumentElement";
 import { richTextPlainLength } from "../richText/richText";
+import { listItemPlainLength } from "../state/ast/listItem";
 
 export type ContentInsertAnchor = {
     sectionId: string;
@@ -15,7 +16,7 @@ const listOrEnumerationIsEmpty = (element: DocumentElement): boolean => {
     if (element.items.length === 0) {
         return true;
     }
-    return element.items.every((item) => richTextPlainLength(item) === 0);
+    return element.items.every((item) => listItemPlainLength(item) === 0);
 };
 
 /** Block types that are removed when empty and the user inserts another block at that anchor. */

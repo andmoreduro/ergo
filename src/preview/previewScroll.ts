@@ -50,7 +50,7 @@ export function scrollPreviewToPage(
 
 /**
  * Page number whose content occupies the largest share of the preview viewport.
- * Used to break ties when a field appears on multiple pages.
+ * Used as the anchor when scrolling to the nearest changed page after compile.
  */
 export function previewAnchorPageFromScroll(scrollRoot: HTMLElement): number | null {
     const rootRect = scrollRoot.getBoundingClientRect();

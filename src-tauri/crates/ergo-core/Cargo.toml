@@ -21,6 +21,7 @@ typst-render = "0.14.2"
 rayon = "1.12.0"
 fontdb = "0.23.0"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+include_dir = "0.7.4"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"

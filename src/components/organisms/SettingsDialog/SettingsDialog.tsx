@@ -2,10 +2,12 @@ import type { GlobalSettings } from "../../../bindings/GlobalSettings";
 import type { KeymapSettings } from "../../../bindings/KeymapSettings";
 import type { ProjectSettings } from "../../../bindings/ProjectSettings";
 import type { TemplateOverride } from "../../../bindings/TemplateOverride";
+import type { TemplateOptionSpec } from "../../../bindings/TemplateOptionSpec";
 import type { TemplateVariantSpec } from "../../../bindings/TemplateVariantSpec";
 import type { KeymapProfile } from "../../../commands/types";
 import { m } from "../../../paraglide/messages.js";
 import { Dialog } from "../../molecules/Dialog/Dialog";
+import { DialogContext } from "../../../actions/contexts/DialogContext";
 import { GlobalSettingsPanel } from "./GlobalSettingsPanel";
 import { ProjectSettingsPanel } from "./ProjectSettingsPanel";
 import { KeymapSettingsPanel } from "./KeymapSettingsPanel";
@@ -19,10 +21,12 @@ export interface SettingsDialogProps {
     keymapSettings: KeymapSettings;
     keymap: KeymapProfile;
     conflicts: unknown[];
+    hasActiveProject?: boolean;
     onGlobalSettingsChange: (settings: GlobalSettings) => void;
     onKeymapSettingsChange: (settings: KeymapSettings) => void;
     onProjectSettingsChange: (settings: ProjectSettings) => void;
     templateDefaultOverrides?: TemplateOverride[];
+    templateOptions?: TemplateOptionSpec[];
     templateVariants?: TemplateVariantSpec[];
     templateVariantId?: string | null;
     onTemplateVariantChange?: (variantId: string) => void;
@@ -38,10 +42,12 @@ export const SettingsDialog = ({
     keymapSettings,
     keymap,
     conflicts,
+    hasActiveProject = false,
     onGlobalSettingsChange,
     onKeymapSettingsChange,
     onProjectSettingsChange,
     templateDefaultOverrides,
+    templateOptions,
     templateVariants,
     templateVariantId,
     onTemplateVariantChange,
@@ -57,6 +63,7 @@ export const SettingsDialog = ({
               : m.settings_global_title();
 
     return (
+        <DialogContext id="settings-dialog" kind={panel} active>
         <Dialog
             size="xl"
             title={title}
@@ -78,6 +85,7 @@ export const SettingsDialog = ({
                     settings={projectSettings}
                     onChange={onProjectSettingsChange}
                     templateDefaultOverrides={templateDefaultOverrides}
+                    templateOptions={templateOptions}
                     templateVariants={templateVariants}
                     templateVariantId={templateVariantId}
                     onTemplateVariantChange={onTemplateVariantChange}
@@ -91,9 +99,11 @@ export const SettingsDialog = ({
                     settings={keymapSettings}
                     keymap={keymap}
                     conflicts={conflicts}
+                    hasActiveProject={hasActiveProject}
                     onChange={onKeymapSettingsChange}
                 />
             )}
         </Dialog>
+        </DialogContext>
     );
 };

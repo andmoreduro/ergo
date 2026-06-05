@@ -1,7 +1,7 @@
 import { importAssetBytes } from "../../assets/importAsset";
-import { defaultFieldIdForElement } from "../../fieldIds";
 import { resolveContentInsertAnchor } from "../../insertContext";
 import { contentSection } from "../../fieldNavigation";
+import { insertFigureWithAsset } from "../../insertFigureWithAsset";
 import { createId } from "../../../state/ast/defaults";
 import { fileNameForPastedImage, readClipboardImageFile } from "../clipboardImage";
 import type { ClipboardPasteContext, ClipboardPasteHandler } from "../types";
@@ -27,7 +27,6 @@ export const pasteImageFigureHandler: ClipboardPasteHandler = {
             return false;
         }
 
-        const figureId = createId();
         const assetId = createId();
         const anchor = resolveContentInsertAnchor(section, ctx.anchorElementId);
         const bytes = new Uint8Array(await file.arrayBuffer());
@@ -36,41 +35,16 @@ export const pasteImageFigureHandler: ClipboardPasteHandler = {
             bytes,
         );
 
-        ctx.dispatch({
-            type: "ADD_FIGURE",
-            payload: {
-                sectionId: anchor.sectionId,
-                figureId,
-                afterElementId: anchor.afterElementId,
-            },
-        });
-
-        if (anchor.replaceElementId) {
-            ctx.dispatch({
-                type: "REMOVE_ELEMENT",
-                payload: { elementId: anchor.replaceElementId },
-            });
-        }
-
         if (!ctx.ast.assets.some((entry) => entry.id === asset.id)) {
             ctx.dispatch({ type: "ADD_ASSET", payload: { asset } });
         }
 
-        ctx.dispatch({
-            type: "UPDATE_FIGURE",
-            payload: { figureId, assetId: asset.id },
-        });
-
-        ctx.setDocumentFocus({
-            elementId: figureId,
-            fieldId: defaultFieldIdForElement({ id: figureId, type: "Figure" }),
-            caretUtf16Offset: 0,
-            sourceRevision: null,
-            anchorPageNumber: null,
-            forcePreviewScroll: false,
-            focusSource: "programmatic",
-        });
-
-        return true;
+        return insertFigureWithAsset(
+            ctx.ast,
+            asset.id,
+            ctx.dispatch,
+            ctx.setDocumentFocus,
+            anchor.afterElementId ?? ctx.anchorElementId,
+        );
     },
 };

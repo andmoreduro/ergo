@@ -20,6 +20,15 @@
     field-sizing: content;
 }
 
+.chipWrap {
+    resize: none;
+    overflow: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    min-height: 1lh;
+    field-sizing: content;
+}
+
 .inlineComposer {
     flex: 1 1 var(--width-col-md);
     min-width: var(--width-col-sm);

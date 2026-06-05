@@ -15,6 +15,7 @@ fn rich_text(text: &str) -> Vec<RichText> {
         reference_id: None,
         equation_source: None,
         equation_syntax: EquationSyntax::Typst,
+        ..Default::default()
     }]
 }
 
@@ -717,6 +718,44 @@ fn applies_asset_events_to_document_state() {
         .unwrap();
 
     assert!(persisted_ast(&vfs).assets.is_empty());
+}
+
+#[test]
+fn remove_diagram_removes_generated_svg_from_vfs() {
+    let vfs = Arc::new(VirtualFileSystem::new());
+    let session = DocumentSession::new(Arc::clone(&vfs));
+    let mut ast = basic_document_ast("Título con ñ", "");
+    let content = match &mut ast.sections[0] {
+        DocumentSection::Content(content) => content,
+    };
+    content.elements.push(DocumentElement::Diagram(crate::ast::Diagram {
+        id: "diagram-1".to_string(),
+        mermaid_source: "flowchart TD\nA-->B".to_string(),
+        caption: String::new(),
+        placement: String::new(),
+        asset_id: Some("diagram-1".to_string()),
+        extra_fields: Default::default(),
+    }));
+    ast.assets.push(crate::ast::AssetEntry {
+        id: "diagram-1".to_string(),
+        path: "assets/diagrams/diagram-1.svg".to_string(),
+        kind: "image".to_string(),
+        caption: None,
+    });
+    session.sync_snapshot(ast).unwrap();
+    vfs.write_file(
+        "assets/diagrams/diagram-1.svg",
+        b"<svg></svg>".to_vec(),
+    );
+
+    session
+        .apply_event(DocumentEvent::RemoveElement {
+            element_id: "diagram-1".to_string(),
+        })
+        .unwrap();
+
+    assert!(persisted_ast(&vfs).assets.is_empty());
+    assert!(vfs.read_file("assets/diagrams/diagram-1.svg").is_err());
 }
 
 #[test]

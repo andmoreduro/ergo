@@ -3,6 +3,7 @@ use tauri::State;
 use crate::app_state::TauriAppState;
 use crate::ast::{AssetEntry, DocumentAST};
 use crate::document_session::{DocumentEvent, DocumentSessionStatus};
+use crate::generated_assets::is_generated_diagram_asset_path;
 use crate::path_utils::normalize_virtual_path;
 
 #[tauri::command]
@@ -34,6 +35,11 @@ pub fn get_document_session_status(
     state: State<'_, TauriAppState>,
 ) -> Result<DocumentSessionStatus, String> {
     Ok(state.document_session.status())
+}
+
+#[tauri::command]
+pub fn reset_project_session(state: State<'_, TauriAppState>) {
+    state.document_session.reset_session();
 }
 
 #[derive(serde::Serialize, ts_rs::TS)]
@@ -87,15 +93,6 @@ pub fn import_resource_bytes(
     })
 }
 
-fn is_generated_diagram_asset_path(path: &str) -> bool {
-    path.starts_with("assets/diagrams/")
-        && path.ends_with(".svg")
-        && !path.contains("..")
-        && path
-            .strip_prefix("assets/diagrams/")
-            .map(|file_name| !file_name.is_empty() && !file_name.contains('/'))
-            .unwrap_or(false)
-}
 
 pub(crate) fn import_resource_file_into_vfs(
     vfs: &crate::vfs::VirtualFileSystem,

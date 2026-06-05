@@ -4,16 +4,24 @@ import type { ElementType } from "../../commands/editorCommands";
 import { tryBodyContentInsert } from "../bodyContentInsert";
 import {
     getActiveBodyView,
+    getActiveTableCellEditor,
     getBodyAstDispatch,
     peekBodyTabModifiers,
 } from "./activeView";
 import { selectCurrentElement } from "./bodySelection";
 import { runBodyTab } from "./bodyTabCommand";
 import { enterLockedWholeBlock, runBodyNavigate } from "./bodyTableCommands";
+import { handleTableCellBoundaryArrow } from "./table/tableCellBoundary";
 import {
     isActiveTableCellEditing,
     TABLE_CELL_FORBIDDEN_ACTION_IDS,
 } from "./table/tableCellInsertPolicy";
+import {
+    moveTableCellSelection,
+    runMergeTableCells,
+    runSplitTableCell,
+    type TableCellDirection,
+} from "./table/tableCellNavigation";
 import { getActiveTableCellCoords } from "./table/tableStructureBridge";
 
 const withBodyView = (
@@ -30,6 +38,64 @@ const withBodyView = (
             view.focus();
         }
         return run(view);
+    };
+};
+
+const NAV_KEY: Record<
+    "left" | "right" | "up" | "down",
+    "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"
+> = {
+    left: "ArrowLeft",
+    right: "ArrowRight",
+    up: "ArrowUp",
+    down: "ArrowDown",
+};
+
+const withActiveTableCellEditor = (
+    run: (view: NonNullable<ReturnType<typeof getActiveTableCellEditor>>) => boolean,
+): (() => boolean) => {
+    return () => {
+        if (!isActiveTableCellEditing()) {
+            return false;
+        }
+        const cellView = getActiveTableCellEditor();
+        if (!cellView) {
+            return false;
+        }
+        if (!cellView.hasFocus()) {
+            cellView.focus();
+        }
+        return run(cellView);
+    };
+};
+
+const withTableCellMove = (direction: TableCellDirection): (() => boolean) =>
+    withActiveTableCellEditor((view) => moveTableCellSelection(view, direction));
+
+const withBodyNavigate = (
+    direction: "left" | "right" | "up" | "down",
+): (() => boolean) => {
+    return () => {
+        if (isActiveTableCellEditing()) {
+            const cellView = getActiveTableCellEditor();
+            if (!cellView) {
+                return true;
+            }
+            if (
+                handleTableCellBoundaryArrow(cellView, {
+                    key: NAV_KEY[direction],
+                    altKey: false,
+                    ctrlKey: true,
+                    metaKey: false,
+                    shiftKey: false,
+                })
+            ) {
+                cellView.focus();
+                return true;
+            }
+            return false;
+        }
+        return withBodyView((view) => runBodyNavigate(view, direction))();
     };
 };
 
@@ -89,14 +155,16 @@ export const bodyEditorActionHandlers = (): ActionHandlerMap => ({
             metaKey: tab.metaKey,
         });
     },
-    "editor::BodyNavigateLeft": withBodyView((view) => runBodyNavigate(view, "left")),
-    "editor::BodyNavigateRight": withBodyView((view) =>
-        runBodyNavigate(view, "right"),
-    ),
-    "editor::BodyNavigateUp": withBodyView((view) => runBodyNavigate(view, "up")),
-    "editor::BodyNavigateDown": withBodyView((view) =>
-        runBodyNavigate(view, "down"),
-    ),
+    "editor::BodyNavigateLeft": withBodyNavigate("left"),
+    "editor::BodyNavigateRight": withBodyNavigate("right"),
+    "editor::BodyNavigateUp": withBodyNavigate("up"),
+    "editor::BodyNavigateDown": withBodyNavigate("down"),
+    "editor::MoveTableCellLeft": withTableCellMove("left"),
+    "editor::MoveTableCellRight": withTableCellMove("right"),
+    "editor::MoveTableCellUp": withTableCellMove("up"),
+    "editor::MoveTableCellDown": withTableCellMove("down"),
+    "editor::MergeTableCells": withActiveTableCellEditor(runMergeTableCells),
+    "editor::SplitTableCell": withActiveTableCellEditor(runSplitTableCell),
     "editor::AddTableRow": () => {
         const coords = getActiveTableCellCoords();
         const dispatch = getBodyAstDispatch();

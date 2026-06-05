@@ -17,6 +17,7 @@ export interface SidebarProps {
     resourcePreviewRevisions?: ResourcePreviewRevisions;
     mainPreviewPaintedRevision?: number | null;
     previewScrollRef?: RefObject<HTMLElement | null>;
+    zoteroTranslationServerEnabled?: boolean;
 }
 
 const SidebarComponent = ({
@@ -26,6 +27,7 @@ const SidebarComponent = ({
     resourcePreviewRevisions = {},
     mainPreviewPaintedRevision = null,
     previewScrollRef: previewScrollRefFromParent,
+    zoteroTranslationServerEnabled = false,
 }: SidebarProps) => {
     const fallbackPreviewScrollRef = useRef<HTMLElement>(null);
     const previewScrollRef =
@@ -45,7 +47,10 @@ const SidebarComponent = ({
                 />
             </Accordion>
             <Accordion title={m.sidebar_bibliography()} defaultOpen>
-                <SidebarBibliographyPanel references={references} />
+                <SidebarBibliographyPanel
+                    references={references}
+                    zoteroTranslationServerEnabled={zoteroTranslationServerEnabled}
+                />
             </Accordion>
             <Accordion title={m.sidebar_resources()} defaultOpen>
                 <SidebarResourcesPanel

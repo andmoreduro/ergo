@@ -28,3 +28,8 @@ src/wasm-compiler/
 .ergproj/
 *.ergtemplate
 
+# Local Typst / compile scratch (src-tauri)
+src-tauri/out*.pdf
+src-tauri/test-*.*
+src-tauri/references.bib
+

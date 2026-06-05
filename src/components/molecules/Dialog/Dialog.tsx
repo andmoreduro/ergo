@@ -4,9 +4,11 @@ import {
     useRef,
     type FormHTMLAttributes,
     type HTMLAttributes,
+    type KeyboardEvent,
     type ReactNode,
 } from "react";
 import { Button } from "../../atoms/Button/Button";
+import { useFocusTrap } from "../../../hooks/useFocusTrap";
 import styles from "./Dialog.module.css";
 
 export type DialogSize = "sm" | "md" | "lg" | "xl";
@@ -28,18 +30,14 @@ const sizeClass: Record<DialogSize, string> = {
     xl: styles.sizeXl,
 };
 
-const shouldIgnoreDialogEnter = (target: EventTarget | null): boolean => {
+const shouldIgnoreDialogConfirm = (target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) {
         return false;
-    }
-    const tag = target.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
-        return true;
     }
     if (target.isContentEditable) {
         return true;
     }
-    return false;
+    return target.tagName === "TEXTAREA";
 };
 
 type DialogPanelProps = {
@@ -49,6 +47,7 @@ type DialogPanelProps = {
     zIndex?: number;
     cancelAction?: DialogActionButton;
     confirmAction?: DialogActionButton;
+    headerAction?: ReactNode;
     onBackdropClick?: () => void;
     children: ReactNode;
 };
@@ -73,6 +72,7 @@ export const Dialog = memo((props: DialogProps) => {
         zIndex = 3200,
         cancelAction,
         confirmAction,
+        headerAction,
         onBackdropClick,
         children,
         as = "section",
@@ -81,8 +81,11 @@ export const Dialog = memo((props: DialogProps) => {
 
     const cancelRef = useRef(cancelAction);
     const confirmRef = useRef(confirmAction);
+    const panelRef = useRef<HTMLElement | HTMLFormElement>(null);
     cancelRef.current = cancelAction;
     confirmRef.current = confirmAction;
+
+    useFocusTrap(panelRef);
 
     const dismissViaBackdrop =
         onBackdropClick ?? cancelAction?.onClick ?? confirmAction?.onClick;
@@ -104,7 +107,10 @@ export const Dialog = memo((props: DialogProps) => {
             if (event.key !== "Enter" || event.defaultPrevented) {
                 return;
             }
-            if (shouldIgnoreDialogEnter(event.target)) {
+            if (!(event.ctrlKey || event.metaKey)) {
+                return;
+            }
+            if (shouldIgnoreDialogConfirm(event.target)) {
                 return;
             }
             const confirm = confirmRef.current;
@@ -130,6 +136,9 @@ export const Dialog = memo((props: DialogProps) => {
     const header = (
         <header className={styles.header}>
             <h2 id={titleId}>{title}</h2>
+            {headerAction ? (
+                <div className={styles.headerAction}>{headerAction}</div>
+            ) : null}
         </header>
     );
 
@@ -175,19 +184,46 @@ export const Dialog = memo((props: DialogProps) => {
         </>
     );
 
+    const handleFormKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
+        if (event.key !== "Enter" || event.defaultPrevented) {
+            return;
+        }
+        if (!(event.ctrlKey || event.metaKey)) {
+            if (!(event.target instanceof HTMLTextAreaElement)) {
+                event.preventDefault();
+            }
+            return;
+        }
+        if (shouldIgnoreDialogConfirm(event.target)) {
+            return;
+        }
+        event.preventDefault();
+        const confirm = confirmRef.current;
+        const cancel = cancelRef.current;
+        if (as === "form" && confirm?.type === "submit") {
+            panelRef.current?.requestSubmit();
+            return;
+        }
+        const handler = confirm?.onClick ?? cancel?.onClick;
+        handler?.();
+    };
+
     const panel =
         as === "form" ? (
             <form
+                ref={panelRef}
                 aria-labelledby={titleId}
                 aria-modal="true"
                 className={panelClassName}
                 role="dialog"
+                onKeyDown={handleFormKeyDown}
                 {...(panelProps as FormHTMLAttributes<HTMLFormElement>)}
             >
                 {panelChildren}
             </form>
         ) : (
             <section
+                ref={panelRef}
                 aria-labelledby={titleId}
                 aria-modal="true"
                 className={panelClassName}

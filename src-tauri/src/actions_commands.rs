@@ -1,11 +1,16 @@
 use tauri::{AppHandle, State};
 
 use crate::actions::{
-    action_catalog, resolve_key_event_with_settings, validate_keymap, ActionContextSnapshot,
-    ActionDescriptor, ActionResolution, ActionResolverState, KeymapValidationResult,
-    LogicalKeyEvent,
+    action_catalog, context_glossary, resolve_key_event_with_settings, validate_keymap,
+    ActionContextSnapshot, ActionDescriptor, ActionResolution, ActionResolverState,
+    ContextDescriptor, KeymapValidationResult, LogicalKeyEvent,
 };
 use crate::ast::KeymapSettings;
+
+#[tauri::command]
+pub fn get_context_glossary() -> Vec<ContextDescriptor> {
+    context_glossary()
+}
 
 #[tauri::command]
 pub fn get_action_catalog() -> Vec<ActionDescriptor> {

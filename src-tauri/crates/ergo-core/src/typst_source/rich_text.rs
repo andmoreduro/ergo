@@ -4,6 +4,7 @@ use crate::ast::{EquationSyntax, RichText};
 use crate::document_source_builder::SourceBuilder;
 
 use super::escape_typst_string;
+use super::quote_attribution;
 use super::references::typst_reference_marker;
 
 pub(crate) fn normalize_math_source(value: &str) -> String {
@@ -81,6 +82,29 @@ pub(crate) fn push_rich_text_field_with_emphasis(
             continue;
         }
 
+        if span.kind.as_deref() == Some("quote") {
+            let text = span.text.trim();
+            if !text.is_empty() {
+                let mut call = "#quote(block: false".to_string();
+                if let Some(attribution) = quote_attribution::format_quote_attribution_param(
+                    span.quote_attribution_text.as_deref(),
+                    span.quote_attribution_reference_id.as_deref(),
+                    bibliography_keys,
+                ) {
+                    call.push_str(&format!(", attribution: {attribution}"));
+                }
+                call.push_str(&format!(")[{}]", escape_typst_string(text)));
+                builder.push_generated_field_marker(
+                    element_id,
+                    field_id,
+                    &call,
+                    field_utf16_offset,
+                );
+            }
+            field_utf16_offset += span.text.chars().map(char::len_utf16).sum::<usize>();
+            continue;
+        }
+
         let bold = emphasis == RichTextEmphasis::Full && span.bold.unwrap_or(false);
         let italic = emphasis == RichTextEmphasis::Full && span.italic.unwrap_or(false);
         let underline = span.underline.unwrap_or(false);
@@ -143,6 +167,7 @@ mod tests {
                 reference_id: None,
                 equation_source: None,
                 equation_syntax: EquationSyntax::Typst,
+                ..Default::default()
             },
             RichText {
                 text: "mix".into(),
@@ -153,6 +178,7 @@ mod tests {
                 reference_id: None,
                 equation_source: None,
                 equation_syntax: EquationSyntax::Typst,
+                ..Default::default()
             },
             RichText {
                 text: "_not a delimiter_".into(),
@@ -163,6 +189,7 @@ mod tests {
                 reference_id: None,
                 equation_source: None,
                 equation_syntax: EquationSyntax::Typst,
+                ..Default::default()
             },
         ]);
         assert!(source.contains("#strong[bold]"));
@@ -182,8 +209,62 @@ mod tests {
             reference_id: None,
             equation_source: None,
             equation_syntax: EquationSyntax::Typst,
+            ..Default::default()
         }]);
         assert_eq!(source, "#underline[#emph[line]]");
+    }
+
+    #[test]
+    fn rich_text_escapes_leading_equals_sign() {
+        let source = render_spans(&[RichText {
+            text: "= whatever".into(),
+            bold: None,
+            italic: None,
+            underline: None,
+            kind: None,
+            reference_id: None,
+            equation_source: None,
+            equation_syntax: EquationSyntax::Typst,
+            ..Default::default()
+        }]);
+        assert_eq!(source, "\\= whatever");
+    }
+
+    #[test]
+    fn inline_quote_span_emits_non_block_quote() {
+        let source = render_spans(&[RichText {
+            text: "they said".into(),
+            bold: None,
+            italic: None,
+            underline: None,
+            kind: Some("quote".into()),
+            reference_id: None,
+            equation_source: None,
+            equation_syntax: EquationSyntax::Typst,
+            quote_attribution_text: None,
+            quote_attribution_reference_id: None,
+        }]);
+        assert_eq!(source, "#quote(block: false)[they said]");
+    }
+
+    #[test]
+    fn inline_quote_span_emits_text_attribution() {
+        let source = render_spans(&[RichText {
+            text: "they said".into(),
+            bold: None,
+            italic: None,
+            underline: None,
+            kind: Some("quote".into()),
+            reference_id: None,
+            equation_source: None,
+            equation_syntax: EquationSyntax::Typst,
+            quote_attribution_text: Some("(Smith, 2020, p. 4)".into()),
+            quote_attribution_reference_id: None,
+        }]);
+        assert_eq!(
+            source,
+            "#quote(block: false, attribution: [(Smith, 2020, p. 4)])[they said]"
+        );
     }
 }
 

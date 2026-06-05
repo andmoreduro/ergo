@@ -17,82 +17,40 @@ High-level runtime containers, responsibilities, and IPC boundaries for the Reac
 
 ```mermaid
 flowchart TB
-    classDef container fill:#f4f6f7,stroke:#2c3e50,stroke-width:2px,color:#2c3e50,font-weight:bold;
-    classDef comp fill:#ffffff,stroke:#34495e,stroke-width:1px,color:#2c3e50;
-    classDef db fill:#ecf0f1,stroke:#7f8c8d,stroke-width:1px,color:#2c3e50;
-
-    subgraph Frontend ["Frontend Container"]
-        direction TB
-        UI["UI Components"]:::comp
-        Actions["Action Runtime"]:::comp
-        DocState["Document State + History"]:::comp
-        AppOrch["App Orchestration"]:::comp
-        PreviewUI["Preview Pages"]:::comp
-        Sidebar["Workspace Sidebar"]:::comp
-        TauriClient["Tauri API Client"]:::comp
-
-        UI --> Actions
-        Actions --> DocState
-        AppOrch --> Actions
-        AppOrch --> TauriClient
-        DocState --> PreviewUI
-        PreviewUI --> Sidebar
-        DocState --> TauriClient
+    subgraph Frontend ["Frontend"]
+        UI[UI]
+        Actions[Action Runtime]
+        DocState[Document State]
+        TauriClient[Tauri Client]
     end
-
     subgraph WasmWorker ["WASM Compiler Worker"]
-        direction TB
-        WorkerBridge["Compiler Client + Worker"]:::comp
-        PreviewEngine["Preview Engine"]:::comp
-        PreviewSync["Preview Sync State"]:::comp
-        WorkerVFS["Worker VFS"]:::comp
-        TypstCompile["Typst Compile + Page Render"]:::comp
-
-        WorkerBridge --> PreviewEngine
-        PreviewEngine --> WorkerVFS
-        PreviewEngine --> TypstCompile
-        TypstCompile --> PreviewSync
+        WorkerBridge[Compiler Worker]
+        PreviewEngine[Preview Engine]
     end
-
-    subgraph Backend ["Backend Container"]
-        direction TB
-        Handlers["Tauri IPC Handlers"]:::comp
-        Session["DocumentSession (mirror)"]:::comp
-        SourceGen["Section Source Generator"]:::comp
-        VFS["VirtualFileSystem"]:::comp
-        Archive["Archive Manager"]:::comp
-        Settings["Settings Store"]:::comp
-        ActionCatalog["Action Catalog + Keymap"]:::comp
-
-        Handlers --> ActionCatalog
-        Handlers --> Session
-        Handlers --> Archive
-        Handlers --> Settings
-        Session --> SourceGen
-        SourceGen --> VFS
-        Archive --> VFS
+    subgraph Backend ["Backend"]
+        Handlers[IPC Handlers]
+        Session[DocumentSession mirror]
+        Archive[Archive Manager]
+        Settings[Settings Store]
+        ActionCatalog[Action Catalog + Keymap]
     end
-
-    subgraph System ["Host Operating System"]
-        direction LR
-        WebView["Native WebView"]:::db
-        ProjectFiles[(".ergproj Archives")]:::db
-        SettingsFile[("Ergo App Config")]:::db
-        TypstCache[("Typst Package Cache")]:::db
+    subgraph Host ["Host OS"]
+        WebView[WebView]
+        ProjectFiles[(.ergproj)]
+        AppConfig[(App config)]
+        TypstCache[(Typst package cache)]
     end
-
-    Frontend -. "rendered in" .-> WebView
-    DocState == "sync, compile, render, preview sync" ==> WorkerBridge
-    PreviewUI == "render_svg_page, render_resource_svg_page, jump_from_click" ==> WorkerBridge
-    TauriClient == "actions, settings, archive mirror, write_bytes" ==> Handlers
-    Archive <== "read/write zip" ==> ProjectFiles
-    Settings <== "read/write JSON" ==> SettingsFile
-    TypstCompile <== "resolve packages" ==> TypstCache
-
-    class Frontend container
-    class WasmWorker container
-    class Backend container
-    class System container
+    Frontend -. rendered in .-> WebView
+    DocState == sync + compile ==> WorkerBridge
+    WorkerBridge --> PreviewEngine
+    TauriClient == IPC ==> Handlers
+    Handlers --> ActionCatalog
+    Handlers --> Session
+    Handlers --> Archive
+    Handlers --> Settings
+    Archive <== read/write ==> ProjectFiles
+    Settings <== read/write ==> AppConfig
+    PreviewEngine -. resolve packages .-> TypstCache
 ```
 
 ## Component Notes
@@ -106,3 +64,4 @@ flowchart TB
 - **Document State + History** (`DocumentContext`) stores local AST, queued events, undo entries `{ forwardEvents, inverseEvents }`, and focus state. `dispatch` and body `commitDocumentEvents` both commit through `COMMIT_EVENTS` and `applyDocumentEvents`; WASM compile is the hot path; the Tauri backend VFS mirror runs on bootstrap and before save, not per keystroke.
 - **Archive Manager** packs the backend VFS on save; open mounts files and bootstraps from `.ergproj/document_state.json`.
 - **VirtualFileSystem** retains Typst `Source` for text paths and bytes for assets; paths use `/` separators.
+- Preview sync message flow: `sequence-diagrams.md` §1 and §7. Module ownership: `package-diagrams.md`.

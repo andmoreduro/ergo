@@ -42,3 +42,10 @@
 .extras:focus-visible {
     color: var(--color-text-primary);
 }
+
+.pressed,
+.pressed:hover,
+.pressed:focus-visible {
+    background-color: var(--color-bg-secondary);
+    color: var(--color-primary);
+}

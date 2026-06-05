@@ -16,6 +16,8 @@ import {
     richTextFieldId,
 } from "./fieldIds";
 import { contentSection } from "./fieldNavigation";
+import { parseListItemFieldPath } from "./listFieldPath";
+import { getListItemAtPath, listItemPlainLength } from "../state/ast/listItem";
 import { richTextPlainLength } from "../richText/richText";
 
 export { ensureMinimumContentParagraphAction } from "../state/ast/contentInvariant";
@@ -91,7 +93,7 @@ export const caretOffsetAtEndForField = (
                         ? richTextPlainLength(block.content)
                         : block.type === "List" || block.type === "Enumeration"
                           ? block.items.reduce(
-                                (sum, item) => sum + richTextPlainLength(item),
+                                (sum, item) => sum + listItemPlainLength(item),
                                 0,
                             )
                           : block.type === "Equation"
@@ -102,15 +104,14 @@ export const caretOffsetAtEndForField = (
         }
     }
 
-    const itemPrefix = `${elementId}:item:`;
+    const itemPath = parseListItemFieldPath(fieldId, elementId);
     if (
-        fieldId.startsWith(itemPrefix) &&
+        itemPath &&
         (element.type === "List" || element.type === "Enumeration")
     ) {
-        const itemIndex = Number(fieldId.slice(itemPrefix.length));
-        const item = element.items[itemIndex];
+        const item = getListItemAtPath(element.items, itemPath);
         if (item) {
-            return richTextPlainLength(item);
+            return richTextPlainLength(item.content);
         }
     }
 

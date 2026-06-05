@@ -141,7 +141,7 @@
         "label":       { "type": "string" },
         "description": { "type": "string" },
         "default":     { "description": "Default input value." },
-        "importance":  { "type": "string", "enum": ["required", "recommended", "optional"], "default": "optional" },
+        "importance":  { "type": "string", "enum": ["required", "optional"], "default": "optional" },
         "variants":    { "$ref": "#/$defs/variant_ids" },
         "properties":  {
           "type": "array",

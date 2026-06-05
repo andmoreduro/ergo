@@ -7,12 +7,12 @@ import {
 } from "./contentBlocksCaret";
 
 describe("contentBlocksCaret", () => {
-    it("parses indexed template input field paths", () => {
-        expect(parseIndexedInputFieldPath("/abstract_es/2")).toEqual({
-            basePath: "/abstract_es",
+    it("parses indexed content-block input paths", () => {
+        expect(parseIndexedInputFieldPath("/summary/2")).toEqual({
+            basePath: "/summary",
             paragraphIndex: 2,
         });
-        expect(parseIndexedInputFieldPath("/abstract_text")).toBeNull();
+        expect(parseIndexedInputFieldPath("/plain_summary")).toBeNull();
     });
 
     it("converts between global and per-paragraph caret offsets", () => {

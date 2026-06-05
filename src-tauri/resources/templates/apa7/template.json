@@ -77,11 +77,11 @@
   },
   "editor": {
     "inputs": [
-      { "id": "title", "type": "string", "label": "Document Title", "importance": "recommended", "default": "Untitled Document" },
-      { "id": "running_head", "type": "string", "label": "Running Head", "importance": "recommended", "variants": ["professional"] },
-      { "id": "abstract_text", "type": "content_blocks", "label": "Abstract", "importance": "recommended" },
-      { "id": "keywords", "type": "simple_list", "label": "Keywords", "importance": "recommended", "items": { "type": "string", "label": "Keyword" } },
-      { "id": "affiliations", "type": "simple_list", "label": "Affiliations", "importance": "recommended", "items": { "type": "content", "label": "Affiliation" } },
+      { "id": "title", "type": "string", "label": "Document Title", "importance": "optional", "default": "Untitled Document" },
+      { "id": "running_head", "type": "string", "label": "Running Head", "importance": "optional", "variants": ["professional"] },
+      { "id": "abstract_text", "type": "content_blocks", "label": "Abstract", "importance": "optional" },
+      { "id": "keywords", "type": "simple_list", "label": "Keywords", "importance": "optional", "items": { "type": "string", "label": "Keyword" } },
+      { "id": "affiliations", "type": "simple_list", "label": "Affiliations", "importance": "optional", "items": { "type": "content", "label": "Affiliation" } },
       {
         "id": "authors", "type": "array", "label": "Authors", "importance": "required",
         "items": {
@@ -89,16 +89,16 @@
           "properties": [
             { "id": "name", "type": "string", "label": "Name", "importance": "required" },
             {
-              "id": "affiliations", "type": "array", "label": "Author's affiliations", "importance": "recommended",
+              "id": "affiliations", "type": "array", "label": "Author's affiliations", "importance": "optional",
               "items": { "type": "reference", "target": "affiliations", "label": "Affiliation Reference" }
             }
           ]
         }
       },
-      { "id": "course", "type": "string", "label": "Course", "importance": "recommended", "variants": ["student"] },
-      { "id": "instructor", "type": "string", "label": "Instructor", "importance": "recommended", "variants": ["student"] },
-      { "id": "due_date", "type": "string", "label": "Due Date", "importance": "recommended", "variants": ["student"] },
-      { "id": "author_note", "type": "content", "label": "Author Note", "importance": "recommended", "variants": ["professional"] }
+      { "id": "course", "type": "string", "label": "Course", "importance": "optional", "variants": ["student"] },
+      { "id": "instructor", "type": "string", "label": "Instructor", "importance": "optional", "variants": ["student"] },
+      { "id": "due_date", "type": "string", "label": "Due Date", "importance": "optional", "variants": ["student"] },
+      { "id": "author_note", "type": "content", "label": "Author Note", "importance": "optional", "variants": ["professional"] }
     ],
     "groups": [
       {
@@ -135,6 +135,7 @@
       "raw_font": "DejaVu Sans Mono",
       "font_size": 12.0,
       "table_stroke_width": 0.5
-    }
+    },
+    "quote_policy": 40
   }
 }

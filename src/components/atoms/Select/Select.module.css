@@ -42,13 +42,6 @@
   outline-offset: var(--outline-offset-sm);
 }
 
-.label {
-  font-family: var(--font-family-sans);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
-
 .selectWrapper {
   position: relative;
   display: flex;
@@ -58,12 +51,15 @@
 
 .select {
   font-family: var(--font-family-sans);
-  font-size: var(--font-size-md);
+  font-size: var(--choice-control-font-size);
   color: var(--color-text-primary);
   background-color: var(--color-bg-primary);
   border: var(--border-width-sm) solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
+  border-radius: var(--choice-control-radius);
+  padding: var(--choice-control-padding-block)
+    var(--choice-control-padding-inline-end)
+    var(--choice-control-padding-block)
+    var(--choice-control-padding-inline-start);
   transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
   outline: none;
   width: 100%;
@@ -84,7 +80,7 @@
 
 .chevron {
   position: absolute;
-  right: var(--space-3);
+  right: var(--choice-control-chevron-inset);
   pointer-events: none;
   color: var(--color-text-secondary);
   display: flex;

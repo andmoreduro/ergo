@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EditorState } from "prosemirror-state";
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { RichText } from "../../bindings/RichText";
-import { createRichText } from "../../state/ast/defaults";
+import { createListItem, createRichText } from "../../state/ast/defaults";
 import { sectionToDoc } from "./astBridge";
 import { bodySchema } from "./schema";
 import {
@@ -47,7 +47,7 @@ describe("selection ↔ focus target", () => {
             {
                 type: "List",
                 id: "l1",
-                items: [[createRichText("first")], [createRichText("second")]],
+                items: [createListItem("first"), createListItem("second")],
             },
         ],
     };
@@ -81,6 +81,25 @@ describe("selection ↔ focus target", () => {
         expectFixedPoint(section, {
             elementId: "l1",
             fieldId: "l1:item:1",
+            caretUtf16Offset: 3,
+        });
+    });
+
+    it("round-trips a quote caret", () => {
+        const quoteSection: ContentSection = {
+            id: "s1",
+            is_optional: false,
+            elements: [
+                {
+                    type: "Quote",
+                    id: "q1",
+                    content: [createRichText("quoted text")],
+                },
+            ],
+        };
+        expectFixedPoint(quoteSection, {
+            elementId: "q1",
+            fieldId: "q1:quote",
             caretUtf16Offset: 3,
         });
     });

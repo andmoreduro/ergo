@@ -2,6 +2,11 @@ import type { KeyboardEvent } from "react";
 import type { KeyStroke } from "../../../bindings/KeyStroke";
 import type { KeymapSettings } from "../../../bindings/KeymapSettings";
 import type { KeyBinding } from "../../../commands/types";
+import {
+    ensureCustomProfileForEdit,
+    normalizeKeymapSettings,
+    updateActiveProfileOverrides,
+} from "../../../settings/keymapProfiles";
 
 export const toOptionalNumber = (value: string): number | null => {
     const parsed = Number(value);
@@ -11,33 +16,33 @@ export const toOptionalNumber = (value: string): number | null => {
 export const removeKeymapOverride = (
     settings: KeymapSettings,
     binding: KeyBinding,
-): KeymapSettings => ({
-    ...settings,
-    keymap_overrides: settings.keymap_overrides.filter(
+): KeymapSettings => {
+    const normalized = normalizeKeymapSettings(settings);
+    const nextOverrides = normalized.keymap_overrides.filter(
         (override) =>
             override.action_id !== binding.commandId ||
             override.context !== binding.context,
-    ),
-});
+    );
+
+    return updateActiveProfileOverrides(normalized, nextOverrides);
+};
 
 export const upsertKeymapOverride = (
     settings: KeymapSettings,
     binding: KeyBinding,
     sequence: KeyStroke[],
 ): KeymapSettings => {
-    const withoutCurrent = removeKeymapOverride(settings, binding);
+    const withCustomProfile = ensureCustomProfileForEdit(settings);
+    const withoutCurrent = removeKeymapOverride(withCustomProfile, binding);
 
-    return {
-        ...withoutCurrent,
-        keymap_overrides: [
-            ...withoutCurrent.keymap_overrides,
-            {
-                action_id: binding.commandId,
-                context: binding.context,
-                sequence,
-            },
-        ],
-    };
+    return updateActiveProfileOverrides(withoutCurrent, [
+        ...withoutCurrent.keymap_overrides,
+        {
+            action_id: binding.commandId,
+            context: binding.context,
+            sequence,
+        },
+    ]);
 };
 
 export const strokeFromKeyboardEvent = (

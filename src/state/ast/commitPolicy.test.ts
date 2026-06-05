@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { DocumentAST } from "../../bindings/DocumentAST";
 import {
-    createDefaultDocumentAST,
     createEquation,
     createFigure,
     createParagraph,
     createRichText,
 } from "./defaults";
+import { createTestDocumentAST } from "../../test/documentAstFixture";
 import { shouldCommitAstAction, textSignificantlyEqual } from "./commitPolicy";
 import type { ASTAction } from "./actions";
 import { astReducer } from "./reducer";
@@ -57,7 +57,7 @@ describe("commitPolicy", () => {
     });
 
     it("skips project input updates that only add trailing whitespace", () => {
-        const ast = createDefaultDocumentAST();
+        const ast = createTestDocumentAST();
         ast.inputs = { title: "Hello" };
         const action: ASTAction = {
             type: "UPDATE_INPUT",
@@ -151,7 +151,7 @@ describe("commitPolicy", () => {
 });
 
 const astWithParagraph = (text: string): DocumentAST => {
-    const ast = createDefaultDocumentAST();
+    const ast = createTestDocumentAST();
     const section = ast.sections[0];
     if (section.type === "Content") {
         section.elements = [createParagraph(text, "paragraph-1")];
@@ -160,7 +160,7 @@ const astWithParagraph = (text: string): DocumentAST => {
 };
 
 const astWithEquation = (latex: string): DocumentAST => {
-    const ast = createDefaultDocumentAST();
+    const ast = createTestDocumentAST();
     const section = ast.sections[0];
     if (section.type === "Content") {
         section.elements = [createEquation("equation-1", latex)];
@@ -169,7 +169,7 @@ const astWithEquation = (latex: string): DocumentAST => {
 };
 
 const astWithFigure = (assetId: string | null): DocumentAST => {
-    const ast = createDefaultDocumentAST();
+    const ast = createTestDocumentAST();
     const section = ast.sections[0];
     if (section.type === "Content") {
         const figure = createFigure("figure-1");

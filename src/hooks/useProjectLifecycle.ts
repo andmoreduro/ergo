@@ -106,7 +106,14 @@ export const useProjectLifecycle = ({
                 return;
             }
 
-            const ast = createDocumentAST(templateId);
+            let templateSpec = null;
+            try {
+                templateSpec = await TauriApi.getTemplateSpec(templateId);
+            } catch (error) {
+                console.error("Failed to load template spec for new project:", error);
+            }
+
+            const ast = createDocumentAST(templateId, templateSpec);
             ast.metadata.title = projectName;
             const projectPath = projectPathInDirectory(
                 projectLocation,
@@ -114,6 +121,7 @@ export const useProjectLifecycle = ({
             );
 
             try {
+                await TauriApi.resetProjectSession();
                 dispatch({
                     type: "LOAD_DOCUMENT",
                     payload: { ast },
@@ -239,7 +247,7 @@ export const useProjectLifecycle = ({
 
         try {
             await waitForDocumentSync();
-            await TauriApi.syncDocumentSnapshot(defaultAst);
+            await TauriApi.resetProjectSession();
         } catch {
             // Welcome screen should still appear even if the backend reset fails.
         }

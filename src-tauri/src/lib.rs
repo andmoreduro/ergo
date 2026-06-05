@@ -78,10 +78,13 @@ pub fn run() {
                 #[cfg(windows)]
                 let _ = window.with_webview(disable_windows_default_context_menu);
             }
+
+            settings::ensure_translation_server_if_enabled(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             actions_commands::get_action_catalog,
+            actions_commands::get_context_glossary,
             actions_commands::resolve_key_event,
             actions_commands::reset_key_sequence,
             actions_commands::validate_keymap_settings,
@@ -89,6 +92,8 @@ pub fn run() {
             compiler::write_zip_export,
             compiler::load_fonts_for_families,
             compiler::load_fonts_for_document,
+            compiler::check_project_fonts,
+            compiler::resolve_project_fonts,
             compiler::list_system_font_families,
             compiler::write_source,
             compiler::patch_source,
@@ -97,12 +102,15 @@ pub fn run() {
             document_session_commands::sync_document_event,
             document_session_commands::sync_document_events,
             document_session_commands::get_document_session_status,
+            document_session_commands::reset_project_session,
             document_session_commands::import_resource_file,
             document_session_commands::import_resource_bytes,
             document_session_commands::read_vfs_file,
             document_session_commands::write_generated_asset,
             settings::load_global_settings,
             settings::save_global_settings,
+            settings::get_translation_server_status,
+            translation_server::lookup_bibliography_metadata,
             settings::load_keymap_settings,
             settings::save_keymap_settings,
             settings::get_template_spec,
@@ -115,6 +123,7 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 pub mod action_catalog;
+pub mod context_glossary;
 pub mod action_context;
 pub mod action_keymap;
 pub mod action_types;
@@ -127,12 +136,14 @@ pub mod compiler;
 pub mod document_session_commands;
 pub mod package_download;
 pub mod settings;
+pub mod translation_server;
 #[cfg(test)]
 pub use ergo_core::test_fixtures;
 pub use ergo_core::{
     ast, compilation_types, compile_artifacts, core_errors, document_outline, document_resources,
     document_session, document_session_events, document_session_generation, document_session_types,
-    document_source_builder, font_loader, font_requirements, package_resolver, path_utils,
+    document_source_builder, font_availability, font_loader, font_requirements, generated_assets,
+    package_resolver, path_utils,
     preview_pipeline, preview_sync, preview_sync_lookup, preview_sync_types, resource_watch,
     template_spec, vfs, world,
 };

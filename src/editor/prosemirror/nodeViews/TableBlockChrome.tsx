@@ -10,6 +10,7 @@ import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { ElementExtrasAccordion } from "../../../components/organisms/ElementEditor/ElementExtrasAccordion";
 import { ElementAnnotationFields } from "../../../components/organisms/ElementEditor/fields/ElementAnnotationFields";
 import { TableSettingsPanel } from "../../../components/organisms/ElementEditor/table/TableSettingsPanel";
+import { TableSettingsContext } from "../../../actions/contexts/TableSettingsContext";
 import { useElementSettingsShortcut } from "../../../components/organisms/ElementEditor/useElementSettingsShortcut";
 import type { TableElement } from "../table/tableSubBridge";
 import styles from "./tableBlockNodeView.module.css";
@@ -72,11 +73,13 @@ export const TableBlockSettingsCoordinator = ({
     }
 
     return createPortal(
-        <TableSettingsPanel
-            element={element}
-            open={settings.open}
-            onOpenChange={settings.setOpen}
-        />,
+        <TableSettingsContext active={settings.open} elementId={elementId}>
+            <TableSettingsPanel
+                element={element}
+                open={settings.open}
+                onOpenChange={settings.setOpen}
+            />
+        </TableSettingsContext>,
         settingsMount,
     );
 };

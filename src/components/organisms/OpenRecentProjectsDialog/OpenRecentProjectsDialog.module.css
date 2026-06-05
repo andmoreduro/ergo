@@ -1,0 +1,24 @@
+.list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-1);
+    max-height: var(--height-scroll-lg);
+    overflow-y: auto;
+    outline: none;
+}
+
+.listItemHighlighted :global(button) {
+    background-color: var(--color-bg-tertiary);
+}
+
+.listItemHighlighted {
+    min-width: 0;
+}
+
+.empty {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}

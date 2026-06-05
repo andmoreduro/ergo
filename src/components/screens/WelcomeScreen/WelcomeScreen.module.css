@@ -10,6 +10,8 @@
 .panel {
     width: min(var(--width-welcome), calc(var(--layout-viewport-w) - var(--layout-overlay-gutter)));
     margin-top: var(--layout-welcome-offset-top);
+    display: grid;
+    gap: var(--space-6);
 }
 
 .header {
@@ -17,7 +19,6 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-4);
-    margin-bottom: var(--space-8);
 }
 
 .header h1 {
@@ -39,42 +40,73 @@
     height: calc(var(--size-avatar) * 2);
 }
 
-.group + .group {
-    margin-top: var(--space-6);
+.section {
+    display: grid;
+    gap: var(--space-2);
 }
 
-.rule {
+.actionLabel {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    margin-bottom: var(--space-2);
-    color: var(--color-primary);
+    justify-content: space-between;
+    gap: var(--space-3);
+    width: 100%;
+}
+
+.actionShortcut {
+    color: var(--color-text-secondary);
     font-family: var(--font-family-mono);
     font-size: var(--font-size-xs);
-    letter-spacing: 0;
+}
+
+.sectionTitle {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.04em;
     text-transform: uppercase;
 }
 
-.rule::after {
-    flex: 1;
-    height: var(--border-width-sm);
-    content: "";
-    background: color-mix(in srgb, var(--color-primary), transparent 35%);
-}
-
-.recentProject {
+.actions {
     display: grid;
-    grid-template-columns: minmax(var(--space-0), 1fr) var(--size-control);
-    align-items: center;
+    gap: var(--space-2);
 }
 
-.recentProject:hover .recentRemove,
-.recentProject:focus-within .recentRemove {
+.recentList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-1);
+}
+
+.recentItem {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.recentButton {
+    width: 100%;
+    text-align: start;
+}
+
+.recentRemove {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.recentItem:hover .recentRemove,
+.recentItem:focus-within .recentRemove {
     opacity: 1;
     pointer-events: auto;
 }
 
 .empty {
+    margin: 0;
     padding: var(--space-2);
     color: var(--color-text-secondary);
     font-size: var(--font-size-sm);

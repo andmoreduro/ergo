@@ -1,6 +1,6 @@
 # UMB APA 7 (Typst)
 
-Typst template for **trabajos de grado** at Universidad Manuela Beltrán, aligned with the UMB Biblioteca *Guía resumida APA 7ª edición* (`guia-resumida-apa-septima-edicion-2024.pdf` in the Érgo repo root).
+Typst template for **trabajos de grado** at Universidad Manuela Beltrán, aligned with the UMB Biblioteca *Guía resumida APA 7ª edición* (`docs/guia-resumida-apa-septima-edicion-2024.pdf` in the Érgo repo).
 
 ## Compliance highlights
 
@@ -12,13 +12,13 @@ Typst template for **trabajos de grado** at Universidad Manuela Beltrán, aligne
 | Double spacing (§1.4) | `double-spacing` on paragraphs and headings |
 | Left-aligned text, no full justification (§2.1) | `justify: false` on `par` |
 | 0.5 in first-line indent; abstract without indent (§2.2) | Body + front-matter abstracts |
-| Five APA heading levels, no numbering (§4.1–4.2) | `numbering: none`; levels 4–6 run-in style |
+| UMB chapter/section numbering (guía) | Level 1: `Capítulo`/`Chapter` + Roman; 2–3: `1.1.` / `1.1.1.`; levels 4+ unnumbered run-in |
 | No separate “Introducción” heading (§4.3) | Body starts with document title as level 1 |
-| Portada + contra portada (UMB) | `front-matter.typ` (second cover without escudo) |
-| Resumen / Abstract + keywords | Bilingual front matter |
+| Portada + contra portada (UMB) | `cover-page.typ` via `front-matter.typ` orchestrator |
+| Resumen / Abstract + keywords | `abstract-block.typ` (bilingual front matter) |
 | Figure captions 10 pt, italic description (§10.2) | `figure.caption` at 10 pt |
-| Block quotes ≥ 40 words (§11.5.3) | `quote-word-trigger` |
-| References section label centered bold (§13) | Generated `#heading` before `#bibliography` |
+| Block quote layout (§11.5.3) | APA indent on `#quote(block: true)`; block vs inline from Érgo `quote_policy` |
+| References section label centered bold (§13) | `#bibliography(..., title: …)` (Typst bibliography title) |
 
 Front-matter order: **portada → contra portada → resumen/abstract → autoridades → agradecimientos → índice → cuerpo**.
 

@@ -1,22 +1,13 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-use include_dir::{include_dir, Dir, DirEntry};
 use tauri::State;
 
-/// The bundled `umb-apa` Typst package source (the editable copy under
-/// `typst_templates/umb-apa`). Embedded at build time so a project using the
-/// `umb-apa` template can `#import "/umb-apa/lib.typ"` without the package
-/// existing in any registry or cache.
-static UMB_APA_PACKAGE: Dir<'_> =
-    include_dir!("$CARGO_MANIFEST_DIR/../typst_templates/umb-apa");
-
-/// The bundled `versatile-apa` Typst package source (the copy under
-/// `typst_templates/versatile-apa`). Embedded at build time so a project using the
-/// `apa7` template can `#import "/versatile-apa/lib.typ"` without the package
-/// existing in any registry or cache.
-static VERSATILE_APA_PACKAGE: Dir<'_> =
-    include_dir!("$CARGO_MANIFEST_DIR/../typst_templates/versatile-apa");
+use ergo_core::bundled_templates::{
+    bundled_package_files_for_template, embedded_template_mounts_for_vfs,
+    is_path_under_template_mount,
+};
+use ergo_core::template_spec::load_bundled_template;
 
 use crate::app_state::TauriAppState;
 use crate::ast::DocumentAST;
@@ -32,11 +23,12 @@ pub fn save_project_to_path(state: &TauriAppState, path: impl AsRef<Path>) -> Re
         .read_source(".ergproj/document_state.json")
         .map_err(|_| "No active document session to save".to_string())?;
 
+    let template_mounts = embedded_template_mounts_for_vfs(&state.vfs);
     let mut files = state
         .vfs
         .get_all_files()
         .into_iter()
-        .filter(|(name, _)| should_pack_file(name))
+        .filter(|(name, _)| should_pack_file(name, &template_mounts))
         .collect::<Vec<_>>();
     files.sort_by(|(left, _), (right, _)| left.cmp(right));
 
@@ -124,18 +116,21 @@ pub fn open_project_from_path(
 }
 
 fn project_files_for_worker_bootstrap(vfs: &crate::vfs::VirtualFileSystem) -> Vec<ProjectFile> {
+    let template_mounts = embedded_template_mounts_for_vfs(vfs);
     let mut files = vfs
         .get_all_files()
         .into_iter()
-        .filter(|(path, _)| is_worker_bootstrap_file(path))
+        .filter(|(path, _)| should_pack_file(path, &template_mounts))
         .map(|(path, bytes)| ProjectFile { path, bytes })
         .collect::<Vec<_>>();
     files.sort_by(|left, right| left.path.cmp(&right.path));
     files
 }
 
-fn should_pack_file(path: &str) -> bool {
-    is_archive_metadata_file(path) || is_worker_bootstrap_file(path)
+fn should_pack_file(path: &str, template_mounts: &[String]) -> bool {
+    is_archive_metadata_file(path)
+        || is_worker_bootstrap_file(path)
+        || is_path_under_template_mount(path, template_mounts)
 }
 
 fn is_archive_metadata_file(path: &str) -> bool {
@@ -145,6 +140,7 @@ fn is_archive_metadata_file(path: &str) -> bool {
             | ".ergproj/dependency_manifest.json"
             | ".ergproj/project_settings.json"
             | ".ergproj/template.json"
+            | ".ergproj/template_spec.json"
             | ".ergproj/source_map.json"
             | ".ergproj/field_source_map.json"
     )
@@ -160,58 +156,20 @@ fn mirror_project_files_to_vfs(state: &TauriAppState, files: &[ProjectFile]) {
     }
 }
 
-/// Files of a locally-bundled template package, mounted under `<name>/…` in the
-/// VFS so the generated document can import them by path. `template/` (the
-/// package's own starter document) is skipped — only the compiled library and its
-/// assets are needed.
-fn bundled_package_files(package: &Dir<'_>, mount: &str) -> Vec<ProjectFile> {
-    fn walk(entry: &DirEntry<'_>, mount: &str, out: &mut Vec<ProjectFile>) {
-        match entry {
-            DirEntry::Dir(dir) => {
-                for child in dir.entries() {
-                    walk(child, mount, out);
-                }
-            }
-            DirEntry::File(file) => {
-                let rel = file.path().to_string_lossy().replace('\\', "/");
-                if rel.starts_with("template/") {
-                    return;
-                }
-                out.push(ProjectFile {
-                    path: format!("{mount}/{rel}"),
-                    bytes: file.contents().to_vec(),
-                });
-            }
-        }
-    }
-
-    let mut files = Vec::new();
-    for entry in package.entries() {
-        walk(entry, mount, &mut files);
-    }
-    files
-}
-
 #[tauri::command]
 pub fn load_template_package_files(
     state: State<'_, TauriAppState>,
     template_id: String,
 ) -> Result<Vec<ProjectFile>, String> {
     use ergo_core::package_resolver::PackageRef;
-    use ergo_core::template_spec::load_bundled_template;
 
-    // `umb-apa` is bundled with the app and imported by path (`/umb-apa/lib.typ`),
-    // not resolved from a registry/cache.
-    if template_id == "umb-apa" {
-        let files = bundled_package_files(&UMB_APA_PACKAGE, "umb-apa");
-        mirror_project_files_to_vfs(&state, &files);
-        return Ok(files);
-    }
-
-    if template_id == "apa7" {
-        let files = bundled_package_files(&VERSATILE_APA_PACKAGE, "versatile-apa");
-        mirror_project_files_to_vfs(&state, &files);
-        return Ok(files);
+    if let Some(files) = bundled_package_files_for_template(&template_id) {
+        let project_files: Vec<ProjectFile> = files
+            .into_iter()
+            .map(|(path, bytes)| ProjectFile { path, bytes })
+            .collect();
+        mirror_project_files_to_vfs(&state, &project_files);
+        return Ok(project_files);
     }
 
     let spec = load_bundled_template(&template_id)?;
@@ -300,10 +258,29 @@ mod tests {
         assert!(names.contains(".ergproj/dependency_manifest.json"));
         assert!(names.contains(".ergproj/project_settings.json"));
         assert!(names.contains(".ergproj/template.json"));
+        assert!(names.contains(".ergproj/template_spec.json"));
         assert!(names.contains(".ergproj/source_map.json"));
         assert!(names.contains(".ergproj/field_source_map.json"));
         assert!(!names.contains(".ergproj/preview/svg/page-1.svg"));
         assert!(!names.contains(".ergproj/exports/document.pdf"));
+    }
+
+    #[test]
+    fn save_project_embeds_template_package_and_spec_snapshot() {
+        let state = test_state();
+        state
+            .document_session
+            .sync_snapshot(basic_document_ast("Proyecto con ñ", "Resumen."))
+            .unwrap();
+        let path = temp_project_path();
+
+        save_project_to_path(&state, &path).unwrap();
+
+        let names = zip_names(&path);
+        fs::remove_file(&path).ok();
+
+        assert!(names.contains("versatile-apa/lib.typ"));
+        assert!(names.contains(".ergproj/template_spec.json"));
     }
 
     #[test]
@@ -441,13 +418,9 @@ mod tests {
             .map(|file| file.path)
             .collect::<HashSet<_>>();
 
-        assert_eq!(
-            bootstrap_paths,
-            HashSet::from([
-                "assets/image.png".to_string(),
-                "packages/preview/pkg/1.0.0/lib.typ".to_string(),
-            ]),
-        );
+        assert!(bootstrap_paths.contains("assets/image.png"));
+        assert!(bootstrap_paths.contains("packages/preview/pkg/1.0.0/lib.typ"));
+        assert!(bootstrap_paths.contains("versatile-apa/lib.typ"));
     }
 
     #[test]
@@ -481,8 +454,8 @@ mod tests {
 
     #[test]
     fn bundled_umb_apa_includes_lib_and_csl_but_not_starter() {
-        let files = bundled_package_files(&UMB_APA_PACKAGE, "umb-apa");
-        let paths: HashSet<String> = files.iter().map(|file| file.path.clone()).collect();
+        let files = bundled_package_files_for_template("umb-apa").expect("umb-apa package");
+        let paths: HashSet<String> = files.into_iter().map(|(path, _)| path).collect();
 
         assert!(paths.contains("umb-apa/lib.typ"), "missing lib.typ: {paths:?}");
         assert!(
@@ -490,18 +463,16 @@ mod tests {
             "missing bundled CSL: {paths:?}"
         );
         assert!(paths.iter().any(|path| path.starts_with("umb-apa/utils/")));
-        // The package's own starter document is not needed to compile a project.
         assert!(!paths.iter().any(|path| path.starts_with("umb-apa/template/")));
     }
 
     #[test]
     fn bundled_versatile_apa_includes_lib_but_not_starter() {
-        let files = bundled_package_files(&VERSATILE_APA_PACKAGE, "versatile-apa");
-        let paths: HashSet<String> = files.iter().map(|file| file.path.clone()).collect();
+        let files = bundled_package_files_for_template("apa7").expect("apa7 package");
+        let paths: HashSet<String> = files.into_iter().map(|(path, _)| path).collect();
 
         assert!(paths.contains("versatile-apa/lib.typ"), "missing lib.typ: {paths:?}");
         assert!(paths.iter().any(|path| path.starts_with("versatile-apa/utils/")));
-        // The package's own starter document is not needed to compile a project.
         assert!(!paths.iter().any(|path| path.starts_with("versatile-apa/template/")));
     }
 
