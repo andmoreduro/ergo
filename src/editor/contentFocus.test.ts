@@ -8,15 +8,15 @@ import {
 import { richTextFieldId } from "./fieldIds";
 import {
     createContentSection,
-    createDefaultDocumentAST,
     createHeading,
     createParagraph,
 } from "../state/ast/defaults";
+import { createTestDocumentAST } from "../test/documentAstFixture";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { DocumentElement } from "../bindings/DocumentElement";
 
 const astWithContent = (elements: DocumentElement[]): DocumentAST => ({
-    ...createDefaultDocumentAST(),
+    ...createTestDocumentAST(),
     sections: [
         {
             type: "Content",

@@ -1,12 +1,12 @@
-#import "utils/to-string.typ": to-string
 #import "utils/languages.typ": get-terms, language-terms
-#import "utils/authoring.typ": print-affiliations, print-authors
+#import "utils/abbreviations-page.typ": abbreviations-page
 #import "utils/appendix.typ": appendix, appendix-outline
 #import "utils/apa-figure.typ": apa-figure
-#import "utils/abstract.typ": abstract-page
-#import "utils/title.typ": title-page
 #import "utils/front-matter.typ": front-matter
-#import "utils/constants.typ": double-spacing, first-indent-length, quote-word-trigger
+#import "utils/symbols-page.typ": symbols-page
+#import "utils/umb-outlines.typ": umb-outlines
+#import "utils/constants.typ": double-spacing, first-indent-length
+#import "utils/headings.typ": chapter-numbering
 
 
 /// UMB graduate-work APA 7 (guía resumida Biblioteca UMB).
@@ -32,12 +32,6 @@
     margin: 1in,
   )
 
-  set par(
-    leading: double-spacing,
-    spacing: double-spacing,
-    justify: false,
-  )
-
   // Show-set rules are at least, easier to override compared to show-function
   // https://github.com/typst/typst/discussions/2883
   show link: set text(fill: blue)
@@ -46,6 +40,12 @@
   show heading: set text(size: font-size)
   show heading: set block(spacing: double-spacing)
   set heading(numbering: none)
+
+  // Body chapters only (`outlined: true`): level 1 "Capítulo I:", 2 → 1.1., 3 → 1.1.1.
+  // Front matter, `#outline` titles, and `numbering: none` headings stay unnumbered.
+  show heading.where(level: 1, outlined: true): set heading(numbering: chapter-numbering)
+  show heading.where(level: 2, outlined: true): set heading(numbering: chapter-numbering)
+  show heading.where(level: 3, outlined: true): set heading(numbering: chapter-numbering)
 
   show heading.where(level: 1): set align(center)
   show heading.where(level: 3).or(heading.where(level: 5)).or(heading.where(level: 6)): set text(
@@ -56,11 +56,13 @@
   ]
 
   set par(
+    leading: double-spacing,
+    spacing: double-spacing,
+    justify: false,
     first-line-indent: (
       amount: first-indent-length,
       all: true,
     ),
-    leading: double-spacing,
   )
 
   show table.cell: set par(leading: 1em)
@@ -125,34 +127,17 @@
 
   set math.equation(numbering: "(1)")
 
+  // Block vs inline comes from generated `#quote(block: …)` (template `quote_policy`); style block quotes only.
   show quote.where(block: true): set block(spacing: double-spacing)
-
-  show quote: it => context {
-    let quote-text-words = to-string(it.body).split(regex("\\s+")).filter(word => word != "").len()
-
-    // https://apastyle.apa.org/style-grammar-guidelines/citations/quotations
-    if quote-text-words < quote-word-trigger.get() {
-      ["#it.body" ]
-
-      if (type(it.attribution) == label) {
-        cite(it.attribution)
-      } else if (
-        type(it.attribution) == str or type(it.attribution) == content
-      ) {
-        it.attribution
-      }
-    } else {
-      block(inset: (left: 0.5in))[
-        #set par(first-line-indent: 0.5in)
-        #it.body
-        #if (type(it.attribution) == label) {
-          cite(it.attribution)
-        } else if (type(it.attribution) == str or type(it.attribution) == content) {
-          it.attribution
-        }
-      ]
+  show quote.where(block: true): it => block(inset: (left: 0.5in))[
+    #set par(first-line-indent: 0.5in)
+    #it.body
+    #if type(it.attribution) == label {
+      cite(it.attribution)
+    } else if type(it.attribution) == str or type(it.attribution) == content {
+      it.attribution
     }
-  }
+  ]
 
   show outline.entry: it => context {
     if (
@@ -190,6 +175,15 @@
     }
 
     bib-it
+  }
+
+  show ref: it => {
+    let el = it.element
+    if el != none and el.func() == heading and el.numbering == none {
+      link(it.target, el.body)
+    } else {
+      it
+    }
   }
 
   body

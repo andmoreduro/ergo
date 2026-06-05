@@ -1,41 +1,61 @@
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
+
+import { Delete24Regular } from "@fluentui/react-icons";
+
+import { BibliographyPanelContext } from "../../../actions/contexts/BibliographyPanelContext";
+import { TauriApi } from "../../../api/tauri";
 import type { ReferenceEntry } from "../../../bindings/ReferenceEntry";
 import {
-    bibliographyEntryTypeOptions,
-    bibliographyFieldImportance,
-    bibliographySecondaryField,
-    bibliographySecondaryFieldLabel,
+    compareBibliographyEntries,
     emptyReferenceFormValue,
+    formValueFromLookupBiblatex,
     formValueFromReference,
     formatReferenceCitation,
+    referenceAuthorFieldImportance,
+    referenceFieldLabel,
+    referenceFieldsForEntryType,
+    referenceFormFieldImportance,
     referenceFromFormValue,
+    sortedBibliographyEntryTypeLabels,
     validateReferenceForm,
-    type BibliographyEntryType,
     type BibliographyValidationCode,
+    type ReferenceFieldKey,
     type ReferenceFormValue,
 } from "../../../bibliography/biblatex";
 import { useDocument } from "../../../state/DocumentContext";
-import { useActionDispatcher } from "../../../actions/runtime";
 import { createId } from "../../../state/ast/defaults";
 import { Button } from "../../atoms/Button/Button";
+import { IconButton } from "../../atoms/IconButton/IconButton";
+import { Combobox } from "../../atoms/Combobox/Combobox";
 import { NavItemButton } from "../../atoms/NavItemButton/NavItemButton";
-import { Select } from "../../atoms/Select/Select";
-import { Textarea } from "../../atoms/Textarea/Textarea";
 import { TextInput } from "../../atoms/TextInput/TextInput";
+import { ReferenceAuthorsField } from "../../molecules/ReferenceAuthorsField/ReferenceAuthorsField";
 import { m } from "../../../paraglide/messages.js";
+import { getLocale } from "../../../paraglide/runtime.js";
 import { SidebarResourceDialog } from "./SidebarResourceDialog";
 import styles from "./Sidebar.module.css";
+
+type CreatePhase = "lookup" | "manual";
 
 type ReferenceDraft = {
     id: string;
     mode: "create" | "edit";
     form: ReferenceFormValue;
+    createPhase?: CreatePhase;
+    lookupQuery?: string;
+    lookupError?: string | null;
+    lookupLoading?: boolean;
 };
 
 export const SidebarBibliographyPanel = memo(
-    ({ references }: { references: ReferenceEntry[] }) => {
+    ({
+        references,
+        zoteroTranslationServerEnabled = false,
+    }: {
+        references: ReferenceEntry[];
+        zoteroTranslationServerEnabled?: boolean;
+    }) => {
         const { dispatch } = useDocument();
-        const dispatchAction = useActionDispatcher();
         const [draft, setDraft] = useState<ReferenceDraft | null>(null);
         const [validationError, setValidationError] = useState<string | null>(
             null,
@@ -55,20 +75,35 @@ export const SidebarBibliographyPanel = memo(
                     return m.bibliography_required_booktitle();
                 case "publisher":
                     return m.bibliography_required_publisher();
+                case "institution":
+                    return m.bibliography_required_institution();
+                case "number":
+                    return m.bibliography_required_number();
             }
         };
 
-        const updateDraftField = <K extends keyof ReferenceFormValue>(
-            field: K,
-            value: ReferenceFormValue[K],
-        ) => {
+        const updateDraftForm = (nextForm: ReferenceFormValue) => {
+            setDraft((current) =>
+                current
+                    ? {
+                          ...current,
+                          form: nextForm,
+                      }
+                    : current,
+            );
+        };
+
+        const updateDraftField = (field: ReferenceFieldKey, value: string) => {
             setDraft((current) =>
                 current
                     ? {
                           ...current,
                           form: {
                               ...current.form,
-                              [field]: value,
+                              fields: {
+                                  ...current.form.fields,
+                                  [field]: value,
+                              },
                           },
                       }
                     : current,
@@ -76,26 +111,102 @@ export const SidebarBibliographyPanel = memo(
         };
 
         const startCreate = () => {
-            void dispatchAction({ id: "bibliography::CreateEntry", payload: null });
             setValidationError(null);
             setDraft({
                 id: createId(),
                 mode: "create",
                 form: emptyReferenceFormValue(),
+                createPhase: zoteroTranslationServerEnabled ? "lookup" : "manual",
+                lookupQuery: "",
+                lookupError: null,
+                lookupLoading: false,
             });
         };
 
         const startEdit = (reference: ReferenceEntry) => {
-            void dispatchAction({
-                id: "bibliography::OpenEntry",
-                payload: { referenceId: reference.id },
-            });
             setValidationError(null);
             setDraft({
                 id: reference.id,
                 mode: "edit",
                 form: formValueFromReference(reference),
+                createPhase: "manual",
             });
+        };
+
+        const openManualForm = () => {
+            setDraft((current) =>
+                current?.mode === "create"
+                    ? {
+                          ...current,
+                          createPhase: "manual",
+                          lookupError: null,
+                          lookupLoading: false,
+                      }
+                    : current,
+            );
+            setValidationError(null);
+        };
+
+        const runLookup = async () => {
+            if (!draft || draft.mode !== "create" || draft.createPhase !== "lookup") {
+                return;
+            }
+
+            const query = draft.lookupQuery?.trim() ?? "";
+            if (!query) {
+                return;
+            }
+
+            setDraft((current) =>
+                current
+                    ? {
+                          ...current,
+                          lookupLoading: true,
+                          lookupError: null,
+                      }
+                    : current,
+            );
+
+            try {
+                const biblatex = await TauriApi.lookupBibliographyMetadata(query);
+                const form = biblatex ? formValueFromLookupBiblatex(biblatex) : null;
+
+                if (!form) {
+                    setDraft((current) =>
+                        current
+                            ? {
+                                  ...current,
+                                  lookupLoading: false,
+                                  lookupError: m.bibliography_lookup_not_found(),
+                              }
+                            : current,
+                    );
+                    return;
+                }
+
+                setDraft((current) =>
+                    current
+                        ? {
+                              ...current,
+                              form,
+                              createPhase: "manual",
+                              lookupLoading: false,
+                              lookupError: null,
+                          }
+                        : current,
+                );
+                setValidationError(null);
+            } catch {
+                setDraft((current) =>
+                    current
+                        ? {
+                              ...current,
+                              lookupLoading: false,
+                              lookupError: m.bibliography_lookup_not_found(),
+                          }
+                        : current,
+                );
+            }
         };
 
         const saveDraft = () => {
@@ -111,10 +222,6 @@ export const SidebarBibliographyPanel = memo(
 
             setValidationError(null);
             const reference = referenceFromFormValue(draft.id, draft.form);
-            void dispatchAction({
-                id: "bibliography::SaveEntry",
-                payload: { mode: draft.mode, referenceId: draft.id },
-            });
             dispatch({
                 type: draft.mode === "create" ? "ADD_REFERENCE" : "UPDATE_REFERENCE",
                 payload: { reference },
@@ -127,10 +234,6 @@ export const SidebarBibliographyPanel = memo(
                 return;
             }
 
-            void dispatchAction({
-                id: "bibliography::RemoveEntry",
-                payload: { referenceId: draft.id },
-            });
             dispatch({
                 type: "REMOVE_REFERENCE",
                 payload: { referenceId: draft.id },
@@ -138,18 +241,38 @@ export const SidebarBibliographyPanel = memo(
             setDraft(null);
         };
 
-        const secondaryField = draft
-            ? bibliographySecondaryField(draft.form.entryType)
-            : "none";
-        const secondaryLabel = draft
-            ? bibliographySecondaryFieldLabel(draft.form.entryType)
-            : null;
+        const locale = getLocale();
+        const sortedReferences = useMemo(
+            () =>
+                [...references].sort((left, right) =>
+                    compareBibliographyEntries(left, right, locale),
+                ),
+            [references, locale],
+        );
+        const entryTypeOptions = useMemo(
+            () => sortedBibliographyEntryTypeLabels(locale),
+            [locale],
+        );
+        const selectedEntryTypeLabel =
+            entryTypeOptions.find((option) => option.value === draft?.form.entryType)
+                ?.label ?? "";
+
+        const formFieldSpecs = draft
+            ? referenceFieldsForEntryType(draft.form.entryType)
+            : [];
+
+        const isLookupPhase =
+            zoteroTranslationServerEnabled &&
+            draft?.mode === "create" &&
+            draft.createPhase === "lookup";
+        const lookupQuery = draft?.lookupQuery ?? "";
 
         return (
+            <BibliographyPanelContext>
             <div className={styles.referencePanel}>
-                {references.length > 0 ? (
+                {sortedReferences.length > 0 ? (
                     <div className={styles.navList}>
-                        {references.map((reference) => (
+                        {sortedReferences.map((reference) => (
                             <NavItemButton
                                 variant="sidebar"
                                 key={reference.id}
@@ -181,122 +304,137 @@ export const SidebarBibliographyPanel = memo(
                         cancelAction={{
                             label: m.bibliography_cancel(),
                             onClick: () => {
-                                void dispatchAction({
-                                    id: "bibliography::CancelEdit",
-                                    payload: null,
-                                });
                                 setDraft(null);
                             },
                         }}
-                        confirmAction={{
-                            label: m.bibliography_save(),
-                            onClick: saveDraft,
-                        }}
+                        confirmAction={
+                            isLookupPhase
+                                ? {
+                                      label: m.bibliography_lookup(),
+                                      disabled:
+                                          draft.lookupLoading ||
+                                          lookupQuery.trim().length === 0,
+                                      onClick: () => {
+                                          void runLookup();
+                                      },
+                                  }
+                                : {
+                                      label: m.bibliography_save(),
+                                      onClick: saveDraft,
+                                  }
+                        }
+                        headerAction={
+                            draft.mode === "edit" ? (
+                                <IconButton
+                                    type="button"
+                                    title={m.bibliography_remove()}
+                                    aria-label={m.bibliography_remove()}
+                                    onClick={removeDraft}
+                                >
+                                    <Delete24Regular />
+                                </IconButton>
+                            ) : undefined
+                        }
                     >
-                        <Select
-                            fullWidth
-                            label={m.references_type()}
-                            importance={bibliographyFieldImportance(draft.form, "entryType")}
-                            options={bibliographyEntryTypeOptions()}
-                            value={draft.form.entryType}
-                            onChange={(event) =>
-                                updateDraftField(
-                                    "entryType",
-                                    event.target.value as BibliographyEntryType,
-                                )
-                            }
-                        />
-                        <TextInput
-                            fullWidth
-                            label={m.references_title()}
-                            importance={bibliographyFieldImportance(draft.form, "title")}
-                            value={draft.form.title}
-                            onChange={(event) =>
-                                updateDraftField("title", event.target.value)
-                            }
-                        />
-                        <Textarea
-                            fullWidth
-                            label={m.references_authors()}
-                            importance={bibliographyFieldImportance(draft.form, "authors")}
-                            value={draft.form.authors}
-                            onChange={(event) =>
-                                updateDraftField("authors", event.target.value)
-                            }
-                        />
-                        <TextInput
-                            fullWidth
-                            label={m.references_year()}
-                            importance={bibliographyFieldImportance(draft.form, "year")}
-                            value={draft.form.year}
-                            onChange={(event) =>
-                                updateDraftField("year", event.target.value)
-                            }
-                        />
-                        {secondaryField === "containerTitle" && secondaryLabel && (
-                            <TextInput
-                                fullWidth
-                                label={secondaryLabel}
-                                importance={bibliographyFieldImportance(
-                                    draft.form,
-                                    "containerTitle",
-                                )}
-                                value={draft.form.containerTitle}
-                                onChange={(event) =>
-                                    updateDraftField("containerTitle", event.target.value)
-                                }
-                            />
+                        {isLookupPhase ? (
+                            <>
+                                <TextInput
+                                    fullWidth
+                                    aria-label={m.bibliography_lookup()}
+                                    placeholder={m.bibliography_lookup_placeholder()}
+                                    disabled={draft.lookupLoading}
+                                    value={lookupQuery}
+                                    onChange={(event) => {
+                                        const nextQuery = event.target.value;
+                                        setDraft((current) =>
+                                            current
+                                                ? {
+                                                      ...current,
+                                                      lookupQuery: nextQuery,
+                                                      lookupError: null,
+                                                  }
+                                                : current,
+                                        );
+                                    }}
+                                />
+                                <div className={styles.referenceActions}>
+                                    <Button
+                                        fullWidth
+                                        size="small"
+                                        type="button"
+                                        variant="secondary"
+                                        disabled={draft.lookupLoading}
+                                        onClick={openManualForm}
+                                    >
+                                        {m.bibliography_cite_manually()}
+                                    </Button>
+                                </div>
+                                {draft.lookupError ? (
+                                    <p className={styles.referenceError} role="alert">
+                                        {draft.lookupError}
+                                    </p>
+                                ) : null}
+                            </>
+                        ) : (
+                            <>
+                                <Combobox
+                                    fullWidth
+                                    label={m.references_type()}
+                                    options={entryTypeOptions.map(
+                                        (option) => option.label,
+                                    )}
+                                    placeholder={m.references_type_search()}
+                                    noResultsLabel={m.references_type_no_results()}
+                                    value={selectedEntryTypeLabel}
+                                    onChange={(label) => {
+                                        const match = entryTypeOptions.find(
+                                            (option) => option.label === label,
+                                        );
+                                        if (match) {
+                                            updateDraftForm({
+                                                ...draft.form,
+                                                entryType: match.value,
+                                            });
+                                        }
+                                    }}
+                                />
+                                <ReferenceAuthorsField
+                                    label={m.references_authors()}
+                                    importance={referenceAuthorFieldImportance()}
+                                    authors={draft.form.authors}
+                                    onChange={(authors) =>
+                                        updateDraftForm({ ...draft.form, authors })
+                                    }
+                                />
+                                {formFieldSpecs.map((spec) => (
+                                    <TextInput
+                                        fullWidth
+                                        key={`${draft.form.entryType}-${spec.key}`}
+                                        label={referenceFieldLabel(spec.key)}
+                                        importance={referenceFormFieldImportance(
+                                            draft.form.entryType,
+                                            spec.key,
+                                        )}
+                                        value={draft.form.fields[spec.key] ?? ""}
+                                        onChange={(event) =>
+                                            updateDraftField(
+                                                spec.key,
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                ))}
+                                {validationError ? (
+                                    <p className={styles.referenceError} role="alert">
+                                        {validationError}
+                                    </p>
+                                ) : null}
+                            </>
                         )}
-                        {secondaryField === "publisher" && (
-                            <TextInput
-                                fullWidth
-                                label={secondaryLabel ?? m.references_publisher()}
-                                importance={bibliographyFieldImportance(
-                                    draft.form,
-                                    "publisher",
-                                )}
-                                value={draft.form.publisher}
-                                onChange={(event) =>
-                                    updateDraftField("publisher", event.target.value)
-                                }
-                            />
-                        )}
-                        <TextInput
-                            fullWidth
-                            label={m.references_doi()}
-                            importance={bibliographyFieldImportance(draft.form, "doi")}
-                            value={draft.form.doi}
-                            onChange={(event) =>
-                                updateDraftField("doi", event.target.value)
-                            }
-                        />
-                        <TextInput
-                            fullWidth
-                            label={m.references_url()}
-                            importance={bibliographyFieldImportance(draft.form, "url")}
-                            value={draft.form.url}
-                            onChange={(event) =>
-                                updateDraftField("url", event.target.value)
-                            }
-                        />
-                        {validationError && (
-                            <p className={styles.referenceError} role="alert">
-                                {validationError}
-                            </p>
-                        )}
-                        {draft.mode === "edit" ? (
-                            <Button
-                                size="small"
-                                type="button"
-                                variant="danger"
-                                onClick={removeDraft}
-                            >
-                                {m.bibliography_remove()}
-                            </Button>
-                        ) : null}
                     </SidebarResourceDialog>
                 )}
             </div>
+            </BibliographyPanelContext>
         );
     },
 );

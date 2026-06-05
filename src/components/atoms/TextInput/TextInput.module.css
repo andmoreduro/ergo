@@ -167,3 +167,9 @@
   outline-offset: var(--outline-offset-sm);
   box-shadow: none;
 }
+
+.compact .input {
+  min-height: var(--size-control-sm);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+}

@@ -371,5 +371,6 @@ fn rich_text(text: &str) -> RichText {
         reference_id: None,
         equation_source: None,
         equation_syntax: EquationSyntax::Typst,
+        ..Default::default()
     }
 }

@@ -1,6 +1,7 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { ResolvedPos } from "prosemirror-model";
 import type { EditorState } from "prosemirror-state";
+import type { Command } from "prosemirror-state";
 import { NodeSelection, TextSelection } from "prosemirror-state";
 import { selectionCell, TableMap } from "prosemirror-tables";
 import {
@@ -10,7 +11,10 @@ import {
     richTextFieldId,
     tableCellFieldId,
 } from "../../fieldIds";
+import { parseListItemFieldPath } from "../../listFieldPath";
 import { fieldCaretOffsetFromNode, pmPosForFieldCaret } from "../astBridge";
+import { listItemPathFromPosition } from "../listPath";
+import { locateListItemField } from "../selection";
 import type { BodyFocusTarget } from "../selection";
 
 export interface TableCellCoords {
@@ -18,6 +22,141 @@ export interface TableCellCoords {
     col: number;
     cellNode: PMNode;
 }
+
+const CELL_BLOCK_TYPES = new Set(["paragraph", "quote", "list", "equation"]);
+
+/** Index of the cellblock (paragraph, quote, list, equation) containing the caret. */
+export const cellBlockAtSelection = (
+    state: EditorState,
+): { cell: PMNode; blockIndex: number } | null => {
+    if (!tableCellCoordsFromChildState(state)) {
+        return null;
+    }
+    const $head = state.selection.$head;
+    for (let depth = $head.depth; depth > 0; depth -= 1) {
+        const node = $head.node(depth);
+        if (node.type.name === "list_item") {
+            continue;
+        }
+        if (!CELL_BLOCK_TYPES.has(node.type.name)) {
+            continue;
+        }
+        const parent = $head.node(depth - 1);
+        if (parent.type.name !== "table_cell") {
+            continue;
+        }
+        return { cell: parent, blockIndex: $head.index(depth - 1) };
+    }
+    return null;
+};
+
+/** Move the caret between cellblock siblings inside one table cell. */
+export const arrowBetweenCellBlocks = (direction: 1 | -1): Command => {
+    return (state, dispatch, view) => {
+        if (!(state.selection instanceof TextSelection) || !state.selection.empty) {
+            return false;
+        }
+        const blockCtx = cellBlockAtSelection(state);
+        if (!blockCtx) {
+            return false;
+        }
+        const { cell, blockIndex } = blockCtx;
+        const nextIndex = blockIndex + direction;
+        if (nextIndex < 0 || nextIndex >= cell.childCount) {
+            return false;
+        }
+
+        if (view) {
+            const atBoundary =
+                direction > 0
+                    ? view.endOfTextblock("down")
+                    : view.endOfTextblock("up");
+            if (!atBoundary) {
+                return false;
+            }
+        }
+
+        const $head = state.selection.$head;
+        let cellDepth = -1;
+        for (let depth = $head.depth; depth > 0; depth -= 1) {
+            if ($head.node(depth).type.name === "table_cell") {
+                cellDepth = depth;
+                break;
+            }
+        }
+        if (cellDepth < 0) {
+            return false;
+        }
+
+        const cellStart = $head.before(cellDepth);
+        let blockPos = cellStart + 1;
+        for (let index = 0; index < nextIndex; index += 1) {
+            blockPos += cell.child(index).nodeSize;
+        }
+        const target = cell.child(nextIndex);
+
+        if (target.type.name === "equation") {
+            if (dispatch) {
+                dispatch(
+                    state.tr
+                        .setSelection(NodeSelection.create(state.doc, blockPos))
+                        .scrollIntoView(),
+                );
+            }
+            return true;
+        }
+
+        const bias = direction > 0 ? 1 : -1;
+        const $inside = state.doc.resolve(blockPos + 1);
+        const nextSel = TextSelection.findFrom($inside, bias, true);
+        if (!nextSel) {
+            return false;
+        }
+        if (dispatch) {
+            dispatch(state.tr.setSelection(nextSel).scrollIntoView());
+        }
+        return true;
+    };
+};
+
+export const defaultFirstCellFocusTarget = (
+    doc: PMNode,
+    tableId: string,
+): BodyFocusTarget => {
+    const table = tableNodeInChildDoc(doc);
+    if (!table) {
+        return {
+            elementId: tableId,
+            fieldId: tableCellFieldId(tableId, 0, 0),
+            caretUtf16Offset: 0,
+        };
+    }
+    const map = TableMap.get(table);
+    const cellPos = 1 + map.positionAt(0, 0, table);
+    const cellNode = doc.resolve(cellPos).nodeAfter;
+    if (!cellNode || cellNode.type.name !== "table_cell") {
+        return {
+            elementId: tableId,
+            fieldId: tableCellFieldId(tableId, 0, 0),
+            caretUtf16Offset: 0,
+        };
+    }
+    for (let index = 0; index < cellNode.childCount; index += 1) {
+        const block = cellNode.child(index);
+        if (block.type.name === "paragraph") {
+            return {
+                elementId: tableId,
+                fieldId: richTextFieldId(block.attrs.elementId as string),
+                caretUtf16Offset: 0,
+            };
+        }
+    }
+    return {
+        elementId: tableId,
+        fieldId: tableCellFieldId(tableId, 0, 0),
+        caretUtf16Offset: 0,
+    };
+};
 
 const blockFieldLength = (block: PMNode): number => {
     if (block.type.name === "equation") {
@@ -64,10 +203,9 @@ const previewTargetForBlock = (
         };
     }
     if (block.type.name === "list") {
-        const itemIndex = $head.index($head.depth - 1);
         return {
             elementId,
-            fieldId: listItemFieldId(elementId, itemIndex),
+            fieldId: listItemFieldId(elementId, listItemPathFromPosition($head)),
             caretUtf16Offset,
         };
     }
@@ -122,17 +260,20 @@ const tableNodeInChildDoc = (doc: PMNode): PMNode | null => {
 };
 
 /**
- * True when the child-table selection has escaped its cells onto the whole
- * `table` node. `prosemirror-tables`' arrow navigation produces this at the
- * table's outer edge (top row + ArrowUp, last cell + ArrowRight, …): with no
- * adjacent cell it falls back to `Selection.near` at the sub-doc boundary,
- * which — since the sub-doc holds only the table — resolves to a `NodeSelection`
- * on the table. Left as-is the caret vanishes and typing replaces the table, so
- * the NodeView treats this as a request to exit fine-grained mode.
+ * True when the nested-table caret is no longer inside a cell. Arrow navigation
+ * at the grid rim (including Ctrl/Cmd+arrow) can land on a whole-table
+ * `NodeSelection` or a doc-level caret outside cells; reject those updates so
+ * typing does not replace the table.
  */
 export const isTableEscapeSelection = (state: EditorState): boolean => {
+    if (!tableNodeInChildDoc(state.doc)) {
+        return false;
+    }
     const sel = state.selection;
-    return sel instanceof NodeSelection && sel.node.type.name === "table";
+    if (sel instanceof NodeSelection && sel.node.type.name === "table") {
+        return true;
+    }
+    return tableCellCoordsFromChildState(state) === null;
 };
 
 export const tableCellCoordsFromChildState = (
@@ -193,7 +334,15 @@ export const parseTableCellFieldId = (
 const paragraphIdFromRichField = (fieldId: string): string | null =>
     fieldId.endsWith(":text") ? fieldId.slice(0, -":text".length) : null;
 
-const findBlockInCell = (cellNode: PMNode, fieldId: string | null): PMNode | null => {
+const findBlockInCell = (
+    cellNode: PMNode,
+    fieldId: string | null,
+    tableId?: string,
+): PMNode | null => {
+    if (fieldId && tableId && parseTableCellFieldId(fieldId, tableId)) {
+        return cellNode.firstChild ?? null;
+    }
+
     if (!fieldId) {
         return cellNode.firstChild ?? null;
     }
@@ -220,21 +369,23 @@ const findBlockInCell = (cellNode: PMNode, fieldId: string | null): PMNode | nul
         return match;
     }
 
-    const itemMatch = fieldId.match(/^(.+):item:(\d+)$/);
+    const itemMatch = fieldId.match(/^(.+):item:([\d:]+)$/);
     if (itemMatch) {
         const listId = itemMatch[1];
-        const itemIndex = Number(itemMatch[2]);
+        const path = itemMatch[2].split(":").map(Number);
         let match: PMNode | null = null;
         cellNode.forEach((block) => {
-            if (
-                block.type.name === "list" &&
-                block.attrs.elementId === listId &&
-                block.child(itemIndex)
-            ) {
+            if (block.type.name === "list" && block.attrs.elementId === listId) {
                 match = block;
             }
         });
-        return match;
+        if (match && path.length === 1 && match.child(path[0])) {
+            return match;
+        }
+        if (match) {
+            return match;
+        }
+        return null;
     }
 
     if (fieldId.endsWith(":latexSource")) {
@@ -273,13 +424,28 @@ const selectionPosInCell = (
     cellNode: PMNode,
     fieldId: string | null,
     caretUtf16: number,
+    tableId?: string,
 ): number => {
-    const block = findBlockInCell(cellNode, fieldId);
+    const block = findBlockInCell(cellNode, fieldId, tableId);
     if (block) {
         let pos = 0;
         for (let index = 0; index < cellNode.childCount; index += 1) {
             const child = cellNode.child(index);
             if (child === block) {
+                const listId = block.attrs.elementId as string;
+                const itemPath =
+                    listId && fieldId
+                        ? parseListItemFieldPath(fieldId, listId)
+                        : null;
+                if (itemPath && block.type.name === "list") {
+                    const located = locateListItemField(block, pos + 1, itemPath);
+                    if (located) {
+                        return (
+                            located.contentStart +
+                            pmPosForFieldCaret(located.fieldNode, caretUtf16)
+                        );
+                    }
+                }
                 return pos + 2 + pmPosForFieldCaret(block, caretUtf16);
             }
             pos += child.nodeSize;
@@ -303,6 +469,7 @@ export const selectionInChildTableForFocus = (
                 located.cellNode,
                 target.fieldId,
                 target.caretUtf16Offset ?? 0,
+                target.elementId,
             );
             return TextSelection.create(doc, located.cellPos + offset);
         }
@@ -326,6 +493,7 @@ export const selectionInChildTableForFocus = (
         cellNode,
         target.fieldId,
         target.caretUtf16Offset ?? 0,
+        target.elementId,
     );
     return TextSelection.create(doc, cellPos + offset);
 };
@@ -350,7 +518,7 @@ const locateTableCellFromInnerField = (
             if (!cellNode || cellNode.type.name !== "table_cell") {
                 continue;
             }
-            if (findBlockInCell(cellNode, target.fieldId)) {
+            if (findBlockInCell(cellNode, target.fieldId, target.elementId)) {
                 return { cellNode, cellPos };
             }
         }

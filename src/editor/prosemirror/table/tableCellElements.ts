@@ -1,7 +1,14 @@
 import type { DocumentElement } from "../../../bindings/DocumentElement";
+import type { ListItem } from "../../../bindings/ListItem";
 import type { TableCell } from "../../../bindings/TableCell";
 import { quoteContentFieldId, richTextFieldId } from "../../fieldIds";
+import { parseListItemFieldPath } from "../../listFieldPath";
 import { createParagraph } from "../../../state/ast/defaults";
+import {
+    getListItemAtPath,
+    listItemPlainLength,
+    updateListItemAtPath,
+} from "../../../state/ast/listItem";
 import { richTextPlainLength } from "../../../richText/richText";
 import type { RichText } from "../../../bindings/RichText";
 
@@ -13,8 +20,46 @@ const richTextFieldLength = (content: readonly RichText[]): number =>
         if (span.kind === "inlineEquation") {
             return total + (span.equation_source ?? "").length;
         }
+        if (span.kind === "quote") {
+            return total + span.text.length;
+        }
         return total + span.text.length;
     }, 0);
+
+const updateListItemsAtOffset = (
+    items: ListItem[],
+    offset: number,
+    updater: (content: RichText[], localOffset: number) => RichText[],
+): { items: ListItem[]; consumed: boolean; remaining: number } => {
+    let remaining = offset;
+    let consumed = false;
+    const mapped = items.map((item) => {
+        if (consumed) {
+            return item;
+        }
+        const contentLen = richTextPlainLength(item.content);
+        if (remaining <= contentLen) {
+            consumed = true;
+            return { ...item, content: updater(item.content, remaining) };
+        }
+        remaining -= contentLen;
+        if (item.children.length > 0) {
+            const nested = updateListItemsAtOffset(
+                item.children,
+                remaining,
+                updater,
+            );
+            if (nested.consumed) {
+                consumed = true;
+                remaining = nested.remaining;
+                return { ...item, children: nested.items };
+            }
+            remaining = nested.remaining;
+        }
+        return item;
+    });
+    return { items: mapped, consumed, remaining };
+};
 
 /** UTF-16 field length of one block inside a table cell (matches source-map widths). */
 export const tableCellBlockFieldLength = (element: DocumentElement): number => {
@@ -25,7 +70,7 @@ export const tableCellBlockFieldLength = (element: DocumentElement): number => {
         case "List":
         case "Enumeration":
             return element.items.reduce(
-                (sum, item) => sum + richTextPlainLength(item),
+                (sum, item) => sum + listItemPlainLength(item),
                 0,
             );
         case "Equation":
@@ -87,23 +132,20 @@ export const updateTableCellRichTextAtField = (
             };
         }
         if (element.type === "List" || element.type === "Enumeration") {
-            const prefix = `${element.id}:item:`;
-            if (!fieldId.startsWith(prefix)) {
+            const path = parseListItemFieldPath(fieldId, element.id);
+            if (!path) {
                 return element;
             }
-            const itemIndex = Number(fieldId.slice(prefix.length));
-            if (!Number.isInteger(itemIndex) || itemIndex >= element.items.length) {
+            const item = getListItemAtPath(element.items, path);
+            if (!item) {
                 return element;
             }
-            const items = element.items.map((item, index) => {
-                if (index !== itemIndex) {
-                    return item;
-                }
-                const offset =
-                    caretOffset ?? richTextPlainLength(item);
-                return updater(item, offset);
-            });
-            return { ...element, items };
+            const offset = caretOffset ?? richTextPlainLength(item.content);
+            const content = updater(item.content, offset);
+            return {
+                ...element,
+                items: updateListItemAtPath(element.items, path, content),
+            };
         }
         return element;
     });
@@ -130,22 +172,16 @@ export const updateTableCellRichTextAtOffset = (
         }
         if (element.type === "List" || element.type === "Enumeration") {
             const length = element.items.reduce(
-                (sum, item) => sum + richTextPlainLength(item),
+                (sum, item) => sum + listItemPlainLength(item),
                 0,
             );
             if (remaining <= length) {
-                let itemRemaining = remaining;
-                const items = element.items.map((item) => {
-                    const itemLen = richTextPlainLength(item);
-                    if (itemRemaining <= itemLen) {
-                        const next = updater(item, itemRemaining);
-                        itemRemaining = itemLen;
-                        return next;
-                    }
-                    itemRemaining -= itemLen;
-                    return item;
-                });
-                return { ...element, items };
+                const updated = updateListItemsAtOffset(
+                    element.items,
+                    remaining,
+                    updater,
+                );
+                return { ...element, items: updated.items };
             }
             remaining -= length;
         }

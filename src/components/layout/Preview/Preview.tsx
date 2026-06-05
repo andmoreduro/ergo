@@ -13,6 +13,10 @@ import {
 import { usePreviewSync } from "../../../hooks/usePreviewSync";
 import { usePreviewZoomInput } from "../../../hooks/usePreviewZoomInput";
 import {
+    clearPreviewPointerAnchor,
+    updatePreviewPointerAnchor,
+} from "../../../preview/previewPointerAnchor";
+import {
     pageSurfaceLayoutStyle,
     previewPageDisplaySizeStyle,
     setPreviewPageMetrics,
@@ -31,6 +35,7 @@ import { isDebugMenuEnabled } from "../../../config/debug";
 import { useDocumentFocusSelector } from "../../../state/DocumentContext";
 import type { useCompiler } from "../../../hooks/useCompiler";
 import { useActionDispatcher } from "../../../actions/runtime";
+import { PreviewContext } from "../../../actions/contexts/PreviewContext";
 import type { ExportFormat } from "../../../bindings/ExportFormat";
 import { m } from "../../../paraglide/messages.js";
 import {
@@ -43,7 +48,6 @@ import {
     PREVIEW_ZOOM_MIN,
     type PreviewPageSize,
     type PreviewZoomMode,
-    stepPreviewZoom,
 } from "../../../preview/previewZoom";
 import { IconButton } from "../../atoms/IconButton/IconButton";
 import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
@@ -99,7 +103,6 @@ export const Preview = ({
         sourceMap,
         previewRevision,
         markMainPreviewPainted,
-        previewSvgPageIndicesRef,
     } = compiler;
 
     // Timestamp when React starts rendering Preview for a given revision (a ref
@@ -138,6 +141,8 @@ export const Preview = ({
         isDebugMenuEnabled() && compiler.previewTelemetry !== null;
     const fallbackScrollRef = useRef<HTMLDivElement>(null);
     const previewScrollRef = scrollRef ?? fallbackScrollRef;
+    const horizontalScrollRef = useRef<HTMLDivElement>(null);
+    const previewColumnRef = useRef<HTMLElement>(null);
     const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
     const [renderedPageMetrics, setRenderedPageMetrics] = useState<
         Record<number, PagePtMetrics>
@@ -146,6 +151,7 @@ export const Preview = ({
         Record<number, RenderedSvgPage>
     >({});
     const renderedSvgPagesRef = useRef<Record<number, RenderedSvgPage>>({});
+    const pageMetricsCacheRef = useRef<Record<number, PagePtMetrics>>({});
     const focusElementId = useDocumentFocusSelector((focus) => focus.elementId);
     const activeSource = useMemo(
         () => sourceMap.find((entry) => entry.elementId === focusElementId),
@@ -180,32 +186,8 @@ export const Preview = ({
         },
         [],
     );
-    // Track which pages are on screen so the next compile can inline their SVG
-    // (see `previewSvgPageIndicesRef`), collapsing the separate render trip for
-    // the page the user is actually looking at. Capped so a zoomed-out viewport
-    // showing many pages can't balloon the compile result.
-    const visiblePageIndicesRef = useRef<Set<number>>(new Set());
-    const MAX_INLINE_SVG_PAGES = 4;
-    const handlePageVisibilityChange = useCallback(
-        (pageIndex: number, visible: boolean) => {
-            const set = visiblePageIndicesRef.current;
-            if (visible) {
-                set.add(pageIndex);
-            } else {
-                set.delete(pageIndex);
-            }
-            const indices = [...set]
-                .sort((a, b) => a - b)
-                .slice(0, MAX_INLINE_SVG_PAGES);
-            previewSvgPageIndicesRef.current =
-                indices.length > 0 ? indices : [0];
-        },
-        [previewSvgPageIndicesRef],
-    );
-
-    // SVG inlined into the compile result for the visible changed pages. Keyed
-    // by page number; consumed by the page view in place of a `renderSvgPage`
-    // round-trip. Identity changes only when a new compile arrives.
+    // Compile may still inline SVG on bootstrap; incremental compiles are
+    // metadata-only and visible changed pages paint via `renderSvgPage`.
     const inlineSvgByPage = useMemo(() => {
         const map: Record<number, RenderedSvgPage | null> = {};
         if (previewRevision === null) {
@@ -227,15 +209,32 @@ export const Preview = ({
         return map;
     }, [previewPages, previewRevision]);
 
-    // Stable per-page initial metrics so the prop identity is preserved between
-    // keystrokes (recomputed only when pages or measured metrics change).
+    // Stable per-page initial metrics so memoized page components keep the same
+    // prop identity between keystrokes (reuse cached objects when values match).
     const initialMetricsByPage = useMemo(() => {
+        const cache = pageMetricsCacheRef.current;
         const map: Record<number, PagePtMetrics | null> = {};
         for (const page of previewPages) {
-            map[page.page_number] =
-                page.width_pt && page.height_pt
-                    ? { widthPt: page.width_pt, heightPt: page.height_pt }
-                    : renderedPageMetrics[page.page_number] ?? null;
+            if (page.width_pt && page.height_pt) {
+                const existing = cache[page.page_number];
+                if (
+                    existing &&
+                    existing.widthPt === page.width_pt &&
+                    existing.heightPt === page.height_pt
+                ) {
+                    map[page.page_number] = existing;
+                } else {
+                    const metrics = {
+                        widthPt: page.width_pt,
+                        heightPt: page.height_pt,
+                    };
+                    cache[page.page_number] = metrics;
+                    map[page.page_number] = metrics;
+                }
+            } else {
+                map[page.page_number] =
+                    renderedPageMetrics[page.page_number] ?? null;
+            }
         }
         return map;
     }, [previewPages, renderedPageMetrics]);
@@ -247,8 +246,6 @@ export const Preview = ({
             renderedSvgPagesRef.current = {};
             setRenderedSvgPages({});
             setRenderedPageMetrics({});
-            visiblePageIndicesRef.current = new Set([0]);
-            previewSvgPageIndicesRef.current = [0];
             return;
         }
 
@@ -287,7 +284,7 @@ export const Preview = ({
             }
             return changed ? next : current;
         });
-    }, [previewRevision, previewPages, previewSvgPageIndicesRef]);
+    }, [previewRevision, previewPages]);
 
     useLayoutEffect(() => {
         const element = previewScrollRef.current;
@@ -382,11 +379,40 @@ export const Preview = ({
         [manualEquivalentZoom, onZoomChange, onZoomModeChange],
     );
 
-    const { setZoomAnchor } = usePreviewZoomInput(
+    usePreviewZoomInput(
         previewScrollRef,
+        horizontalScrollRef,
+        previewColumnRef,
         effectiveZoom,
         manualZoomFromInteraction,
     );
+
+    useEffect(() => {
+        const column = previewColumnRef.current;
+        if (!column) {
+            return;
+        }
+
+        const onPointerMove = (event: PointerEvent) => {
+            updatePreviewPointerAnchor(
+                event.clientX,
+                event.clientY,
+                true,
+            );
+        };
+
+        const onPointerLeave = () => {
+            clearPreviewPointerAnchor();
+        };
+
+        column.addEventListener("pointermove", onPointerMove);
+        column.addEventListener("pointerleave", onPointerLeave);
+        return () => {
+            column.removeEventListener("pointermove", onPointerMove);
+            column.removeEventListener("pointerleave", onPointerLeave);
+            clearPreviewPointerAnchor();
+        };
+    }, []);
 
     const [isZoomMenuOpen, setZoomMenuOpen] = useState(false);
     const [isExportMenuOpen, setExportMenuOpen] = useState(false);
@@ -427,12 +453,22 @@ export const Preview = ({
               ? m.preview_zoom_fit_height()
               : m.preview_zoom_level({ percent: zoomPercent });
 
+    const [previewFocused, setPreviewFocused] = useState(false);
+
     return (
+        <PreviewContext active={previewFocused}>
         <aside
+            ref={previewColumnRef}
             className={styles.preview}
             data-active-source-label={activeSource?.label}
             data-editor-focus-lose-exempt=""
             onClick={handlePreviewClick}
+            onFocusCapture={() => setPreviewFocused(true)}
+            onBlurCapture={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                    setPreviewFocused(false);
+                }
+            }}
         >
             <Toolbar onClick={(event) => event.stopPropagation()}>
                 <IconButton
@@ -441,10 +477,10 @@ export const Preview = ({
                     aria-label={m.menubar_zoom_out()}
                     disabled={!canZoomOut}
                     onClick={() => {
-                        setZoomAnchor();
-                        manualZoomFromInteraction((current) =>
-                            stepPreviewZoom(current, -1),
-                        );
+                        void dispatchAction({
+                            id: "view::ZoomOut",
+                            payload: null,
+                        });
                     }}
                 >
                     <ZoomOut24Regular />
@@ -532,10 +568,10 @@ export const Preview = ({
                     aria-label={m.menubar_zoom_in()}
                     disabled={!canZoomIn}
                     onClick={() => {
-                        setZoomAnchor();
-                        manualZoomFromInteraction((current) =>
-                            stepPreviewZoom(current, 1),
-                        );
+                        void dispatchAction({
+                            id: "view::ZoomIn",
+                            payload: null,
+                        });
                     }}
                 >
                     <ZoomIn24Regular />
@@ -573,7 +609,10 @@ export const Preview = ({
                     className={styles.scrollArea}
                     ref={previewScrollRef as RefObject<HTMLDivElement>}
                 >
-                    <div className={styles.scrollAreaInner}>
+                    <div
+                        className={styles.scrollAreaInner}
+                        ref={horizontalScrollRef}
+                    >
                     <div className={styles.svgContainer}>
                         {previewPages.length > 0 && previewRevision !== null ? (
                             previewPages.map((page, index) => {
@@ -601,9 +640,6 @@ export const Preview = ({
                                         onPagePainted={onFirstPagePainted}
                                         onPageMetrics={handlePageMetrics}
                                         onPageSvg={handlePageSvg}
-                                        onPageVisibilityChange={
-                                            handlePageVisibilityChange
-                                        }
                                     />
                                 );
                             })
@@ -633,6 +669,7 @@ export const Preview = ({
                 )}
             </div>
         </aside>
+        </PreviewContext>
     );
 };
 
@@ -649,7 +686,6 @@ interface PreviewPageSvgProps {
     onPagePainted: (paintInfo: PagePaintInfo) => void;
     onPageMetrics: (pageNumber: number, metrics: PagePtMetrics) => void;
     onPageSvg: (pageNumber: number, renderedPage: RenderedSvgPage) => void;
-    onPageVisibilityChange: (pageIndex: number, visible: boolean) => void;
 }
 
 interface RenderedSvgPage {
@@ -671,7 +707,6 @@ const PreviewPageSvgComponent = ({
     onPagePainted,
     onPageMetrics,
     onPageSvg,
-    onPageVisibilityChange,
 }: PreviewPageSvgProps) => {
     const pageRef = useRef<HTMLDivElement>(null);
     const svgRef = useRef<HTMLDivElement>(null);
@@ -700,13 +735,6 @@ const PreviewPageSvgComponent = ({
     const isInViewport = useInViewport(pageRef, {
         rootRef: previewScrollRef,
     });
-
-    // Report visibility so the next compile inlines this page's SVG while it's
-    // on screen (see `previewSvgPageIndicesRef`).
-    useEffect(() => {
-        onPageVisibilityChange(pageIndex, isInViewport);
-        return () => onPageVisibilityChange(pageIndex, false);
-    }, [isInViewport, onPageVisibilityChange, pageIndex]);
 
     useEffect(() => {
         const effectStartAt = nowMs();
@@ -901,8 +929,7 @@ const previewPageSvgPropsAreEqual = (
         prev.initialMetrics !== next.initialMetrics ||
         prev.previewScrollRef !== next.previewScrollRef ||
         prev.onPageMetrics !== next.onPageMetrics ||
-        prev.onPageSvg !== next.onPageSvg ||
-        prev.onPageVisibilityChange !== next.onPageVisibilityChange
+        prev.onPageSvg !== next.onPageSvg
     ) {
         return false;
     }

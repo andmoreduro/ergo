@@ -8,7 +8,7 @@ export interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
    */
   label?: string;
   /**
-   * Required, recommended, or optional — shown as a colored asterisk with tooltip.
+   * When "required", shows a red asterisk on the label.
    */
   importance?: FieldImportance;
   /**
@@ -24,7 +24,7 @@ export interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
    * Visual variant for specialized surfaces.
    * @default "default"
    */
-  variant?: "default" | "borderless" | "toolbarZoom";
+  variant?: "default" | "borderless" | "toolbarZoom" | "compact";
   /**
    * Non-editable text shown after the input (e.g. a fixed file extension).
    */
@@ -61,6 +61,7 @@ export const TextInput = memo(forwardRef<HTMLInputElement, TextInputProps>(
       fullWidth ? styles.fullWidth : '',
       variant === "borderless" ? styles.borderless : '',
       variant === "toolbarZoom" ? styles.toolbarZoom : '',
+      variant === "compact" ? styles.compact : '',
       className,
     ]
       .filter(Boolean)

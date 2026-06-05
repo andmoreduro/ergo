@@ -110,6 +110,93 @@ export const selectBlockRange = (
         Math.max(anchorIdx, headIdx),
     );
 
+/** Select the whole top-level block at `blockIdx`. */
+export const wholeBlockSelectionAtIndex = (
+    doc: PMNode,
+    blockIdx: number,
+): Selection => blockRangeSelection(doc, blockIdx, blockIdx);
+
+/** True when a text range fully spans every top-level block in `[minIdx, maxIdx]`. */
+export const selectionCoversWholeBlocks = (
+    state: EditorState,
+    minIdx: number,
+    maxIdx: number,
+): boolean => {
+    const sel = state.selection;
+    if (!(sel instanceof TextSelection) || sel.empty) {
+        return false;
+    }
+    const expected = blockRangeSelection(state.doc, minIdx, maxIdx);
+    if (expected instanceof NodeSelection) {
+        return sel.from === expected.from && sel.to === expected.to;
+    }
+    return sel.from <= expected.from && sel.to >= expected.to;
+};
+
+/**
+ * True when Shift+Arrow should grow by whole elements rather than native
+ * line-by-line text (NodeSelection, AllSelection, or a range that already
+ * covers whole top-level block(s)). Partial cross-block text ranges still
+ * defer to native line selection until each touched block is fully covered.
+ */
+export const isBlockLevelTextSelection = (state: EditorState): boolean => {
+    const sel = state.selection;
+    if (sel instanceof NodeSelection || sel instanceof AllSelection) {
+        return true;
+    }
+    if (!(sel instanceof TextSelection) || sel.empty) {
+        return false;
+    }
+
+    const { doc } = state;
+    const minIdx = blockIndexAtPos(doc, Math.min(sel.from, sel.to));
+    const maxIdx = blockIndexAtPos(doc, Math.max(sel.from, sel.to - 1));
+    if (minIdx !== maxIdx) {
+        return selectionCoversWholeBlocks(state, minIdx, maxIdx);
+    }
+
+    const block = doc.child(minIdx);
+    if (!block.isTextblock) {
+        return true;
+    }
+
+    return selectionCoversWholeBlocks(state, minIdx, minIdx);
+};
+
+/**
+ * True when Shift+Arrow would grow the selection (head moving away from anchor).
+ * When false, the key should shrink the range and native text selection applies.
+ */
+export const isExtendingTextSelection = (
+    state: EditorState,
+    dir: 1 | -1,
+): boolean => {
+    const { head, anchor } = state.selection;
+    if (head === anchor) {
+        return true;
+    }
+    return dir > 0 ? head > anchor : head < anchor;
+};
+
+/** True when the selection head sits on the inner edge of its text block. */
+export const textSelectionHeadAtBlockEdge = (
+    state: EditorState,
+    dir: 1 | -1,
+): boolean => {
+    const sel = state.selection;
+    if (!(sel instanceof TextSelection)) {
+        return false;
+    }
+    const $head = sel.$head;
+    if (!$head.parent.isTextblock) {
+        return true;
+    }
+    if (dir > 0) {
+        return $head.parentOffset === $head.parent.content.size;
+    }
+    return $head.parentOffset === 0;
+};
+
 /**
  * Element-level Shift+Arrow: extend the selection by whole top-level elements.
  * From a collapsed caret the first press selects the current element; from an
@@ -120,6 +207,9 @@ export const extendBlockSelection = (
     state: EditorState,
     dir: 1 | -1,
 ): Selection | null => {
+    if (!isExtendingTextSelection(state, dir)) {
+        return null;
+    }
     const { doc, selection } = state;
     if (doc.childCount === 0) {
         return null;

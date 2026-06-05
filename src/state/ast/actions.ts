@@ -202,6 +202,15 @@ export type UpdateQuoteContentAction = {
   };
 };
 
+export type UpdateQuoteAttributionAction = {
+  type: 'UPDATE_QUOTE_ATTRIBUTION';
+  payload: {
+    quoteId: string;
+    attributionText: string | null;
+    attributionReferenceId: string | null;
+  };
+};
+
 export type UpdateDiagramAction = {
   type: 'UPDATE_DIAGRAM';
   payload: {
@@ -217,7 +226,7 @@ export type UpdateListItemAction = {
   type: 'UPDATE_LIST_ITEM';
   payload: {
     listId: string;
-    itemIndex: number;
+    itemPath: number[];
     content: import('../../bindings/RichText').RichText[];
   };
 };
@@ -226,7 +235,7 @@ export type UpdateEnumerationItemAction = {
   type: 'UPDATE_ENUMERATION_ITEM';
   payload: {
     enumerationId: string;
-    itemIndex: number;
+    itemPath: number[];
     content: import('../../bindings/RichText').RichText[];
   };
 };
@@ -356,6 +365,7 @@ export type ConvertElementAction = {
   payload: {
     elementId: string;
     targetKind: 'Paragraph' | 'Heading' | 'Table' | 'Equation' | 'Figure' | 'Quote' | 'List' | 'Enumeration';
+    headingLevel?: number;
   };
 };
 
@@ -383,6 +393,7 @@ export type ASTAction =
   | UpdateHeadingContentAction
   | UpdateEquationAction
   | UpdateQuoteContentAction
+  | UpdateQuoteAttributionAction
   | UpdateDiagramAction
   | UpdateListItemAction
   | UpdateEnumerationItemAction

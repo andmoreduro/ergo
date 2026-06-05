@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{AssetEntry, DocumentElement, EquationSyntax, ReferenceEntry, RichText};
+use crate::ast::{AssetEntry, DocumentElement, EquationSyntax, ListItem, ReferenceEntry, RichText};
 use crate::document_session_types::{GeneratedFragment, SourceMapEntry};
 use crate::document_source_builder::SourceBuilder;
 use crate::template_spec::TemplateSpec;
@@ -19,6 +19,7 @@ use super::paths::{
     figure_caption_field_id, label_for_id, path_id_for_id, quote_content_field_id,
     rich_text_field_id,
 };
+use super::quote_attribution;
 use super::references::bibliography_citation_keys;
 use super::rich_text::{normalize_math_source, push_rich_text_field};
 use super::tables::{sanitize_table_column_size, table_placement_value, typst_placement_arg};
@@ -155,7 +156,16 @@ fn generate_element_typst(
                 bibliography_keys,
             );
             if !quote_builder.source.trim().is_empty() {
-                builder.push_literal("#quote(block: true)[");
+                let mut literal = "#quote(block: true".to_string();
+                if let Some(attribution) = quote_attribution::format_quote_attribution_param(
+                    quote.attribution_text.as_deref(),
+                    quote.attribution_reference_id.as_deref(),
+                    bibliography_keys,
+                ) {
+                    literal.push_str(&format!(", attribution: {attribution}"));
+                }
+                literal.push('[');
+                builder.push_literal(&literal);
                 builder.push_builder(quote_builder);
                 builder.push_literal(&format!("] <{label}>\n\n"));
             }
@@ -579,7 +589,16 @@ fn push_table_cell_elements(
                     bibliography_keys,
                 );
                 if !quote_builder.source.trim().is_empty() {
-                    builder.push_literal("#quote(block: true)[");
+                    let mut literal = "#quote(block: true".to_string();
+                    if let Some(attribution) = quote_attribution::format_quote_attribution_param(
+                        quote.attribution_text.as_deref(),
+                        quote.attribution_reference_id.as_deref(),
+                        bibliography_keys,
+                    ) {
+                        literal.push_str(&format!(", attribution: {attribution}"));
+                    }
+                    literal.push('[');
+                    builder.push_literal(&literal);
                     builder.push_builder(quote_builder);
                     builder.push_literal("]");
                 }
@@ -642,7 +661,7 @@ fn push_table_cell_elements(
 fn push_list_like_element(
     builder: &mut SourceBuilder,
     element_id: &str,
-    items: &[Vec<RichText>],
+    items: &[ListItem],
     function: &str,
     label: &str,
     bibliography_keys: &HashMap<String, String>,
@@ -654,30 +673,131 @@ fn push_list_like_element(
     builder.push_literal(&format!("#{function}("));
     let mut pushed_any = false;
     for (index, item) in items.iter().enumerate() {
-        let mut item_builder = SourceBuilder::default();
-        push_rich_text_field(
-            &mut item_builder,
-            element_id,
-            &format!("{element_id}:item:{index}"),
-            item,
-            bibliography_keys,
-        );
-        if item_builder.source.trim().is_empty() {
-            continue;
-        }
-        if pushed_any {
+        if index > 0 && pushed_any {
             builder.push_literal(", ");
         }
-        builder.push_literal("[");
-        builder.push_builder(item_builder);
-        builder.push_literal("]");
-        pushed_any = true;
+        if push_list_item_bracket(
+            builder,
+            element_id,
+            &[index],
+            item,
+            function,
+            bibliography_keys,
+        ) {
+            pushed_any = true;
+        } else if index > 0 && pushed_any {
+            // Undo a trailing comma when the item was skipped.
+            let suffix = ", ";
+            if builder.source.ends_with(suffix) {
+                builder.source.truncate(builder.source.len() - suffix.len());
+            }
+        }
     }
     if pushed_any {
         builder.push_literal(&format!(") <{label}>\n\n"));
     } else {
         builder.clear();
     }
+}
+
+fn list_item_field_id(element_id: &str, path: &[usize]) -> String {
+    let suffix = path
+        .iter()
+        .map(|index| index.to_string())
+        .collect::<Vec<_>>()
+        .join(":");
+    format!("{element_id}:item:{suffix}")
+}
+
+/// Markers cycled for nested bullet lists — must match `umb-apa` / `versatile-apa`
+/// `set list(marker: ([•], [◦]))` because each nested `#list(...)` starts at depth zero.
+const NESTED_LIST_MARKERS: [&str; 2] = ["◦", "•"];
+
+/// Typst options for a nested `#list` / `#enum` inside a parent item. Each
+/// explicit nested call starts at list depth zero, so pass indent, marker (for
+/// bullets), and APA-style numbering (for enumerations) per nest level.
+fn list_nest_options(function: &str, nest_depth: usize) -> String {
+    if nest_depth == 0 {
+        return String::new();
+    }
+    let indent_em = nest_depth as f64 * 1.25;
+    match function {
+        "enum" => {
+            let numbering = match nest_depth {
+                1 => "a.",
+                2 => "i.",
+                3 => "A.",
+                _ => "I.",
+            };
+            format!("indent: {indent_em}em, numbering: \"{numbering}\", ")
+        }
+        "list" => {
+            let marker = NESTED_LIST_MARKERS[(nest_depth - 1) % NESTED_LIST_MARKERS.len()];
+            format!("indent: {indent_em}em, marker: [{marker}], ")
+        }
+        _ => String::new(),
+    }
+}
+
+fn push_list_item_bracket(
+    builder: &mut SourceBuilder,
+    element_id: &str,
+    path: &[usize],
+    item: &ListItem,
+    function: &str,
+    bibliography_keys: &HashMap<String, String>,
+) -> bool {
+    let mut item_builder = SourceBuilder::default();
+    push_rich_text_field(
+        &mut item_builder,
+        element_id,
+        &list_item_field_id(element_id, path),
+        &item.content,
+        bibliography_keys,
+    );
+    if item_builder.source.trim().is_empty() && item.children.is_empty() {
+        return false;
+    }
+
+    builder.push_literal("[");
+    builder.push_builder(item_builder);
+    if !item.children.is_empty() {
+        let mut nested = SourceBuilder::default();
+        let mut pushed_child = false;
+        for (index, child) in item.children.iter().enumerate() {
+            let mut child_path = path.to_vec();
+            child_path.push(index);
+            if index > 0 && pushed_child {
+                nested.push_literal(", ");
+            }
+            if push_list_item_bracket(
+                &mut nested,
+                element_id,
+                &child_path,
+                child,
+                function,
+                bibliography_keys,
+            ) {
+                pushed_child = true;
+            } else if index > 0 && pushed_child {
+                let suffix = ", ";
+                if nested.source.ends_with(suffix) {
+                    nested.source.truncate(nested.source.len() - suffix.len());
+                }
+            }
+        }
+        if pushed_child {
+            builder.push_literal("\n\n    ");
+            builder.push_literal(&format!(
+                "#{function}({}",
+                list_nest_options(function, path.len())
+            ));
+            builder.push_builder(nested);
+            builder.push_literal("\n    )");
+        }
+    }
+    builder.push_literal("]");
+    true
 }
 
 fn element_uses_latex_math(element: &DocumentElement) -> bool {
@@ -688,17 +808,25 @@ fn element_uses_latex_math(element: &DocumentElement) -> bool {
         DocumentElement::List(list) => list
             .items
             .iter()
-            .any(|item| rich_text_uses_latex_math(item)),
+            .any(|item| list_item_uses_latex_math(item)),
         DocumentElement::Enumeration(enumeration) => enumeration
             .items
             .iter()
-            .any(|item| rich_text_uses_latex_math(item)),
+            .any(|item| list_item_uses_latex_math(item)),
         DocumentElement::Equation(equation) => equation.syntax == EquationSyntax::Latex,
         DocumentElement::Figure(figure) => element_uses_latex_math(&figure.content),
         DocumentElement::Table(_) | DocumentElement::Diagram(_) | DocumentElement::Custom(_) => {
             false
         }
     }
+}
+
+fn list_item_uses_latex_math(item: &ListItem) -> bool {
+    rich_text_uses_latex_math(&item.content)
+        || item
+            .children
+            .iter()
+            .any(list_item_uses_latex_math)
 }
 
 fn rich_text_uses_latex_math(content: &[RichText]) -> bool {

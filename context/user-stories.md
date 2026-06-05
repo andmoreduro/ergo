@@ -1,80 +1,103 @@
-# Érgo User Stories
+# Érgo — product capabilities
 
-This document categorizes the core functionalities of Érgo into specific Epics and User Stories. These are written from the perspective of the end-user, focusing on desired outcomes rather than technical implementation details.
+Érgo is a local-first desktop IDE for academic documents. Users edit structured forms and a ProseMirror body; Rust owns canonical Typst source generation; a WASM worker compiles and renders the live preview. This document catalogs what the product provides, grouped by functional area. Stories use the “As a user…” form but describe shipped behavior, not a backlog. The same scope appears as imperative requirements in `requirements.md` (`US*` / `Tech*` map to `REQ*`).
 
-## Epic 0: Foundational UI & Design System (Technical Epic)
+## Epic 1: Project and template management
 
-- **Tech0.1 (Atoms) - Core Primitives:** Build the core primitive UI components (e.g., base buttons, text inputs, checkboxes, typography wrappers) completely from scratch to establish the visual language and unblock feature development.
-- **Tech0.2 (Molecules) - Reusable Combinations:** Build reusable, simple component combinations (e.g., labeled form inputs, accordion headers, styled tooltips) that will be shared across multiple forms and features.
-- **Tech0.3 (Infrastructure) - Styling Architecture:** Setup the foundational custom styling architecture and design tokens (colors, spacing, typography) to ensure consistency since no external CSS frameworks will be used.
+- **US1.1 — Create project:** Create a new project from the welcome screen or menubar: choose a display name, save location (defaulting to the system documents folder), optional custom `.ergproj` filename, and a template (`none`, bundled **APA 7** `apa7`, or **UMB APA 7** `umb-apa`). The app materializes a `.ergproj` archive with embedded template spec, Typst package tree, and generated section sources.
+- **US1.2 — Open project:** Open an existing `.ergproj` from the file picker or by path; the archive restores document AST, settings, bibliography, assets, and embedded template files into the backend session and WASM preview.
+- **US1.3 — Recent projects:** Open a recent project from the welcome list, the **Open Recent** dialog (keyboard-navigable), or the file menu; remove entries from the recent list without deleting files.
+- **US1.4 — Welcome entry point:** Start work from a welcome screen with new project, open project, open recent, command palette, and recent-project shortcuts before entering the workspace.
+- **US1.5 — Close project:** Close the active project (with optional save prompts per autosave settings) and return to the welcome screen; backend session and VFS reset for a clean boundary.
+- **US1.6 — Template-driven metadata forms:** Edit template-defined front matter through grouped form fields (authors with affiliation/degree references, bibliography metadata, UMB cover fields, dedication, symbols, abbreviations, abstracts, keywords, etc.) driven by each template’s `editor` manifest and locale messages.
+- **US1.7 — Template variants and options:** For templates that declare variants (e.g. APA 7 student / professional / complete), switch variant in project settings. For templates that declare options (e.g. UMB cover emblem style), set options in project settings; values flow into generated Typst.
+- **US1.8 — Outline and layout overrides:** In project settings, toggle which compiled outlines appear (tables, figures, equations, listings, appendices) and customize outline titles where the template supports it.
+- **US1.9 — Dynamic author references:** When a template exposes affiliation and degree/title lists, author rows show reference checkboxes keyed to those lists (numeric or lowercase-alpha markers per template), avoiding duplicate metadata entry.
+- **US1.10 — Document export:** Export the full compiled document as **PDF** (file menu) or as **PNG** / **SVG** page bundles from the preview toolbar (ZIP when multi-page).
+- **US1.11 — Bibliography export:** Export the project reference list as a `.bib` file from the file menu.
 
-## Epic 1: Project & Template Management
+## Epic 2: Settings and configuration
 
-- **US1.1 - Create Project via Template:** As a user, I want to create a new project by naming it, reviewing the Documents-folder destination, optionally choosing a different folder, optionally disabling the default generated file name, and selecting a document template (e.g., APA7) so that my work automatically adheres to strict formatting standards from the beginning and is saved as a clear `.ergproj` archive immediately.
-- **US1.2 - Open Recent/Existing Projects:** As a user, I want to easily open recent projects or browse for existing project files so that I can seamlessly resume my work.
-- **US1.7 - Welcome Screen Entry Point:** As a user, I want a polished welcome screen with New Project, Open Project, command palette, and recent project actions so that I can start or resume work without first entering an empty editor.
-- **US1.3 - Toggle Document Sections:** As a user, I want to toggle specific sections of my document (like a cover page) on or off so that I can tailor the template's structure to my specific assignment.
-- **US1.4 - Dynamic Form Adaptability:** As a user, I want the editing form to intelligently adapt to my inputs (e.g., adding an affiliation automatically provides matching checkboxes for authors) so that I don't have to enter the same metadata multiple times.
-- **US1.5 - Multiformat Document Export:** As a user, I want to export my entire document, specific pages, or individual elements to standard formats (PDF, PNG, SVG) so that I can easily share or publish my finished work.
-- **US1.6 - Online/Offline Project Modes:** As a user, I want to save or convert my project file between an "online" mode (lightweight) and an "offline" mode (bundling all dependencies) so that I can optimize for file size or ensure the project compiles anywhere without internet access.
+- **US2.1 — Global settings:** Configure application theme, UI locale (English / Spanish), default equation input syntax (Typst / LaTeX), default text and math fonts, autosave interval and triggers (focus loss, app close, project close), undo history limit, and optional Zotero translation-server integration for bibliography metadata lookup.
+- **US2.2 — Project settings:** Override per-project paper size, document language, fonts, font size, table stroke width, template variant, template-specific options, and outline inclusion/title overrides without changing global defaults.
+- **US2.3 — Keymap settings:** Choose a keymap profile, record and edit bindings (including multi-stroke sequences), view conflicts against the Rust action catalog, and persist overrides in user config.
+- **US2.4 — Configurable undo depth:** Cap in-memory undo/redo steps via global `history_limit` to bound RAM use on long sessions.
 
-## Epic 2: Settings & Configuration
+## Epic 3: Workspace and navigation
 
-- **US2.1 - Global Application Settings:** As a user, I want to set application-wide defaults for page size, language, and core fonts so that all my new projects start with my preferred baseline configuration.
-- **US2.2 - Local Project Settings Override:** As a user, I want to override default settings on a per-project basis so that I can customize individual documents for unique requirements without altering my global preferences.
-- **US2.3 - Configurable History Buffer:** As a user, I want to configure the maximum number of undo/history events kept in memory so that I can prevent the application from consuming too much RAM during long editing sessions.
+- **US3.1 — Tri-column workspace:** Resize three columns—sidebar, editor (metadata form + body), and live preview—with persisted split ratios.
+- **US3.2 — Sidebar panels:** Switch among **Outline** (compiled structure, jump to fields/elements), **Bibliography** (reference CRUD), and **Resources** (figures, tables, diagrams, equations with WASM resource previews).
+- **US3.3 — Editor toolbar:** Insert and convert body elements (paragraph, headings levels 1–6, table, figure, block/inline equation, quote, list, diagram) via toolbar actions routed through the action runtime.
+- **US3.4 — Menubar:** Localized menus for file (project lifecycle, PDF export, bibliography export), insert (subset of body elements), view (command palette, sidebar toggles, zoom), settings, and help placeholders.
+- **US3.5 — Command palette:** Search and invoke catalog actions from the welcome screen and workspace with the same routing as menus and shortcuts.
+- **US3.6 — Find and replace:** Open a find bar to search the document AST and ProseMirror body, step matches, and replace text with preview highlighting in the editor.
+- **US3.7 — Keyboard actions:** Use logical-key shortcuts resolved in Rust (`default_keymap.json` + user overrides); actions dispatch through a context tree (app, workspace, editor, body, table cell, dialog, bibliography panel, etc.) with no frontend fallback resolver.
+- **US3.8 — Custom keymaps:** Remap any catalog action in settings; menubar labels show effective shortcuts for the active profile.
 
-## Epic 3: Workspace & Navigation UI
+## Epic 4: Document editing (no-code body and forms)
 
-- **US3.1 - Resizable Tri-Column Layout:** As a user, I want a resizable three-column interface so that I can simultaneously navigate the rendered outline, edit my content, and view the final rendered result.
-- **US3.2 - Sidebar Navigation Menus:** As a user, I want dedicated sidebar menus for the rendered outline, bibliography, and resources so that I can quickly organize citations and reusable document content.
-- **US3.3 - Visual Element Insertion:** As a user, I want straightforward visual buttons to insert complex elements like tables, images, and equations so that I don't have to memorize code commands or markup.
-- **US3.4 - Comprehensive Keyboard Navigation:** As a user, I want to use comprehensive keyboard shortcuts for navigation, inserting elements, and standard operations so that I can work efficiently without constantly relying on my mouse.
-- **US3.5 - Custom Keymap Configuration:** As a user, I want to be able to customize and remap my keyboard shortcuts so that the IDE matches my personal workflow preferences.
-- **US3.6 - Command-Driven Menubar:** As a user, I want a complete localized menubar for project, edit, insert, view, options, and help actions so that desktop workflows feel predictable and native.
+- **US4.1 — ProseMirror body:** Edit section body content in a structured rich-text surface with undo/redo, clipboard integration, and element-level operations.
+- **US4.2 — Paragraph flow:** Press Enter in body text to split/create paragraphs; Backspace at block start merges with the previous block per template rules.
+- **US4.3 — Headings:** Insert and toggle heading levels 1–6 from toolbar or shortcuts; template Typst rules control numbering and outline inclusion.
+- **US4.4 — Inline embeds:** Insert inline equations and citation references inside rich-text fields; chips use distinct styling so embeds are visible in the form.
+- **US4.5 — Tables:** Insert tables; edit cells in ProseMirror; add/remove rows and columns, merge/split cells, and adjust column widths via shortcuts and a settings panel (placement, caption, notes).
+- **US4.6 — Figures:** Insert image figures (file pick or paste); configure width, caption, source, and note fields per template `element_overrides`.
+- **US4.7 — Equations:** Edit block and inline equations with Typst or LaTeX **input** syntax; Rust sanitizes and emits Typst math for compile. A syntax toggle is available per field and as a global default.
+- **US4.8 — Quotes:** Insert block and inline quotes with template-defined attribution fields governed by `quote_policy` on the template spec.
+- **US4.9 — Lists:** Insert bullet, numbered, and definition lists with nested item editing.
+- **US4.10 — Diagrams:** Author Mermaid diagram definitions; the app generates SVG assets, syncs them to the VFS, and shows resource previews.
+- **US4.11 — Element settings:** Open an element settings panel for the focused table, figure, equation, quote, or list via toolbar or shortcut.
+- **US4.12 — Delete confirmation:** Confirm before deleting a focused body element to avoid accidental loss.
+- **US4.13 — Input sanitization:** User text in generated Typst is escaped/sanitized so raw Typst markup cannot be injected from standard form fields.
+- **US4.14 — Template field types:** Render template inputs as strings, rich text, content blocks, simple lists, object groups, arrays (authorities, symbols, abbreviations), and equation fields, with labels translated via template locale messages and Paraglide UI strings.
 
-## Epic 4: Document Editing & Forms (No-Code Experience)
+## Epic 5: Live preview and persistence
 
-- **US4.1 - Seamless Paragraph Creation:** As a user, I want to press "Enter" while typing to automatically create a new paragraph so that my writing process feels natural and fluid.
-- **US4.2 - Embedded Inline Elements:** As a user, I want to be able to seamlessly embed items like equations and references directly inside my text fields so that my writing isn't interrupted by rigid form limitations.
-- **US4.3 - Distinct Inline Highlighting:** As a user, I want embedded items within text to have a distinct background color so that I can easily differentiate them from standard text at a glance.
-- **US4.4 - Hierarchical Heading Controls:** As a user, I want to add up to five levels of headings via the interface so that I can logically organize my document.
-- **US4.5 - Visual Table Manipulation:** As a user, I want to manipulate tables (add/remove rows and columns, merge cells, and resize columns) using visual UI controls so that I can create complex tables without writing specialized code.
-- **US4.6 - Figure Parameter Controls:** As a user, I want dedicated settings for my images and tables so that I can easily define captions and control where they are placed on the page.
-- **US4.7 - Math Symbol Autocomplete:** As a user, I want an autocomplete menu for math symbols when editing equations so that I can easily insert complex mathematical notation without memorizing specific syntax.
-- **US4.8 - Element Deletion Confirmation:** As a user, I want to be asked for confirmation before deleting entire document elements so that I don't accidentally lose major sections of my work.
-- **US4.9 - Automated Input Sanitization:** As a user, I want my text inputs to be automatically sanitized in the background so that accidentally entering special code characters doesn't unexpectedly break my document.
-- **US4.10 - Native LaTeX Math Support:** As a user, I want the equation editor to natively support standard LaTeX math syntax so that I can write formulas using a familiar academic standard without having to learn Typst's specific math language.
+- **US5.1 — Live preview:** WASM compiles Typst on document changes and paints pages in the preview pane without blocking the UI on full export.
+- **US5.2 — Preview-first compile:** Preview compilation runs in a dedicated worker; compile-status UI does not shift preview layout during typing.
+- **US5.3 — Autosave:** Save the `.ergproj` archive on a timer and on configured lifecycle events (window blur, app close, project close) when enabled.
+- **US5.4 — Manual save:** Save on demand from the menubar or shortcut while a project is open.
+- **US5.5 — Zoom and fit:** Zoom the preview and fit page width/height from view actions.
 
-## Epic 5: Live Preview & Performance
+## Epic 6: Preview ↔ editor synchronization
 
-- **US5.1 - Real-Time Document Rendering:** As a user, I want the document preview to update instantly as I type so that I get immediate visual feedback on my edits.
-- **US5.2 - Live Preview Prioritization:** As a user, I want the live visual preview to be prioritized over full document exports so that the interface remains incredibly fast and responsive during active typing.
-- **US5.3 - Seamless Background Saving:** As a user, I want the application to automatically save my progress at a configurable interval and at configured moments such as app focus loss, app close, or project close so that my data is safe without interrupting my workflow.
+- **US6.1 — Forward sync:** After compile, scroll the preview toward pages that changed so edits remain visible.
+- **US6.2 — Backward sync:** Click a preview page to focus the corresponding editor field or body caret using WASM source maps and `FocusField` actions.
+- **US6.3 — Outline and resource jumps:** Activate outline entries or resource rows to focus the underlying AST element or metadata field in the editor.
 
-## Epic 6: Bi-directional Synchronization
+## Epic 7: Bibliography, references, and identity
 
-- **US6.1 - Forward Sync (Form to Preview):** As a user, I want the live preview to automatically scroll to vertically center the new content I am adding so that I never lose sight of my active editing location.
-- **US6.2 - Backward Sync (Preview to Form):** As a user, I want to click on any specific word or visual element in the rendered preview, and have the editor instantly focus the exact input field where that content was written, so that I can quickly fix typos without hunting through long forms.
+- **US7.1 — Stable element IDs:** Every section and element carries an immutable id used for labels, references, source maps, and sync.
+- **US7.2 — Bibliography editor:** Add, edit, and remove `references.bib` entries through sidebar forms (BibLaTeX-oriented fields).
+- **US7.3 — Insert reference:** Open a searchable reference dialog to insert citations into body text or rich fields.
+- **US7.4 — Metadata lookup:** Optionally fetch bibliography metadata from a configured Zotero translation server when adding or editing entries.
+- **US7.5 — Resource catalog:** Sidebar lists document assets and generated elements with labels derived from captions or template defaults.
 
-## Epic 7: Bibliography, Resources & Labeling
+## Epic 8: Platform and localization
 
-- **US7.1 - Universal Background IDs:** As a user, I want every single element I create (paragraphs, tables, images, equations) to be automatically assigned a unique, invisible identifier in the background so that everything is instantly ready to be cross-referenced without manual setup.
-- **US7.2 - Manual Custom Labeling:** As a user, I want to right-click on specific text selections to manually attach a hidden label so that I can create hyperlinks to highly specific parts of my writing.
-- **US7.3 - Form-Based Bibliography Editor:** As a user, I want to manage my bibliography using a dedicated form so that I can easily add, remove, and edit citations without learning citation code formats.
-- **US7.4 - Searchable Reference Dropdown:** As a user, I want to trigger a searchable dropdown menu (focusable via a keyboard shortcut like `Shift+Enter`) when inserting a reference so that I can rapidly locate the correct label or citation entry.
+- **US8.1 — Desktop application:** Run as a Tauri v2 desktop app (frameless window, native open/save dialogs, filesystem IPC).
+- **US8.2 — UI localization:** Switch interface language between English and Spanish via Paraglide (`messages/{locale}.json`); all chrome strings use typed `m.*()` accessors.
+- **US8.3 — Template localization:** Bundled templates ship `locales/{lang}.json` message maps; the editor translates field labels through `TemplateSpec.messages` with UI locale fallback.
 
-## Epic 8: Platform & Language Support
+## Epic 9: Architecture and quality (technical)
 
-- **US8.1 - Native Desktop Installers:** As a user, I want to install and run the application natively on both Linux and Windows operating systems (including via a standard Windows installer) so that I can easily set it up on my preferred computer.
-- **US8.2 - English/Spanish Localization:** As a user, I want to be able to switch the application's interface language between English and Spanish so that I can work in the language I am most comfortable with.
-- **Tech8.3 - Paraglide Localization Pipeline:** As a developer, I want frontend localization to use Paraglide JS with typed message functions so that translations are tree-shakable, type-safe, and consistent across the welcome screen, menubar, settings, and editor UI.
+These capabilities underpin the product but are not direct end-user features.
 
-## Epic 9: Testing & Quality Assurance (Technical Epic)
+- **Tech9.1 — Design system:** CSS Modules and design tokens only (no external UI framework); atomic components under `src/components/atoms/`, composed into molecules, organisms, layout, and screens.
+- **Tech9.2 — Rust Typst ownership:** `DocumentSession` mirrors the AST, tracks dirty fragments, assembles per-section `.typ` files, maintains source maps, and syncs the in-memory VFS; React never generates Typst source.
+- **Tech9.3 — WASM preview engine:** `ergo-engine-wasm` compiles from the mirrored VFS, retains `PagedDocument`, exposes SVG page export, and runs resource previews off the main thread.
+- **Tech9.4 — IPC type sync:** `ts-rs` generates `src/bindings/` TypeScript types from Rust command DTOs; hand-editing bindings is forbidden.
+- **Tech9.5 — Action catalog:** Rust owns action ids, context expressions, catalog metadata, and keymap validation; React registers contexts and handler chains.
+- **Tech9.6 — Automated tests:** Vitest for frontend logic; `cargo nextest` for Rust (VFS patching, document session generation, template spec, settings, archive I/O). React component tests and Playwright E2E are out of scope for the current test strategy.
 
-- **Tech9.1 (Unit Testing) - AST & VFS:** Setup Vitest and Cargo Test to ensure AST reducers and VFS text patching logic are mathematically rigorous and bug-free.
-- **Tech9.2 (Component Isolation) - Co-located tests:** Exercise custom UI primitives in isolation through co-located Vitest and React Testing Library component tests.
-- **Tech9.3 (Type Synchronization) - `ts-rs`:** Integrate the `ts-rs` crate into the Rust backend to automatically generate strict TypeScript interfaces for all IPC payloads.
-- **Tech9.4 (E2E Integration) - Playwright:** Establish Playwright for End-to-End testing of the built Tauri desktop application.
-- **Tech9.5 (Backend Source Session) - Fragmented Typst Generation:** As a developer, I want Rust to own canonical Typst source generation through a document session, section files, retained Typst sources, and an element fragment cache so that large documents can update preview sources incrementally without regenerating one monolithic file on every edit.
-- **Tech9.6 (Preview Compile Contract) - WASM SVG Preview:** As a developer, I want preview compilation in the WASM worker to retain a `PagedDocument`, source maps, and logical page metadata, with SVG serialization on demand, so that the live preview stays fast without depending on backend VFS SVG artifacts.
+## Out of product scope (current release)
+
+The following ideas appear in older notes or adjacent tools but are **not** part of Érgo today:
+
+- Online vs offline project modes (lightweight archive vs fully bundled dependencies toggle).
+- Per-page or per-element export pickers beyond full-document export.
+- User-defined manual labels on arbitrary text selections (only automatic element ids and template references).
+- Math symbol autocomplete in the equation editor.
+- In-app template authoring (templates are bundled JSON + Typst packages in the repo).
+- Help menu documentation/about surfaces (menu entries exist as disabled placeholders).
+- Cut/copy/paste menubar entries (clipboard works in editors; dedicated edit-menu actions are not wired).

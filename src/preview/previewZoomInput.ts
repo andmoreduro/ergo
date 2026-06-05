@@ -44,34 +44,6 @@ export function pointerDistance(
     return Math.hypot(dx, dy);
 }
 
-/** Center of the sync caret when it intersects the preview scroll viewport. */
-export function syncCaretAnchorInPreviewViewport(
-    scrollRoot: HTMLElement,
-): { x: number; y: number } | null {
-    const caret = scrollRoot.querySelector<HTMLElement>(
-        '[data-preview-sync-caret="true"]',
-    );
-    if (!caret) {
-        return null;
-    }
-
-    const caretRect = caret.getBoundingClientRect();
-    const rootRect = scrollRoot.getBoundingClientRect();
-    const centerX = (caretRect.left + caretRect.right) * 0.5;
-    const centerY = (caretRect.top + caretRect.bottom) * 0.5;
-
-    if (
-        centerX < rootRect.left ||
-        centerX > rootRect.right ||
-        centerY < rootRect.top ||
-        centerY > rootRect.bottom
-    ) {
-        return null;
-    }
-
-    return { x: centerX, y: centerY };
-}
-
 export function clientPointInsideElement(
     element: HTMLElement,
     clientX: number,
@@ -88,27 +60,31 @@ export function clientPointInsideElement(
 
 /** Keep a viewport point fixed on content while zoom changes. */
 export function preservePreviewScrollAtClientPoint(
-    scrollRoot: HTMLElement,
+    verticalScrollRoot: HTMLElement,
     oldZoom: number,
     newZoom: number,
     clientX: number,
     clientY: number,
+    horizontalScrollRoot?: HTMLElement | null,
 ): void {
     if (oldZoom <= 0 || newZoom <= 0 || oldZoom === newZoom) {
         return;
     }
 
-    const rootRect = scrollRoot.getBoundingClientRect();
-    const offsetX = clientX - rootRect.left + scrollRoot.scrollLeft;
-    const offsetY = clientY - rootRect.top + scrollRoot.scrollTop;
     const scale = newZoom / oldZoom;
 
-    scrollRoot.scrollLeft = Math.max(
+    const verticalRect = verticalScrollRoot.getBoundingClientRect();
+    const offsetY = clientY - verticalRect.top + verticalScrollRoot.scrollTop;
+    verticalScrollRoot.scrollTop = Math.max(
         0,
-        offsetX * scale - (clientX - rootRect.left),
+        offsetY * scale - (clientY - verticalRect.top),
     );
-    scrollRoot.scrollTop = Math.max(
+
+    const horizontalRoot = horizontalScrollRoot ?? verticalScrollRoot;
+    const horizontalRect = horizontalRoot.getBoundingClientRect();
+    const offsetX = clientX - horizontalRect.left + horizontalRoot.scrollLeft;
+    horizontalRoot.scrollLeft = Math.max(
         0,
-        offsetY * scale - (clientY - rootRect.top),
+        offsetX * scale - (clientX - horizontalRect.left),
     );
 }

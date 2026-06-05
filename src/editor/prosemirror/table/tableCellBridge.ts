@@ -1,8 +1,18 @@
 import type { Fragment, Node as PMNode } from "prosemirror-model";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
+import type { ListItem } from "../../../bindings/ListItem";
 import type { TableCell } from "../../../bindings/TableCell";
-import { createId } from "../../../state/ast/defaults";
-import { fragmentToRichText, richTextToInlineNodes } from "../astBridge";
+import { createId, createListItem } from "../../../state/ast/defaults";
+import {
+    quoteElementFromQuoteNode,
+    quoteNodeAttributionAttrs,
+} from "../../quoteAttribution";
+import {
+    fragmentToRichText,
+    listItemFromNode,
+    listItemToNode,
+    richTextToInlineNodes,
+} from "../astBridge";
 import type { TableSchema } from "./tableSchema";
 import { normalizeTableCellElements } from "./tableCellElements";
 
@@ -10,12 +20,10 @@ const listNode = (
     schema: TableSchema,
     id: string,
     ordered: boolean,
-    items: import("../../../bindings/RichText").RichText[][],
+    items: ListItem[],
 ): PMNode => {
-    const source = items.length > 0 ? items : [[]];
-    const listItems = source.map((item) =>
-        schema.nodes.list_item.create(null, richTextToInlineNodes(schema, item)),
-    );
+    const source = items.length > 0 ? items : [createListItem()];
+    const listItems = source.map((item) => listItemToNode(schema, item, ordered));
     return schema.nodes.list.create({ elementId: id, ordered }, listItems);
 };
 
@@ -31,7 +39,10 @@ export const cellElementToNode = (
             );
         case "Quote":
             return schema.nodes.quote.create(
-                { elementId: element.id },
+                {
+                    elementId: element.id,
+                    ...quoteNodeAttributionAttrs(element),
+                },
                 richTextToInlineNodes(schema, element.content),
             );
         case "List":
@@ -66,17 +77,23 @@ export const cellFragmentToElements = (
                 });
                 break;
             case "quote":
-                elements.push({
-                    type: "Quote",
-                    id: node.attrs.elementId || createId(),
-                    content: fragmentToRichText(node.content),
-                });
+                elements.push(
+                    quoteElementFromQuoteNode(
+                        {
+                            attrs: {
+                                elementId: node.attrs.elementId || createId(),
+                                attributionText: node.attrs.attributionText,
+                                attributionReferenceId:
+                                    node.attrs.attributionReferenceId,
+                            },
+                        },
+                        fragmentToRichText(node.content),
+                    ),
+                );
                 break;
             case "list": {
-                const items: import("../../../bindings/RichText").RichText[][] = [];
-                node.content.forEach((item) =>
-                    items.push(fragmentToRichText(item.content)),
-                );
+                const items: ListItem[] = [];
+                node.content.forEach((item) => items.push(listItemFromNode(item)));
                 elements.push(
                     node.attrs.ordered
                         ? {

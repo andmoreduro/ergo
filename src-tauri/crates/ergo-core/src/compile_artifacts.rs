@@ -249,6 +249,122 @@ mod tests {
         assert!(svgs[0].contains("<svg"));
     }
 
+    /// New project AST + bundled `umb-apa` template spec → canonical `.ergproj` sources → Typst compile.
+    #[test]
+    fn new_umb_apa_project_from_bundled_template_compiles_to_svg() {
+        use crate::test_fixtures::{default_umb_apa_project_ast, populate_umb_apa};
+
+        let vfs = Arc::new(VirtualFileSystem::new());
+        populate_umb_apa(&vfs);
+
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session.sync_snapshot(default_umb_apa_project_ast()).unwrap();
+
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
+        let document = compile_document(&world).unwrap();
+        let svgs = render_svgs(&document);
+
+        assert!(!svgs.is_empty());
+        assert!(svgs[0].contains("<svg"));
+    }
+
+    /// Body with nested lists (including empty placeholder children), quotes, and table cell blocks.
+    #[test]
+    fn umb_apa_complex_body_compiles_to_svg() {
+        use std::collections::HashMap;
+
+        use crate::ast::{
+            ContentSection, DocumentElement, DocumentSection, List, Paragraph, Quote,
+            ReferenceEntry, Table, TableCell,
+        };
+        use crate::test_fixtures::{
+            default_umb_apa_project_ast, list_item, populate_umb_apa, rich_text,
+        };
+
+        let mut nested_with_empty_child = list_item("item one");
+        nested_with_empty_child.children = vec![list_item("")];
+
+        let mut nested_parent = list_item("outer");
+        nested_parent.children = vec![list_item("nested text")];
+
+        let mut ast = default_umb_apa_project_ast();
+        ast.references.push(ReferenceEntry {
+            id: "ref-1".to_string(),
+            citation_key: "ref-1".to_string(),
+            biblatex: "@book{ref-1, title={Test}}".to_string(),
+        });
+        ast.sections = vec![DocumentSection::Content(ContentSection {
+            id: "content-section".to_string(),
+            is_optional: false,
+            elements: vec![
+                DocumentElement::List(List {
+                    id: "list-1".to_string(),
+                    items: vec![
+                        nested_with_empty_child,
+                        list_item("top two"),
+                        nested_parent,
+                    ],
+                }),
+                DocumentElement::Quote(Quote {
+                    id: "quote-1".to_string(),
+                    content: vec![rich_text("body quote")],
+                    ..Default::default()
+                }),
+                DocumentElement::Table(Table {
+                    id: "table-1".to_string(),
+                    rows: 1,
+                    cols: 1,
+                    cells: vec![vec![TableCell {
+                        elements: vec![
+                            DocumentElement::Paragraph(Paragraph {
+                                id: "cell-p1".to_string(),
+                                content: vec![rich_text("first para")],
+                            }),
+                            DocumentElement::Quote(Quote {
+                                id: "cell-q1".to_string(),
+                                content: vec![rich_text("quoted")],
+                                ..Default::default()
+                            }),
+                            DocumentElement::List(List {
+                                id: "cell-l1".to_string(),
+                                items: vec![list_item("cell item")],
+                            }),
+                        ],
+                        row_span: None,
+                        col_span: None,
+                    }]],
+                    column_sizes: vec!["1fr".to_string()],
+                    extra_fields: HashMap::new(),
+                }),
+                DocumentElement::Paragraph(Paragraph {
+                    id: "p-2".to_string(),
+                    content: vec![rich_text("after table")],
+                }),
+            ],
+        })];
+
+        let vfs = Arc::new(VirtualFileSystem::new());
+        populate_umb_apa(&vfs);
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session.sync_snapshot(ast).unwrap();
+
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
+        if let Err(error) = compile_document(&world) {
+            for path in [
+                "main.typ",
+                "lib.typ",
+                "elements/list-1.typ",
+                "elements/table-1.typ",
+                "elements/quote-1.typ",
+            ] {
+                if let Ok(source) = vfs.read_source(path) {
+                    eprintln!("=== {path} ===\n{source}");
+                }
+            }
+            panic!("compile failed: {error}");
+        }
+    }
+
     /// New project AST + bundled `apa7` template spec → canonical `.ergproj` sources → Typst compile.
     #[test]
     fn new_apa7_project_from_bundled_template_compiles_to_svg() {
@@ -293,6 +409,209 @@ mod tests {
 
         assert!(!svgs.is_empty());
         assert!(svgs[0].contains("<svg"));
+    }
+
+    #[test]
+    fn apa7_paragraph_with_bibliography_citation_compiles() {
+        use crate::ast::{
+            DocumentElement, DocumentSection, EquationSyntax, Paragraph, ReferenceEntry, RichText,
+        };
+        use crate::path_utils::file_id_for_virtual_path;
+        use crate::test_fixtures::{default_apa7_project_ast, populate_versatile_apa, rich_text};
+        use crate::vfs::VirtualFileSystem;
+        use std::sync::Arc;
+
+        let mut ast = default_apa7_project_ast();
+        ast.references = vec![ReferenceEntry {
+            id: "bib-ref-1".to_string(),
+            citation_key: "smith2020".to_string(),
+            biblatex: "@article{smith2020, author = {Smith}, title = {Demo}, year = {2020}}"
+                .to_string(),
+        }];
+        let DocumentSection::Content(content) = &mut ast.sections[0];
+        content.elements.push(DocumentElement::Paragraph(Paragraph {
+            id: "p-1".to_string(),
+            content: vec![
+                rich_text("See "),
+                RichText {
+                    text: "smith2020".to_string(),
+                    bold: None,
+                    italic: None,
+                    underline: None,
+                    kind: Some("reference".to_string()),
+                    reference_id: Some("bib-ref-1".to_string()),
+                    equation_source: None,
+                    equation_syntax: EquationSyntax::Typst,
+                    ..Default::default()
+                },
+                rich_text(" for details."),
+            ],
+        }));
+
+        let vfs = Arc::new(VirtualFileSystem::new());
+        populate_versatile_apa(&vfs);
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session.sync_snapshot(ast).unwrap();
+
+        if let Ok(source) = vfs.read_source("elements/p-1.typ") {
+            eprintln!("=== elements/p-1.typ ===\n{source}");
+        }
+        if let Ok(source) = vfs.read_source("references.bib") {
+            eprintln!("=== references.bib ===\n{source}");
+        }
+
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
+        if let Err(error) = compile_document(&world) {
+            panic!("compile failed: {error}");
+        }
+    }
+
+    #[test]
+    fn umb_apa_paragraph_with_bibliography_citation_compiles() {
+        use crate::ast::{
+            DocumentElement, DocumentSection, EquationSyntax, Paragraph, ReferenceEntry, RichText,
+        };
+        use crate::path_utils::file_id_for_virtual_path;
+        use crate::test_fixtures::{default_umb_apa_project_ast, populate_umb_apa, rich_text};
+        use crate::vfs::VirtualFileSystem;
+        use std::sync::Arc;
+
+        let mut ast = default_umb_apa_project_ast();
+        ast.references = vec![ReferenceEntry {
+            id: "bib-ref-1".to_string(),
+            citation_key: "smith2020".to_string(),
+            biblatex: "@article{smith2020, author = {Smith}, title = {Demo}, year = {2020}}"
+                .to_string(),
+        }];
+        let DocumentSection::Content(content) = &mut ast.sections[0];
+        content.elements.push(DocumentElement::Paragraph(Paragraph {
+            id: "p-1".to_string(),
+            content: vec![
+                rich_text("See "),
+                RichText {
+                    text: "smith2020".to_string(),
+                    bold: None,
+                    italic: None,
+                    underline: None,
+                    kind: Some("reference".to_string()),
+                    reference_id: Some("bib-ref-1".to_string()),
+                    equation_source: None,
+                    equation_syntax: EquationSyntax::Typst,
+                    ..Default::default()
+                },
+                rich_text(" for details."),
+            ],
+        }));
+
+        let vfs = Arc::new(VirtualFileSystem::new());
+        populate_umb_apa(&vfs);
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session.sync_snapshot(ast).unwrap();
+
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
+        if let Err(error) = compile_document(&world) {
+            panic!("umb-apa bibliography citation compile failed: {error}");
+        }
+    }
+
+    #[test]
+    fn apa7_minimal_bibliography_entry_with_citation_compiles() {
+        use crate::ast::{
+            DocumentElement, DocumentSection, EquationSyntax, Paragraph, ReferenceEntry, RichText,
+        };
+        use crate::path_utils::file_id_for_virtual_path;
+        use crate::test_fixtures::{default_apa7_project_ast, populate_versatile_apa, rich_text};
+        use crate::vfs::VirtualFileSystem;
+        use std::sync::Arc;
+
+        let mut ast = default_apa7_project_ast();
+        ast.references = vec![ReferenceEntry {
+            id: "ref-1".to_string(),
+            citation_key: "ref-1".to_string(),
+            biblatex: "@book{ref-1}".to_string(),
+        }];
+        let DocumentSection::Content(content) = &mut ast.sections[0];
+        content.elements.push(DocumentElement::Paragraph(Paragraph {
+            id: "p-1".to_string(),
+            content: vec![
+                rich_text("See "),
+                RichText {
+                    text: "ref-1".to_string(),
+                    bold: None,
+                    italic: None,
+                    underline: None,
+                    kind: Some("reference".to_string()),
+                    reference_id: Some("ref-1".to_string()),
+                    equation_source: None,
+                    equation_syntax: EquationSyntax::Typst,
+                    ..Default::default()
+                },
+                rich_text("."),
+            ],
+        }));
+
+        let vfs = Arc::new(VirtualFileSystem::new());
+        populate_versatile_apa(&vfs);
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session.sync_snapshot(ast).unwrap();
+
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
+        if let Err(error) = compile_document(&world) {
+            panic!("compile failed: {error}");
+        }
+    }
+
+    #[test]
+    fn apa7_bibliography_citation_uses_biblatex_entry_key() {
+        use crate::ast::{
+            DocumentElement, DocumentSection, EquationSyntax, Paragraph, ReferenceEntry, RichText,
+        };
+        use crate::path_utils::file_id_for_virtual_path;
+        use crate::test_fixtures::{default_apa7_project_ast, populate_versatile_apa};
+        use crate::typst_source::{bibliography_citation_keys, typst_reference_marker};
+        use crate::vfs::VirtualFileSystem;
+        use std::sync::Arc;
+
+        let references = vec![ReferenceEntry {
+            id: "ref-1".to_string(),
+            citation_key: "ref-1".to_string(),
+            biblatex: "@article{smith2020, author = {Smith}, title = {Demo}, year = {2020}}"
+                .to_string(),
+        }];
+        let keys = bibliography_citation_keys(&references);
+        assert_eq!(
+            typst_reference_marker("ref-1", &keys),
+            "@smith2020"
+        );
+
+        let mut ast = default_apa7_project_ast();
+        ast.references = references;
+        let DocumentSection::Content(content) = &mut ast.sections[0];
+        content.elements.push(DocumentElement::Paragraph(Paragraph {
+            id: "p-1".to_string(),
+            content: vec![RichText {
+                text: "smith2020".to_string(),
+                bold: None,
+                italic: None,
+                underline: None,
+                kind: Some("reference".to_string()),
+                reference_id: Some("ref-1".to_string()),
+                equation_source: None,
+                equation_syntax: EquationSyntax::Typst,
+                ..Default::default()
+            }],
+        }));
+
+        let vfs = Arc::new(VirtualFileSystem::new());
+        populate_versatile_apa(&vfs);
+        let session = DocumentSession::new(Arc::clone(&vfs));
+        session.sync_snapshot(ast).unwrap();
+
+        let element_source = vfs.read_source("elements/p-1.typ").unwrap();
+        assert!(element_source.contains("@smith2020"));
+
+        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
+        compile_document(&world).expect("citation key mismatch should compile");
     }
 
     #[test]

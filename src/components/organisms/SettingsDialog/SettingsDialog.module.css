@@ -40,7 +40,7 @@
 }
 
 .fieldCheckbox {
-    justify-self: end;
+    justify-self: start;
 }
 
 .sectionTitle {
@@ -85,6 +85,63 @@
     gap: var(--space-2);
 }
 
+.keymapProfileRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2);
+    align-items: end;
+    margin-bottom: var(--space-4);
+}
+
+.keymapRenameRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: var(--space-2);
+    align-items: center;
+    margin-bottom: var(--space-4);
+}
+
+.keymapCaptureBanner {
+    margin: 0 0 var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--border-radius-md);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.keymapCategory {
+    margin-bottom: var(--space-5);
+}
+
+.keymapCategoryTitle {
+    margin: 0 0 var(--space-2);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+}
+
+.keymapActionMeta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.keymapActionLabel {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+}
+
+.keymapActionDescription {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-relaxed);
+}
+
+.keymapRowRecording {
+    outline: var(--border-width-sm) solid var(--color-accent);
+}
+
 .visuallyHidden {
     position: absolute;
     width: var(--border-width-sm);
@@ -104,6 +161,37 @@
 .empty {
     margin: 0;
     color: var(--color-text-secondary);
+}
+
+.settingHint {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-relaxed);
+}
+
+.fontUnavailable {
+    margin: var(--space-1) 0 0;
+    color: var(--color-danger);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-relaxed);
+}
+
+.settingStatus {
+    margin: 0;
+    font-size: var(--font-size-sm);
+}
+
+.settingStatusRunning {
+    color: var(--color-success, var(--color-text-primary));
+}
+
+.settingStatusStopped {
+    color: var(--color-text-secondary);
+}
+
+.settingStatusWarning {
+    color: var(--color-warning);
 }
 
 @media (max-width: var(--breakpoint-md)) {

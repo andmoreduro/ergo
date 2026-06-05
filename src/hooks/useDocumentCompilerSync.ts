@@ -15,6 +15,10 @@ import type { ProjectFile } from "../bindings/ProjectFile";
 import type { SourceMapEntry } from "../bindings/SourceMapEntry";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import { TauriApi } from "../api/tauri";
+import {
+    documentAstForCompile,
+    documentEventsForCompile,
+} from "../settings/documentAstForCompile";
 import { CompilerClient } from "../workers/compilerClient";
 import { projectFilesToVfsEntries } from "../workers/compilerProtocol";
 import type { QueuedDocumentEvent } from "../state/DocumentContext";
@@ -52,12 +56,6 @@ export interface CompilerPreviewSetters {
     previewRevisionRef: MutableRefObject<SourceRevision | null>;
     latestRevisionRef: MutableRefObject<SourceRevision | null>;
     latencyStartRef: MutableRefObject<number | null>;
-    /**
-     * 0-based indices of the pages the preview currently shows. The compile
-     * trip inlines the SVG of the changed ones (see `compile_preview_with_svg`)
-     * so the visible page paints without a second `render_svg_page` round-trip.
-     */
-    previewSvgPageIndicesRef: MutableRefObject<number[]>;
 }
 
 export interface UseDocumentCompilerSyncParams {
@@ -99,7 +97,6 @@ export function useDocumentCompilerSync({
         previewRevisionRef,
         latestRevisionRef,
         latencyStartRef,
-        previewSvgPageIndicesRef,
     } = preview;
 
     const desiredAstRef = useRef<DocumentAST | null>(null);
@@ -225,9 +222,11 @@ export function useDocumentCompilerSync({
                         console.error("Failed to load template package files:", loadError);
                     }
 
+                    const compileAst = await documentAstForCompile(currentAst);
+
                     const bootstrapStarted = nowMs();
                     const { status, result } = await CompilerClient.bootstrap({
-                        ast: currentAst,
+                        ast: compileAst,
                         files: vfsFiles,
                     });
                     const bootstrapFinished = nowMs();
@@ -256,7 +255,7 @@ export function useDocumentCompilerSync({
                     }
                     applyPreviewResult(status, result, currentSessionId);
 
-                    await TauriApi.syncDocumentSnapshot(currentAst);
+                    await TauriApi.syncDocumentSnapshot(compileAst);
                     backendMirrorDirtyRef.current = false;
                     continue;
                 }
@@ -271,9 +270,11 @@ export function useDocumentCompilerSync({
                 const lastEvent = pendingEvents[pendingEvents.length - 1];
                 const syncStarted = nowMs();
 
-                const status = await CompilerClient.syncEvents(
+                const compileEvents = await documentEventsForCompile(
                     pendingEvents.map((event) => event.event),
                 );
+
+                const status = await CompilerClient.syncEvents(compileEvents);
 
                 const syncFinished = nowMs();
                 if (
@@ -285,10 +286,11 @@ export function useDocumentCompilerSync({
 
                 latencyStartRef.current = lastEvent.timestamp;
 
-                const compileOutput = await CompilerClient.compile(
-                    currentAst,
-                    previewSvgPageIndicesRef.current,
-                );
+                // Keep compile metadata-only on the typing hot path. Visible changed
+                // pages paint via `renderSvgPage` in PreviewPageSvg; inlining SVG
+                // during compile (after forward scroll expands visible indices) was
+                // adding raster work to every keystroke.
+                const compileOutput = await CompilerClient.compile(currentAst, []);
                 const compileFinished = nowMs();
                 setPendingPreviewTelemetry({
                     revision: compileOutput.result.source_revision,
@@ -353,7 +355,9 @@ export function useDocumentCompilerSync({
             ) {
                 return;
             }
-            await TauriApi.syncDocumentSnapshot(mirrorAst);
+            await TauriApi.syncDocumentSnapshot(
+                await documentAstForCompile(mirrorAst),
+            );
             backendMirrorDirtyRef.current = false;
         };
 

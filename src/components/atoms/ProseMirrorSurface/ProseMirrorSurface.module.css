@@ -133,19 +133,52 @@
 }
 
 .bodyPaper > :global(blockquote) {
+    font-size: var(--heading-size-6);
     border-inline-start: 3px solid var(--color-border, #cbd5e1);
     padding-inline-start: var(--space-3, 0.75rem);
     color: var(--color-text-muted, #64748b);
 }
 
-.bodyPaper > :global(ul),
-.bodyPaper > :global(ol) {
-    padding-inline-start: var(--space-5, 1.25rem);
+.bodyPaper > :global(blockquote)::before {
+    content: "\201C";
+    margin-inline-end: var(--space-2);
+    color: var(--color-text-secondary);
+    font-family: var(--font-family-serif, inherit);
+    user-select: none;
+}
+
+.bodyPaper :global(ul),
+.bodyPaper :global(ol) {
+    padding-inline-start: 1.25em;
+    list-style-position: outside;
+    margin-block: 0.25em 0;
+}
+
+.bodyPaper :global(li) > :global(p) {
+    display: inline;
+    margin: 0;
+}
+
+.bodyPaper :global(li) > :global(ul),
+.bodyPaper :global(li) > :global(ol) {
+    display: block;
+    margin-top: 0.25em;
+    padding-inline-start: 1.25em;
 }
 
 .bodyPaper :global(.ergo-ref-chip) {
+    display: inline;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
     color: var(--color-accent, #2563eb);
     cursor: default;
+}
+
+.bodyPaper :global(.ergo-inline-equation-chip),
+.bodyPaper :global(.ergo-inline-quote-chip) {
+    display: inline;
+    vertical-align: baseline;
 }
 
 .bodyPaper :global(u) {

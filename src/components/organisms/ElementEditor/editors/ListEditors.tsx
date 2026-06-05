@@ -57,7 +57,7 @@ const ListItemEditor = ({
                         type: "UPDATE_LIST_ITEM",
                         payload: {
                             listId: element.id,
-                            itemIndex,
+                            itemPath: [itemIndex],
                             content: normalized,
                         },
                     });
@@ -68,7 +68,7 @@ const ListItemEditor = ({
                     type: "UPDATE_ENUMERATION_ITEM",
                     payload: {
                         enumerationId: element.id,
-                        itemIndex,
+                        itemPath: [itemIndex],
                         content: normalized,
                     },
                 });
@@ -88,7 +88,7 @@ const ListLikeEditor = ({ element }: { element: ListLikeElement }) => {
                 type: "UPDATE_LIST_ITEM",
                 payload: {
                     listId: element.id,
-                    itemIndex: element.items.length,
+                    itemPath: [element.items.length],
                     content: [createRichText("")],
                 },
             });
@@ -99,7 +99,7 @@ const ListLikeEditor = ({ element }: { element: ListLikeElement }) => {
             type: "UPDATE_ENUMERATION_ITEM",
             payload: {
                 enumerationId: element.id,
-                itemIndex: element.items.length,
+                itemPath: [element.items.length],
                 content: [createRichText("")],
             },
         });
@@ -112,7 +112,7 @@ const ListLikeEditor = ({ element }: { element: ListLikeElement }) => {
                     key={`${element.id}-${index}`}
                     element={element}
                     itemIndex={index}
-                    content={item}
+                    content={item.content}
                 />
             ))}
             <Button type="button" variant="secondary" size="small" onClick={addItem}>

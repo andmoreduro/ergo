@@ -5,13 +5,13 @@
     min-width: var(--width-menu-popover);
     max-height: var(--height-scroll-md);
     margin: 0;
-    padding: var(--space-1);
+    padding: var(--popover-list-padding);
     border: var(--border-width-sm) solid var(--color-border);
     border-radius: var(--border-radius-sm);
     background: var(--color-bg-primary);
     box-shadow: var(--shadow-md);
     color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
+    font-size: var(--popover-item-font-size);
     overflow-y: auto;
     scrollbar-gutter: auto;
 }

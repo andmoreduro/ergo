@@ -1,7 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::ast::{DocumentElement, RichText};
+use crate::ast::{DocumentElement, ListItem, RichText};
 
 pub(crate) fn hash_source(source: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
@@ -33,13 +33,13 @@ fn hash_document_element(element: &DocumentElement, hasher: &mut impl Hasher) {
         DocumentElement::List(l) => {
             l.id.hash(hasher);
             for item in &l.items {
-                hash_rich_text_slice(item, hasher);
+                hash_list_item(item, hasher);
             }
         }
         DocumentElement::Enumeration(e) => {
             e.id.hash(hasher);
             for item in &e.items {
-                hash_rich_text_slice(item, hasher);
+                hash_list_item(item, hasher);
             }
         }
         DocumentElement::Equation(e) => {
@@ -87,6 +87,14 @@ fn hash_document_element(element: &DocumentElement, hasher: &mut impl Hasher) {
             c.element_type.hash(hasher);
             hash_json_map(&c.fields, hasher);
         }
+    }
+}
+
+fn hash_list_item(item: &ListItem, hasher: &mut impl Hasher) {
+    hash_rich_text_slice(&item.content, hasher);
+    item.children.len().hash(hasher);
+    for child in &item.children {
+        hash_list_item(child, hasher);
     }
 }
 

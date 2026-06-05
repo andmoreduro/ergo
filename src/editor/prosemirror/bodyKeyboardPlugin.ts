@@ -1,6 +1,14 @@
 import { Plugin, TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import { clearElementSelection, extendBlockSelection } from "./bodySelection";
+import {
+    blockIndexAtPos,
+    clearElementSelection,
+    extendBlockSelection,
+    isBlockLevelTextSelection,
+    isExtendingTextSelection,
+    textSelectionHeadAtBlockEdge,
+    wholeBlockSelectionAtIndex,
+} from "./bodySelection";
 import { blockEditIds } from "./blockEditMode";
 import {
     enterLockedWholeBlock,
@@ -9,22 +17,11 @@ import {
     tableBlockFromSelection,
 } from "./bodyTableCommands";
 import { runBodyTab } from "./bodyTabCommand";
-import {
-    getActiveBodyView,
-    getBodyHistoryActions,
-    getBodyParagraphInsert,
-} from "./activeView";
+import { runListEnter } from "./listEnter";
+import { getBodyParagraphInsert } from "./activeView";
 import { isTableBlockFocused } from "./tableBlockFocus";
 
 const isMod = (event: KeyboardEvent) => event.ctrlKey || event.metaKey;
-
-const isHistoryUndo = (event: KeyboardEvent) =>
-    isMod(event) && event.key.toLowerCase() === "z" && !event.shiftKey;
-
-const isHistoryRedo = (event: KeyboardEvent) =>
-    isMod(event) &&
-    (event.key.toLowerCase() === "y" ||
-        (event.key.toLowerCase() === "z" && event.shiftKey));
 
 const NAV_DIR: Record<string, "left" | "right" | "up" | "down"> = {
     ArrowLeft: "left",
@@ -48,22 +45,6 @@ export const bodyKeyboardPlugin = () =>
         props: {
             handleKeyDown(view: EditorView, event: KeyboardEvent) {
                 const mod = isMod(event);
-
-                if (view === getActiveBodyView()) {
-                    const history = getBodyHistoryActions();
-                    if (history && isHistoryUndo(event) && history.canUndo()) {
-                        history.undo();
-                        event.preventDefault();
-                        event.stopPropagation();
-                        return true;
-                    }
-                    if (history && isHistoryRedo(event) && history.canRedo()) {
-                        history.redo();
-                        event.preventDefault();
-                        event.stopPropagation();
-                        return true;
-                    }
-                }
 
                 // Esc clears a whole-element / range selection back to a caret.
                 // While a block is edited fine-grained, Esc belongs to that block
@@ -121,6 +102,11 @@ export const bodyKeyboardPlugin = () =>
                         }
                         return false;
                     }
+                    if (runListEnter(view)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return true;
+                    }
                     const lockedBlockId = lockedWholeBlockElementId(view.state);
                     const insert = getBodyParagraphInsert();
                     if (lockedBlockId && insert) {
@@ -132,10 +118,8 @@ export const bodyKeyboardPlugin = () =>
                     return false;
                 }
 
-                // Shift+Up/Down selects whole elements. Inside a multi-line text
-                // block, defer to native line-by-line selection until the caret
-                // reaches the block edge; then extend element by element (the only
-                // way to span atoms, which native selection cannot enter).
+                // Shift+Up/Down selects whole elements once the moving end reaches a
+                // block edge. Until then, defer to native line-by-line selection.
                 if (
                     (event.key === "ArrowUp" || event.key === "ArrowDown") &&
                     event.shiftKey &&
@@ -144,12 +128,33 @@ export const bodyKeyboardPlugin = () =>
                 ) {
                     const dir = event.key === "ArrowDown" ? 1 : -1;
                     const sel = view.state.selection;
-                    if (sel instanceof TextSelection && sel.empty) {
-                        const atEdge =
-                            dir > 0
-                                ? view.endOfTextblock("down")
-                                : view.endOfTextblock("up");
-                        if (!atEdge) {
+                    if (sel instanceof TextSelection) {
+                        if (!isBlockLevelTextSelection(view.state)) {
+                            if (!textSelectionHeadAtBlockEdge(view.state, dir)) {
+                                return false;
+                            }
+                            if (!isExtendingTextSelection(view.state, dir)) {
+                                return false;
+                            }
+                            const blockIdx = blockIndexAtPos(
+                                view.state.doc,
+                                sel.head,
+                            );
+                            view.dispatch(
+                                view.state.tr
+                                    .setSelection(
+                                        wholeBlockSelectionAtIndex(
+                                            view.state.doc,
+                                            blockIdx,
+                                        ),
+                                    )
+                                    .scrollIntoView(),
+                            );
+                            event.preventDefault();
+                            event.stopPropagation();
+                            return true;
+                        }
+                        if (!isExtendingTextSelection(view.state, dir)) {
                             return false;
                         }
                     }

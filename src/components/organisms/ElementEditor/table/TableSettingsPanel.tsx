@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { elementExtraFieldFieldId } from "../../../../editor/fieldIds";
 import { getPlacementOptions, tablePlacementValue } from "../../../../editor/placementOptions";
-import { usesStandardTypstFigureWrapper } from "../../../../editor/templateElementOverrides";
+import { tableEditorSupportsPlacement } from "../../../../editor/templateElementOverrides";
 import { useDocumentAst } from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { useTemplateSpecContext } from "../../../../state/TemplateSpecContext";
@@ -25,7 +25,7 @@ export const TableSettingsPanel = ({
     const { dispatch } = useDocumentAst();
     const { spec: templateSpec } = useTemplateSpecContext();
     const tableOverride = templateSpec?.typst.element_overrides?.table ?? null;
-    const showPlacement = usesStandardTypstFigureWrapper(tableOverride);
+    const showPlacement = tableEditorSupportsPlacement(tableOverride);
 
     const committedPlacement = tablePlacementValue(element.extra_fields);
     const committedWidth =

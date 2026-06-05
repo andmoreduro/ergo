@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { registerActiveElementSettingsToggle } from "../../../editor/elementSettingsBridge";
 import { useBlockUiState } from "../../../editor/prosemirror/blockUiState";
 
 /**
- * Controlled open-state for a block element's settings modal, plus a keyboard
- * shortcut (Ctrl/Cmd+,) that opens it — but only while the block is in
- * fine-grained edit mode, so the chord never fires for a block the user isn't
- * actively editing. Returns the open flag and a setter for the cog button to
- * share, keeping mouse and keyboard on the same control.
+ * Controlled open-state for a block element's settings modal. Ctrl/Cmd+, is
+ * handled by the action runtime (`editor::OpenElementSettings`) via
+ * {@link registerActiveElementSettingsToggle} while the block is in
+ * fine-grained edit mode.
  */
 export const useElementSettingsShortcut = (elementId: string) => {
     const { selected, editing } = useBlockUiState(elementId);
@@ -15,8 +15,6 @@ export const useElementSettingsShortcut = (elementId: string) => {
 
     useEffect(() => {
         const focused = selected || editing;
-        // Close only after the block was focused and then lost focus — not when
-        // opening from the cog while the block is still unfocused.
         if (hadBlockFocusRef.current && !focused) {
             setOpen(false);
         }
@@ -25,17 +23,12 @@ export const useElementSettingsShortcut = (elementId: string) => {
 
     useEffect(() => {
         if (!editing) {
-            return;
+            return undefined;
         }
-        const onKeyDown = (event: KeyboardEvent) => {
-            if ((event.ctrlKey || event.metaKey) && event.key === ",") {
-                event.preventDefault();
-                event.stopPropagation();
-                setOpen((value) => !value);
-            }
-        };
-        document.addEventListener("keydown", onKeyDown, true);
-        return () => document.removeEventListener("keydown", onKeyDown, true);
+
+        return registerActiveElementSettingsToggle(() => {
+            setOpen((value) => !value);
+        });
     }, [editing]);
 
     return { open, setOpen };

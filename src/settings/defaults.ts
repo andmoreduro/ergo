@@ -1,5 +1,6 @@
 import type { GlobalSettings } from "../bindings/GlobalSettings";
 import type { KeymapSettings } from "../bindings/KeymapSettings";
+import { normalizeKeymapSettings } from "./keymapProfiles";
 import type { ProjectSettings } from "../bindings/ProjectSettings";
 
 export type ThemeMode = "system" | "light" | "dark";
@@ -19,13 +20,16 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     autosave_on_app_close: true,
     autosave_on_project_close: true,
     default_equation_syntax: "typst",
+    zotero_translation_server_enabled: false,
 };
 
-export const DEFAULT_KEYMAP_SETTINGS: KeymapSettings = {
+export const DEFAULT_KEYMAP_SETTINGS: KeymapSettings = normalizeKeymapSettings({
     keymap_profile: "Default",
     keymap_bindings: [],
     keymap_overrides: [],
-};
+    active_profile_id: "default",
+    profiles: [],
+});
 
 export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
     paper_size: "us-letter",
@@ -78,9 +82,13 @@ export const mergeGlobalSettings = (
 
 export const mergeKeymapSettings = (
     settings: Partial<KeymapSettings> | null | undefined,
-): KeymapSettings => ({
-    ...DEFAULT_KEYMAP_SETTINGS,
-    ...(settings ?? {}),
-    keymap_bindings: settings?.keymap_bindings ?? [],
-    keymap_overrides: settings?.keymap_overrides ?? [],
-});
+): KeymapSettings =>
+    normalizeKeymapSettings({
+        ...DEFAULT_KEYMAP_SETTINGS,
+        ...(settings ?? {}),
+        keymap_bindings: settings?.keymap_bindings ?? [],
+        keymap_overrides: settings?.keymap_overrides ?? [],
+        active_profile_id:
+            settings?.active_profile_id ?? DEFAULT_KEYMAP_SETTINGS.active_profile_id,
+        profiles: settings?.profiles ?? [],
+    });

@@ -214,29 +214,3 @@ const readInputValue = (state: DocumentAST, path: string): unknown => {
     }
     return current;
 };
-
-export const parseReferenceInsertPayload = (
-    payload: unknown,
-): ReferenceInsertTarget | null => {
-    if (typeof payload !== "object" || payload === null) {
-        return null;
-    }
-
-    const record = payload as Record<string, unknown>;
-    const referenceId =
-        typeof record.referenceId === "string"
-            ? record.referenceId
-            : typeof record.resourceId === "string"
-              ? record.resourceId
-              : null;
-    if (!referenceId) {
-        return null;
-    }
-
-    const label =
-        typeof record.label === "string" && record.label.length > 0
-            ? record.label
-            : labelForReferenceId(referenceId);
-
-    return { referenceId, label };
-};

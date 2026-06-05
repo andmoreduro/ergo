@@ -9,6 +9,16 @@
       "Abstract": "Abstract",
       "Keywords": "Keywords",
       "Appendix": "Appendix",
+      "Chapter": "Chapter",
+      "Dedication": "Dedication",
+      "List of symbols": "List of symbols",
+      "Symbol": "Symbol",
+      "Term": "Term",
+      "Unit": "Unit",
+      "Definition": "Definition",
+      "List of abbreviations": "List of abbreviations",
+      "Abbreviation": "Abbreviation",
+      "Thesis requirement": "Graduate thesis submitted in partial fulfillment of the requirements for the degree of:",
       "Note": "Note",
       ..overrides,
     )
@@ -19,6 +29,16 @@
       "Abstract": "Resumen",
       "Keywords": "Palabras clave",
       "Appendix": "Apéndice",
+      "Chapter": "Capítulo",
+      "Dedication": "Dedicatoria",
+      "List of symbols": "Lista de símbolos",
+      "Symbol": "Símbolo",
+      "Term": "Término",
+      "Unit": "Unidad",
+      "Definition": "Definición",
+      "List of abbreviations": "Lista de abreviaturas",
+      "Abbreviation": "Abreviatura",
+      "Thesis requirement": "Trabajo de Grado presentado como requisito parcial para optar por el título de:",
       "Note": "Nota",
       ..overrides,
     )
@@ -29,6 +49,7 @@
       "Abstract": "Zusammenfassung",
       "Keywords": "Schlüsselwörter",
       "Appendix": "Anhang",
+      "Dedication": "Widmung",
       "Note": "Hinweis",
       ..overrides,
     )
@@ -39,6 +60,7 @@
       "Abstract": "Resumo",
       "Keywords": "Palavras-chave",
       "Appendix": "Apêndice",
+      "Dedication": "Dedicação",
       "Note": "Nota",
       ..overrides,
     )
@@ -49,6 +71,7 @@
       "Abstract": "Résumé",
       "Keywords": "Mots-clés",
       "Appendix": "Annexe",
+      "Dedication": "Dédicace",
       "Note": "Note",
       ..overrides,
     )
@@ -59,6 +82,7 @@
       "Abstract": "Sommario",
       "Keywords": "Parole chiave",
       "Appendix": "Appendice",
+      "Dedication": "Dedica",
       "Note": "Nota",
       ..overrides,
     )
@@ -69,6 +93,7 @@
       "Abstract": "Samenvatting",
       "Keywords": "Trefwoorden",
       "Appendix": "Bijlage",
+      "Dedication": "Opdracht",
       "Note": "Notitie",
       ..overrides,
     )
@@ -79,6 +104,7 @@
       "Abstract": "Apstrakt",
       "Keywords": "Ključne reči",
       "Appendix": "Dodatak",
+      "Dedication": "Posveta",
       "Note": "Napomena",
       ..overrides,
     )
@@ -89,6 +115,7 @@
       "Abstract": "Апстракт",
       "Keywords": "Кључне речи",
       "Appendix": "Додатак",
+      "Dedication": "Посвета",
       "Note": "Напомена",
       ..overrides,
     )
@@ -99,6 +126,7 @@
       "Abstract": "Abstrak",
       "Keywords": "Kata Kunci",
       "Appendix": "Lampiran",
+      "Dedication": "Dedikasi",
       "Note": "Catatan",
       ..overrides,
     )

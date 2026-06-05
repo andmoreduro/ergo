@@ -15,9 +15,11 @@ import {
     createRichText,
     createTable,
 } from "./defaults";
+import { appendListItem, updateListItemAtPath } from "./listItem";
 import { convertElement } from "./convertElement";
 import { trailingParagraphAction } from "../../editor/ensureTrailingParagraph";
 import { applyMinimumContentParagraph } from "./contentInvariant";
+import { generatedDiagramAssetForElement } from "../documentEvents/helpers";
 
 type ParagraphElement = Extract<DocumentElement, { type: "Paragraph" }>;
 
@@ -482,6 +484,25 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
             );
         }
 
+        case "UPDATE_QUOTE_ATTRIBUTION": {
+            const { quoteId, attributionText, attributionReferenceId } =
+                action.payload;
+
+            return mapContentElements(state, (element) =>
+                element.type === "Quote" && element.id === quoteId
+                    ? {
+                          ...element,
+                          attribution_text: attributionReferenceId
+                              ? null
+                              : attributionText,
+                          attribution_reference_id: attributionText
+                              ? null
+                              : attributionReferenceId,
+                      }
+                    : element,
+            );
+        }
+
         case "UPDATE_DIAGRAM": {
             const { diagramId, mermaidSource, assetId, caption, placement } =
                 action.payload;
@@ -502,30 +523,42 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         }
 
         case "UPDATE_LIST_ITEM": {
-            const { listId, itemIndex, content } = action.payload;
+            const { listId, itemPath, content } = action.payload;
 
             return mapContentElements(state, (element) =>
                 element.type === "List" && element.id === listId
                     ? {
                           ...element,
-                          items: element.items.map((item, index) =>
-                              index === itemIndex ? content : item,
-                          ).concat(itemIndex === element.items.length ? [content] : []),
+                          items:
+                              itemPath.length === 1 &&
+                              itemPath[0] === element.items.length
+                                  ? appendListItem(element.items, content)
+                                  : updateListItemAtPath(
+                                        element.items,
+                                        itemPath,
+                                        content,
+                                    ),
                       }
                     : element,
             );
         }
 
         case "UPDATE_ENUMERATION_ITEM": {
-            const { enumerationId, itemIndex, content } = action.payload;
+            const { enumerationId, itemPath, content } = action.payload;
 
             return mapContentElements(state, (element) =>
                 element.type === "Enumeration" && element.id === enumerationId
                     ? {
                           ...element,
-                          items: element.items.map((item, index) =>
-                              index === itemIndex ? content : item,
-                          ).concat(itemIndex === element.items.length ? [content] : []),
+                          items:
+                              itemPath.length === 1 &&
+                              itemPath[0] === element.items.length
+                                  ? appendListItem(element.items, content)
+                                  : updateListItemAtPath(
+                                        element.items,
+                                        itemPath,
+                                        content,
+                                    ),
                       }
                     : element,
             );
@@ -776,21 +809,22 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
             };
 
         case "CONVERT_ELEMENT": {
-            const { elementId, targetKind } = action.payload;
+            const { elementId, targetKind, headingLevel } = action.payload;
 
             return mapContentElements(state, (element) => {
                 if (element.id !== elementId) {
                     return element;
                 }
 
-                return convertElement(element, targetKind);
+                return convertElement(element, targetKind, { headingLevel });
             });
         }
 
         case "REMOVE_ELEMENT": {
             const { elementId } = action.payload;
+            const generatedAsset = generatedDiagramAssetForElement(state, elementId);
 
-            return mapSections(state, (section) => {
+            const next = mapSections(state, (section) => {
                 if (section.type !== "Content") {
                     return section;
                 }
@@ -802,6 +836,15 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                     ),
                 };
             });
+
+            if (!generatedAsset) {
+                return next;
+            }
+
+            return {
+                ...next,
+                assets: next.assets.filter((asset) => asset.id !== generatedAsset.id),
+            };
         }
 
         default:

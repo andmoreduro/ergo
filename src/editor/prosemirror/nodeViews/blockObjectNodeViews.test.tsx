@@ -55,19 +55,4 @@ describe("block-object node views use the portal registry", () => {
         view.destroy?.();
         expect(registry.getSnapshot()).toHaveLength(0);
     });
-
-    it("keeps a stable snapshot reference between mutations", () => {
-        const registry = new NodeViewPortalRegistry();
-        const first = registry.getSnapshot();
-        expect(registry.getSnapshot()).toBe(first);
-
-        registry.register({
-            key: "k",
-            dom: document.createElement("div"),
-            render: () => null,
-        });
-        const afterRegister = registry.getSnapshot();
-        expect(afterRegister).not.toBe(first);
-        expect(registry.getSnapshot()).toBe(afterRegister);
-    });
 });

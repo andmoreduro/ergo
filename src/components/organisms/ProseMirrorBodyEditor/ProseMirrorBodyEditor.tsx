@@ -39,10 +39,17 @@ import {
 import { rememberBodyFocus } from "../../../editor/editorFocusMemory";
 import {
     focusTargetFromState,
+    selectionForFocusRange,
     selectionForFocusTarget,
 } from "../../../editor/prosemirror/selection";
+import {
+    takePendingFindNavigation,
+} from "../../../editor/find/documentFind";
+import { applyProseMirrorDocumentFindMatch } from "../../../editor/find/prosemirrorFindPlugin";
 import { bodyPlugins } from "../../../editor/prosemirror/plugins";
 import { createBlockObjectNodeViews } from "../../../editor/prosemirror/nodeViews/blockObjectNodeViews";
+import { createInlineEquationNodeView } from "../../../editor/prosemirror/nodeViews/inlineEquationNodeView";
+import { createInlineQuoteNodeView } from "../../../editor/prosemirror/nodeViews/inlineQuoteNodeView";
 import { NodeViewPortalRegistry } from "../../../editor/prosemirror/nodeViews/nodeViewPortals";
 import {
     createTableBlockNodeView,
@@ -54,7 +61,6 @@ import { insertParagraphBeforeElement } from "../../../editor/insertParagraphBef
 import {
     clearActiveBodyView,
     setActiveBodyView,
-    setBodyHistoryActions,
     setBodyParagraphInsert,
     setBodyAstDispatch,
     setBodyClipboardPasteDeps,
@@ -68,6 +74,7 @@ import { setBodyEditorInsertDeps } from "../../../editor/bodyContentInsert";
 import { DEFAULT_GLOBAL_SETTINGS } from "../../../settings/defaults";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
 import { enterBlockEditById } from "../../../editor/prosemirror/bodyTableCommands";
+import { getActiveInlineEquationFocus } from "../../../editor/prosemirror/inlineEquationFocus";
 import { takePendingBlockEditIfMatches } from "../../../editor/prosemirror/pendingBlockEdit";
 import { setTableFocusPush } from "../../../editor/prosemirror/table/tableFocusBridge";
 import { applyTableCellFocus } from "../../../editor/prosemirror/table/tableFocusRegistry";
@@ -191,9 +198,9 @@ const ProseMirrorBodyEditorImpl = ({
     sectionId: string;
     autoFocus?: boolean;
 }) => {
-    const { dispatch, commitDocumentEvents, undo, redo, setDocumentFocus } =
+    const { dispatch, commitDocumentEvents, setDocumentFocus } =
         useDocumentActions();
-    const { externalRevision, canUndo, canRedo } = useDocumentReconcile();
+    const { externalRevision } = useDocumentReconcile();
     const astStore = useDocumentAstStore();
     const { spec: templateSpec } = useTemplateSpecContext();
     const templateSpecRef = useRef(templateSpec);
@@ -224,6 +231,8 @@ const ProseMirrorBodyEditorImpl = ({
     );
     const nodeViewsRef = useRef({
         ...createBlockObjectNodeViews(portalRegistryRef.current),
+        inlineEquation: createInlineEquationNodeView(portalRegistryRef.current),
+        inlineQuote: createInlineQuoteNodeView(portalRegistryRef.current),
         table_block: (
             node: PMNode,
             view: EditorView,
@@ -258,23 +267,8 @@ const ProseMirrorBodyEditorImpl = ({
         skipPmReconcileRef.current = true;
     };
 
-    const canUndoRef = useRef(canUndo);
-    const canRedoRef = useRef(canRedo);
-    canUndoRef.current = canUndo;
-    canRedoRef.current = canRedo;
-
     const dispatchRef = useRef(dispatch);
     dispatchRef.current = dispatch;
-
-    useLayoutEffect(() => {
-        setBodyHistoryActions({
-            undo,
-            redo,
-            canUndo: () => canUndoRef.current,
-            canRedo: () => canRedoRef.current,
-        });
-        return () => setBodyHistoryActions(null);
-    }, [undo, redo]);
 
     useLayoutEffect(() => {
         setBodyReconcileGuard(() => {
@@ -317,9 +311,10 @@ const ProseMirrorBodyEditorImpl = ({
             setDocumentFocus: (focus) => setFocusRef.current(focus),
             defaultEquationSyntax:
                 DEFAULT_GLOBAL_SETTINGS.default_equation_syntax ?? "typst",
+            quotePolicy: templateSpecRef.current?.editor.quote_policy ?? null,
         });
         return () => setBodyEditorInsertDeps(null);
-    }, [astStore]);
+    }, [astStore, templateSpec]);
 
     useLayoutEffect(() => {
         setBodyClipboardPasteDeps({
@@ -443,7 +438,9 @@ const ProseMirrorBodyEditorImpl = ({
             }
 
             if ((tr.selectionSet || tr.docChanged) && view.hasFocus()) {
-                const target = focusTargetFromState(nextState);
+                const inlineTarget = getActiveInlineEquationFocus()?.getFieldTarget();
+                const target =
+                    inlineTarget ?? focusTargetFromState(nextState);
                 if (
                     target &&
                     target.fieldId != null &&
@@ -602,10 +599,36 @@ const ProseMirrorBodyEditorImpl = ({
                 return;
             }
 
-            const selection = selectionForFocusTarget(view.state.doc, target);
+            const pendingFind = takePendingFindNavigation();
+            const selection =
+                typeof externalFocus.selectionEndUtf16Offset === "number"
+                    ? selectionForFocusRange(
+                          view.state.doc,
+                          target,
+                          externalFocus.selectionEndUtf16Offset,
+                      )
+                    : selectionForFocusTarget(view.state.doc, target);
             if (!selection) {
                 return;
             }
+
+            if (
+                pendingFind &&
+                pendingFind.match.elementId === target.elementId &&
+                pendingFind.match.fieldId === target.fieldId &&
+                selection instanceof TextSelection
+            ) {
+                applyProseMirrorDocumentFindMatch(
+                    view.state,
+                    view.dispatch.bind(view),
+                    pendingFind.query,
+                    selection.from,
+                    selection.to,
+                );
+                view.focus();
+                return;
+            }
+
             view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
             view.focus();
         } finally {

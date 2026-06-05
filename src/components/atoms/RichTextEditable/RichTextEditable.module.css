@@ -30,8 +30,12 @@
 }
 
 :global(.ergo-ref-chip) {
-    display: inline-flex;
-    align-items: center;
+    display: inline-block;
+    max-width: 10em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: baseline;
     margin: 0 var(--space-px);
     padding: 0 var(--space-2);
     border-radius: var(--border-radius-sm);
@@ -39,6 +43,5 @@
     color: var(--color-primary);
     font-size: var(--font-size-sm);
     line-height: 1.4;
-    vertical-align: baseline;
     user-select: none;
 }

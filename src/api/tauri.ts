@@ -7,13 +7,16 @@ import type { ActionContextSnapshot } from "../bindings/ActionContextSnapshot";
 import type { ImportResourceResult } from "../bindings/ImportResourceResult";
 import type { OpenProjectResult } from "../bindings/OpenProjectResult";
 import type { ActionDescriptor } from "../bindings/ActionDescriptor";
+import type { ContextDescriptor } from "../bindings/ContextDescriptor";
 import type { ActionResolution } from "../bindings/ActionResolution";
 import type { KeymapValidationResult } from "../bindings/KeymapValidationResult";
 import type { LogicalKeyEvent } from "../bindings/LogicalKeyEvent";
 import type { ProjectFile } from "../bindings/ProjectFile";
+import type { ProjectFontAvailability } from "../bindings/ProjectFontAvailability";
+import type { ProjectSettings } from "../bindings/ProjectSettings";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
-import type { TemplateSpec } from "../bindings/TemplateSpec";
+import type { TranslationServerStatus } from "../bindings/TranslationServerStatus";
 
 export type { DocumentOutline } from "../bindings/DocumentOutline";
 
@@ -44,8 +47,22 @@ export const TauriApi = {
         return buffers.map((buf) => new Uint8Array(buf));
     },
 
+    async checkProjectFonts(
+        settings: ProjectSettings,
+    ): Promise<ProjectFontAvailability> {
+        return invoke("check_project_fonts", { settings });
+    },
+
+    async resolveProjectFonts(settings: ProjectSettings): Promise<ProjectSettings> {
+        return invoke("resolve_project_fonts", { settings });
+    },
+
     async listSystemFontFamilies(): Promise<string[]> {
         return invoke("list_system_font_families");
+    },
+
+    async resetProjectSession(): Promise<void> {
+        return invoke("reset_project_session");
     },
 
     async syncDocumentSnapshot(ast: DocumentAST): Promise<DocumentSessionStatus> {
@@ -104,6 +121,14 @@ export const TauriApi = {
         return invoke("save_global_settings", { settings });
     },
 
+    async getTranslationServerStatus(): Promise<TranslationServerStatus> {
+        return invoke("get_translation_server_status");
+    },
+
+    async lookupBibliographyMetadata(query: string): Promise<string | null> {
+        return invoke("lookup_bibliography_metadata", { query });
+    },
+
     async loadKeymapSettings(): Promise<KeymapSettings> {
         return invoke("load_keymap_settings");
     },
@@ -114,6 +139,10 @@ export const TauriApi = {
 
     async getActionCatalog(): Promise<ActionDescriptor[]> {
         return invoke("get_action_catalog");
+    },
+
+    async getContextGlossary(): Promise<ContextDescriptor[]> {
+        return invoke("get_context_glossary");
     },
 
     async resolveKeyEvent(

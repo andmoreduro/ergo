@@ -23,6 +23,14 @@ describe("Dialog keyboard shortcuts", () => {
         });
     };
 
+    const dispatchEnter = (init: KeyboardEventInit = {}) => {
+        act(() => {
+            document.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "Enter", bubbles: true, ...init }),
+            );
+        });
+    };
+
     it("Escape triggers cancel when provided", () => {
         const onCancel = vi.fn();
         renderDialog({
@@ -41,7 +49,7 @@ describe("Dialog keyboard shortcuts", () => {
         expect(onCancel).toHaveBeenCalledTimes(1);
     });
 
-    it("Enter triggers confirm when provided", () => {
+    it("Ctrl+Enter triggers confirm when provided", () => {
         const onConfirm = vi.fn();
         renderDialog({
             title: "Test",
@@ -50,16 +58,26 @@ describe("Dialog keyboard shortcuts", () => {
             children: "Body",
         });
 
-        act(() => {
-            document.dispatchEvent(
-                new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-            );
-        });
+        dispatchEnter({ ctrlKey: true });
 
         expect(onConfirm).toHaveBeenCalledTimes(1);
     });
 
-    it("Enter in a text field submits a form dialog with a submit confirm", () => {
+    it("plain Enter does not trigger confirm", () => {
+        const onConfirm = vi.fn();
+        renderDialog({
+            title: "Test",
+            titleId: "test-title",
+            confirmAction: { label: "OK", onClick: onConfirm },
+            children: "Body",
+        });
+
+        dispatchEnter();
+
+        expect(onConfirm).not.toHaveBeenCalled();
+    });
+
+    it("Ctrl+Enter in a text field submits a form dialog with a submit confirm", () => {
         const onConfirm = vi.fn();
         renderDialog({
             as: "form",
@@ -81,13 +99,49 @@ describe("Dialog keyboard shortcuts", () => {
         expect(input).not.toBeNull();
 
         act(() => {
-            input?.form?.requestSubmit();
+            input?.dispatchEvent(
+                new KeyboardEvent("keydown", {
+                    key: "Enter",
+                    ctrlKey: true,
+                    bubbles: true,
+                }),
+            );
         });
 
         expect(onConfirm).toHaveBeenCalledTimes(1);
     });
 
-    it("Enter triggers cancel when confirm is absent", () => {
+    it("plain Enter in a text field does not submit a form dialog", () => {
+        const onConfirm = vi.fn();
+        renderDialog({
+            as: "form",
+            title: "Test",
+            titleId: "test-title",
+            confirmAction: { label: "Save", type: "submit", onClick: onConfirm },
+            panelProps: {
+                onSubmit: (event) => {
+                    event.preventDefault();
+                    onConfirm();
+                },
+            },
+            children: (
+                <input type="text" defaultValue="Example" aria-label="Title" />
+            ),
+        });
+
+        const input = container.querySelector("input");
+        expect(input).not.toBeNull();
+
+        act(() => {
+            input?.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+            );
+        });
+
+        expect(onConfirm).not.toHaveBeenCalled();
+    });
+
+    it("Ctrl+Enter triggers cancel when confirm is absent", () => {
         const onCancel = vi.fn();
         renderDialog({
             title: "Test",
@@ -96,11 +150,7 @@ describe("Dialog keyboard shortcuts", () => {
             children: "Body",
         });
 
-        act(() => {
-            document.dispatchEvent(
-                new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-            );
-        });
+        dispatchEnter({ ctrlKey: true });
 
         expect(onCancel).toHaveBeenCalledTimes(1);
     });

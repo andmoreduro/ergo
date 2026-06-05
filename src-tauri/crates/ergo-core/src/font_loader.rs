@@ -1,7 +1,32 @@
 use std::collections::{BTreeSet, HashSet};
 use std::path::Path;
+use std::sync::OnceLock;
 
 use fontdb::{Database, Family, Query, Source};
+
+fn system_font_database() -> &'static Database {
+    static DATABASE: OnceLock<Database> = OnceLock::new();
+    DATABASE.get_or_init(|| {
+        let mut database = Database::new();
+        database.load_system_fonts();
+        database
+    })
+}
+
+/// Whether an installed system font advertises the given family name (case-insensitive).
+pub fn family_is_installed(name: &str) -> bool {
+    let normalized = name.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return false;
+    }
+
+    let database = system_font_database();
+    database.faces().any(|face| {
+        face.families.iter().any(|(family, _)| {
+            family.trim().to_ascii_lowercase() == normalized
+        })
+    })
+}
 
 /// Enumerates every font family the compiler can render — installed system
 /// fonts plus the families Typst embeds in its bundle — deduplicated and sorted.
@@ -10,8 +35,7 @@ use fontdb::{Database, Family, Query, Source};
 /// [`load_font_bytes_for_families`], while bundled families (e.g. Libertinus,
 /// New Computer Modern) are always available even when not installed OS-wide.
 pub fn list_system_font_family_names() -> Vec<String> {
-    let mut database = Database::new();
-    database.load_system_fonts();
+    let database = system_font_database();
 
     let mut families = BTreeSet::new();
     for face in database.faces() {
@@ -38,8 +62,7 @@ pub fn load_font_bytes_for_families(families: &[String]) -> Result<Vec<Vec<u8>>,
         .filter(|family| !family.is_empty())
         .collect();
 
-    let mut database = Database::new();
-    database.load_system_fonts();
+    let database = system_font_database();
 
     let mut buffers = Vec::new();
     let mut loaded_sources: HashSet<String> = HashSet::new();

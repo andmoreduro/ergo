@@ -37,6 +37,8 @@ export interface DocumentFocusState {
     elementId: string | null;
     fieldId: string | null;
     caretUtf16Offset: number | null;
+    /** When set with `caretUtf16Offset`, selects a UTF-16 range in the field. */
+    selectionEndUtf16Offset: number | null;
     sourceRevision: number | null;
     anchorPageNumber: number | null;
     forcePreviewScroll: boolean;
@@ -214,6 +216,7 @@ const createInitialSessionState = (
         elementId: null,
         fieldId: null,
         caretUtf16Offset: null,
+        selectionEndUtf16Offset: null,
         sourceRevision: null,
         anchorPageNumber: null,
         forcePreviewScroll: false,
@@ -354,7 +357,10 @@ const createSessionReducer =
             return {
                 ...state,
                 documentFocus: {
+                    ...state.documentFocus,
                     ...action.focus,
+                    selectionEndUtf16Offset:
+                        action.focus.selectionEndUtf16Offset ?? null,
                     requestId: state.documentFocus.requestId + 1,
                 },
             };

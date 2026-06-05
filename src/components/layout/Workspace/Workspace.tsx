@@ -20,6 +20,7 @@ import { useWorkspaceColumns } from "./useWorkspaceColumns";
 import type { PreviewZoomMode } from "../../../preview/previewZoom";
 import { Toast } from "../../molecules/Toast/Toast";
 import { m } from "../../../paraglide/messages.js";
+import { notifyUnavailableProjectFonts } from "../../../settings/projectFontNotifications";
 import styles from "./Workspace.module.css";
 
 export interface WorkspaceProps {
@@ -27,6 +28,9 @@ export interface WorkspaceProps {
     previewZoomMode: PreviewZoomMode;
     onPreviewZoomChange: Dispatch<SetStateAction<number>>;
     onPreviewZoomModeChange: Dispatch<SetStateAction<PreviewZoomMode>>;
+    zoteroTranslationServerEnabled?: boolean;
+    findBarOpen: boolean;
+    onFindBarOpenChange: (open: boolean) => void;
     onExportDocument: (
         format: import("../../../bindings/ExportFormat").ExportFormat,
     ) => void | Promise<void>;
@@ -37,6 +41,9 @@ export const Workspace = ({
     previewZoomMode,
     onPreviewZoomChange,
     onPreviewZoomModeChange,
+    zoteroTranslationServerEnabled = false,
+    findBarOpen,
+    onFindBarOpenChange,
     onExportDocument,
 }: WorkspaceProps) => {
     const { state } = useDocumentAst();
@@ -101,6 +108,10 @@ export const Workspace = ({
     }, [compiler.error, showToast]);
 
     useEffect(() => {
+        void notifyUnavailableProjectFonts(state.metadata.project_settings);
+    }, [sessionId]);
+
+    useEffect(() => {
         const onToast = (event: Event) => {
             const detail = (event as CustomEvent<{ message?: string }>).detail;
             if (!detail?.message) {
@@ -133,6 +144,9 @@ export const Workspace = ({
                                 compiler.mainPreviewPaintedRevision
                             }
                             previewScrollRef={previewScrollRef}
+                            zoteroTranslationServerEnabled={
+                                zoteroTranslationServerEnabled
+                            }
                         />
                     </div>
                     <ColumnResizeHandle {...handle1} />
@@ -146,6 +160,8 @@ export const Workspace = ({
                             mainPreviewPaintedRevision={
                                 compiler.mainPreviewPaintedRevision
                             }
+                            findBarOpen={findBarOpen}
+                            onFindBarOpenChange={onFindBarOpenChange}
                         />
                     </div>
                     <ColumnResizeHandle {...handle2} />

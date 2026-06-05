@@ -11,8 +11,9 @@ The `context/` folder holds the canonical design documents. Before proposing or 
 5. `context/collaboration-diagrams.md` — message passing between runtime objects
 6. `context/state-diagrams.md` — frontend, backend, typst watch, key sequence state machines
 7. `context/distribution-diagram.md` — deployment, archive layout, storage boundaries
-8. `context/user-stories.md` / `context/user-story-map.md` — feature scope and priority
-9. `context/README.md` — index of which diagram file owns each topic (avoids duplicate lookups)
+8. `context/requirements.md` — product scope as imperative, testable requirements (canonical for “what the system shall do”)
+9. `context/user-stories.md` / `context/user-story-map.md` — same scope in narrative user-story form and journey map (`REQ*` ids map to `US*` / `Tech*` in `user-stories.md`)
+10. `context/README.md` — index of which diagram file owns each topic (avoids duplicate lookups)
 
 When implementation and design docs conflict, preserve working code and update the design docs deliberately.
 
@@ -30,6 +31,8 @@ The context files describe the intended current design. They are not a changelog
   - `collaboration-diagrams.md`: message passing and object cooperation.
   - `state-diagrams.md`: states, transitions, guards, and events.
   - `distribution-diagram.md`: deployment nodes, archive layout, config files, and storage boundaries.
+  - `requirements.md`: product capabilities as imperative requirements (`REQ*`), one-to-one with `user-stories.md`.
+  - `user-stories.md` / `user-story-map.md`: narrative capability catalog and author journey; keep in sync with `requirements.md` when scope changes.
 - If a detail belongs in another diagram type, move it there instead of duplicating it or forcing it into the current file.
 - Keep code-level module names out of component diagrams unless the module is also a runtime architectural component.
 - Keep package dependency rules out of class diagrams. Class diagrams should describe data and type relationships, not source-file ownership.
@@ -148,9 +151,13 @@ Available scenarios are `small-document`, `typing-title`, `large-document`, and 
 - Logical keys from `KeyboardEvent.key`, not physical positions
 - Multi-stroke sequences supported (e.g. `Ctrl+O Ctrl+O` opens, `Ctrl+O Ctrl+R` opens recent)
 - No frontend fallback shortcut resolver
+- Body undo/redo (`edit::Undo`, `edit::Redo`) resolve through the action runtime; the capture listener suppresses native contenteditable history in the ProseMirror body surface
+- ProseMirror-owned synchronous shortcuts (body navigation arrows, Tab, Shift+arrow block selection) stay in `bodyKeyboardPlugin.ts` and are not user-bindable
+- Table cell merge/split (`editor::MergeTableCells`, `editor::SplitTableCell`) and Alt+arrow cell navigation resolve through the action runtime; `tableCellBoundary` swallows plain/Ctrl arrows at the grid rim but defers Alt+arrow to `editor::MoveTableCell*`
+- Context wrappers: `PreviewContext`, `CoverPageFieldContext`, `TableSettingsContext` alongside bibliography/resources/quote/dialog providers
 
 ### Project archive (`.ergproj`)
-Zip archive containing: `main.typ`, `sections/{section-id}.typ`, `assets/`, `references.bib`, `.ergproj/document_state.json`, `.ergproj/dependency_manifest.json`, `.ergproj/project_settings.json`, `.ergproj/template.json`, `.ergproj/source_map.json`. Generated previews/exports are cache artifacts, not authoritative state.
+Zip archive containing durable project state: `assets/`, `packages/` (registry Typst deps), embedded template Typst package tree (`umb-apa/`, `versatile-apa/`, …), `.ergproj/document_state.json`, `.ergproj/template_spec.json`, `.ergproj/dependency_manifest.json`, `.ergproj/project_settings.json`, `.ergproj/template.json`, `.ergproj/source_map.json`, `.ergproj/field_source_map.json`. Generated Typst sources (`main.typ`, `sections/`, `references.bib`, …) and previews/exports are cache artifacts, not authoritative state. Projects embed their template manifest and Typst package on save so reopening does not depend on the installed app version.
 
 ### VFS
 In-memory virtual filesystem. Text files stored as retained Typst `Source` objects (for incremental parsing) with revisions. Binary files as bytes. Paths normalized to `/`.
@@ -210,11 +217,64 @@ Button/
 
 ## Testing
 
-See `docs/testing.md` for layers, what to add, and what to avoid.
+### Test contracts, not product instances
+
+Tests assert behavior against the **contract** the code implements: schema shapes, spec fields, merge/normalization logic, and minimal inline fixtures. They do not snapshot a shipped product instance (default JSON, a concrete field catalog, generated binding shapes, a bundled defaults document, etc.).
+
+If a test would break when an instance is renamed or its defaults change, but the contract did not change, delete or rewrite the test in the same change. Do not add another coupled case beside it.
+
+- Build minimal inline fixtures (`TemplateSpec`, `InputSchema`, `KeymapProfile`, …) in the test file.
+- Use `createTestDocumentAST()` (`src/test/documentAstFixture.ts`) or `createDocumentAST("none")` for document state unless the test targets instance load or save.
+- Derive field order, list-label style, outline titles, and option values from **spec fields** in the fixture, not from production ids or names in assertions.
+
+### Layout
 
 - Co-located `*.test.ts` with source (no `*.test.tsx` until RTL returns)
 - Vitest: `jsdom` environment (DOM unit tests only), `globals: true`
-- Prefer pure logic and Rust tests; no label/CSS smoke tests
+- Prefer pure logic and Rust tests; push compile/archive/VFS invariants to `cargo nextest run`
+
+### Before changing code
+
+1. Run `pnpm test:changed` (or `vitest run <affected.test.ts>`) and read failures — do not assume green means the right tests exist.
+2. Search for tests that import or describe the module you are editing (`rg 'from \"./foo\"' **/*.test.ts`, `rg 'describe.*Foo'`). Update or remove those tests in the **same change** as the behavior change.
+3. **Audit those tests for product-instance coupling** (see above). Remove or rewrite coupled tests before adding new ones.
+4. Do not add a new test file when an existing file already owns the behavior surface.
+
+### When to add a test
+
+Add or extend a test only when it guards a **regression**, **non-obvious invariant**, or **IPC/schema contract** that would realistically break again. Examples that earn tests: VFS patching, document session generation, keymap merge/validation, archive save/open, source maps, reducer commit policy.
+
+Do **not** add a test solely because you touched a file. A bugfix needs a test only if the bug could recur without it.
+
+### Do not add (delete on sight during review)
+
+- **Product-instance snapshots** — asserting the shape of a shipped defaults file, catalog export, or other concrete instance instead of the contract
+- **Existence checks** — `expect(typeof fn).toBe("function")`, `expect(handlers["id"]).toBeDefined()`, re-export smoke tests
+- **Mirror tests** — asserting the same fact as TypeScript types, Paraglide keys, or generated `src/bindings/`
+- **Config/catalog snapshots** — default JSON shape unless verifying merge/migration **logic**
+- **One-liner wrappers** — pure pass-through with no branch (e.g. `formatX` calling `formatY`)
+- **Duplicate chord/key tests** — one canonical file per shortcut normalization family (`shortcutKeyFromKeyboardEvent.test.ts`)
+- **Diagnostic / temporary tests** — files named `*Diagnostic*` or tests added only to print state during debugging
+- **RTL/component smoke** — label text, CSS class presence, snapshot of markup (deferred until RTL pass)
+
+### When changing behavior
+
+- **Update** tests that assert the old behavior; do not leave them failing or add a parallel test for the new path.
+- **Remove** tests that only encoded the old design and no longer protect a product invariant.
+- **Consolidate** overlapping cases into one table-driven `it.each` instead of many near-duplicate `it` blocks.
+
+### Review bar (every `it` must pass)
+
+1. *If this test failed in CI, would we fix production code or delete the test?* If “delete the test”, it should not exist.
+2. *Does this test a contract or a concrete product instance?* If instance-only, rewrite against a minimal fixture or delete it.
+
+### Commands
+
+| Command | Use |
+|---------|-----|
+| `pnpm test:changed` | After local edits — only tests affected by the diff |
+| `pnpm test` | Pre-merge gate |
+| `cargo nextest run` | Backend / WASM-adjacent Rust |
 
 ## No lint/format/CI config
 
@@ -224,7 +284,7 @@ TypeScript strict mode (`noUnusedLocals`, `noUnusedParameters`) is the only enfo
 
 1. Read context files and relevant source before coding.
 2. Prefer existing architecture and source patterns over inventing new systems.
-3. Add or update tests alongside new behavior (especially VFS patching, document session generation, command/keymap logic, settings, source maps, archive save/open, typst watch).
+3. Follow **Testing** above: audit affected tests for product-instance coupling, update or remove them in the same change, and add tests only for regressions or non-obvious **contracts** (VFS, document session, keymap merge logic, settings, source maps, archive I/O).
 4. Run focused tests first, then broader gates:
    - `pnpm test` (frontend)
    - `pnpm build` (typecheck)

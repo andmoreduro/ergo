@@ -63,6 +63,9 @@ const EDITOR_OUTSIDE_TABLE_CELL = "editor && !tableCell";
 /** Swallow toolbar-locked shortcuts while editing a cell. */
 const TABLE_CELL = "tableCell";
 
+/** Table row/column and cell navigation shortcuts. */
+const BODY_OR_TABLE_CELL = "body || tableCell";
+
 const tableCellForbiddenBindings = (
     commandId: ActionId,
     keys: string,
@@ -99,7 +102,28 @@ export const DEFAULT_KEYMAP: KeymapProfile = {
             "global",
             "app",
         ),
+        defaultBinding(
+            "editor::OpenElementSettings",
+            "Ctrl+,",
+            "editor",
+            "element || inlineElement",
+        ),
+        defaultBinding("editor::Find", "Ctrl+F", "project", "workspace || editor || body || tableCell || input"),
+        defaultBinding(
+            "editor::FindNext",
+            "F3",
+            "project",
+            "workspace || editor || body || tableCell || input",
+        ),
+        defaultBinding(
+            "editor::FindPrevious",
+            "Shift+F3",
+            "project",
+            "workspace || editor || body || tableCell || input",
+        ),
         defaultBinding("view::ZoomIn", "Ctrl+=", "global", "workspace"),
+        defaultBinding("view::ZoomIn", "Ctrl+Shift+=", "global", "workspace"),
+        defaultBinding("view::ZoomIn", "Ctrl++", "global", "workspace"),
         defaultBinding("view::ZoomOut", "Ctrl+-", "global", "workspace"),
         defaultBinding(
             "edit::Undo",
@@ -113,6 +137,7 @@ export const DEFAULT_KEYMAP: KeymapProfile = {
             "project",
             "workspace || editor || body",
         ),
+        defaultBinding("edit::Redo", "Ctrl+Y", "project", "body"),
         defaultBinding(
             "editor::InsertParagraph",
             "Ctrl+Alt+P",
@@ -231,6 +256,71 @@ export const DEFAULT_KEYMAP: KeymapProfile = {
             "editor",
             "element && !input",
         ),
+        defaultBinding(
+            "editor::MoveTableCellLeft",
+            "Alt+ArrowLeft",
+            "editor",
+            BODY_OR_TABLE_CELL,
+        ),
+        defaultBinding(
+            "editor::MoveTableCellRight",
+            "Alt+ArrowRight",
+            "editor",
+            BODY_OR_TABLE_CELL,
+        ),
+        defaultBinding(
+            "editor::MoveTableCellUp",
+            "Alt+ArrowUp",
+            "editor",
+            BODY_OR_TABLE_CELL,
+        ),
+        defaultBinding(
+            "editor::MoveTableCellDown",
+            "Alt+ArrowDown",
+            "editor",
+            BODY_OR_TABLE_CELL,
+        ),
+        defaultBinding(
+            "editor::AddTableRow",
+            "Ctrl+Alt+Shift+R",
+            "editor",
+            BODY_OR_TABLE_CELL,
+        ),
+        defaultBinding(
+            "editor::AddTableColumn",
+            "Ctrl+Alt+Shift+C",
+            "editor",
+            BODY_OR_TABLE_CELL,
+        ),
+        defaultBinding(
+            "editor::RemoveTableRow",
+            "Ctrl+Alt+R",
+            "editor",
+            BODY_OR_TABLE_CELL,
+        ),
+        defaultBinding(
+            "editor::RemoveTableColumn",
+            "Ctrl+Alt+C",
+            "editor",
+            BODY_OR_TABLE_CELL,
+        ),
+        defaultBinding(
+            "editor::MergeTableCells",
+            "Ctrl+Shift+M",
+            "editor",
+            TABLE_CELL,
+        ),
+        defaultBinding(
+            "editor::SplitTableCell",
+            "Ctrl+Shift+S",
+            "editor",
+            TABLE_CELL,
+        ),
+        defaultBinding("editor::EnterTable", "Ctrl+Enter", "editor", "body"),
+        defaultBinding("editor::Tab", "Tab", "editor", "body"),
+        defaultBinding("editor::Tab", "Ctrl+Shift+Tab", "editor", "body"),
+        defaultBinding("editor::Tab", "Ctrl+Shift+Tab", "editor", "editor"),
+        defaultBinding("editor::Tab", "Ctrl+Tab", "editor", "editor && input"),
     ],
 };
 

@@ -5,6 +5,7 @@ import type { DocumentAST } from "../bindings/DocumentAST";
 import type { CommandRegistry } from "../commands/registry";
 import type { CommandContext } from "../commands/types";
 import { parseHeadingInsertLevel } from "../editor/headingInsert";
+import { toggleActiveElementSettings } from "../editor/elementSettingsBridge";
 import type { ElementType, InsertElementOptions } from "../commands/editorCommands";
 import { parseInputContentBlocks } from "../editor/contentBlocks";
 import { globalCaretInContentBlocks, parseIndexedInputFieldPath } from "../editor/contentBlocksCaret";
@@ -121,6 +122,9 @@ export const useAppActionHandlers = ({
             void closeProject();
             return true;
         };
+
+        handlers["editor::OpenElementSettings"] = () =>
+            toggleActiveElementSettings();
 
         handlers["editor::FocusField"] = (invocation) => {
             const target = parseFocusFieldPayload(invocation.payload);

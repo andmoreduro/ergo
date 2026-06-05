@@ -7,7 +7,7 @@ export interface WorkspaceCommandDeps {
     openProject: (path?: string) => Promise<void>;
     saveProject: () => void;
     closeProject: () => Promise<void>;
-    recentProjectsRef: { current: string[] };
+    showOpenRecentProjectsDialog: () => void;
     exportDocument: (format: ExportFormat) => Promise<void>;
 }
 
@@ -28,11 +28,7 @@ export const workspaceCommands = (deps: WorkspaceCommandDeps): Command[] => [
         id: "workspace::OpenRecentProject",
         label: m.action_workspace_open_recent_project(),
         scope: "global",
-        run: () => {
-            const recent = deps.recentProjectsRef.current[0];
-            if (recent) void deps.openProject(recent);
-        },
-        isEnabled: () => deps.recentProjectsRef.current.length > 0,
+        run: deps.showOpenRecentProjectsDialog,
     },
     {
         id: "workspace::SaveProject",

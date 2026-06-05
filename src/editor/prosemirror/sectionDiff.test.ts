@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DocumentElement } from "../../bindings/DocumentElement";
-import { createRichText, createTable } from "../../state/ast/defaults";
+import { createListItem, createRichText, createTable } from "../../state/ast/defaults";
 import {
     applyElementEvents,
     diffChangedBlocks,
@@ -129,7 +129,7 @@ describe("diffSectionElements", () => {
         const list = (id: string, items: string[]): DocumentElement => ({
             type: "List",
             id,
-            items: items.map((text) => (text ? [createRichText(text)] : [])),
+            items: items.map((text) => createListItem(text)),
         });
         expectRoundTrip([list("l1", ["one", "two"])], [list("l1", ["one", "TWO"])]);
     });
@@ -238,5 +238,16 @@ describe("rangeSignificantlyEqual", () => {
         const prev = [paragraph("a", "hello")];
         const next = [paragraph("a", "hello ")];
         expect(rangeSignificantlyEqual(prev, next, 0, 0)).toBe(true);
+    });
+
+    it("treats underline mark changes as significant", () => {
+        const prev = [paragraph("p1", "hello")];
+        const next = [
+            {
+                ...paragraph("p1", "hello"),
+                content: [{ ...createRichText("hello"), underline: true }],
+            },
+        ];
+        expect(rangeSignificantlyEqual(prev, next, 0, 0)).toBe(false);
     });
 });

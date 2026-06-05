@@ -1,5 +1,6 @@
 import type { AssetEntry } from "../../bindings/AssetEntry";
 import type { DocumentAST } from "../../bindings/DocumentAST";
+import { isGeneratedDiagramAsset } from "../../editor/diagram/diagramAsset";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { ReferenceEntry } from "../../bindings/ReferenceEntry";
 import type { Table } from "../../bindings/Table";
@@ -214,6 +215,21 @@ export const diagramElement = (ast: DocumentAST, elementId: string) => {
     }
 
     return element;
+};
+
+export const generatedDiagramAssetForElement = (
+    ast: DocumentAST,
+    elementId: string,
+): AssetEntry | null => {
+    const element = elementById(ast, elementId);
+    if (element.type !== "Diagram" || !element.asset_id) {
+        return null;
+    }
+    const asset = ast.assets.find((entry) => entry.id === element.asset_id);
+    if (!asset || !isGeneratedDiagramAsset(asset)) {
+        return null;
+    }
+    return asset;
 };
 
 export const referenceLocation = (

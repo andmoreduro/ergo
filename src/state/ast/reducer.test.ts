@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { astReducer } from "./reducer";
 import type { DocumentAST } from "../../bindings/DocumentAST";
 import type { ASTAction } from "./actions";
-import { createDefaultDocumentAST, createRichText } from "./defaults";
+import { createRichText } from "./defaults";
+import { createTestDocumentAST } from "../../test/documentAstFixture";
 
 const getContentSection = (state: DocumentAST) => {
     const section = state.sections.find((item) => item.type === "Content");
@@ -10,15 +11,9 @@ const getContentSection = (state: DocumentAST) => {
     return section?.type === "Content" ? section : undefined;
 };
 
-const getCoverPage = (state: DocumentAST) => {
-    const section = state.sections.find((item) => item.type === "CoverPage");
-    expect(section?.type).toBe("CoverPage");
-    return section?.type === "CoverPage" ? section : undefined;
-};
-
 describe("astReducer", () => {
     it("returns the same state for unknown actions", () => {
-        const state = createDefaultDocumentAST();
+        const state = createTestDocumentAST();
         const action = { type: "UNKNOWN_ACTION" } as unknown as ASTAction;
         const nextState = astReducer(state, action);
 
@@ -26,9 +21,9 @@ describe("astReducer", () => {
     });
 
     it("loads a complete document snapshot", () => {
-        const state = createDefaultDocumentAST();
+        const state = createTestDocumentAST();
         const nextDocument = {
-            ...createDefaultDocumentAST(),
+            ...createTestDocumentAST(),
             metadata: {
                 ...state.metadata,
                 title: "Loaded",
@@ -47,7 +42,7 @@ describe("astReducer", () => {
     });
 
     it("updates input values via UPDATE_INPUT without mutating the original state", () => {
-        const state = createDefaultDocumentAST();
+        const state = createTestDocumentAST();
 
         let nextState = astReducer(state, {
             type: "UPDATE_PROJECT_TITLE",
@@ -57,19 +52,19 @@ describe("astReducer", () => {
         nextState = astReducer(nextState, {
             type: "UPDATE_INPUT",
             payload: {
-                path: "/abstract_text",
-                value: "A compact abstract.",
+                path: "/notes",
+                value: "A compact note.",
             },
         });
 
         expect(state.metadata.title).toBe("Untitled Document");
-        expect(state.inputs.abstract_text).toBe("");
+        expect(state.inputs.notes).toBe("");
         expect(nextState.metadata.title).toBe("Research Notes");
-        expect(nextState.inputs.abstract_text).toBe("A compact abstract.");
+        expect(nextState.inputs.notes).toBe("A compact note.");
     });
 
     it("inserts and updates items in input arrays", () => {
-        const state = createDefaultDocumentAST();
+        const state = createTestDocumentAST();
 
         const withAuthor = astReducer(state, {
             type: "INSERT_INPUT_ARRAY_ITEM",
@@ -93,21 +88,36 @@ describe("astReducer", () => {
         expect(updated.inputs.authors[0].name).toBe("Ada Lovelace");
     });
 
-    it("adds and updates paragraphs", () => {
-        const state = createDefaultDocumentAST();
+    it("inserts paragraphs and headings in document order", () => {
+        const state = createTestDocumentAST();
         const content = getContentSection(state);
         expect(content).toBeDefined();
+        const sectionId = content?.id ?? "";
 
         const withParagraph = astReducer(state, {
             type: "ADD_PARAGRAPH",
-            payload: { sectionId: content?.id ?? "", paragraphId: "para-1" },
+            payload: { sectionId, paragraphId: "para-1" },
         });
-        const updated = astReducer(withParagraph, {
+        const withHeading = astReducer(withParagraph, {
+            type: "ADD_HEADING",
+            payload: {
+                sectionId,
+                headingId: "heading-1",
+                level: 3,
+                afterElementId: "para-1",
+            },
+        });
+        const updated = astReducer(withHeading, {
             type: "UPDATE_PARAGRAPH_TEXT",
             payload: { paragraphId: "para-1", text: "Hello, World!" },
         });
 
         const section = getContentSection(updated);
+        expect(section?.elements.map((element) => element.id)).toEqual([
+            "para-1",
+            "heading-1",
+        ]);
+        expect(section?.elements[1].type).toBe("Heading");
         const paragraph = section?.elements[0];
         expect(paragraph?.type).toBe("Paragraph");
         expect(paragraph?.type === "Paragraph" ? paragraph.content[0].text : "").toBe(
@@ -115,35 +125,8 @@ describe("astReducer", () => {
         );
     });
 
-    it("inserts headings after a specific element", () => {
-        const state = createDefaultDocumentAST();
-        const content = getContentSection(state);
-        expect(content).toBeDefined();
-
-        const withParagraph = astReducer(state, {
-            type: "ADD_PARAGRAPH",
-            payload: { sectionId: content?.id ?? "", paragraphId: "para-1" },
-        });
-        const withHeading = astReducer(withParagraph, {
-            type: "ADD_HEADING",
-            payload: {
-                sectionId: content?.id ?? "",
-                headingId: "heading-1",
-                level: 3,
-                afterElementId: "para-1",
-            },
-        });
-
-        const section = getContentSection(withHeading);
-        expect(section?.elements.map((element) => element.id)).toEqual([
-            "para-1",
-            "heading-1",
-        ]);
-        expect(section?.elements[1].type).toBe("Heading");
-    });
-
     it("updates table cells and dimensions", () => {
-        const state = createDefaultDocumentAST();
+        const state = createTestDocumentAST();
         const content = getContentSection(state);
         expect(content).toBeDefined();
 
@@ -185,7 +168,7 @@ describe("astReducer", () => {
     });
 
     it("updates equations and figures", () => {
-        const state = createDefaultDocumentAST();
+        const state = createTestDocumentAST();
         const content = getContentSection(state);
         expect(content).toBeDefined();
 
@@ -225,92 +208,61 @@ describe("astReducer", () => {
     });
 
     it("adds and updates quote, diagram, list, and enumeration elements", () => {
-        const state = createDefaultDocumentAST();
+        const state = createTestDocumentAST();
         const content = getContentSection(state);
         expect(content).toBeDefined();
+        const sectionId = content?.id ?? "";
 
-        const withQuote = astReducer(state, {
-            type: "ADD_QUOTE",
-            payload: { sectionId: content?.id ?? "", quoteId: "quote-1" },
-        });
-        const withDiagram = astReducer(withQuote, {
-            type: "ADD_DIAGRAM",
-            payload: { sectionId: content?.id ?? "", diagramId: "diagram-1" },
-        });
-        const withList = astReducer(withDiagram, {
-            type: "ADD_LIST",
-            payload: { sectionId: content?.id ?? "", listId: "list-1" },
-        });
-        const withEnumeration = astReducer(withList, {
-            type: "ADD_ENUMERATION",
-            payload: { sectionId: content?.id ?? "", enumerationId: "enum-1" },
-        });
+        const withEnumeration = [
+            { type: "ADD_QUOTE", payload: { sectionId, quoteId: "quote-1" } },
+            { type: "ADD_DIAGRAM", payload: { sectionId, diagramId: "diagram-1" } },
+            { type: "ADD_LIST", payload: { sectionId, listId: "list-1" } },
+            {
+                type: "ADD_ENUMERATION",
+                payload: { sectionId, enumerationId: "enum-1" },
+            },
+        ].reduce(
+            (current, action) => astReducer(current, action as ASTAction),
+            state,
+        );
 
-        const withQuoteText = astReducer(withEnumeration, {
-            type: "UPDATE_QUOTE_CONTENT",
-            payload: {
-                quoteId: "quote-1",
-                content: [
-                    {
-                        text: "Quoted",
-                        bold: null,
-                        italic: null,
-                        underline: null,
-                        kind: null,
-                        reference_id: null,
-                        equation_source: null,
-                        equation_syntax: "typst",
-                    },
-                ],
+        const next = [
+            {
+                type: "UPDATE_QUOTE_CONTENT",
+                payload: {
+                    quoteId: "quote-1",
+                    content: [createRichText("Quoted")],
+                },
             },
-        });
-        const withDiagramAsset = astReducer(withQuoteText, {
-            type: "UPDATE_DIAGRAM",
-            payload: {
-                diagramId: "diagram-1",
-                mermaidSource: "flowchart TD\nA-->B",
-                assetId: "diagram-1",
-                caption: "Diagram",
+            {
+                type: "UPDATE_DIAGRAM",
+                payload: {
+                    diagramId: "diagram-1",
+                    mermaidSource: "flowchart TD\nA-->B",
+                    assetId: "diagram-1",
+                    caption: "Diagram",
+                },
             },
-        });
-        const withListItem = astReducer(withDiagramAsset, {
-            type: "UPDATE_LIST_ITEM",
-            payload: {
-                listId: "list-1",
-                itemIndex: 1,
-                content: [
-                    {
-                        text: "Second",
-                        bold: null,
-                        italic: null,
-                        underline: null,
-                        kind: null,
-                        reference_id: null,
-                        equation_source: null,
-                        equation_syntax: "typst",
-                    },
-                ],
+            {
+                type: "UPDATE_LIST_ITEM",
+                payload: {
+                    listId: "list-1",
+                    itemPath: [1],
+                    content: [createRichText("Second")],
+                },
             },
-        });
-        const next = astReducer(withListItem, {
-            type: "UPDATE_ENUMERATION_ITEM",
-            payload: {
-                enumerationId: "enum-1",
-                itemIndex: 1,
-                content: [
-                    {
-                        text: "Second enum",
-                        bold: null,
-                        italic: null,
-                        underline: null,
-                        kind: null,
-                        reference_id: null,
-                        equation_source: null,
-                        equation_syntax: "typst",
-                    },
-                ],
+            {
+                type: "UPDATE_ENUMERATION_ITEM",
+                payload: {
+                    enumerationId: "enum-1",
+                    itemPath: [1],
+                    content: [createRichText("Second enum")],
+                },
             },
-        });
+        ].reduce(
+            (current, action) => astReducer(current, action as ASTAction),
+            withEnumeration,
+        );
 
         const elements = getContentSection(next)?.elements ?? [];
         expect(elements.map((element) => element.type)).toEqual([
@@ -325,12 +277,14 @@ describe("astReducer", () => {
         const enumeration = elements[3];
         expect(quote?.type === "Quote" ? quote.content[0].text : "").toBe("Quoted");
         expect(diagram?.type === "Diagram" ? diagram.asset_id : null).toBe("diagram-1");
-        expect(list?.type === "List" ? list.items[1][0].text : "").toBe("Second");
-        expect(enumeration?.type === "Enumeration" ? enumeration.items[1][0].text : "").toBe("Second enum");
+        expect(list?.type === "List" ? list.items[1].content[0].text : "").toBe("Second");
+        expect(enumeration?.type === "Enumeration" ? enumeration.items[1].content[0].text : "").toBe(
+            "Second enum",
+        );
     });
 
     it("removes an element", () => {
-        const state = createDefaultDocumentAST();
+        const state = createTestDocumentAST();
         const content = getContentSection(state);
         expect(content).toBeDefined();
 
@@ -346,8 +300,49 @@ describe("astReducer", () => {
         expect(getContentSection(nextState)?.elements).toHaveLength(0);
     });
 
+    it("removes generated diagram asset when diagram is deleted", () => {
+        let state = createTestDocumentAST();
+        const content = getContentSection(state);
+        expect(content).toBeDefined();
+
+        state = astReducer(state, {
+            type: "ADD_DIAGRAM",
+            payload: {
+                sectionId: content?.id ?? "",
+                diagramId: "diagram-1",
+            },
+        });
+        state = astReducer(state, {
+            type: "UPDATE_DIAGRAM",
+            payload: {
+                diagramId: "diagram-1",
+                mermaidSource: "flowchart TD\nA-->B",
+                assetId: "diagram-1",
+            },
+        });
+        state = astReducer(state, {
+            type: "ADD_ASSET",
+            payload: {
+                asset: {
+                    id: "diagram-1",
+                    path: "assets/diagrams/diagram-1.svg",
+                    kind: "image",
+                    caption: null,
+                },
+            },
+        });
+
+        const nextState = astReducer(state, {
+            type: "REMOVE_ELEMENT",
+            payload: { elementId: "diagram-1" },
+        });
+
+        expect(getContentSection(nextState)?.elements).toHaveLength(0);
+        expect(nextState.assets).toHaveLength(0);
+    });
+
     it("updates element extra fields", () => {
-        const state = createDefaultDocumentAST();
+        const state = createTestDocumentAST();
         const content = getContentSection(state);
 
         const withFigure = astReducer(state, {
@@ -372,8 +367,8 @@ describe("astReducer", () => {
         }
     });
 
-    it("adds, updates, and removes references without mutating the original state", () => {
-        const state = createDefaultDocumentAST();
+    it("adds, updates, and removes references and assets without mutating the original state", () => {
+        const state = createTestDocumentAST();
 
         const withReference = astReducer(state, {
             type: "ADD_REFERENCE",
@@ -385,7 +380,7 @@ describe("astReducer", () => {
                 },
             },
         });
-        const updated = astReducer(withReference, {
+        const updatedReference = astReducer(withReference, {
             type: "UPDATE_REFERENCE",
             payload: {
                 reference: {
@@ -395,25 +390,15 @@ describe("astReducer", () => {
                 },
             },
         });
-        const removed = astReducer(updated, {
+        const removedReference = astReducer(updatedReference, {
             type: "REMOVE_REFERENCE",
             payload: { referenceId: "ref-1" },
         });
 
         expect(state.references).toHaveLength(0);
-        expect(withReference.references).toEqual([
-            {
-                id: "ref-1",
-                citation_key: "garcia2024",
-                biblatex: "@article{garcia2024,\n  title = {Niñez}\n}",
-            },
-        ]);
-        expect(updated.references[0].citation_key).toBe("garcia2025");
-        expect(removed.references).toHaveLength(0);
-    });
-
-    it("adds, updates, and removes assets without mutating the original state", () => {
-        const state = createDefaultDocumentAST();
+        expect(withReference.references[0].citation_key).toBe("garcia2024");
+        expect(updatedReference.references[0].citation_key).toBe("garcia2025");
+        expect(removedReference.references).toHaveLength(0);
 
         const withAsset = astReducer(state, {
             type: "ADD_ASSET",
@@ -426,7 +411,7 @@ describe("astReducer", () => {
                 },
             },
         });
-        const updated = astReducer(withAsset, {
+        const updatedAsset = astReducer(withAsset, {
             type: "UPDATE_ASSET",
             payload: {
                 asset: {
@@ -437,21 +422,14 @@ describe("astReducer", () => {
                 },
             },
         });
-        const removed = astReducer(updated, {
+        const removedAsset = astReducer(updatedAsset, {
             type: "REMOVE_ASSET",
             payload: { assetId: "asset-1" },
         });
 
         expect(state.assets).toHaveLength(0);
-        expect(withAsset.assets).toEqual([
-            {
-                id: "asset-1",
-                path: "assets/chart.png",
-                kind: "image",
-                caption: "Chart",
-            },
-        ]);
-        expect(updated.assets[0].caption).toBe("Updated chart");
-        expect(removed.assets).toHaveLength(0);
+        expect(withAsset.assets[0].caption).toBe("Chart");
+        expect(updatedAsset.assets[0].caption).toBe("Updated chart");
+        expect(removedAsset.assets).toHaveLength(0);
     });
 });

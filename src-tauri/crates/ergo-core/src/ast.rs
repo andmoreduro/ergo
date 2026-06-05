@@ -65,6 +65,9 @@ pub struct GlobalSettings {
     /// Syntax applied to newly inserted equations.
     #[serde(default)]
     pub default_equation_syntax: Option<EquationSyntax>,
+    /// Runs the Zotero translation server in a fixed-name Docker container on localhost.
+    #[serde(default)]
+    pub zotero_translation_server_enabled: Option<bool>,
 }
 
 impl Default for GlobalSettings {
@@ -84,6 +87,7 @@ impl Default for GlobalSettings {
             autosave_on_app_close: Some(true),
             autosave_on_project_close: Some(true),
             default_equation_syntax: Some(EquationSyntax::Typst),
+            zotero_translation_server_enabled: Some(false),
         }
     }
 }
@@ -196,6 +200,10 @@ pub enum ActionId {
     EditorRemoveTableRow,
     #[serde(rename = "editor::RemoveTableColumn")]
     EditorRemoveTableColumn,
+    #[serde(rename = "editor::MergeTableCells")]
+    EditorMergeTableCells,
+    #[serde(rename = "editor::SplitTableCell")]
+    EditorSplitTableCell,
     #[serde(rename = "editor::ConvertToParagraph")]
     EditorConvertToParagraph,
     #[serde(rename = "editor::ConvertToHeading")]
@@ -208,6 +216,8 @@ pub enum ActionId {
     EditorConvertToFigure,
     #[serde(rename = "editor::FocusField")]
     EditorFocusField,
+    #[serde(rename = "editor::OpenElementSettings")]
+    EditorOpenElementSettings,
     #[serde(rename = "editor::MoveTableCellLeft")]
     EditorMoveTableCellLeft,
     #[serde(rename = "editor::MoveTableCellRight")]
@@ -228,28 +238,14 @@ pub enum ActionId {
     EditorBodyNavigateUp,
     #[serde(rename = "editor::BodyNavigateDown")]
     EditorBodyNavigateDown,
-    #[serde(rename = "bibliography::CreateEntry")]
-    BibliographyCreateEntry,
-    #[serde(rename = "bibliography::OpenEntry")]
-    BibliographyOpenEntry,
-    #[serde(rename = "bibliography::SaveEntry")]
-    BibliographySaveEntry,
-    #[serde(rename = "bibliography::RemoveEntry")]
-    BibliographyRemoveEntry,
-    #[serde(rename = "bibliography::CancelEdit")]
-    BibliographyCancelEdit,
-    #[serde(rename = "resources::Create")]
-    ResourcesCreate,
-    #[serde(rename = "resources::Open")]
-    ResourcesOpen,
-    #[serde(rename = "resources::Edit")]
-    ResourcesEdit,
-    #[serde(rename = "resources::Save")]
-    ResourcesSave,
-    #[serde(rename = "resources::Remove")]
-    ResourcesRemove,
-    #[serde(rename = "resources::InsertReference")]
-    ResourcesInsertReference,
+    #[serde(rename = "editor::Find")]
+    EditorFind,
+    #[serde(rename = "editor::FindNext")]
+    EditorFindNext,
+    #[serde(rename = "editor::FindPrevious")]
+    EditorFindPrevious,
+    #[serde(rename = "bibliography::ExportBib")]
+    BibliographyExportBib,
     #[serde(rename = "view::OpenCommandPalette")]
     ViewOpenCommandPalette,
     #[serde(rename = "view::ZoomIn")]
@@ -310,12 +306,15 @@ impl ActionId {
             ActionId::EditorAddTableColumn => "editor::AddTableColumn",
             ActionId::EditorRemoveTableRow => "editor::RemoveTableRow",
             ActionId::EditorRemoveTableColumn => "editor::RemoveTableColumn",
+            ActionId::EditorMergeTableCells => "editor::MergeTableCells",
+            ActionId::EditorSplitTableCell => "editor::SplitTableCell",
             ActionId::EditorConvertToParagraph => "editor::ConvertToParagraph",
             ActionId::EditorConvertToHeading => "editor::ConvertToHeading",
             ActionId::EditorConvertToTable => "editor::ConvertToTable",
             ActionId::EditorConvertToEquation => "editor::ConvertToEquation",
             ActionId::EditorConvertToFigure => "editor::ConvertToFigure",
             ActionId::EditorFocusField => "editor::FocusField",
+            ActionId::EditorOpenElementSettings => "editor::OpenElementSettings",
             ActionId::EditorMoveTableCellLeft => "editor::MoveTableCellLeft",
             ActionId::EditorMoveTableCellRight => "editor::MoveTableCellRight",
             ActionId::EditorMoveTableCellUp => "editor::MoveTableCellUp",
@@ -326,17 +325,10 @@ impl ActionId {
             ActionId::EditorBodyNavigateRight => "editor::BodyNavigateRight",
             ActionId::EditorBodyNavigateUp => "editor::BodyNavigateUp",
             ActionId::EditorBodyNavigateDown => "editor::BodyNavigateDown",
-            ActionId::BibliographyCreateEntry => "bibliography::CreateEntry",
-            ActionId::BibliographyOpenEntry => "bibliography::OpenEntry",
-            ActionId::BibliographySaveEntry => "bibliography::SaveEntry",
-            ActionId::BibliographyRemoveEntry => "bibliography::RemoveEntry",
-            ActionId::BibliographyCancelEdit => "bibliography::CancelEdit",
-            ActionId::ResourcesCreate => "resources::Create",
-            ActionId::ResourcesOpen => "resources::Open",
-            ActionId::ResourcesEdit => "resources::Edit",
-            ActionId::ResourcesSave => "resources::Save",
-            ActionId::ResourcesRemove => "resources::Remove",
-            ActionId::ResourcesInsertReference => "resources::InsertReference",
+            ActionId::EditorFind => "editor::Find",
+            ActionId::EditorFindNext => "editor::FindNext",
+            ActionId::EditorFindPrevious => "editor::FindPrevious",
+            ActionId::BibliographyExportBib => "bibliography::ExportBib",
             ActionId::ViewOpenCommandPalette => "view::OpenCommandPalette",
             ActionId::ViewZoomIn => "view::ZoomIn",
             ActionId::ViewZoomOut => "view::ZoomOut",
@@ -395,12 +387,15 @@ impl FromStr for ActionId {
             "editor::AddTableColumn" => Ok(ActionId::EditorAddTableColumn),
             "editor::RemoveTableRow" => Ok(ActionId::EditorRemoveTableRow),
             "editor::RemoveTableColumn" => Ok(ActionId::EditorRemoveTableColumn),
+            "editor::MergeTableCells" => Ok(ActionId::EditorMergeTableCells),
+            "editor::SplitTableCell" => Ok(ActionId::EditorSplitTableCell),
             "editor::ConvertToParagraph" => Ok(ActionId::EditorConvertToParagraph),
             "editor::ConvertToHeading" => Ok(ActionId::EditorConvertToHeading),
             "editor::ConvertToTable" => Ok(ActionId::EditorConvertToTable),
             "editor::ConvertToEquation" => Ok(ActionId::EditorConvertToEquation),
             "editor::ConvertToFigure" => Ok(ActionId::EditorConvertToFigure),
             "editor::FocusField" => Ok(ActionId::EditorFocusField),
+            "editor::OpenElementSettings" => Ok(ActionId::EditorOpenElementSettings),
             "editor::MoveTableCellLeft" => Ok(ActionId::EditorMoveTableCellLeft),
             "editor::MoveTableCellRight" => Ok(ActionId::EditorMoveTableCellRight),
             "editor::MoveTableCellUp" => Ok(ActionId::EditorMoveTableCellUp),
@@ -411,17 +406,10 @@ impl FromStr for ActionId {
             "editor::BodyNavigateRight" => Ok(ActionId::EditorBodyNavigateRight),
             "editor::BodyNavigateUp" => Ok(ActionId::EditorBodyNavigateUp),
             "editor::BodyNavigateDown" => Ok(ActionId::EditorBodyNavigateDown),
-            "bibliography::CreateEntry" => Ok(ActionId::BibliographyCreateEntry),
-            "bibliography::OpenEntry" => Ok(ActionId::BibliographyOpenEntry),
-            "bibliography::SaveEntry" => Ok(ActionId::BibliographySaveEntry),
-            "bibliography::RemoveEntry" => Ok(ActionId::BibliographyRemoveEntry),
-            "bibliography::CancelEdit" => Ok(ActionId::BibliographyCancelEdit),
-            "resources::Create" => Ok(ActionId::ResourcesCreate),
-            "resources::Open" => Ok(ActionId::ResourcesOpen),
-            "resources::Edit" => Ok(ActionId::ResourcesEdit),
-            "resources::Save" => Ok(ActionId::ResourcesSave),
-            "resources::Remove" => Ok(ActionId::ResourcesRemove),
-            "resources::InsertReference" => Ok(ActionId::ResourcesInsertReference),
+            "editor::Find" => Ok(ActionId::EditorFind),
+            "editor::FindNext" => Ok(ActionId::EditorFindNext),
+            "editor::FindPrevious" => Ok(ActionId::EditorFindPrevious),
+            "bibliography::ExportBib" => Ok(ActionId::BibliographyExportBib),
             "view::OpenCommandPalette" => Ok(ActionId::ViewOpenCommandPalette),
             "view::ZoomIn" => Ok(ActionId::ViewZoomIn),
             "view::ZoomOut" => Ok(ActionId::ViewZoomOut),
@@ -532,6 +520,23 @@ fn push_modifier(modifiers: &mut Vec<KeyModifier>, modifier: KeyModifier) {
     }
 }
 
+pub const DEFAULT_KEYMAP_PROFILE_ID: &str = "default";
+pub const CUSTOM_KEYMAP_PROFILE_ID: &str = "custom";
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct KeymapProfileRecord {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub overrides: Vec<KeyBindingPreference>,
+}
+
+fn default_active_profile_id() -> String {
+    DEFAULT_KEYMAP_PROFILE_ID.to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
@@ -542,6 +547,10 @@ pub struct KeymapSettings {
     pub keymap_bindings: Vec<KeyBindingPreference>,
     #[serde(default)]
     pub keymap_overrides: Vec<KeyBindingPreference>,
+    #[serde(default = "default_active_profile_id")]
+    pub active_profile_id: String,
+    #[serde(default)]
+    pub profiles: Vec<KeymapProfileRecord>,
 }
 
 impl Default for KeymapSettings {
@@ -550,8 +559,55 @@ impl Default for KeymapSettings {
             keymap_profile: Some("Default".to_string()),
             keymap_bindings: Vec::new(),
             keymap_overrides: Vec::new(),
+            active_profile_id: DEFAULT_KEYMAP_PROFILE_ID.to_string(),
+            profiles: Vec::new(),
         }
     }
+}
+
+pub fn normalize_keymap_settings(mut settings: KeymapSettings) -> KeymapSettings {
+    if settings.profiles.is_empty() {
+        let legacy_overrides = settings.keymap_overrides.clone();
+        let legacy_name = settings.keymap_profile.clone();
+
+        settings.profiles = vec![KeymapProfileRecord {
+            id: DEFAULT_KEYMAP_PROFILE_ID.to_string(),
+            name: "Default".to_string(),
+            overrides: vec![],
+        }];
+
+        if !legacy_overrides.is_empty() {
+            settings.profiles.push(KeymapProfileRecord {
+                id: CUSTOM_KEYMAP_PROFILE_ID.to_string(),
+                name: legacy_name
+                    .filter(|name| name != "Default")
+                    .unwrap_or_else(|| "Custom".to_string()),
+                overrides: legacy_overrides,
+            });
+            settings.active_profile_id = CUSTOM_KEYMAP_PROFILE_ID.to_string();
+        } else {
+            settings.active_profile_id = DEFAULT_KEYMAP_PROFILE_ID.to_string();
+        }
+    }
+
+    if !settings
+        .profiles
+        .iter()
+        .any(|profile| profile.id == settings.active_profile_id)
+    {
+        settings.active_profile_id = DEFAULT_KEYMAP_PROFILE_ID.to_string();
+    }
+
+    if let Some(profile) = settings
+        .profiles
+        .iter()
+        .find(|profile| profile.id == settings.active_profile_id)
+    {
+        settings.keymap_profile = Some(profile.name.clone());
+        settings.keymap_overrides = profile.overrides.clone();
+    }
+
+    settings
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -639,28 +695,44 @@ pub struct Paragraph {
     pub content: Vec<RichText>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, Default)]
 #[ts(export)]
 pub struct Quote {
     pub id: String,
     pub content: Vec<RichText>,
+    /// Parenthetical or narrative attribution text (APA-style). Mutually exclusive
+    /// with `attribution_reference_id`.
+    #[serde(default)]
+    pub attribution_text: Option<String>,
+    /// Bibliography entry cited as the quote attribution. Mutually exclusive with
+    /// `attribution_text`.
+    #[serde(default)]
+    pub attribution_reference_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ListItem {
+    pub content: Vec<RichText>,
+    #[serde(default)]
+    pub children: Vec<ListItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct List {
     pub id: String,
-    pub items: Vec<Vec<RichText>>,
+    pub items: Vec<ListItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Enumeration {
     pub id: String,
-    pub items: Vec<Vec<RichText>>,
+    pub items: Vec<ListItem>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, Default)]
 #[ts(export)]
 pub struct RichText {
     pub text: String,
@@ -676,6 +748,13 @@ pub struct RichText {
     pub equation_source: Option<String>,
     #[serde(default)]
     pub equation_syntax: EquationSyntax,
+    /// Quote attribution text for inline quote spans (`kind == "quote"`).
+    #[serde(default)]
+    pub quote_attribution_text: Option<String>,
+    /// Bibliography entry for inline quote attribution. Mutually exclusive with
+    /// `quote_attribution_text`.
+    #[serde(default)]
+    pub quote_attribution_reference_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

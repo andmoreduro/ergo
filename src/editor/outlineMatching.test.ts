@@ -40,7 +40,7 @@ describe("buildTargetedOutlineEntries", () => {
                 },
             ]),
             isAbstractEntry: () => false,
-            abstractTarget: { elementId: "inputs", fieldId: "inputs/abstract_text" },
+            abstractTarget: { elementId: "inputs", fieldId: "inputs/summary" },
         });
 
         expect(entries).toHaveLength(2);

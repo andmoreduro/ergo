@@ -60,6 +60,24 @@
     --space-6: 2rem;
     --space-8: 3rem;
 
+    /* Popover lists (dropdown menus, combobox, select listbox) */
+    --popover-list-gap: var(--space-1);
+    --popover-list-padding: var(--space-1);
+    --popover-item-padding-block: var(--space-2);
+    --popover-item-padding-inline: var(--space-3);
+    --popover-item-font-size: var(--font-size-sm);
+    --popover-item-radius: var(--border-radius-sm);
+    --popover-item-selected-color: var(--color-primary);
+    --popover-item-selected-weight: var(--font-weight-medium);
+
+    /* Single-choice field triggers (select, combobox) */
+    --choice-control-font-size: var(--font-size-md);
+    --choice-control-padding-block: var(--space-2);
+    --choice-control-padding-inline-start: var(--space-3);
+    --choice-control-padding-inline-end: var(--space-6);
+    --choice-control-radius: var(--border-radius-md);
+    --choice-control-chevron-inset: var(--space-3);
+
     /* Layout */
     --layout-full: 100%;
     --layout-viewport-w: 100vw;

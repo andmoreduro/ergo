@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Workspace } from "./components/layout/Workspace/Workspace";
 import { Menubar } from "./components/layout/Menubar/Menubar";
 import { WelcomeScreen } from "./components/screens/WelcomeScreen/WelcomeScreen";
@@ -10,6 +10,9 @@ import {
 import {
     NewProjectDialog,
 } from "./components/organisms/NewProjectDialog/NewProjectDialog";
+import {
+    OpenRecentProjectsDialog,
+} from "./components/organisms/OpenRecentProjectsDialog/OpenRecentProjectsDialog";
 import {
     DocumentProvider,
     useDocumentActions,
@@ -65,6 +68,11 @@ import { themeCommands } from "./commands/themeCommands";
 import { editCommands } from "./commands/editCommands";
 import { settingsCommands } from "./commands/settingsCommands";
 import { helpCommands } from "./commands/helpCommands";
+import { bibliographyCommands } from "./commands/bibliographyCommands";
+import { defaultFindCommandDeps, findCommands } from "./commands/findCommands";
+import { exportReferencesBib } from "./bibliography/exportReferencesBib";
+import { saveBibliographyDialog } from "./platform/bibliographyExport";
+import { previewZoomIn, previewZoomOut } from "./preview/previewZoomBridge";
 import { applyRichTextMarkToFocusedField } from "./editor/richTextMarks";
 import {
     applyBodyMark,
@@ -72,10 +80,14 @@ import {
     getActiveTableCellEditor,
 } from "./editor/prosemirror/activeView";
 import { tryBodyContentInsert } from "./editor/bodyContentInsert";
+import { resolveContentInsertAnchor } from "./editor/insertContext";
 import { resolveBodyInsertAnchor } from "./editor/bodyInsertAnchor";
 import { parseHeadingInsertLevel } from "./editor/headingInsert";
-import { resolveContentInsertAnchor } from "./editor/insertContext";
-import { insertBodyInlineEquation } from "./editor/prosemirror/bodyInsert";
+import { tryApplyHeadingLevelToCurrentBlock } from "./editor/headingToggle";
+import { parseListItemFieldPath } from "./editor/listFieldPath";
+import { getListItemAtPath } from "./state/ast/listItem";
+import { insertBodyInlineEquation, insertBodyInlineQuote } from "./editor/prosemirror/bodyInsert";
+import { shouldInsertQuoteAsBlock } from "./editor/quote/quotePolicy";
 import { setPendingBlockEdit } from "./editor/prosemirror/pendingBlockEdit";
 import {
     insertInlineEquationAtOffset,
@@ -96,7 +108,6 @@ import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
 import {
     PREVIEW_ZOOM_DEFAULT,
     type PreviewZoomMode,
-    stepPreviewZoom,
 } from "./preview/previewZoom";
 import { CommandPalette } from "./components/organisms/CommandPalette/CommandPalette";
 import styles from "./App.module.css";
@@ -164,10 +175,16 @@ const AppShellContent = () => {
     const [previewZoomMode, setPreviewZoomMode] =
         useState<PreviewZoomMode>("manual");
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
+    const [isFindBarOpen, setFindBarOpen] = useState(false);
+    const [isOpenRecentDialogOpen, setOpenRecentDialogOpen] = useState(false);
     const [commandQuery, setCommandQuery] = useState("");
     const [systemFonts, setSystemFonts] = useState<string[]>([]);
     const dispatchAction = useActionDispatcher();
     const recentProjects = globalSettings.recent_projects;
+
+    const showOpenRecentProjectsDialog = useCallback(() => {
+        setOpenRecentDialogOpen(true);
+    }, []);
 
     useEffect(() => {
         if (!hasActiveProject) {
@@ -206,9 +223,6 @@ const AppShellContent = () => {
         };
     }, [hasActiveProject, systemFonts.length]);
 
-    const recentProjectsRef = useRef(recentProjects);
-    recentProjectsRef.current = recentProjects;
-
     useAutosave({
         globalSettings,
         hasActiveProject,
@@ -226,12 +240,12 @@ const AppShellContent = () => {
 
     const zoomPreviewIn = useCallback(() => {
         setPreviewZoomMode("manual");
-        setPreviewZoom((current) => stepPreviewZoom(current, 1));
+        previewZoomIn();
     }, []);
 
     const zoomPreviewOut = useCallback(() => {
         setPreviewZoomMode("manual");
-        setPreviewZoom((current) => stepPreviewZoom(current, -1));
+        previewZoomOut();
     }, []);
 
     const insertInlineEquation = useCallback((syntax: EquationSyntax = "typst") => {
@@ -320,19 +334,21 @@ const AppShellContent = () => {
         }
 
         if (element.type === "List" || element.type === "Enumeration") {
-            const itemIndex = element.items.findIndex(
-                (_, index) => fieldId === listItemFieldId(element.id, index),
-            );
-            if (itemIndex === -1) {
+            const itemPath = parseListItemFieldPath(fieldId, element.id);
+            if (!itemPath) {
                 return false;
             }
-            const content = insertAt(element.items[itemIndex] ?? []);
+            const item = getListItemAtPath(element.items, itemPath);
+            if (!item) {
+                return false;
+            }
+            const content = insertAt(item.content);
             if (element.type === "List") {
                 dispatch({
                     type: "UPDATE_LIST_ITEM",
                     payload: {
                         listId: element.id,
-                        itemIndex,
+                        itemPath,
                         content,
                     },
                 });
@@ -342,7 +358,7 @@ const AppShellContent = () => {
                 type: "UPDATE_ENUMERATION_ITEM",
                 payload: {
                     enumerationId: element.id,
-                    itemIndex,
+                    itemPath,
                     content,
                 },
             });
@@ -389,6 +405,7 @@ const AppShellContent = () => {
 
         const defaultEquationSyntax: EquationSyntax =
             globalSettings.default_equation_syntax ?? "typst";
+        const quotePolicy = templateSpec?.editor.quote_policy ?? null;
 
         const tableCellCtx = resolveTableCellEditContext(
             state,
@@ -406,7 +423,11 @@ const AppShellContent = () => {
                     block = createParagraph("", id);
                     break;
                 case "quote":
-                    block = createQuote("", id);
+                    if (shouldInsertQuoteAsBlock(quotePolicy)) {
+                        block = createQuote("", id);
+                    } else if (insertBodyInlineQuote("")) {
+                        return;
+                    }
                     break;
                 case "list":
                     block = createList(id);
@@ -421,7 +442,12 @@ const AppShellContent = () => {
                     break;
             }
             if (block) {
-                dispatch(buildInsertInTableCellAction(tableCellCtx, block));
+                dispatch(
+                    buildInsertInTableCellAction(tableCellCtx, block, {
+                        elementId: focus.elementId,
+                        fieldId: focus.fieldId,
+                    }),
+                );
                 const focusElementId =
                     block.type === "Paragraph" ? tableCellCtx.tableId : block.id;
                 const focusFieldId =
@@ -505,6 +531,9 @@ const AppShellContent = () => {
                 options?.headingLevel ??
                 parseHeadingInsertLevel(invocationPayload) ??
                 1;
+            if (tryApplyHeadingLevelToCurrentBlock(level, dispatch)) {
+                return;
+            }
             dispatch({
                 type: "ADD_HEADING",
                 payload: {
@@ -562,29 +591,27 @@ const AppShellContent = () => {
             if (insertInlineEquation(defaultEquationSyntax)) {
                 return;
             }
-            dispatch({
-                type: "ADD_EQUATION",
-                payload: {
-                    sectionId,
-                    equationId: id,
-                    afterElementId,
-                    syntax: defaultEquationSyntax,
-                },
-            });
-            dispatch({
-                type: "UPDATE_EQUATION",
-                payload: { equationId: id, isBlock: false },
-            });
-            finishInsert("Equation");
             return;
         }
 
         if (elementType === "quote") {
-            dispatch({
-                type: "ADD_QUOTE",
-                payload: { sectionId, quoteId: id, afterElementId },
-            });
-            finishInsert("Quote");
+            if (shouldInsertQuoteAsBlock(quotePolicy)) {
+                dispatch({
+                    type: "ADD_QUOTE",
+                    payload: { sectionId, quoteId: id, afterElementId },
+                });
+                finishInsert("Quote");
+                return;
+            }
+            if (insertBodyInlineQuote("")) {
+                if (replaceTargetId) {
+                    dispatch({
+                        type: "REMOVE_ELEMENT",
+                        payload: { elementId: replaceTargetId },
+                    });
+                }
+                return;
+            }
             return;
         }
 
@@ -627,6 +654,7 @@ const AppShellContent = () => {
         ensureActiveProject,
         globalSettings.default_equation_syntax,
         insertInlineEquation,
+        templateSpec?.editor.quote_policy,
         setDocumentFocus,
     ]);
 
@@ -689,6 +717,29 @@ const AppShellContent = () => {
         [currentProjectPath, getState],
     );
 
+    const exportBibliography = useCallback(async () => {
+        try {
+            const references = getState().references;
+            const content = exportReferencesBib(references);
+            if (!content) {
+                window.alert(m.bibliography_export_empty());
+                return;
+            }
+            const path = await saveBibliographyDialog("references.bib");
+            if (!path) {
+                return;
+            }
+            await TauriApi.writeBytesToPath(path, new TextEncoder().encode(content));
+        } catch (error) {
+            window.alert(
+                m.bibliography_export_failed({
+                    message:
+                        error instanceof Error ? error.message : String(error),
+                }),
+            );
+        }
+    }, [getState]);
+
     const commandContext = useMemo<CommandContext>(
         () => ({
             hasActiveProject,
@@ -701,6 +752,7 @@ const AppShellContent = () => {
         await closeProject();
         setSettingsPanel(null);
         setCommandPaletteOpen(false);
+        setFindBarOpen(false);
         cancelNewProjectDialog();
     }, [cancelNewProjectDialog, closeProject]);
 
@@ -711,7 +763,7 @@ const AppShellContent = () => {
                 openProject,
                 saveProject,
                 closeProject: handleCloseProject,
-                recentProjectsRef,
+                showOpenRecentProjectsDialog,
                 exportDocument,
             }),
             ...editorCommands({
@@ -738,6 +790,8 @@ const AppShellContent = () => {
                 setCommandPaletteOpen,
             }),
             ...helpCommands(),
+            ...bibliographyCommands({ exportBibliography }),
+            ...findCommands(defaultFindCommandDeps()),
         ],
         [
             handleCloseProject,
@@ -749,7 +803,9 @@ const AppShellContent = () => {
             redo,
             saveProject,
             showNewProjectDialog,
+            showOpenRecentProjectsDialog,
             undo,
+            exportBibliography,
             exportDocument,
             hasActiveProject,
             zoomPreviewIn,
@@ -803,6 +859,7 @@ const AppShellContent = () => {
                 >
                 <Menubar
                     hasActiveProject={hasActiveProject}
+                    keymap={keymap}
                     onCommand={runCommand}
                     isCommandEnabled={isCommandEnabled}
                 />
@@ -813,12 +870,19 @@ const AppShellContent = () => {
                             previewZoomMode={previewZoomMode}
                             onPreviewZoomChange={setPreviewZoom}
                             onPreviewZoomModeChange={setPreviewZoomMode}
+                            findBarOpen={isFindBarOpen}
+                            onFindBarOpenChange={setFindBarOpen}
+                            zoteroTranslationServerEnabled={
+                                globalSettings.zotero_translation_server_enabled ??
+                                false
+                            }
                             onExportDocument={exportDocument}
                         />
                     </ActionContextProvider>
                 ) : (
                     <ActionContextProvider id="welcome" contexts={["welcome"]}>
                         <WelcomeScreen
+                            keymap={keymap}
                             recentProjects={recentProjects}
                             onNewProject={() => runCommand("workspace::NewProject")}
                             onOpenProject={() => runCommand("workspace::OpenProject")}
@@ -837,7 +901,7 @@ const AppShellContent = () => {
                             query={commandQuery}
                             onQueryChange={setCommandQuery}
                             commands={filteredCommands}
-                            commandRegistry={commandRegistry}
+                            keymap={keymap}
                             commandContext={commandContext}
                             onRunCommand={runCommand}
                             onClose={() => runCommand("settings::Close")}
@@ -855,6 +919,7 @@ const AppShellContent = () => {
                             projectSettings={projectSettings}
                             keymap={keymap}
                             conflicts={keymapConflicts}
+                            hasActiveProject={hasActiveProject}
                             keymapSettings={keymapSettings}
                             onGlobalSettingsChange={updateGlobalSettings}
                             onKeymapSettingsChange={updateKeymapSettings}
@@ -865,6 +930,7 @@ const AppShellContent = () => {
                                 })
                             }
                             templateDefaultOverrides={templateDefaultOverrides}
+                            templateOptions={templateSpec?.editor.options ?? []}
                             templateVariants={templateVariants}
                             templateVariantId={templateVariantId}
                             onTemplateVariantChange={(variantId) =>
@@ -887,6 +953,18 @@ const AppShellContent = () => {
                         onChooseLocation={chooseNewProjectLocation}
                         onCreate={createNewProject}
                     />
+                )}
+                {isOpenRecentDialogOpen && (
+                    <ActionContextProvider
+                        id="open-recent-dialog"
+                        contexts={["dialog"]}
+                    >
+                        <OpenRecentProjectsDialog
+                            recentProjects={recentProjects}
+                            onClose={() => setOpenRecentDialogOpen(false)}
+                            onOpenProject={(path) => void openProject(path)}
+                        />
+                    </ActionContextProvider>
                 )}
             </div>
             </ContextMenuProvider>

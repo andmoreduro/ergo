@@ -6,6 +6,7 @@ import { InputEntryRemoveButton } from "../InputEntryControls/InputEntryRemoveBu
 import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
 import { TextInput } from "../../atoms/TextInput/TextInput";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
+import { useDocumentAst } from "../../../state/DocumentContext";
 import {
     projectInputElementId,
     projectInputFieldId,
@@ -14,11 +15,11 @@ import { normalizeEditableText } from "../../../editor/textInput";
 import { inputRichTextPlain } from "../../../editor/richTextMarks";
 import { useDeferredTextCommit } from "../../../editor/useDeferredTextCommit";
 import { useEditorNavigation } from "../../../editor/EditorNavigationContext";
-import { useDocumentAst } from "../../../state/DocumentContext";
 import {
     listReferenceId,
     type ListReferenceStyle,
 } from "../../../project/listReferenceId";
+import { fieldLabelImportance } from "../../../template/fieldImportance";
 import { m } from "../../../paraglide/messages.js";
 import entryStyles from "../../../styles/inputEntry.module.css";
 import styles from "./AuthorsField.module.css";
@@ -26,7 +27,7 @@ import styles from "./AuthorsField.module.css";
 type AuthorEntry = {
     name?: string;
     affiliations?: string[];
-    degrees?: string[];
+    titles?: string[];
 };
 
 export interface AuthorsFieldProps {
@@ -37,9 +38,9 @@ export interface AuthorsFieldProps {
     namePlaceholder?: string;
     authors: AuthorEntry[];
     affiliations: unknown[];
-    degrees?: unknown[];
+    titles?: unknown[];
     affiliationsLabel: string;
-    degreesLabel: string;
+    titlesLabel: string;
     referenceStyle?: ListReferenceStyle;
 }
 
@@ -52,7 +53,7 @@ const AuthorReferenceCheckbox = ({
     selectedReferences,
 }: {
     authorIndex: number;
-    field: "affiliations" | "degrees";
+    field: "affiliations" | "titles";
     referenceValue: string;
     label: string;
     checked: boolean;
@@ -101,7 +102,7 @@ const AuthorReferenceGroup = ({
     fallbackLabel,
 }: {
     authorIndex: number;
-    field: "affiliations" | "degrees";
+    field: "affiliations" | "titles";
     groupLabel: string;
     items: unknown[];
     selectedReferences: string[];
@@ -151,26 +152,28 @@ const AuthorRow = ({
     author,
     authorIndex,
     affiliations,
-    degrees,
+    titles,
     affiliationsLabel,
-    degreesLabel,
+    titlesLabel,
     nameLabel,
     nameImportance,
     namePlaceholder,
     referenceStyle,
-    showDegrees,
+    showTitles,
+    onInsertBelow,
 }: {
     author: AuthorEntry;
     authorIndex: number;
     affiliations: unknown[];
-    degrees: unknown[];
+    titles: unknown[];
     affiliationsLabel: string;
-    degreesLabel: string;
+    titlesLabel: string;
     nameLabel: string;
     nameImportance?: InputSchema["importance"];
     namePlaceholder?: string;
     referenceStyle: ListReferenceStyle;
-    showDegrees: boolean;
+    showTitles: boolean;
+    onInsertBelow: () => void;
 }) => {
     const { dispatch } = useDocumentAst();
     const { handleAdvanceKeyDown } = useEditorNavigation();
@@ -199,8 +202,8 @@ const AuthorRow = ({
     const affiliationReferences = Array.isArray(author.affiliations)
         ? author.affiliations.map(String)
         : [];
-    const degreeReferences = Array.isArray(author.degrees)
-        ? author.degrees.map(String)
+    const titleReferences = Array.isArray(author.titles)
+        ? author.titles.map(String)
         : [];
 
     return (
@@ -208,12 +211,29 @@ const AuthorRow = ({
             <TextInput
                 {...nameBinding}
                 fullWidth
-                importance={nameImportance}
+                importance={fieldLabelImportance(nameImportance)}
                 label={nameLabel}
                 placeholder={namePlaceholder}
                 value={draft}
                 onChange={(event) => updateName(event.target.value)}
                 onKeyDown={(event) => {
+                    if (
+                        event.key === "Enter" &&
+                        !event.ctrlKey &&
+                        !event.metaKey &&
+                        !event.shiftKey
+                    ) {
+                        event.preventDefault();
+                        const normalized = normalizeEditableText(draft);
+                        if (normalized !== committedName) {
+                            dispatch({
+                                type: "UPDATE_INPUT",
+                                payload: { path: namePath, value: normalized },
+                            });
+                        }
+                        onInsertBelow();
+                        return;
+                    }
                     handleAdvanceKeyDown(event, fieldId);
                 }}
             />
@@ -231,20 +251,20 @@ const AuthorRow = ({
                 referenceStyle={referenceStyle}
                 selectedReferences={affiliationReferences}
             />
-            {showDegrees ? (
+            {showTitles ? (
                 <AuthorReferenceGroup
                     authorIndex={authorIndex}
                     emptyLabel={m.editor_reference_empty({
-                        label: degreesLabel,
+                        label: titlesLabel,
                     })}
                     fallbackLabel={(index) =>
                         m.editor_degree_fallback({ index })
                     }
-                    field="degrees"
-                    groupLabel={degreesLabel}
-                    items={degrees}
+                    field="titles"
+                    groupLabel={titlesLabel}
+                    items={titles}
                     referenceStyle={referenceStyle}
-                    selectedReferences={degreeReferences}
+                    selectedReferences={titleReferences}
                 />
             ) : null}
         </>
@@ -259,13 +279,37 @@ export const AuthorsField = ({
     namePlaceholder,
     authors,
     affiliations,
-    degrees = [],
+    titles = [],
     affiliationsLabel,
-    degreesLabel,
+    titlesLabel,
     referenceStyle = "numeric",
 }: AuthorsFieldProps) => {
     const { dispatch } = useDocumentAst();
-    const showDegrees = degrees.length > 0 || referenceStyle === "lowercase-alpha";
+    const { focusField } = useEditorNavigation();
+    const showTitles = titles.length > 0 || referenceStyle === "lowercase-alpha";
+
+    const insertAuthorBelow = useCallback(
+        (index: number) => {
+            const nextIndex = index + 1;
+            dispatch({
+                type: "INSERT_INPUT_ARRAY_ITEM",
+                payload: {
+                    path: "/authors",
+                    index: nextIndex,
+                    value: {
+                        name: "",
+                        affiliations: [],
+                        ...(showTitles ? { titles: [] } : {}),
+                    },
+                },
+            });
+            focusField(
+                projectInputElementId,
+                projectInputFieldId(`/authors/${nextIndex}/name`),
+            );
+        },
+        [dispatch, focusField, showTitles],
+    );
 
     const addAuthor = useCallback(() => {
         dispatch({
@@ -276,11 +320,11 @@ export const AuthorsField = ({
                 value: {
                     name: "",
                     affiliations: [],
-                    ...(showDegrees ? { degrees: [] } : {}),
+                    ...(showTitles ? { titles: [] } : {}),
                 },
             },
         });
-    }, [authors.length, dispatch, showDegrees]);
+    }, [authors.length, dispatch, showTitles]);
 
     const removeAuthor = useCallback(
         (index: number) => {
@@ -294,7 +338,7 @@ export const AuthorsField = ({
 
     return (
         <div className={styles.field}>
-            <FieldLabel importance={importance ?? undefined}>{label}</FieldLabel>
+            <FieldLabel importance={fieldLabelImportance(importance)}>{label}</FieldLabel>
             {authors.length > 0 && (
                 <div className={entryStyles.list}>
                     {authors.map((author, index) => (
@@ -311,13 +355,14 @@ export const AuthorsField = ({
                                 authorIndex={index}
                                 affiliations={affiliations}
                                 affiliationsLabel={affiliationsLabel}
-                                degrees={degrees}
-                                degreesLabel={degreesLabel}
+                                titles={titles}
+                                titlesLabel={titlesLabel}
                                 nameImportance={nameImportance}
                                 nameLabel={nameLabel}
                                 namePlaceholder={namePlaceholder}
+                                onInsertBelow={() => insertAuthorBelow(index)}
                                 referenceStyle={referenceStyle}
-                                showDegrees={showDegrees}
+                                showTitles={showTitles}
                             />
                         </div>
                     ))}

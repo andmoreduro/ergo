@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod bundled_templates;
 pub mod compilation_types;
 pub mod compile_artifacts;
 pub mod core_errors;
@@ -11,13 +12,16 @@ pub mod document_session_types;
 pub mod document_source_builder;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod font_loader;
+pub mod font_availability;
 pub mod font_requirements;
+pub mod generated_assets;
 pub mod package_resolver;
 pub mod path_utils;
 pub mod preview_pipeline;
 pub mod preview_sync;
 pub mod preview_sync_lookup;
 pub mod preview_sync_types;
+pub mod quote_policy;
 mod required_input_fallback;
 pub mod resource_watch;
 pub mod template_spec;

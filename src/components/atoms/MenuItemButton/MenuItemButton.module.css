@@ -23,11 +23,16 @@
     display: flex;
     align-items: center;
     width: 100%;
-    padding: var(--space-2) var(--space-3);
+    padding: var(--popover-item-padding-block) var(--popover-item-padding-inline);
     color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
-    border-radius: var(--border-radius-sm);
+    font-size: var(--popover-item-font-size);
+    border-radius: var(--popover-item-radius);
     white-space: nowrap;
+}
+
+.dropdown[aria-current="true"] {
+    font-weight: var(--popover-item-selected-weight);
+    color: var(--popover-item-selected-color);
 }
 
 .dropdown:disabled {

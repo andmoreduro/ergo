@@ -38,6 +38,41 @@
       "sequence": [{ "key": "p", "modifiers": ["Control", "Shift"] }]
     },
     {
+      "action_id": "editor::Find",
+      "context": "workspace || editor || body || tableCell || input",
+      "sequence": [{ "key": "f", "modifiers": ["Control"] }]
+    },
+    {
+      "action_id": "editor::FindNext",
+      "context": "workspace || editor || body || tableCell || input",
+      "sequence": [{ "key": "f3", "modifiers": [] }]
+    },
+    {
+      "action_id": "editor::FindPrevious",
+      "context": "workspace || editor || body || tableCell || input",
+      "sequence": [{ "key": "f3", "modifiers": ["Shift"] }]
+    },
+    {
+      "action_id": "view::ZoomIn",
+      "context": "workspace",
+      "sequence": [{ "key": "=", "modifiers": ["Control"] }]
+    },
+    {
+      "action_id": "view::ZoomIn",
+      "context": "workspace",
+      "sequence": [{ "key": "=", "modifiers": ["Control", "Shift"] }]
+    },
+    {
+      "action_id": "view::ZoomIn",
+      "context": "workspace",
+      "sequence": [{ "key": "+", "modifiers": ["Control"] }]
+    },
+    {
+      "action_id": "view::ZoomOut",
+      "context": "workspace",
+      "sequence": [{ "key": "-", "modifiers": ["Control"] }]
+    },
+    {
       "action_id": "edit::Undo",
       "context": "workspace || editor || body",
       "sequence": [{ "key": "z", "modifiers": ["Control"] }]
@@ -46,6 +81,16 @@
       "action_id": "edit::Redo",
       "context": "workspace || editor || body",
       "sequence": [{ "key": "z", "modifiers": ["Control", "Shift"] }]
+    },
+    {
+      "action_id": "edit::Redo",
+      "context": "body",
+      "sequence": [{ "key": "y", "modifiers": ["Control"] }]
+    },
+    {
+      "action_id": "editor::OpenElementSettings",
+      "context": "element || inlineElement",
+      "sequence": [{ "key": ",", "modifiers": ["Control"] }]
     },
     {
       "action_id": "editor::InsertParagraph",
@@ -232,6 +277,16 @@
       "action_id": "editor::RemoveTableColumn",
       "context": "body || tableCell",
       "sequence": [{ "key": "c", "modifiers": ["Control", "Alt"] }]
+    },
+    {
+      "action_id": "editor::MergeTableCells",
+      "context": "tableCell",
+      "sequence": [{ "key": "m", "modifiers": ["Control", "Shift"] }]
+    },
+    {
+      "action_id": "editor::SplitTableCell",
+      "context": "tableCell",
+      "sequence": [{ "key": "s", "modifiers": ["Control", "Shift"] }]
     },
     {
       "action_id": "editor::EnterTable",

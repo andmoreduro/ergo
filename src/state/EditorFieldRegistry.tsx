@@ -26,7 +26,7 @@ import {
     isUiOnlyComposerFieldId,
     projectInputElementId,
 } from "../editor/fieldIds";
-import { caretPlainOffsetFromSelection } from "../richText/richText";
+import { caretPlainOffsetFromSelection, selectPlainTextRange } from "../richText/richText";
 import {
     useDocumentActions,
     useDocumentFocusSelector,
@@ -223,6 +223,7 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
             fieldId: focus.fieldId,
             focusSource: focus.focusSource,
             caretUtf16Offset: focus.caretUtf16Offset,
+            selectionEndUtf16Offset: focus.selectionEndUtf16Offset,
         }),
         programmaticFocusEqual,
     );
@@ -340,19 +341,44 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
 
             if (typeof programmaticFocus.caretUtf16Offset === "number") {
                 if (isTextSelectionField(node)) {
-                    const caret = Math.max(
+                    const start = Math.max(
                         0,
                         Math.min(
                             programmaticFocus.caretUtf16Offset,
                             node.value.length,
                         ),
                     );
-                    node.setSelectionRange(caret, caret);
-                } else if (node instanceof HTMLDivElement) {
-                    restoreRichTextCaret(
-                        node,
-                        programmaticFocus.caretUtf16Offset,
+                    const end =
+                        typeof programmaticFocus.selectionEndUtf16Offset ===
+                        "number"
+                            ? Math.max(
+                                  0,
+                                  Math.min(
+                                      programmaticFocus.selectionEndUtf16Offset,
+                                      node.value.length,
+                                  ),
+                              )
+                            : start;
+                    node.setSelectionRange(
+                        Math.min(start, end),
+                        Math.max(start, end),
                     );
+                } else if (node instanceof HTMLDivElement) {
+                    if (
+                        typeof programmaticFocus.selectionEndUtf16Offset ===
+                        "number"
+                    ) {
+                        selectPlainTextRange(
+                            node,
+                            programmaticFocus.caretUtf16Offset,
+                            programmaticFocus.selectionEndUtf16Offset,
+                        );
+                    } else {
+                        restoreRichTextCaret(
+                            node,
+                            programmaticFocus.caretUtf16Offset,
+                        );
+                    }
                 }
             }
         } finally {
@@ -380,6 +406,7 @@ interface ProgrammaticFocusSlice {
     fieldId: string | null;
     focusSource: DocumentFocusState["focusSource"];
     caretUtf16Offset: number | null;
+    selectionEndUtf16Offset: number | null;
 }
 
 const programmaticFocusEqual = (
@@ -389,7 +416,8 @@ const programmaticFocusEqual = (
     a.requestId === b.requestId &&
     a.fieldId === b.fieldId &&
     a.focusSource === b.focusSource &&
-    a.caretUtf16Offset === b.caretUtf16Offset;
+    a.caretUtf16Offset === b.caretUtf16Offset &&
+    a.selectionEndUtf16Offset === b.selectionEndUtf16Offset;
 
 const caretOffsetFromNode = (node: EditorFieldElement): number | null => {
     if (isTextSelectionField(node)) {

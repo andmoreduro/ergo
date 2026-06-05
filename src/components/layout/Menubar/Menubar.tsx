@@ -7,7 +7,8 @@ import { MenuSeparator } from "../../atoms/MenuSeparator/MenuSeparator";
 import { WindowControlButton } from "../../atoms/WindowControlButton/WindowControlButton";
 import { DropdownMenu } from "../../molecules/DropdownMenu/DropdownMenu";
 import { m } from "../../../paraglide/messages.js";
-import type { ActionId } from "../../../commands/types";
+import type { ActionId, KeymapProfile } from "../../../commands/types";
+import { lookupActionShortcut } from "../../../settings/keymap";
 import styles from "./Menubar.module.css";
 
 export type InsertElementType =
@@ -28,12 +29,14 @@ interface MenuGroup {
 
 export interface MenubarProps {
     hasActiveProject: boolean;
+    keymap: KeymapProfile;
     onCommand: (commandId: ActionId) => void;
     isCommandEnabled: (commandId: ActionId) => boolean;
 }
 
 const MenubarComponent = ({
     hasActiveProject,
+    keymap,
     onCommand,
     isCommandEnabled,
 }: MenubarProps) => {
@@ -58,6 +61,11 @@ const MenubarComponent = ({
                       type: "item" as const,
                       label: m.menubar_export(),
                       commandId: "workspace::ExportSvg" as const,
+                  },
+                  {
+                      type: "item" as const,
+                      label: m.menubar_export_bibliography(),
+                      commandId: "bibliography::ExportBib" as const,
                   },
                   { type: "separator" as const },
                   {
@@ -121,6 +129,15 @@ const MenubarComponent = ({
                     label: m.menubar_command_palette(),
                     commandId: "view::OpenCommandPalette",
                 },
+                ...(hasActiveProject
+                    ? [
+                          {
+                              type: "item" as const,
+                              label: m.menubar_find(),
+                              commandId: "editor::Find" as const,
+                          },
+                      ]
+                    : []),
                 ...(hasActiveProject
                     ? [
                           {
@@ -242,6 +259,11 @@ const MenubarComponent = ({
                                         );
                                     }
 
+                                    const shortcut = lookupActionShortcut(
+                                        keymap,
+                                        entry.commandId,
+                                    );
+
                                     return (
                                         <MenuItemButton
                                             disabled={
@@ -255,7 +277,18 @@ const MenubarComponent = ({
                                                 onCommand(entry.commandId);
                                             }}
                                         >
-                                            {entry.label}
+                                            <span className={styles.menuItemRow}>
+                                                <span>{entry.label}</span>
+                                                {shortcut ? (
+                                                    <span
+                                                        className={
+                                                            styles.menuShortcut
+                                                        }
+                                                    >
+                                                        {shortcut}
+                                                    </span>
+                                                ) : null}
+                                            </span>
                                         </MenuItemButton>
                                     );
                                 })}

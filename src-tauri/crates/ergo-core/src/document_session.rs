@@ -6,11 +6,17 @@ use std::sync::Arc;
 use crate::ast::{DocumentAST, DocumentElement, DocumentSection};
 use crate::document_session_events::apply_document_event;
 use crate::document_session_generation::{default_layout, generate_project_sources_incremental};
+use crate::generated_assets::{
+    generated_diagram_asset_path_for_asset_id, generated_diagram_asset_path_for_element,
+};
 pub use crate::document_session_types::{
     DocumentEvent, DocumentSessionStatus, FieldSourceMapEntry, FieldTextSegment, GeneratedFragment,
     ProjectSourceLayout, SourceMapEntry,
 };
-use crate::template_spec::TemplateSpec;
+use crate::bundled_templates::{
+    has_bundled_template_spec, sync_bundled_template_package, TEMPLATE_SPEC_PATH,
+};
+use crate::template_spec::{load_template_spec_for_project, TemplateSpec};
 use crate::vfs::VirtualFileSystem;
 
 pub(crate) const MAIN_PATH: &str = "main.typ";
@@ -78,6 +84,21 @@ impl DocumentSession {
         self.status_snapshot.read().clone()
     }
 
+    /// Clear the VFS and in-memory session state (e.g. before creating a new project).
+    pub fn reset_session(&self) {
+        self.vfs.clear();
+        *self.inner.lock() = DocumentSessionInner::default();
+        *self.status_snapshot.write() = DocumentSessionStatus {
+            source_revision: 0,
+            layout: default_layout(Vec::new()),
+            source_map: Vec::new(),
+            field_source_map: Vec::new(),
+            dirty_element_ids: Vec::new(),
+            fragment_count: 0,
+            dirty_resource_ids: Vec::new(),
+        };
+    }
+
     pub fn sync_snapshot(&self, ast: DocumentAST) -> Result<DocumentSessionStatus, String> {
         let mut inner = self.inner.lock();
         let mut dirty_resource_ids = HashSet::new();
@@ -113,10 +134,14 @@ impl DocumentSession {
             .ast
             .take()
             .ok_or_else(|| "Document session has not been initialized".to_string())?;
+        let vfs_removals = vfs_paths_for_generated_diagram_removal(&ast, &event);
         let dirty_resource_ids = dirty_resource_ids_for_event(&ast, &event);
         if let Err(e) = apply_document_event(&mut ast, event) {
             inner.ast = Some(ast);
             return Err(e);
+        }
+        for path in vfs_removals {
+            self.vfs.remove_path(&path);
         }
         self.sync_ast_locked(&mut inner, ast, dirty_resource_ids)
     }
@@ -135,10 +160,14 @@ impl DocumentSession {
             .ok_or_else(|| "Document session has not been initialized".to_string())?;
         let mut dirty_resource_ids = HashSet::new();
         for event in events {
+            let vfs_removals = vfs_paths_for_generated_diagram_removal(&ast, &event);
             dirty_resource_ids.extend(dirty_resource_ids_for_event(&ast, &event));
             if let Err(e) = apply_document_event(&mut ast, event) {
                 inner.ast = Some(ast);
                 return Err(e);
+            }
+            for path in vfs_removals {
+                self.vfs.remove_path(&path);
             }
         }
         self.sync_ast_locked(&mut inner, ast, dirty_resource_ids)
@@ -150,29 +179,32 @@ impl DocumentSession {
         ast: DocumentAST,
         dirty_resource_ids: HashSet<String>,
     ) -> Result<DocumentSessionStatus, String> {
-        let template_spec = match &inner.cached_template_spec {
-            Some((tid, vid, spec))
-                if *tid == ast.metadata.template_id && *vid == ast.metadata.template_variant_id =>
-            {
-                spec.clone()
-            }
-            _ => {
-                let spec = crate::template_spec::load_bundled_template(&ast.metadata.template_id)?;
-                let resolved = crate::template_spec::resolve_template_variant(
-                    &spec,
-                    ast.metadata
-                        .template_variant_id
-                        .as_deref()
-                        .map(crate::template_spec::typst_template_variant_id),
-                );
-                inner.cached_template_spec = Some((
-                    ast.metadata.template_id.clone(),
-                    ast.metadata.template_variant_id.clone(),
-                    resolved.clone(),
-                ));
-                resolved
-            }
+        let use_cached_spec = inner
+            .cached_template_spec
+            .as_ref()
+            .is_some_and(|(tid, vid, _)| {
+                *tid == ast.metadata.template_id
+                    && *vid == ast.metadata.template_variant_id
+                    && !has_bundled_template_spec(&ast.metadata.template_id)
+            });
+        let template_spec = if use_cached_spec {
+            inner.cached_template_spec.as_ref().unwrap().2.clone()
+        } else {
+            let resolved = load_template_spec_for_project(&self.vfs, &ast)?;
+            inner.cached_template_spec = Some((
+                ast.metadata.template_id.clone(),
+                ast.metadata.template_variant_id.clone(),
+                resolved.clone(),
+            ));
+            resolved
         };
+        if self.write_sidecar_files {
+            sync_bundled_template_package(
+                &self.vfs,
+                &ast.metadata.template_id,
+                &template_spec,
+            )?;
+        }
         let generated = generate_project_sources_incremental(
             &ast,
             &template_spec,
@@ -240,6 +272,7 @@ impl DocumentSession {
                 })
                 .to_string(),
             );
+            write_json_source(&self.vfs, TEMPLATE_SPEC_PATH, &template_spec)?;
             write_json_source(&self.vfs, SOURCE_MAP_PATH, &generated.source_map)?;
             write_json_source(
                 &self.vfs,
@@ -282,6 +315,27 @@ impl DocumentSession {
 
     pub fn ast(&self) -> Option<DocumentAST> {
         self.inner.lock().ast.clone()
+    }
+}
+
+fn vfs_paths_for_generated_diagram_removal(
+    ast: &DocumentAST,
+    event: &DocumentEvent,
+) -> Vec<String> {
+    match event {
+        DocumentEvent::RemoveElement { element_id } => generated_diagram_asset_path_for_element(
+            ast,
+            element_id,
+        )
+        .into_iter()
+        .collect(),
+        DocumentEvent::RemoveAsset { asset_id } => generated_diagram_asset_path_for_asset_id(
+            ast,
+            asset_id,
+        )
+        .into_iter()
+        .collect(),
+        _ => Vec::new(),
     }
 }
 

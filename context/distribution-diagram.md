@@ -8,45 +8,23 @@ Deployment topology, `.ergproj` layout, config files, and storage boundaries.
 
 ```mermaid
 flowchart TB
-    classDef cloud fill:#e0f7fa,stroke:#3498db,stroke-width:2px,stroke-dasharray:5 5,color:#2c3e50;
-    classDef machine fill:#ecf0f1,stroke:#2c3e50,stroke-width:2px,font-weight:bold,color:#2c3e50;
-    classDef os fill:#ffffff,stroke:#7f8c8d,stroke-width:2px,color:#2c3e50;
-    classDef artifact fill:#d5f5e3,stroke:#1abc9c,stroke-width:1px,color:#2c3e50;
-    classDef db fill:#fcf3cf,stroke:#f1c40f,stroke-width:1px,color:#2c3e50;
-
-    subgraph Internet ["External Network"]
-        Registry["Typst Universe"]:::cloud
+    Registry[Typst Universe]
+    subgraph UserMachine [User machine]
+        WebView[WebView + WASM worker]
+        ErgoInstall[Érgo install]
+        UserDocs[(.ergproj)]
+        AppConfig[(App config)]
+        TypstCache[(Typst package cache)]
     end
-
-    subgraph LocalMachine ["User Machine"]
-        subgraph OS ["Host OS"]
-            WebView["WebView + WASM worker"]:::os
-            UserDocs[(".ergproj")]:::db
-            AppConfig[("Ergo config")]:::db
-            TypstCache[("Typst package cache")]:::db
-        end
-
-        subgraph App ["Érgo install"]
-            FrontendBundle["React bundle"]:::artifact
-            BackendBinary["Tauri backend"]:::artifact
-            WasmModule["ergo-engine-wasm"]:::artifact
-            Defaults["Bundled default JSON"]:::artifact
-        end
-    end
-
-    FrontendBundle -.-> WebView
-    WasmModule -.-> WebView
-    FrontendBundle == IPC ==> BackendBinary
-    BackendBinary --> UserDocs
-    BackendBinary --> AppConfig
-    BackendBinary --> Defaults
-    BackendBinary --> TypstCache
-    TypstCache -. package sources .-> WebView
+    ErgoInstall --> WebView
+    ErgoInstall --> UserDocs
+    ErgoInstall --> AppConfig
+    ErgoInstall --> TypstCache
+    TypstCache -. package sources .-> Registry
     TypstCache -. package sources .-> UserDocs
-    Registry -. package sources .-> TypstCache
-
-    class LocalMachine machine
 ```
+
+Install artifacts (React bundle, Tauri backend, WASM module, bundled default JSON) ship inside **Érgo install**. Runtime containers and IPC boundaries are in `component-diagram.md`.
 
 ## `.ergproj` Archive Layout
 
@@ -57,11 +35,18 @@ assets/
   diagrams/
 packages/
   {namespace}/{name}/{version}/...
+umb-apa/
+  lib.typ
+  utils/...
+versatile-apa/
+  lib.typ
+  utils/...
 .ergproj/
   document_state.json
   dependency_manifest.json
   project_settings.json
   template.json
+  template_spec.json
   source_map.json
   field_source_map.json
 ```
@@ -69,11 +54,13 @@ packages/
 | Path | Role |
 |------|------|
 | `assets/` | Binary files referenced by `AssetEntry`, including durable generated diagram SVGs under `assets/diagrams/` |
-| `packages/` | Mirrored Typst package files needed for offline WASM compilation |
+| `packages/` | Mirrored registry Typst package files needed for offline WASM compilation |
+| `umb-apa/`, `versatile-apa/` | Embedded path-imported template Typst packages (frozen per project on save) |
 | `.ergproj/document_state.json` | Canonical structured AST (required on open) |
 | `.ergproj/source_map.json` | Element → Typst byte ranges |
 | `.ergproj/field_source_map.json` | Field → Typst byte ranges and UTF-16 segments |
-| `.ergproj/template.json` | Template identity and variant |
+| `.ergproj/template.json` | Template identity and variant (summary) |
+| `.ergproj/template_spec.json` | Full `TemplateSpec` manifest snapshot used for source generation |
 
 Optional cache paths (regenerable, not required to reopen):
 
@@ -82,7 +69,8 @@ Optional cache paths (regenerable, not required to reopen):
 ```
 
 Preview pixels, `PreviewSyncState`, and export files are cache artifacts. They are not archive-authoritative.
-Typst sources such as `main.typ`, `lib.typ`, `elements/{id}.typ`, `references.bib`, and `resources.typ` are runtime VFS materializations derived from `.ergproj/document_state.json`.
+Typst sources such as `main.typ`, `lib.typ`, `elements/{id}.typ`, `references.bib`, and `resources.typ` are runtime VFS materializations derived from `.ergproj/document_state.json` and the embedded `.ergproj/template_spec.json`.
+Projects reopen with their saved template snapshot; the app bundle is used only when a project has no embedded template files yet.
 
 ## App Configuration
 
@@ -111,4 +99,4 @@ Per-project overrides: `.ergproj/project_settings.json`.
 - VFS paths use `/` separators on all platforms.
 - Saves pack durable project state from the backend session VFS after worker sync and backend mirror sync drain.
 - Autosave defaults are controlled in global `settings.json` (`autosave_interval_ms`, blur/close toggles).
-- Keymap schema: `action_id`, `context` expression, `sequence` of logical keys with modifiers.
+- Keymap schema: `active_profile_id`, `profiles[]` (`id`, `name`, `overrides`), plus bundled `keymap_bindings` (`action_id`, `context` expression, `sequence` of logical keys with modifiers). Legacy `keymap_overrides` migrates into a `custom` profile on load.

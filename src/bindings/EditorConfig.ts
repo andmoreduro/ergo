@@ -3,6 +3,8 @@ import type { CustomElementSpec } from "./CustomElementSpec";
 import type { DefaultsSpec } from "./DefaultsSpec";
 import type { InputGroupSpec } from "./InputGroupSpec";
 import type { InputSchema } from "./InputSchema";
+import type { QuotePolicySpec } from "./QuotePolicySpec";
+import type { TemplateOptionSpec } from "./TemplateOptionSpec";
 import type { TemplateVariantSpec } from "./TemplateVariantSpec";
 
-export type EditorConfig = { inputs: Array<InputSchema>, groups: Array<InputGroupSpec>, variants: Array<TemplateVariantSpec>, custom_elements: Array<CustomElementSpec>, defaults: DefaultsSpec | null, };
+export type EditorConfig = { inputs: Array<InputSchema>, groups: Array<InputGroupSpec>, variants: Array<TemplateVariantSpec>, custom_elements: Array<CustomElementSpec>, defaults: DefaultsSpec | null, quote_policy: QuotePolicySpec | null, options: Array<TemplateOptionSpec>, };

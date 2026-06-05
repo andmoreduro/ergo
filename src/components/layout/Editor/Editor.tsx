@@ -22,10 +22,7 @@ import {
     useActionDispatcher,
     type ActionHandlerMap,
 } from "../../../actions/runtime";
-import {
-    buildReferenceInsertAction,
-    parseReferenceInsertPayload,
-} from "../../../editor/insertReference";
+import { buildReferenceInsertAction } from "../../../editor/insertReference";
 import { InsertReferenceDialog } from "../../organisms/InsertReferenceDialog/InsertReferenceDialog";
 import type { TargetedOutlineEntry } from "../../../editor/outlineMatching";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
@@ -36,6 +33,7 @@ import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
 import { Textarea } from "../../atoms/Textarea/Textarea";
 import { EditorToolbar } from "../../organisms/EditorToolbar/EditorToolbar";
+import { FindBar } from "../../organisms/FindBar/FindBar";
 import { m } from "../../../paraglide/messages.js";
 import entryStyles from "../../../styles/inputEntry.module.css";
 import styles from "./Editor.module.css";
@@ -61,6 +59,9 @@ import { RichTextField } from "../../molecules/RichTextField/RichTextField";
 import { useDeferredTextCommit } from "../../../editor/useDeferredTextCommit";
 import { SimpleListField } from "../../molecules/SimpleListField/SimpleListField";
 import { AuthorsField } from "../../molecules/AuthorsField/AuthorsField";
+import { EquationSyntaxField } from "../../molecules/EquationSyntaxField/EquationSyntaxField";
+import type { EquationSyntax } from "../../../bindings/EquationSyntax";
+import { CoverPageFieldContext } from "../../../actions/contexts/CoverPageFieldContext";
 import {
     EditorNavigationProvider,
     useEditorNavigation,
@@ -68,8 +69,16 @@ import {
 import { useFieldNavigation } from "../../../editor/useFieldNavigation";
 import { insertBodyReference } from "../../../editor/prosemirror/bodyInsert";
 import { subscribeActiveTableCellSession } from "../../../editor/prosemirror/table/tableStructureBridge";
+import {
+    getActiveTextMarksSnapshot,
+    subscribeActiveTextMarks,
+} from "../../../editor/prosemirror/textMarkState";
 import { isActiveTableCellEditing } from "../../../editor/prosemirror/table/tableCellInsertPolicy";
 import { peekBodyTabModifiers } from "../../../editor/prosemirror/activeView";
+import { createInputArrayItem } from "../../../editor/inputArrayEntry/createInputArrayItem";
+import { InputArrayEntryProvider } from "../../../editor/inputArrayEntry/InputArrayEntryContext";
+import { useInputArrayEntryContext } from "../../../editor/inputArrayEntry/InputArrayEntryContext";
+import { fieldLabelImportance } from "../../../template/fieldImportance";
 
 /** Shared stable empty array so selectors don't return a fresh `[]` each call. */
 const EMPTY_ARRAY: readonly unknown[] = [];
@@ -120,6 +129,8 @@ export interface EditorProps {
     outlineEntries: TargetedOutlineEntry[];
     resourcePreviewRevisions: ResourcePreviewRevisions;
     mainPreviewPaintedRevision: number | null;
+    findBarOpen: boolean;
+    onFindBarOpenChange: (open: boolean) => void;
 }
 
 const EditorComponent = ({
@@ -127,6 +138,8 @@ const EditorComponent = ({
     outlineEntries,
     resourcePreviewRevisions,
     mainPreviewPaintedRevision,
+    findBarOpen,
+    onFindBarOpenChange,
 }: EditorProps) => {
     // Narrow subscriptions: the editor shell must not re-render on body typing.
     // `dispatchAst` is identity-stable; live AST/focus are read imperatively in
@@ -204,16 +217,8 @@ const EditorComponent = ({
                 setReferenceDialogOpen(true);
                 return true;
             },
-            "resources::InsertReference": (invocation) => {
-                const target = parseReferenceInsertPayload(invocation.payload);
-                if (!target) {
-                    return false;
-                }
-                applyReferenceInsert(target);
-                return true;
-            },
         }),
-        [applyReferenceInsert],
+        [],
     );
 
     const { spec: templateSpec, variantId: activeVariantId } = useTemplateSpecContext();
@@ -269,6 +274,12 @@ const EditorComponent = ({
         subscribeActiveTableCellSession,
         isActiveTableCellEditing,
         () => false,
+    );
+
+    const activeTextMarks = useSyncExternalStore(
+        subscribeActiveTextMarks,
+        getActiveTextMarksSnapshot,
+        () => ({ bold: false, italic: false, underline: false }),
     );
 
     const editorHandlersWithDelete = useMemo<ActionHandlerMap>(
@@ -422,9 +433,11 @@ const EditorComponent = ({
             <main className={styles.editor}>
                 <EditorToolbar
                     canDeleteFocusedTarget={canDeleteFocusedTarget}
+                    activeTextMarks={activeTextMarks}
                     tableCellEditing={tableCellEditing}
                     {...toolbarHandlers}
                 />
+                <FindBar open={findBarOpen} onOpenChange={onFindBarOpenChange} />
                 <InsertReferenceDialog
                     open={referenceDialogOpen}
                     resources={resources}
@@ -529,6 +542,10 @@ const DynamicField = memo(function DynamicField({
         return <DynamicFieldContentBlocks schema={schema} path={path} label={label} />;
     }
 
+    if (schema.type === "equation") {
+        return <DynamicFieldEquation schema={schema} path={path} label={label} />;
+    }
+
     return <DynamicFieldString schema={schema} path={path} label={label} />;
 });
 
@@ -546,7 +563,7 @@ const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
 
         return (
             <SimpleListField
-                importance={schema.importance ?? undefined}
+                importance={fieldLabelImportance(schema.importance)}
                 itemKind="content"
                 items={items}
                 label={getFieldLabel(schema, label, t)}
@@ -566,7 +583,7 @@ const DynamicFieldSimpleList = ({ schema, path, label }: DynamicFieldProps) => {
 
     return (
         <SimpleListField
-            importance={schema.importance ?? undefined}
+            importance={fieldLabelImportance(schema.importance)}
             itemKind="string"
             items={items.map(String)}
             label={getFieldLabel(schema, label, t)}
@@ -596,7 +613,7 @@ const authorItemProperty = (
 const authorReferenceGroupLabel = (
     spec: TemplateSpec | null,
     authorSchema: InputSchema,
-    propertyId: "affiliations" | "degrees",
+    propertyId: "affiliations" | "titles",
     targetInputId: string,
     t: (key: string) => string,
     fallback: string,
@@ -624,19 +641,20 @@ const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
         []) as Array<{
         name?: string;
         affiliations?: string[];
-        degrees?: string[];
+        titles?: string[];
     }>;
     const affiliations = useDocumentAstSelector((s) =>
         getValueAtPath(s.inputs, "/affiliations"),
     );
-    const degrees = useDocumentAstSelector((s) =>
-        getValueAtPath(s.inputs, "/degrees"),
+    const titles = useDocumentAstSelector((s) =>
+        getValueAtPath(s.inputs, "/titles"),
     );
     const referenceStyle =
         templateId === "umb-apa" ? "lowercase-alpha" : "numeric";
     const nameProperty = authorItemProperty(schema, "name");
 
     return (
+        <CoverPageFieldContext fieldId={path}>
         <AuthorsField
             affiliations={Array.isArray(affiliations) ? affiliations : []}
             affiliationsLabel={authorReferenceGroupLabel(
@@ -648,18 +666,18 @@ const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
                 m.editor_affiliations(),
             )}
             authors={authors}
-            degrees={Array.isArray(degrees) ? degrees : []}
-            degreesLabel={authorReferenceGroupLabel(
+            titles={Array.isArray(titles) ? titles : []}
+            titlesLabel={authorReferenceGroupLabel(
                 spec,
                 schema,
-                "degrees",
-                "degrees",
+                "titles",
+                "titles",
                 t,
                 m.editor_degrees(),
             )}
-            importance={schema.importance ?? undefined}
+            importance={fieldLabelImportance(schema.importance)}
             label={getFieldLabel(schema, label, t)}
-            nameImportance={nameProperty?.importance ?? undefined}
+            nameImportance={fieldLabelImportance(nameProperty?.importance)}
             nameLabel={
                 nameProperty ? getFieldLabel(nameProperty, undefined, t) : ""
             }
@@ -670,10 +688,13 @@ const DynamicFieldAuthors = ({ schema, path, label }: DynamicFieldProps) => {
             }
             referenceStyle={referenceStyle}
         />
+        </CoverPageFieldContext>
     );
 };
 
 const DynamicFieldContent = ({ schema, path, label }: DynamicFieldProps) => {
+    const { spec } = useTemplateSpecContext();
+    const t = useTemplateTranslation(spec);
     const { dispatch } = useDocumentActions();
     const { handleAdvanceKeyDown } = useEditorNavigation();
     const rawValue = useDocumentAstSelector((s) => getValueAtPath(s.inputs, path));
@@ -690,8 +711,8 @@ const DynamicFieldContent = ({ schema, path, label }: DynamicFieldProps) => {
 
     return (
         <RichTextField
-            label={getFieldLabel(schema, label)}
-            importance={schema.importance ?? undefined}
+            label={getFieldLabel(schema, label, t)}
+            importance={fieldLabelImportance(schema.importance)}
             content={content}
             fieldBinding={fieldBinding}
             onChange={(next) => {
@@ -714,6 +735,8 @@ const DynamicFieldContent = ({ schema, path, label }: DynamicFieldProps) => {
 };
 
 const DynamicFieldContentBlocks = ({ schema, path, label }: DynamicFieldProps) => {
+    const { spec } = useTemplateSpecContext();
+    const t = useTemplateTranslation(spec);
     const { dispatch } = useDocumentActions();
     const { handleAdvanceKeyDown } = useEditorNavigation();
     const rawValue = useDocumentAstSelector((s) => getValueAtPath(s.inputs, path));
@@ -730,8 +753,8 @@ const DynamicFieldContentBlocks = ({ schema, path, label }: DynamicFieldProps) =
 
     return (
         <ParagraphsField
-            label={getFieldLabel(schema, label)}
-            importance={schema.importance ?? undefined}
+            label={getFieldLabel(schema, label, t)}
+            importance={fieldLabelImportance(schema.importance)}
             paragraphs={content}
             fieldBinding={fieldBinding}
             onChange={(next) => {
@@ -768,9 +791,93 @@ const DynamicFieldContentBlocks = ({ schema, path, label }: DynamicFieldProps) =
     );
 };
 
-const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
+type InputEquationValue = { syntax: EquationSyntax; source: string };
+
+const parseInputEquationValue = (raw: unknown): InputEquationValue => {
+    if (raw !== null && typeof raw === "object") {
+        const record = raw as Record<string, unknown>;
+        return {
+            syntax: record.syntax === "latex" ? "latex" : "typst",
+            source: typeof record.source === "string" ? record.source : "",
+        };
+    }
+    return { syntax: "typst", source: "" };
+};
+
+const DynamicFieldEquation = ({ schema, path, label }: DynamicFieldProps) => {
+    const { spec } = useTemplateSpecContext();
+    const t = useTemplateTranslation(spec);
     const { dispatch } = useDocumentActions();
     const { handleAdvanceKeyDown } = useEditorNavigation();
+    const rawValue = useDocumentAstSelector((s) => getValueAtPath(s.inputs, path));
+    const committed = parseInputEquationValue(rawValue);
+    const { draft, setDraft, shouldCommit } = useDeferredTextCommit(committed.source);
+    const fieldId = projectInputFieldId(path);
+    const fieldBinding = useEditorFieldBinding<HTMLTextAreaElement>({
+        elementId: "project",
+        fieldId,
+    });
+
+    const updateEquation = (next: InputEquationValue) => {
+        dispatch({
+            type: "UPDATE_INPUT",
+            payload: { path, value: next },
+        });
+    };
+
+    return (
+        <div className={entryStyles.card}>
+            <EquationSyntaxField
+                value={committed.syntax}
+                onChange={(syntax) =>
+                    updateEquation({
+                        syntax,
+                        source: committed.source,
+                    })
+                }
+            />
+            <Textarea
+                {...fieldBinding}
+                fullWidth
+                label={getFieldLabel(schema, label, t)}
+                importance={fieldLabelImportance(schema.importance)}
+                placeholder={getFieldPlaceholder(schema, label, t)}
+                value={draft}
+                onChange={(event) => {
+                    const next = normalizeEditableText(event.target.value);
+                    setDraft(next);
+                    if (shouldCommit(next)) {
+                        updateEquation({
+                            syntax: committed.syntax,
+                            source: next,
+                        });
+                    }
+                }}
+                onBlur={() => {
+                    const normalized = normalizeEditableText(draft);
+                    if (normalized !== committed.source) {
+                        updateEquation({
+                            syntax: committed.syntax,
+                            source: normalized,
+                        });
+                    }
+                }}
+                onKeyDown={(event) => {
+                    if (handleAdvanceKeyDown(event, fieldId)) {
+                        return;
+                    }
+                }}
+            />
+        </div>
+    );
+};
+
+const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
+    const { spec } = useTemplateSpecContext();
+    const t = useTemplateTranslation(spec);
+    const { dispatch } = useDocumentActions();
+    const { handleAdvanceKeyDown } = useEditorNavigation();
+    const arrayEntry = useInputArrayEntryContext();
     const rawValue = useDocumentAstSelector((s) => getValueAtPath(s.inputs, path));
     const committed = String(rawValue ?? "");
     const { draft, setDraft, shouldCommit } = useDeferredTextCommit(committed);
@@ -784,9 +891,9 @@ const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
         <Textarea
             {...fieldBinding}
             fullWidth
-            label={getFieldLabel(schema, label)}
-            importance={schema.importance ?? undefined}
-            placeholder={getFieldPlaceholder(schema, label)}
+            label={getFieldLabel(schema, label, t)}
+            importance={fieldLabelImportance(schema.importance)}
+            placeholder={getFieldPlaceholder(schema, label, t)}
             value={draft}
             onChange={(event) => {
                 const next = normalizeEditableText(event.target.value);
@@ -799,6 +906,24 @@ const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
                 }
             }}
             onKeyDown={(event) => {
+                if (
+                    arrayEntry &&
+                    event.key === "Enter" &&
+                    !event.ctrlKey &&
+                    !event.metaKey &&
+                    !event.shiftKey
+                ) {
+                    event.preventDefault();
+                    const normalized = normalizeEditableText(draft);
+                    if (normalized !== committed) {
+                        dispatch({
+                            type: "UPDATE_INPUT",
+                            payload: { path, value: normalized },
+                        });
+                    }
+                    arrayEntry.insertBelow();
+                    return;
+                }
                 if (handleAdvanceKeyDown(event, fieldId)) {
                     return;
                 }
@@ -808,12 +933,14 @@ const DynamicFieldString = ({ schema, path, label }: DynamicFieldProps) => {
 };
 
 const DynamicFieldObject = ({ schema, path, label }: DynamicFieldProps) => {
-    const sectionLabel = getFieldLabel(schema, label);
+    const { spec } = useTemplateSpecContext();
+    const t = useTemplateTranslation(spec);
+    const sectionLabel = getFieldLabel(schema, label, t);
 
     return (
         <div className={entryStyles.section}>
             {sectionLabel ? (
-                <FieldLabel importance={schema.importance ?? undefined}>
+                <FieldLabel importance={fieldLabelImportance(schema.importance)}>
                     {sectionLabel}
                 </FieldLabel>
             ) : null}
@@ -875,6 +1002,8 @@ const ReferenceArrayField = ({
     path: string;
     selectedReferences: string[];
 }) => {
+    const { spec } = useTemplateSpecContext();
+    const t = useTemplateTranslation(spec);
     const { dispatch } = useDocumentActions();
     const targetPath = schema.items?.target
         ? normalizeReferenceTargetPath(schema.items.target)
@@ -882,7 +1011,7 @@ const ReferenceArrayField = ({
     const targetItems = useDocumentAstSelector((s) =>
         targetPath ? getValueAtPath(s.inputs, targetPath) : EMPTY_ARRAY,
     );
-    const fieldLabel = getFieldLabel(schema);
+    const fieldLabel = getFieldLabel(schema, undefined, t);
 
     const handleToggleReference = (referenceValue: string, checked: boolean) => {
         const nextReferences = checked
@@ -966,6 +1095,8 @@ const ReferenceCheckbox = ({
 };
 
 const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
+    const { spec } = useTemplateSpecContext();
+    const t = useTemplateTranslation(spec);
     const { dispatch } = useDocumentActions();
     const items =
         useDocumentAstSelector((s) => getValueAtPath(s.inputs, path)) ?? EMPTY_ARRAY;
@@ -981,29 +1112,12 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
     }
 
     const handleAddItem = () => {
-        let insertedValue: any;
-        if (schema.items?.type === "object" && schema.items.properties) {
-            const newItem: Record<string, any> = {};
-            for (const prop of schema.items.properties) {
-                if (prop.type === "integer" && prop.id === "id") {
-                    newItem[prop.id] = items.length + 1;
-                } else if (prop.type === "array") {
-                    newItem[prop.id!] = [];
-                } else {
-                    newItem[prop.id!] = prop.default ?? "";
-                }
-            }
-            insertedValue = newItem;
-        } else {
-            insertedValue = schema.items?.default ?? "";
-        }
-
         dispatch({
             type: "INSERT_INPUT_ARRAY_ITEM",
             payload: {
                 path,
                 index: items.length,
-                value: insertedValue,
+                value: createInputArrayItem(schema.items, items.length),
             },
         });
     };
@@ -1017,17 +1131,23 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
 
     return (
         <div className={entryStyles.section}>
-            <FieldLabel importance={schema.importance ?? undefined}>
-                {getFieldLabel(schema, label)}
+            <FieldLabel importance={fieldLabelImportance(schema.importance)}>
+                {getFieldLabel(schema, label, t)}
             </FieldLabel>
             {items.length > 0 ? (
                 <div className={entryStyles.list}>
                     {items.map((item: any, index: number) => {
                         const itemPath = `${path}/${index}`;
                         return (
+                            <InputArrayEntryProvider
+                                key={index}
+                                arrayPath={path}
+                                existingLength={items.length}
+                                itemIndex={index}
+                                itemSchema={schema.items}
+                            >
                             <div
                                 className={`${entryStyles.card} ${entryStyles.cardWithRemove}`}
-                                key={index}
                             >
                                 <InputEntryRemoveButton
                                     onClick={() => handleRemoveItem(index)}
@@ -1066,6 +1186,7 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
                                         />
                                     )}
                             </div>
+                            </InputArrayEntryProvider>
                         );
                     })}
                 </div>

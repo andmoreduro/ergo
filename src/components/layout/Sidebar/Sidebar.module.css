@@ -60,8 +60,14 @@
 }
 
 .resourceRow {
-    display: grid;
+    display: flex;
+    align-items: stretch;
     gap: var(--space-1);
+    min-width: 0;
+}
+
+.resourceRowNav {
+    flex: 1;
     min-width: 0;
 }
 

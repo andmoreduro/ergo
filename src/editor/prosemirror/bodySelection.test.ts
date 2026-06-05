@@ -14,10 +14,15 @@ import {
     blockIndexAtPos,
     clearElementSelection,
     extendBlockSelection,
+    isBlockLevelTextSelection,
+    isExtendingTextSelection,
     isBlockSelectionHighlighted,
+    selectionCoversWholeBlocks,
     selectBlockRange,
     selectCurrentElement,
     selectCurrentOrAllElements,
+    textSelectionHeadAtBlockEdge,
+    wholeBlockSelectionAtIndex,
 } from "./bodySelection";
 
 const section: ContentSection = {
@@ -104,6 +109,96 @@ describe("selectCurrentOrAllElements", () => {
     });
 });
 
+describe("isBlockLevelTextSelection", () => {
+    it("is false for a partial in-block range", () => {
+        const state = stateWithCaretIn(1);
+        const block = state.doc.child(1);
+        const from = 1 + state.doc.child(0).nodeSize + 1;
+        const partial = state.apply(
+            state.tr.setSelection(
+                TextSelection.create(state.doc, from, from + 3),
+            ),
+        );
+        expect(isBlockLevelTextSelection(partial)).toBe(false);
+    });
+
+    it("is true once the whole text block is covered", () => {
+        const state = stateWithCaretIn(1);
+        const whole = state.apply(
+            state.tr.setSelection(
+                wholeBlockSelectionAtIndex(state.doc, 1),
+            ),
+        );
+        expect(isBlockLevelTextSelection(whole)).toBe(true);
+    });
+
+    it("is false when the range only partially crosses into the next block", () => {
+        const state = stateWithCaretIn(0);
+        const headingSize = state.doc.child(0).nodeSize;
+        const paragraphInnerStart = 1 + headingSize + 1;
+        const crossBlock = state.apply(
+            state.tr.setSelection(
+                TextSelection.create(
+                    state.doc,
+                    1 + 1,
+                    paragraphInnerStart + 2,
+                ),
+            ),
+        );
+        expect(selectionCoversWholeBlocks(crossBlock, 0, 1)).toBe(false);
+        expect(isBlockLevelTextSelection(crossBlock)).toBe(false);
+    });
+
+    it("is true when every spanned block is fully covered", () => {
+        const state = stateWithCaretIn(0);
+        const applied = state.apply(
+            state.tr.setSelection(selectBlockRange(state, 0, 1)),
+        );
+        expect(selectionCoversWholeBlocks(applied, 0, 1)).toBe(true);
+        expect(isBlockLevelTextSelection(applied)).toBe(true);
+    });
+});
+
+describe("textSelectionHeadAtBlockEdge", () => {
+    it("detects the moving end within a partial range", () => {
+        const state = stateWithCaretIn(1);
+        const from = 1 + state.doc.child(0).nodeSize + 1;
+        const partial = state.apply(
+            state.tr.setSelection(
+                TextSelection.create(state.doc, from, from + 3),
+            ),
+        );
+        expect(textSelectionHeadAtBlockEdge(partial, 1)).toBe(false);
+        expect(textSelectionHeadAtBlockEdge(partial, -1)).toBe(false);
+    });
+});
+
+describe("isExtendingTextSelection", () => {
+    it("treats a collapsed caret as extending in either direction", () => {
+        const state = stateWithCaretIn(1);
+        expect(isExtendingTextSelection(state, 1)).toBe(true);
+        expect(isExtendingTextSelection(state, -1)).toBe(true);
+    });
+
+    it("detects shrinking when shift moves the head toward the anchor", () => {
+        const state = stateWithCaretIn(1);
+        const block = state.doc.child(1);
+        const from = 1 + state.doc.child(0).nodeSize + 1;
+        const to = from + block.content.size;
+        const forward = state.apply(
+            state.tr.setSelection(TextSelection.create(state.doc, from, to)),
+        );
+        expect(isExtendingTextSelection(forward, -1)).toBe(false);
+        expect(isExtendingTextSelection(forward, 1)).toBe(true);
+
+        const backward = state.apply(
+            state.tr.setSelection(TextSelection.create(state.doc, to, from)),
+        );
+        expect(isExtendingTextSelection(backward, 1)).toBe(false);
+        expect(isExtendingTextSelection(backward, -1)).toBe(true);
+    });
+});
+
 describe("extendBlockSelection", () => {
     const atomPos = () => {
         const doc = sectionToDoc(bodySchema, section);
@@ -113,6 +208,16 @@ describe("extendBlockSelection", () => {
         }
         return pos;
     };
+
+    it("returns null when the key would shrink the selection", () => {
+        const state = stateWithCaretIn(1);
+        const from = 1 + state.doc.child(0).nodeSize + 1;
+        const to = from + state.doc.child(1).content.size;
+        const forward = state.apply(
+            state.tr.setSelection(TextSelection.create(state.doc, from, to)),
+        );
+        expect(extendBlockSelection(forward, -1)).toBeNull();
+    });
 
     it("first press selects only the current element", () => {
         const state = stateWithCaretIn(1);

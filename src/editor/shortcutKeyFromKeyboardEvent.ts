@@ -42,6 +42,8 @@ export function keyFromKeyboardCode(code: string): string | null {
         ArrowRight: "arrowright",
         Minus: "-",
         Equal: "=",
+        NumpadAdd: "+",
+        NumpadSubtract: "-",
         BracketLeft: "[",
         BracketRight: "]",
         Backslash: "\\",

@@ -34,7 +34,6 @@ export interface UseCompilerResult {
     outline: DocumentOutline | null;
     resources: DocumentResources | null;
     latencyStartRef: MutableRefObject<number | null>;
-    previewSvgPageIndicesRef: MutableRefObject<number[]>;
     previewTelemetry: PreviewTelemetry | null;
     resourcePreviewRevisions: ResourcePreviewRevisions;
     mainPreviewPaintedRevision: SourceRevision | null;
@@ -69,9 +68,6 @@ export function useCompiler(
     const previewRevisionRef = useRef<SourceRevision | null>(null);
     const latestRevisionRef = useRef<SourceRevision | null>(null);
     const latencyStartRef = useRef<number | null>(null);
-    // Default to the first page so the very first compile/bootstrap inlines it;
-    // the Preview keeps this in sync with the pages actually on screen.
-    const previewSvgPageIndicesRef = useRef<number[]>([0]);
     const pendingPreviewTelemetryRef = useRef<PendingPreviewTelemetry | null>(null);
     // Revision whose telemetry was finalized by a page that actually re-rendered
     // (authoritative, locked), and the revision provisionally finalized by a
@@ -115,7 +111,6 @@ export function useCompiler(
         pendingPreviewTelemetryRef.current = null;
         renderedTelemetryRevisionRef.current = null;
         noRenderTelemetryRevisionRef.current = null;
-        previewSvgPageIndicesRef.current = [0];
         setPreviewTelemetry(null);
         setResourcePreviewRevisions({});
         setMainPreviewPaintedRevision(null);
@@ -208,7 +203,6 @@ export function useCompiler(
             previewRevisionRef,
             latestRevisionRef,
             latencyStartRef,
-            previewSvgPageIndicesRef,
         },
     });
 
@@ -225,7 +219,6 @@ export function useCompiler(
             outline,
             resources,
             latencyStartRef,
-            previewSvgPageIndicesRef,
             previewTelemetry,
             resourcePreviewRevisions,
             mainPreviewPaintedRevision,
@@ -240,7 +233,6 @@ export function useCompiler(
             outline,
             resources,
             latencyStartRef,
-            previewSvgPageIndicesRef,
             previewTelemetry,
             resourcePreviewRevisions,
             mainPreviewPaintedRevision,

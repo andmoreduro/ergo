@@ -8,9 +8,11 @@ import { useDocumentAst } from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
 import { FieldLabel } from "../../../atoms/FieldLabel/FieldLabel";
-import { Select } from "../../../atoms/Select/Select";
 import { Textarea } from "../../../atoms/Textarea/Textarea";
+import { EquationSyntaxField } from "../../../molecules/EquationSyntaxField/EquationSyntaxField";
 import { ElementExtrasCollapse } from "../ElementExtrasCollapse";
+import { ElementSettingsButton } from "../ElementSettingsButton";
+import { useElementSettingsShortcut } from "../useElementSettingsShortcut";
 import type { EquationElement } from "../types";
 import styles from "./EquationEditor.module.css";
 
@@ -27,83 +29,71 @@ export const EquationEditor = ({ element }: { element: EquationElement }) => {
         elementId: element.id,
         fieldId,
     });
+    const settings = useElementSettingsShortcut(element.id);
 
     return (
-        <ElementExtrasCollapse
-            elementId={element.id}
-            showToggle={false}
-            primary={
-                <div className={styles.field}>
-                    <FieldLabel htmlFor={sourceInputId}>
-                        {m.editor_equation_source()}
-                    </FieldLabel>
-                    <div className={styles.sourceRow}>
-                        <Textarea
-                            {...sourceField}
-                            id={sourceInputId}
-                            variant="borderless"
-                            fullWidth
-                            monospace
-                            placeholder={m.editor_equation_source()}
-                            value={draft}
-                            onChange={(event) => {
-                                const next = normalizeEditableText(
-                                    event.target.value,
-                                );
-                                setDraft(next);
-                                if (shouldCommit(next)) {
-                                    dispatch({
-                                        type: "UPDATE_EQUATION",
-                                        payload: {
-                                            equationId: element.id,
-                                            latexSource: next,
-                                        },
-                                    });
-                                }
-                            }}
-                            onKeyDown={(event) => {
-                                if (handleAdvanceKeyDown(event, fieldId)) {
-                                    return;
-                                }
-                                handleEnterKey(event);
-                            }}
-                        />
-                        <div
-                            className={styles.syntax}
-                            data-wrapper-tab="extra"
-                            data-wrapper-tab-index={0}
-                        >
-                            <Select
-                                aria-label={m.editor_equation_syntax()}
-                                value={element.syntax}
-                                options={[
-                                    {
-                                        value: "typst",
-                                        label: m.editor_equation_syntax_typst(),
-                                    },
-                                    {
-                                        value: "latex",
-                                        label: m.editor_equation_syntax_latex(),
-                                    },
-                                ]}
-                                onChange={(event) =>
-                                    dispatch({
-                                        type: "UPDATE_EQUATION",
-                                        payload: {
-                                            equationId: element.id,
-                                            syntax:
-                                                event.target.value === "latex"
-                                                    ? "latex"
-                                                    : "typst",
-                                        },
-                                    })
-                                }
+        <>
+            <ElementSettingsButton
+                open={settings.open}
+                onOpenChange={settings.setOpen}
+            >
+                <EquationSyntaxField
+                    value={element.syntax}
+                    onChange={(syntax) =>
+                        dispatch({
+                            type: "UPDATE_EQUATION",
+                            payload: {
+                                equationId: element.id,
+                                syntax,
+                            },
+                        })
+                    }
+                />
+            </ElementSettingsButton>
+            <ElementExtrasCollapse
+                elementId={element.id}
+                showToggle={false}
+                primary={
+                    <div className={styles.field}>
+                        <FieldLabel htmlFor={sourceInputId}>
+                            {m.editor_equation_source()}
+                        </FieldLabel>
+                        <div className={styles.sourceRow}>
+                            <Textarea
+                                {...sourceField}
+                                id={sourceInputId}
+                                variant="borderless"
+                                fullWidth
+                                monospace
+                                placeholder={m.editor_equation_source()}
+                                value={draft}
+                                onChange={(event) => {
+                                    const next = normalizeEditableText(
+                                        event.target.value,
+                                    );
+                                    setDraft(next);
+                                    if (shouldCommit(next)) {
+                                        dispatch({
+                                            type: "UPDATE_EQUATION",
+                                            payload: {
+                                                equationId: element.id,
+                                                latexSource: next,
+                                            },
+                                        });
+                                    }
+                                }}
+                                onKeyDown={(event) => {
+                                    if (handleAdvanceKeyDown(event, fieldId)) {
+                                        return;
+                                    }
+                                    handleEnterKey(event);
+                                }}
                             />
                         </div>
                     </div>
-                </div>
-            }
-            extras={null}
-        />
+                }
+                extras={null}
+            />
+        </>
     );
 };

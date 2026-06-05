@@ -1,7 +1,6 @@
 import { memo } from "react";
-import type { Command } from "../../../commands/types";
-import type { CommandContext } from "../../../commands/types";
-import type { CommandRegistry } from "../../../commands/registry";
+import type { Command, CommandContext, KeymapProfile } from "../../../commands/types";
+import { lookupActionShortcut } from "../../../settings/keymap";
 import { Dialog } from "../../molecules/Dialog/Dialog";
 import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
 import { TextInput } from "../../atoms/TextInput/TextInput";
@@ -12,7 +11,7 @@ export interface CommandPaletteProps {
     query: string;
     onQueryChange: (query: string) => void;
     commands: Command[];
-    commandRegistry: CommandRegistry;
+    keymap: KeymapProfile;
     commandContext: CommandContext;
     onRunCommand: (commandId: Command["id"]) => void;
     onClose: () => void;
@@ -23,7 +22,7 @@ export const CommandPalette = memo(
         query,
         onQueryChange,
         commands,
-        commandRegistry,
+        keymap,
         commandContext,
         onRunCommand,
         onClose,
@@ -50,18 +49,24 @@ export const CommandPalette = memo(
             />
             <div className={styles.commandList}>
                 {commands.length > 0 ? (
-                    commands.map((command) => (
-                        <MenuItemButton
-                            key={command.id}
-                            variant="commandPalette"
-                            disabled={
-                                !commandRegistry.enabled(command.id, commandContext)
-                            }
-                            onClick={() => onRunCommand(command.id)}
-                        >
-                            {command.label}
-                        </MenuItemButton>
-                    ))
+                    commands.map((command) => {
+                        const shortcut = lookupActionShortcut(keymap, command.id);
+                        return (
+                            <MenuItemButton
+                                key={command.id}
+                                variant="listPicker"
+                                disabled={
+                                    command.isEnabled
+                                        ? !command.isEnabled(commandContext)
+                                        : false
+                                }
+                                onClick={() => onRunCommand(command.id)}
+                            >
+                                <span>{command.label}</span>
+                                {shortcut ? <small>{shortcut}</small> : null}
+                            </MenuItemButton>
+                        );
+                    })
                 ) : (
                     <p className={styles.empty}>{m.command_palette_empty()}</p>
                 )}

@@ -1,8 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 
-use crate::ast::{GlobalSettings, KeymapSettings};
+use crate::ast::{GlobalSettings, KeymapSettings, normalize_keymap_settings};
 use crate::template_spec::{load_bundled_template, resolve_template_variant, TemplateSpec};
 
 const GLOBAL_SETTINGS_FILE_NAME: &str = "settings.json";
@@ -102,16 +102,18 @@ fn load_keymap_settings_from_paths(
     if path.exists() {
         let user_settings = read_keymap_settings_from_path(path)?;
 
-        return Ok(KeymapSettings {
+        return Ok(normalize_keymap_settings(KeymapSettings {
             keymap_profile: user_settings
                 .keymap_profile
                 .or(default_settings.keymap_profile),
             keymap_bindings: default_settings.keymap_bindings,
             keymap_overrides: user_settings.keymap_overrides,
-        });
+            active_profile_id: user_settings.active_profile_id,
+            profiles: user_settings.profiles,
+        }));
     }
 
-    Ok(default_settings)
+    Ok(normalize_keymap_settings(default_settings))
 }
 
 fn save_keymap_settings_to_path(path: &Path, settings: &KeymapSettings) -> Result<(), String> {
@@ -119,7 +121,8 @@ fn save_keymap_settings_to_path(path: &Path, settings: &KeymapSettings) -> Resul
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
 
-    let mut contents = serde_json::to_value(settings).map_err(|error| error.to_string())?;
+    let settings = normalize_keymap_settings(settings.clone());
+    let mut contents = serde_json::to_value(&settings).map_err(|error| error.to_string())?;
     if let Some(object) = contents.as_object_mut() {
         object.remove("keymap_bindings");
     }
@@ -138,7 +141,48 @@ pub fn load_global_settings(app: AppHandle) -> Result<GlobalSettings, String> {
 
 #[tauri::command]
 pub fn save_global_settings(app: AppHandle, settings: GlobalSettings) -> Result<(), String> {
-    save_global_settings_to_path(&global_settings_path(&app)?, &settings)
+    let path = global_settings_path(&app)?;
+    let previous = load_global_settings_from_paths(
+        &path,
+        default_global_settings_path(&app).as_deref(),
+    )
+    .unwrap_or_default();
+
+    save_global_settings_to_path(&path, &settings)?;
+
+    let was_enabled = previous
+        .zotero_translation_server_enabled
+        .unwrap_or(false);
+    let is_enabled = settings
+        .zotero_translation_server_enabled
+        .unwrap_or(false);
+
+    if was_enabled != is_enabled {
+        crate::translation_server::sync_enabled(is_enabled)?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_translation_server_status(app: AppHandle) -> Result<crate::translation_server::TranslationServerStatus, String> {
+    let settings = load_global_settings(app)?;
+    Ok(crate::translation_server::status(
+        settings.zotero_translation_server_enabled.unwrap_or(false),
+    ))
+}
+
+pub fn ensure_translation_server_if_enabled(app: &AppHandle) {
+    let settings = match load_global_settings(app.clone()) {
+        Ok(settings) => settings,
+        Err(_) => return,
+    };
+
+    if !settings.zotero_translation_server_enabled.unwrap_or(false) {
+        return;
+    }
+
+    let _ = crate::translation_server::ensure_running();
 }
 
 #[tauri::command]
@@ -159,9 +203,22 @@ pub fn save_keymap_settings(app: AppHandle, settings: KeymapSettings) -> Result<
 
 #[tauri::command]
 pub fn get_template_spec(
+    state: State<'_, crate::app_state::TauriAppState>,
     template_id: String,
     variant_id: Option<String>,
 ) -> Result<TemplateSpec, String> {
+    if ergo_core::bundled_templates::has_bundled_template_spec(&template_id) {
+        let spec = load_bundled_template(&template_id)?;
+        return Ok(resolve_template_variant(&spec, variant_id.as_deref()));
+    }
+
+    if let Ok(json) = state.vfs.read_source(ergo_core::bundled_templates::TEMPLATE_SPEC_PATH) {
+        if let Ok(spec) = serde_json::from_str::<TemplateSpec>(&json) {
+            if spec.metadata.id == template_id {
+                return Ok(resolve_template_variant(&spec, variant_id.as_deref()));
+            }
+        }
+    }
     let spec = load_bundled_template(&template_id)?;
     Ok(resolve_template_variant(&spec, variant_id.as_deref()))
 }
@@ -169,7 +226,7 @@ pub fn get_template_spec(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{parse_key_sequence, ActionId, KeyBindingPreference};
+    use crate::ast::{parse_key_sequence, ActionId, KeyBindingPreference, DEFAULT_KEYMAP_PROFILE_ID};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_settings_path() -> PathBuf {
@@ -345,13 +402,6 @@ mod tests {
       "context": "app",
       "sequence": [{ "key": "o", "modifiers": ["Control"] }]
     }
-  ],
-  "keymap_overrides": [
-    {
-      "action_id": "workspace::OpenProject",
-      "context": "app",
-      "sequence": [{ "key": "o", "modifiers": ["Control", "Alt"] }]
-    }
   ]
 }"#,
         )
@@ -360,14 +410,10 @@ mod tests {
         let settings = load_keymap_settings_from_paths(&path, Some(&default_path)).unwrap();
 
         assert_eq!(settings.keymap_profile.as_deref(), Some("Default"));
+        assert_eq!(settings.active_profile_id, DEFAULT_KEYMAP_PROFILE_ID);
         assert_eq!(settings.keymap_bindings.len(), 1);
-        assert_eq!(settings.keymap_overrides.len(), 1);
         assert_eq!(
             settings.keymap_bindings[0].action_id,
-            ActionId::WorkspaceOpenProject
-        );
-        assert_eq!(
-            settings.keymap_overrides[0].action_id,
             ActionId::WorkspaceOpenProject
         );
 
@@ -488,6 +534,7 @@ mod tests {
                 sequence: parse_key_sequence("Ctrl+O").unwrap(),
                 payload: None,
             }],
+            ..Default::default()
         };
 
         save_keymap_settings_to_path(&path, &settings).unwrap();
