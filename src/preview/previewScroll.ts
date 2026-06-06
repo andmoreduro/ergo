@@ -49,28 +49,18 @@ export function scrollPreviewToPage(
 }
 
 /**
- * Page number whose content occupies the largest share of the preview viewport.
- * Used as the anchor when scrolling to the nearest changed page after compile.
+ * Page number occupying the largest share of the preview viewport, selected from
+ * an IntersectionObserver-maintained map of page number -> visible height (px).
+ * Replaces a per-revision `getBoundingClientRect` sweep over every page that
+ * forced a full preview-column reflow on every keystroke.
  */
-export function previewAnchorPageFromScroll(scrollRoot: HTMLElement): number | null {
-    const rootRect = scrollRoot.getBoundingClientRect();
-    const viewportTop = rootRect.top;
-    const viewportBottom = rootRect.bottom;
+export function anchorPageFromVisibility(
+    visibility: Map<number, number>,
+): number | null {
     let bestPage: number | null = null;
     let bestVisible = 0;
 
-    for (const page of scrollRoot.querySelectorAll<HTMLElement>(
-        "[data-preview-page-number]",
-    )) {
-        const pageNumber = Number(page.dataset.previewPageNumber);
-        if (!Number.isFinite(pageNumber)) {
-            continue;
-        }
-
-        const rect = page.getBoundingClientRect();
-        const visibleTop = Math.max(rect.top, viewportTop);
-        const visibleBottom = Math.min(rect.bottom, viewportBottom);
-        const visible = Math.max(0, visibleBottom - visibleTop);
+    for (const [pageNumber, visible] of visibility) {
         if (visible > bestVisible) {
             bestVisible = visible;
             bestPage = pageNumber;
