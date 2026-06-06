@@ -16,6 +16,12 @@
     min-height: 0;
     min-width: 0;
     height: 100%;
+    /* Isolate each column's internal layout so a reflow in one (the editor while
+       typing, the preview while compiling) does not invalidate layout for the
+       others, which is what made the whole UI heavier as the document grew.
+       `layout` only -- no `paint` -- so overflowing or portaled UI (menus,
+       popovers) is never clipped, and no `size` so flex sizing is unaffected. */
+    contain: layout;
 }
 
 .resizeHandle {
