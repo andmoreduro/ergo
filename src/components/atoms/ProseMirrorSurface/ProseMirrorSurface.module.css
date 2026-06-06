@@ -43,6 +43,32 @@
     margin: 0;
 }
 
+/*
+ * Virtualize off-screen top-level text blocks: skip their layout and paint until
+ * they approach the viewport, so per-keystroke layout (and any forced reflow) is
+ * bounded by the visible region instead of the whole document. The DOM stays
+ * intact, so ProseMirror's model, selection, and find still see every node.
+ * `contain-intrinsic-size: auto <fallback>` remembers each block's real height
+ * once it has rendered, keeping the scrollbar stable after the first pass; the
+ * fallback only sizes blocks that have never been on-screen.
+ *
+ * Node-view blocks (tables, figures, equations, diagrams) are intentionally
+ * excluded: they measure their own layout and are the most coordinate-sensitive.
+ */
+.bodyPaper > :global(p),
+.bodyPaper > :global(h1),
+.bodyPaper > :global(h2),
+.bodyPaper > :global(h3),
+.bodyPaper > :global(h4),
+.bodyPaper > :global(h5),
+.bodyPaper > :global(h6),
+.bodyPaper > :global(blockquote),
+.bodyPaper > :global(ul),
+.bodyPaper > :global(ol) {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 4em;
+}
+
 .bodyPaper > :global(p) {
     font-size: var(--heading-size-6);
     font-weight: var(--font-weight-normal);
