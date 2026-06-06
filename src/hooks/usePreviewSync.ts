@@ -160,6 +160,15 @@ export function usePreviewSync({
             return;
         }
 
+        // If the changed page is already the one dominating the viewport, the
+        // user is looking right at it — snapping would only cost a full-preview
+        // repaint per keystroke without moving anything into view. Only follow
+        // the edit when it lands on a different (off-screen) page.
+        if (anchorPage !== null && targetPage === anchorPage) {
+            lastForwardScrollKeyRef.current = scrollKey;
+            return;
+        }
+
         programmaticScrollRef.current = true;
         schedulePreviewPageScroll(scrollRoot, targetPage, {
             lastScrollKeyRef: lastForwardScrollKeyRef,
