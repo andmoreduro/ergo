@@ -31,3 +31,4 @@ web-sys = { version = "0.3", features = [
     "CssStyleDeclaration",
     "ImageData"
 ] }
+comemo = "0.5.1"
