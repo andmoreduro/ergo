@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+    anchorPageFromVisibility,
     closestChangedPageNumber,
-    previewAnchorPageFromScroll,
 } from "./previewScroll";
 
 describe("closestChangedPageNumber", () => {
@@ -20,47 +20,18 @@ describe("closestChangedPageNumber", () => {
     });
 });
 
-describe("previewAnchorPageFromScroll", () => {
-    it("returns the page with the largest visible area in the viewport", () => {
-        const scrollRoot = document.createElement("div");
-        scrollRoot.getBoundingClientRect = () =>
-            ({
-                top: 0,
-                bottom: 400,
-                left: 0,
-                right: 300,
-                width: 300,
-                height: 400,
-                x: 0,
-                y: 0,
-                toJSON: () => ({}),
-            }) as DOMRect;
+describe("anchorPageFromVisibility", () => {
+    it("returns the page with the largest visible height", () => {
+        const visibility = new Map<number, number>([
+            [1, 50],
+            [2, 350],
+            [3, 0],
+        ]);
 
-        const makePage = (pageNumber: number, top: number, height: number) => {
-            const page = document.createElement("div");
-            page.dataset.previewPageNumber = String(pageNumber);
-            page.getBoundingClientRect = () =>
-                ({
-                    top,
-                    bottom: top + height,
-                    left: 0,
-                    right: 300,
-                    width: 300,
-                    height,
-                    x: 0,
-                    y: top,
-                    toJSON: () => ({}),
-                }) as DOMRect;
-            scrollRoot.appendChild(page);
-        };
+        expect(anchorPageFromVisibility(visibility)).toBe(2);
+    });
 
-        makePage(1, -350, 400);
-        makePage(2, 50, 400);
-        makePage(3, 450, 400);
-        document.body.appendChild(scrollRoot);
-
-        expect(previewAnchorPageFromScroll(scrollRoot)).toBe(2);
-
-        document.body.removeChild(scrollRoot);
+    it("returns null when no page is visible", () => {
+        expect(anchorPageFromVisibility(new Map())).toBeNull();
     });
 });
