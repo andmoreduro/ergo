@@ -8,12 +8,19 @@ import {
 import { logPreviewSyncError } from "../config/previewSync";
 import { previewPointFromPageMouseEvent } from "../preview/previewPageMetrics";
 import {
+    anchorPageFromVisibility,
     closestChangedPageNumber,
-    previewAnchorPageFromScroll,
     schedulePreviewPageScroll,
 } from "../preview/previewScroll";
 import { CompilerClient } from "../workers/compilerClient";
 import type { ActionInvocation } from "../bindings/ActionInvocation";
+
+// IntersectionObserver thresholds at 5% steps so the visible-height map updates
+// as pages scroll through the viewport without a callback per scrolled pixel.
+const PAGE_VISIBILITY_THRESHOLDS = Array.from(
+    { length: 21 },
+    (_, index) => index / 20,
+);
 
 export interface PreviewPageDescriptor {
     page_number: number;
@@ -38,6 +45,61 @@ export function usePreviewSync({
     const programmaticScrollRef = useRef(false);
     const lastForwardScrollKeyRef = useRef<string | null>(null);
     const prevRevisionRef = useRef<number | null>(null);
+    const pageVisibilityRef = useRef<Map<number, number>>(new Map());
+
+    // Stable while the set of page numbers is unchanged (the common case while
+    // typing), so the observer is only rebuilt when pages are added or removed.
+    const pageNumbersKey = previewPages
+        .map((page) => page.page_number)
+        .join(",");
+
+    // Track which page occupies the most of the viewport without measuring: an
+    // IntersectionObserver keeps a page-number -> visible-height map, so the
+    // anchor is a cheap map read instead of a `getBoundingClientRect` sweep over
+    // every page that forced a full preview reflow on every keystroke.
+    useEffect(() => {
+        const scrollRoot = scrollRef.current;
+        if (!scrollRoot || typeof IntersectionObserver === "undefined") {
+            return;
+        }
+
+        const visibility = pageVisibilityRef.current;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                for (const entry of entries) {
+                    const element = entry.target as HTMLElement;
+                    const pageNumber = Number(element.dataset.previewPageNumber);
+                    if (!Number.isFinite(pageNumber)) {
+                        continue;
+                    }
+                    if (
+                        entry.isIntersecting &&
+                        entry.intersectionRect.height > 0
+                    ) {
+                        visibility.set(pageNumber, entry.intersectionRect.height);
+                    } else {
+                        visibility.delete(pageNumber);
+                    }
+                }
+                const anchor = anchorPageFromVisibility(visibility);
+                if (anchor !== null) {
+                    anchorPageRef.current = anchor;
+                }
+            },
+            { root: scrollRoot, threshold: PAGE_VISIBILITY_THRESHOLDS },
+        );
+
+        for (const element of scrollRoot.querySelectorAll<HTMLElement>(
+            "[data-preview-page-number]",
+        )) {
+            observer.observe(element);
+        }
+
+        return () => {
+            observer.disconnect();
+            visibility.clear();
+        };
+    }, [scrollRef, pageNumbersKey]);
 
     useEffect(() => {
         const scrollRoot = scrollRef.current;
@@ -45,22 +107,15 @@ export function usePreviewSync({
             return;
         }
 
-        const updateAnchorFromScroll = () => {
-            const page = previewAnchorPageFromScroll(scrollRoot);
-            if (page !== null) {
-                anchorPageRef.current = page;
-            }
-        };
-
         const onUserScroll = () => {
-            updateAnchorFromScroll();
+            // The anchor is maintained by the IntersectionObserver above; a user
+            // scroll only needs to flag that auto-scroll should yield to them.
             if (programmaticScrollRef.current) {
                 return;
             }
             userOverrodeScrollRef.current = true;
         };
 
-        updateAnchorFromScroll();
         scrollRoot.addEventListener("scroll", onUserScroll, { passive: true });
         return () => scrollRoot.removeEventListener("scroll", onUserScroll);
     }, [scrollRef]);
@@ -96,7 +151,9 @@ export function usePreviewSync({
             return;
         }
 
-        const anchorFromViewport = previewAnchorPageFromScroll(scrollRoot);
+        const anchorFromViewport = anchorPageFromVisibility(
+            pageVisibilityRef.current,
+        );
         const anchorPage = anchorFromViewport ?? anchorPageRef.current;
         const targetPage = closestChangedPageNumber(changedPages, anchorPage);
         if (targetPage === null) {
