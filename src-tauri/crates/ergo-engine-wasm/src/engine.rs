@@ -23,20 +23,28 @@ static CUSTOM_FONTS: RwLock<Option<Arc<Vec<Font>>>> = RwLock::new(None);
 static CUSTOM_FONT_BOOK: RwLock<Option<LazyHash<FontBook>>> = RwLock::new(None);
 static FONT_STAMP: AtomicU64 = AtomicU64::new(0);
 
-/// How many compile generations Typst's `comemo` memoization cache may retain
-/// when it is swept. `comemo` (used internally by `typst::compile`, layout, and
-/// the SVG/raster renderers) is a process-global, append-only cache that never
-/// drops entries on its own; left unbounded on a long-lived worker it grows into
-/// the gigabytes as the user types.
-const COMEMO_MAX_AGE: usize = 10;
+/// How many sweeps a Typst `comemo` cache entry may go unused before it is
+/// dropped. `comemo` (used internally by `typst::compile`, layout, and the
+/// SVG/raster renderers) is a process-global, append-only cache that never drops
+/// entries on its own; left unbounded on a long-lived worker it grows into the
+/// gigabytes as the user types.
+///
+/// Sweeping is driven from the worker on an idle timer (see `evict_caches`),
+/// never on the compile path: `comemo::evict` walks the whole cache, which is
+/// huge for a large document, so calling it per keystroke wrecks incremental
+/// compile latency. The current document's entries are touched on every compile
+/// and so survive a sweep regardless of this value; only superseded states (text
+/// the user has since changed) are reclaimed.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+const COMEMO_MAX_AGE: usize = 4;
 
-/// Sweep the `comemo` cache only every Nth compile, never on every keystroke.
-/// Eviction belongs off the typing hot path: sweeping (and re-validating) the
-/// whole cache on every compile measurably slows incremental compilation, both
-/// because the sweep itself competes with layout work and because it can drop
-/// entries the very next keystroke would have reused. Sweeping periodically keeps
-/// the cache warm for fast incremental compiles while still bounding peak memory.
-const COMEMO_EVICT_INTERVAL: usize = 25;
+/// Drop `comemo` cache entries unused for the last `COMEMO_MAX_AGE` sweeps. Call
+/// only when typing has paused — never on the compile hot path, since the sweep
+/// walks the entire cache.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub fn evict_caches() {
+    comemo::evict(COMEMO_MAX_AGE);
+}
 
 pub fn bundled_fonts_vec() -> Vec<Font> {
     typst_assets::fonts()
@@ -176,7 +184,6 @@ pub struct ErgoPreviewEngine {
     resource_document: Option<Arc<PagedDocument>>,
     preview_page_fingerprints: Vec<u64>,
     sync_state: PreviewSyncState,
-    compiles_since_evict: usize,
 }
 
 impl ErgoPreviewEngine {
@@ -195,7 +202,6 @@ impl ErgoPreviewEngine {
             resource_document: None,
             preview_page_fingerprints: Vec::new(),
             sync_state: PreviewSyncState::default(),
-            compiles_since_evict: 0,
         }
     }
 
@@ -249,15 +255,6 @@ impl ErgoPreviewEngine {
     }
 
     pub fn run_compile_preview(&mut self) -> CompilationResult {
-        // Sweep Typst's global incremental-compile cache periodically (not on
-        // every keystroke) to bound memory without taxing every compile. See
-        // `COMEMO_EVICT_INTERVAL`.
-        self.compiles_since_evict += 1;
-        if self.compiles_since_evict >= COMEMO_EVICT_INTERVAL {
-            self.compiles_since_evict = 0;
-            comemo::evict(COMEMO_MAX_AGE);
-        }
-
         self.sync_worlds_if_needed();
         let source_revision = self.vfs.latest_revision();
 
