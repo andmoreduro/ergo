@@ -1427,6 +1427,7 @@ dependencies = [
 name = "ergo-engine-wasm"
 version = "0.1.0"
 dependencies = [
+ "comemo",
  "console_error_panic_hook",
  "ergo-core",
  "js-sys",
