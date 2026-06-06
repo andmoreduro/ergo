@@ -307,3 +307,11 @@ pub fn reset_fonts_to_bundled() {
 pub fn append_font_buffers(font_buffers: js_sys::Array) {
     engine::append_font_buffers(font_buffers);
 }
+
+/// Sweep Typst's `comemo` memoization cache. Called from the worker on an idle
+/// timer once typing has paused — never on the compile hot path.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn evict_caches() {
+    engine::evict_caches();
+}
