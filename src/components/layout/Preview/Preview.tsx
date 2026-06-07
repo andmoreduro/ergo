@@ -119,6 +119,22 @@ export const Preview = ({
         previewRenderAtRef.current = { revision: previewRevision, at: nowMs() };
     }
 
+    // Probe: timestamp when React finishes committing this revision (after DOM
+    // mutation, before the browser paints). Splits `commit` (previewRenderAt →
+    // page passive effect) into React render+commit vs browser paint, to locate
+    // the part that grows with document size.
+    const reactCommittedAtRef = useRef<{ revision: number; at: number } | null>(
+        null,
+    );
+    useLayoutEffect(() => {
+        if (previewRevision !== null) {
+            reactCommittedAtRef.current = {
+                revision: previewRevision,
+                at: nowMs(),
+            };
+        }
+    }, [previewRevision]);
+
     // Depend on the stable `markMainPreviewPainted`, NOT the whole `compiler`
     // object: `compiler` changes identity whenever telemetry updates, which would
     // churn this callback → re-run the page effect → re-finalize telemetry in a
@@ -129,10 +145,15 @@ export const Preview = ({
                 return;
             }
             const renderAt = previewRenderAtRef.current;
+            const committedAt = reactCommittedAtRef.current;
             markMainPreviewPainted(previewRevision, {
                 ...paintInfo,
                 previewRenderAt:
                     renderAt?.revision === previewRevision ? renderAt.at : null,
+                reactCommittedAt:
+                    committedAt?.revision === previewRevision
+                        ? committedAt.at
+                        : null,
             });
         },
         [markMainPreviewPainted, previewRevision],
@@ -665,6 +686,7 @@ export const Preview = ({
                             dom: compiler.previewTelemetry.domWriteMs,
                             raster: compiler.previewTelemetry.rasterMs,
                         })}
+                        {` · react=${compiler.previewTelemetry.reactCommitMs}ms paint=${compiler.previewTelemetry.paintMs}ms`}
                     </div>
                 )}
             </div>
@@ -739,7 +761,22 @@ const PreviewPageSvgComponent = ({
     useEffect(() => {
         const effectStartAt = nowMs();
         const element = svgRef.current;
-        if (!element || !isInViewport) {
+        if (!element) {
+            return;
+        }
+        if (!isInViewport) {
+            // Drop heavy off-screen SVG so the live preview DOM stays roughly
+            // viewport-sized. The per-frame browser layout/paint cost scales with
+            // how many pages have SVG in the DOM (it accumulates as you scroll),
+            // not how many are visible — so editing one page was repainting
+            // against every page ever viewed. The page keeps its reserved box
+            // (contain-intrinsic-size) so scroll position is unaffected, and the
+            // SVG re-injects (from cache when possible) when the page returns.
+            if (hasRenderedRef.current) {
+                element.innerHTML = "";
+                hasRenderedRef.current = false;
+                lastRenderedRevisionRef.current = null;
+            }
             return;
         }
 
