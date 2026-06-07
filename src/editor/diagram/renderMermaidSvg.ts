@@ -12,6 +12,14 @@ const loadMermaid = async (): Promise<MermaidApi> => {
             mermaid.initialize({
                 startOnLoad: false,
                 securityLevel: "strict",
+                // Render labels as native SVG <text>, never HTML in
+                // <foreignObject>. These SVGs are embedded as images and
+                // rasterized by Typst (resvg/usvg), which cannot render
+                // foreignObject — so htmlLabels:true silently drops all text
+                // from flowcharts (the default diagram type) while leaving
+                // <text>-based diagrams like sequence diagrams intact.
+                htmlLabels: false,
+                flowchart: { htmlLabels: false },
             });
             return mermaid;
         });
