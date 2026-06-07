@@ -1,8 +1,51 @@
+use std::collections::BTreeSet;
+use std::sync::RwLock;
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::ast::ProjectSettings;
 use crate::font_requirements::family_is_bundled;
+
+/// Font families the compiler can render beyond Typst's embedded bundle.
+///
+/// The native build discovers installed fonts through `font_loader` (fontdb),
+/// but the WASM compile target has no system access: the worker streams the
+/// chosen system/project fonts in as raw buffers and they only exist inside the
+/// engine's `FontBook`. The engine registers their family names here whenever the
+/// active font set changes so [`family_is_available`] — and therefore
+/// [`effective_font_family`], which decides the `#set text(font: …)` the
+/// generated Typst emits — recognizes them instead of downgrading to a bundled
+/// fallback (which would drop the user's font from the preview and export).
+static REGISTERED_FONT_FAMILIES: RwLock<BTreeSet<String>> = RwLock::new(BTreeSet::new());
+
+fn normalize_family(name: &str) -> String {
+    name.trim().to_ascii_lowercase()
+}
+
+/// Replace the set of extra font families the compiler can render. Called by the
+/// engine after loading fonts into its `FontBook`.
+pub fn set_registered_font_families<I>(families: I)
+where
+    I: IntoIterator<Item = String>,
+{
+    let normalized = families
+        .into_iter()
+        .map(|family| normalize_family(&family))
+        .filter(|family| !family.is_empty())
+        .collect();
+    if let Ok(mut registered) = REGISTERED_FONT_FAMILIES.write() {
+        *registered = normalized;
+    }
+}
+
+fn family_is_registered(name: &str) -> bool {
+    let normalized = normalize_family(name);
+    REGISTERED_FONT_FAMILIES
+        .read()
+        .map(|registered| registered.contains(&normalized))
+        .unwrap_or(false)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FontRole {
@@ -21,6 +64,9 @@ pub fn family_is_available(name: &str) -> bool {
         return false;
     }
     if family_is_bundled(trimmed) {
+        return true;
+    }
+    if family_is_registered(trimmed) {
         return true;
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -129,6 +175,28 @@ mod tests {
             effective_font_family(Some("Definitely Not A Real Font 9000"), FontRole::Text),
             bundled_fallback_for_role(FontRole::Text)
         );
+    }
+
+    #[test]
+    fn registered_font_is_available_and_kept_by_effective_family() {
+        let family = "Érgo Registry Test Family";
+        assert!(!family_is_available(family));
+        assert_eq!(
+            effective_font_family(Some(family), FontRole::Text),
+            bundled_fallback_for_role(FontRole::Text),
+        );
+
+        set_registered_font_families([family.to_string()]);
+        assert!(family_is_available(family));
+        // Case-insensitive, like the bundled/system checks.
+        assert!(family_is_available(&family.to_ascii_uppercase()));
+        assert_eq!(
+            effective_font_family(Some(family), FontRole::Text),
+            family.to_string(),
+        );
+
+        set_registered_font_families(std::iter::empty());
+        assert!(!family_is_available(family));
     }
 
     #[test]

@@ -23,28 +23,21 @@ static CUSTOM_FONTS: RwLock<Option<Arc<Vec<Font>>>> = RwLock::new(None);
 static CUSTOM_FONT_BOOK: RwLock<Option<LazyHash<FontBook>>> = RwLock::new(None);
 static FONT_STAMP: AtomicU64 = AtomicU64::new(0);
 
-/// How many sweeps a Typst `comemo` cache entry may go unused before it is
-/// dropped. `comemo` (used internally by `typst::compile`, layout, and the
-/// SVG/raster renderers) is a process-global, append-only cache that never drops
-/// entries on its own; left unbounded on a long-lived worker it grows into the
-/// gigabytes as the user types.
+/// How many compile generations Typst's `comemo` memoization cache may retain.
 ///
-/// Sweeping is driven from the worker on an idle timer (see `evict_caches`),
-/// never on the compile path: `comemo::evict` walks the whole cache, which is
-/// huge for a large document, so calling it per keystroke wrecks incremental
-/// compile latency. The current document's entries are touched on every compile
-/// and so survive a sweep regardless of this value; only superseded states (text
-/// the user has since changed) are reclaimed.
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-const COMEMO_MAX_AGE: usize = 4;
-
-/// Drop `comemo` cache entries unused for the last `COMEMO_MAX_AGE` sweeps. Call
-/// only when typing has paused — never on the compile hot path, since the sweep
-/// walks the entire cache.
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-pub fn evict_caches() {
-    comemo::evict(COMEMO_MAX_AGE);
-}
+/// `comemo` (used internally by `typst::compile`, layout, and the SVG/raster
+/// renderers) is a process-global, append-only cache: every compile memoizes
+/// fresh entries keyed by content hash and never drops them on its own. Because
+/// the worker holds one long-lived engine and WASM linear memory only ever
+/// grows, that cache balloons with each keystroke — the dominant cause of the
+/// preview process climbing into the gigabytes on large documents. Calling
+/// `comemo::evict` once per compile cycle ages the cache and drops entries not
+/// touched for this many cycles, bounding peak memory. Entries for the document's
+/// current state are re-touched on every compile and so never age out; only
+/// superseded states (old text the user has since changed) are reclaimed. Lower
+/// reclaims sooner (less memory); higher tolerates more edit oscillation
+/// (undo/redo, retyping) before dropping reusable work.
+const COMEMO_MAX_AGE: usize = 10;
 
 pub fn bundled_fonts_vec() -> Vec<Font> {
     typst_assets::fonts()
@@ -58,6 +51,13 @@ pub fn store_fonts(fonts: Vec<Font>) {
     for font in &fonts {
         book.push(font.info().clone());
     }
+    // Tell `ergo_core`'s font-availability check which families this build can
+    // actually render. On WASM there is no system font database, so without this
+    // the generated `#set text(font: …)` would downgrade any streamed-in system
+    // or project font to a bundled fallback. See `set_registered_font_families`.
+    ergo_core::font_availability::set_registered_font_families(
+        fonts.iter().map(|font| font.info().family.clone()),
+    );
     *CUSTOM_FONTS.write() = Some(Arc::new(fonts));
     *CUSTOM_FONT_BOOK.write() = Some(LazyHash::new(book));
     FONT_STAMP.fetch_add(1, Ordering::SeqCst);
@@ -255,6 +255,11 @@ impl ErgoPreviewEngine {
     }
 
     pub fn run_compile_preview(&mut self) -> CompilationResult {
+        // Bound Typst's global incremental-compile cache before this cycle adds
+        // to it. Without this the cache (and the worker's WASM memory) grows
+        // unbounded as the user types. See `COMEMO_MAX_AGE`.
+        comemo::evict(COMEMO_MAX_AGE);
+
         self.sync_worlds_if_needed();
         let source_revision = self.vfs.latest_revision();
 

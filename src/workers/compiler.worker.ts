@@ -1,32 +1,12 @@
 import init, {
     ErgoWasmCompiler,
     append_font_buffers,
-    evict_caches,
     reset_fonts_to_bundled,
 } from "../wasm-compiler/ergo_engine_wasm.js";
 import type { WorkerMessage, WorkerReply } from "./compilerProtocol";
 
 let compiler: ErgoWasmCompiler | null = null;
 let initialized = false;
-
-// Sweep Typst's memoization cache only once typing has paused, never on the
-// compile hot path: `comemo::evict` walks the whole (large) cache, so doing it
-// per compile destroys incremental-compile latency. Each compile reschedules the
-// timer, so the sweep fires only after a gap with no compiles.
-const IDLE_EVICT_DELAY_MS = 1500;
-let idleEvictTimer: ReturnType<typeof setTimeout> | null = null;
-
-const scheduleIdleEvict = () => {
-    if (idleEvictTimer !== null) {
-        clearTimeout(idleEvictTimer);
-    }
-    idleEvictTimer = setTimeout(() => {
-        idleEvictTimer = null;
-        if (initialized) {
-            evict_caches();
-        }
-    }, IDLE_EVICT_DELAY_MS);
-};
 
 const workerScope = self as unknown as {
     postMessage: (message: WorkerReply, transfer?: Transferable[]) => void;
@@ -99,7 +79,6 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                     compileMs: Math.round(compileFinished - compileStarted),
                     id,
                 });
-                scheduleIdleEvict();
                 break;
             }
             case "bootstrap": {
@@ -112,7 +91,6 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                     })),
                 });
                 reply({ type: "bootstrap_done", payload: bootstrapResult, id });
-                scheduleIdleEvict();
                 break;
             }
             case "render_page": {

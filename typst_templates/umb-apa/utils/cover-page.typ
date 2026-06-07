@@ -108,7 +108,7 @@
   ]
 }
 
-#let print-thesis-titles-block(authors, titles) = context {
+#let print-thesis-titles-block(_authors, titles) = context {
   if titles == none {
     return none
   }
@@ -116,14 +116,10 @@
     "Thesis requirement",
     default: "Graduate thesis submitted in partial fulfillment of the requirements for the degree of:",
   )
-  block[
-    #intro
-    #parbreak()
-    #print-degrees(authors, titles)
-  ]
+  block[#intro]
 }
 
-// Cover page: four leading parbreaks, then a fill block with even row gutters.
+// Cover page: optional leading parbreaks for the escudo, then a fill block with even row gutters.
 #let cover-page(
   title: none,
   authors: none,
@@ -138,16 +134,17 @@
   show-escudo: true,
   escudo-style: "badge",
 ) = context {
+  set text(font: text.font, size: text.size, lang: text.lang)
+
   set document(
     title: title,
   ) if title != none
 
   if show-escudo {
     place(top + center, escudo-image(escudo-style))
-  }
-
-  for i in range(4) {
-    [~] + parbreak()
+    for i in range(4) {
+      [~] + parbreak()
+    }
   }
 
   block(width: 100%, height: 1fr,
@@ -192,7 +189,6 @@
             city,
             country,
             year,
-            include-titles: false,
           ),
         )
       }
