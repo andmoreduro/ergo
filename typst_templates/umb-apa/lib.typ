@@ -21,9 +21,15 @@
     size: font-size,
   )
 
-  show std.title: set text(size: font-size, weight: "bold")
-  show std.title: set block(spacing: double-spacing)
-  show std.title: set align(center)
+  show std.title: it => {
+    set text(size: font-size, weight: "bold")
+    set block(spacing: double-spacing)
+    set align(center)
+    context {
+      set text(font: text.font)
+      it
+    }
+  }
 
   set page(
     paper: "us-letter",

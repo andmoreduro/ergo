@@ -24,6 +24,10 @@ export interface PreviewTelemetry {
      * itself is expensive, so the fix is reducing per-keystroke render work.
      */
     commitMs: number;
+    /** Of commit: React render+commit only (before browser paint). */
+    reactCommitMs: number;
+    /** Of commit: browser paint after React commit (commit − reactCommit). */
+    paintMs: number;
     /**
      * Of svgRenderMs: the `renderSvgPage` worker round-trip (Typst → SVG). Zero
      * when the page reused cached SVG without a worker trip.
@@ -44,6 +48,11 @@ export interface PagePaintInfo {
      * the Preview parent, not the page). Splits the schedule gap into defer/commit.
      */
     previewRenderAt?: number | null;
+    /**
+     * Probe: when React finished committing this revision (after DOM mutation,
+     * before paint). Splits `commit` into React render+commit vs browser paint.
+     */
+    reactCommittedAt?: number | null;
     domWrittenAt: number;
     workerRenderMs: number;
     domWriteMs: number;

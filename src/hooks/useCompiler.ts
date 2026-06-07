@@ -143,6 +143,7 @@ export function useCompiler(
             const domWrittenAt = paintInfo?.domWrittenAt ?? paintedAt;
             const effectStartAt = paintInfo?.effectStartAt ?? domWrittenAt;
             const previewRenderAt = paintInfo?.previewRenderAt ?? null;
+            const reactCommittedAt = paintInfo?.reactCommittedAt ?? null;
             setPreviewTelemetry({
                 totalLatencyMs: elapsedMs(pendingTelemetry.startedAt, paintedAt),
                 queuedToSyncMs: pendingTelemetry.queuedToSyncMs,
@@ -166,6 +167,14 @@ export function useCompiler(
                 commitMs:
                     previewRenderAt !== null
                         ? elapsedMs(previewRenderAt, effectStartAt)
+                        : 0,
+                reactCommitMs:
+                    previewRenderAt !== null && reactCommittedAt !== null
+                        ? elapsedMs(previewRenderAt, reactCommittedAt)
+                        : 0,
+                paintMs:
+                    reactCommittedAt !== null
+                        ? elapsedMs(reactCommittedAt, effectStartAt)
                         : 0,
                 workerRenderMs: paintInfo?.workerRenderMs ?? 0,
                 domWriteMs: paintInfo?.domWriteMs ?? 0,
