@@ -17,6 +17,8 @@ import type { ProjectSettings } from "../bindings/ProjectSettings";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import type { TranslationServerStatus } from "../bindings/TranslationServerStatus";
+import type { PerfHarnessConfig } from "../bindings/PerfHarnessConfig";
+import type { PerfHarnessReport } from "../bindings/PerfHarnessReport";
 
 export type { DocumentOutline } from "../bindings/DocumentOutline";
 
@@ -181,6 +183,14 @@ export const TauriApi = {
 
     async loadPackageFiles(name: string, version: string): Promise<ProjectFile[]> {
         return invoke("load_package_files", { name, version });
+    },
+
+    async getPerfConfig(): Promise<PerfHarnessConfig> {
+        return invoke("get_perf_config");
+    },
+
+    async writePerfReportAndExit(report: PerfHarnessReport): Promise<void> {
+        return invoke("write_perf_report_and_exit", { report });
     },
 
     async documentDir(): Promise<string> {
