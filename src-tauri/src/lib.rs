@@ -117,7 +117,9 @@ pub fn run() {
             archive::save_project,
             archive::open_project,
             archive::load_template_package_files,
-            archive::load_package_files
+            archive::load_package_files,
+            perf_commands::get_perf_config,
+            perf_commands::write_perf_report_and_exit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -135,6 +137,7 @@ pub mod compile_events;
 pub mod compiler;
 pub mod document_session_commands;
 pub mod package_download;
+pub mod perf_commands;
 pub mod settings;
 pub mod translation_server;
 #[cfg(test)]
