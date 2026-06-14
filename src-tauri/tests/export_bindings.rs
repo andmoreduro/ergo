@@ -32,4 +32,5 @@ fn export_typescript_bindings() {
     ergo_lib::preview_sync_types::PreviewJumpResult::export_all(&config).unwrap();
     ergo_lib::template_spec::TemplateSpec::export_all(&config).unwrap();
     ergo_lib::translation_server::TranslationServerStatus::export_all(&config).unwrap();
+    ergo_lib::perf_commands::PerfHarnessReport::export_all(&config).unwrap();
 }
