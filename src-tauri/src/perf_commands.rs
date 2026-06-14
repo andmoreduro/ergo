@@ -125,3 +125,54 @@ pub fn write_perf_report_and_exit(
     app_handle.exit(0);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_perf_config_reads_env_vars() {
+        // Set only the variables we want to verify; others keep defaults.
+        std::env::set_var("ERGO_PERF_ENABLED", "1");
+        std::env::set_var("ERGO_PERF_PROJECT_PATH", "/tmp/tesis.ergproj");
+        std::env::set_var("ERGO_PERF_KEYSTROKE_COUNT", "42");
+        std::env::set_var("ERGO_PERF_KEYSTROKE_INTERVAL_MS", "120");
+
+        let config = get_perf_config();
+
+        assert!(config.enabled);
+        assert_eq!(config.project_path, Some("/tmp/tesis.ergproj".to_string()));
+        assert_eq!(config.keystroke_count, 42);
+        assert_eq!(config.keystroke_interval_ms, 120);
+        assert_eq!(config.warmup_keystrokes, 3); // default
+
+        std::env::remove_var("ERGO_PERF_ENABLED");
+        std::env::remove_var("ERGO_PERF_PROJECT_PATH");
+        std::env::remove_var("ERGO_PERF_KEYSTROKE_COUNT");
+        std::env::remove_var("ERGO_PERF_KEYSTROKE_INTERVAL_MS");
+    }
+
+    #[test]
+    fn get_perf_config_defaults_when_no_env() {
+        // Ensure no env vars leak from other tests.
+        for key in [
+            "ERGO_PERF_ENABLED",
+            "ERGO_PERF_PROJECT_PATH",
+            "ERGO_PERF_REPORT_PATH",
+            "ERGO_PERF_KEYSTROKE_COUNT",
+            "ERGO_PERF_WARMUP_KEYSTROKES",
+            "ERGO_PERF_KEYSTROKE_INTERVAL_MS",
+        ] {
+            std::env::remove_var(key);
+        }
+
+        let config = get_perf_config();
+
+        assert!(!config.enabled);
+        assert_eq!(config.project_path, None);
+        assert_eq!(config.report_path, None);
+        assert_eq!(config.keystroke_count, 30);
+        assert_eq!(config.warmup_keystrokes, 3);
+        assert_eq!(config.keystroke_interval_ms, 80);
+    }
+}
