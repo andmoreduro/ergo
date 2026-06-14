@@ -11,7 +11,7 @@ pub struct PerfHarnessConfig {
     pub report_path: Option<String>,
     pub keystroke_count: usize,
     pub warmup_keystrokes: usize,
-    pub keystroke_interval_ms: u64,
+    pub keystroke_interval_ms: u32,
 }
 
 impl Default for PerfHarnessConfig {
@@ -78,7 +78,7 @@ fn env_usize(key: &str, default: usize) -> usize {
         .unwrap_or(default)
 }
 
-fn env_u64(key: &str, default: u64) -> u64 {
+fn env_u32(key: &str, default: u32) -> u32 {
     std::env::var(key)
         .ok()
         .and_then(|v| v.parse().ok())
@@ -93,7 +93,7 @@ pub fn get_perf_config() -> PerfHarnessConfig {
         report_path: std::env::var("ERGO_PERF_REPORT_PATH").ok(),
         keystroke_count: env_usize("ERGO_PERF_KEYSTROKE_COUNT", 30),
         warmup_keystrokes: env_usize("ERGO_PERF_WARMUP_KEYSTROKES", 3),
-        keystroke_interval_ms: env_u64("ERGO_PERF_KEYSTROKE_INTERVAL_MS", 80),
+        keystroke_interval_ms: env_u32("ERGO_PERF_KEYSTROKE_INTERVAL_MS", 80),
     }
 }
 
