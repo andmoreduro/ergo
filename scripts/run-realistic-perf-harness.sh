@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT_PATH="${ERGO_PERF_PROJECT_PATH:-$HOME/Documents/tesis.ergproj}"
-REPORT_PATH="${ERGO_PERF_REPORT_PATH:-$REPO_ROOT/target/perf-report.json}"
+REPORT_PATH="${ERGO_PERF_REPORT_PATH:-$REPO_ROOT/src-tauri/target/perf-report.json}"
 KEYSTROKES="${ERGO_PERF_KEYSTROKE_COUNT:-30}"
 WARMUP="${ERGO_PERF_WARMUP_KEYSTROKES:-3}"
 INTERVAL="${ERGO_PERF_KEYSTROKE_INTERVAL_MS:-80}"
