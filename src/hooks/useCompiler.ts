@@ -14,6 +14,7 @@ import type { DocumentOutline } from "../bindings/DocumentOutline";
 import type { DocumentResources } from "../bindings/DocumentResources";
 import type { PreviewPageFile } from "../bindings/PreviewPageFile";
 import { useDocumentCompilerSync } from "./useDocumentCompilerSync";
+import { notifyPreviewTelemetry } from "./previewDiagnostics";
 import {
     elapsedMs,
     nowMs,
@@ -144,7 +145,7 @@ export function useCompiler(
             const effectStartAt = paintInfo?.effectStartAt ?? domWrittenAt;
             const previewRenderAt = paintInfo?.previewRenderAt ?? null;
             const reactCommittedAt = paintInfo?.reactCommittedAt ?? null;
-            setPreviewTelemetry({
+            const telemetry: PreviewTelemetry = {
                 totalLatencyMs: elapsedMs(pendingTelemetry.startedAt, paintedAt),
                 queuedToSyncMs: pendingTelemetry.queuedToSyncMs,
                 workerSyncMs: pendingTelemetry.workerSyncMs,
@@ -179,7 +180,9 @@ export function useCompiler(
                 workerRenderMs: paintInfo?.workerRenderMs ?? 0,
                 domWriteMs: paintInfo?.domWriteMs ?? 0,
                 rasterMs: elapsedMs(domWrittenAt, paintedAt),
-            });
+            };
+            setPreviewTelemetry(telemetry);
+            notifyPreviewTelemetry(telemetry);
             if (rendered) {
                 renderedTelemetryRevisionRef.current = revision;
                 pendingPreviewTelemetryRef.current = null;
