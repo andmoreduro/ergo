@@ -83,12 +83,12 @@ export const usePerfReplay = ({
         }
         void (async () => {
             const config = await TauriApi.getPerfConfig();
-            if (!config.enabled || !config.project_path) {
+            if (!config.enabled || !config.projectPath) {
                 return;
             }
             configRef.current = config;
             startedRef.current = true;
-            await openProject(config.project_path);
+            await openProject(config.projectPath);
         })();
     }, [openProject]);
 
@@ -136,8 +136,8 @@ export const usePerfReplay = ({
 
         const run = async (): Promise<void> => {
             const { paragraphId, initialText } = paragraph;
-            const total = config.keystroke_count;
-            const warmup = config.warmup_keystrokes;
+            const total = config.keystrokeCount;
+            const warmup = config.warmupKeystrokes;
 
             for (let i = 0; i < total && !cancelled; i++) {
                 const nextText = `${initialText}${"x".repeat(i + 1)}`;
@@ -160,12 +160,12 @@ export const usePerfReplay = ({
 
                 await waitForTelemetry();
 
-                if (i >= warmup && config.keystroke_interval_ms > 0) {
-                    await sleep(config.keystroke_interval_ms);
+                if (i >= warmup && config.keystrokeIntervalMs > 0) {
+                    await sleep(config.keystrokeIntervalMs);
                 }
             }
 
-            const recorded = samplesRef.current.slice(config.warmup_keystrokes);
+            const recorded = samplesRef.current.slice(config.warmupKeystrokes);
             const totalLatencies = recorded.map((s) => s.totalLatencyMs);
             const compileLatencies = recorded.map((s) => s.compileMs);
             const renderLatencies = recorded.map((s) => s.svgRenderMs);
