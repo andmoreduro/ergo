@@ -105,6 +105,7 @@ import { useAutosave } from "./hooks/useAutosave";
 import { useScrollRegionReveal } from "./hooks/useScrollRegionReveal";
 import { useSettingsLifecycle } from "./hooks/useSettingsLifecycle";
 import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
+import { usePerfReplay } from "./hooks/usePerfReplay";
 import {
     PREVIEW_ZOOM_DEFAULT,
     type PreviewZoomMode,
@@ -116,8 +117,14 @@ const AppShellContent = () => {
     // Narrow subscriptions: the app shell must not re-render on every keystroke.
     // Mutators are identity-stable; the live AST/focus are read imperatively in
     // callbacks via the stores; only rarely-changing slices subscribe.
-    const { dispatch, undo, redo, markSaved, setDocumentFocus } =
-        useDocumentActions();
+    const {
+        dispatch,
+        undo,
+        redo,
+        markSaved,
+        setDocumentFocus,
+        commitDocumentEvents,
+    } = useDocumentActions();
     const { canUndo, canRedo, isDirty } = useDocumentReconcile();
     const astStore = useDocumentAstStore();
     const focusStore = useDocumentFocusStore();
@@ -163,6 +170,13 @@ const AppShellContent = () => {
         isDirty,
         globalSettings,
         rememberProject,
+    });
+    usePerfReplay({
+        hasActiveProject,
+        openProject,
+        dispatch,
+        ast: astStore.getSnapshot(),
+        commitDocumentEvents,
     });
     const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
     const [templateSpec, setTemplateSpec] = useState<TemplateSpec | null>(null);
