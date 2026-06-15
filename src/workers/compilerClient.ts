@@ -118,7 +118,7 @@ export const CompilerClient = {
             "render_svg_done",
         );
         return reply.payload;
-    }
+    },
 
     async renderPngPage(
         pageIndex: number,
@@ -133,7 +133,7 @@ export const CompilerClient = {
             "render_png_done",
         );
         return reply.payload;
-    }
+    },
 
     async renderResourceSvgPage(
         pageNumber: number,
