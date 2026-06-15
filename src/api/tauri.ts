@@ -193,6 +193,18 @@ export const TauriApi = {
         return invoke("write_perf_report_and_exit", { report });
     },
 
+    async logToFile(
+        level: string,
+        message: string,
+        source?: string,
+    ): Promise<void> {
+        return invoke("log_to_file", { level, message, source });
+    },
+
+    async getLogPath(): Promise<string> {
+        return invoke("get_log_path");
+    },
+
     async documentDir(): Promise<string> {
         return tauriDocumentDir();
     },

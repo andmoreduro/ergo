@@ -8,8 +8,14 @@ pub use profile::{
 };
 
 use wasm_bindgen::prelude::*;
+use web_sys::console;
 
 use ergo_core::ast::DocumentAST;
+
+fn wasm_log(level: &str, message: &str) {
+    let formatted = format!("[ergo-wasm {level}] {message}");
+    console::log_1(&formatted.into());
+}
 use ergo_core::document_session_types::{DocumentEvent, DocumentSessionStatus};
 
 /// Serialize a sync status for the main thread, dropping `field_source_map`.
@@ -294,10 +300,23 @@ impl ErgoWasmCompiler {
         &mut self,
         page_number: usize,
     ) -> Result<WasmPageSvg, JsValue> {
-        self.engine
+        wasm_log(
+            "info",
+            &format!("render_resource_svg_page called page={page_number}"),
+        );
+        let result = self
+            .engine
             .render_resource_svg_page(page_number)
             .map(WasmPageSvg::from)
-            .map_err(|error| JsValue::from_str(&error))
+            .map_err(|error| JsValue::from_str(&error));
+        wasm_log(
+            "info",
+            &format!(
+                "render_resource_svg_page result ok={} page={page_number}",
+                result.is_ok()
+            ),
+        );
+        result
     }
 
     #[wasm_bindgen]

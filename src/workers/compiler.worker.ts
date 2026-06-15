@@ -5,6 +5,40 @@ import init, {
 } from "../wasm-compiler/ergo_engine_wasm.js";
 import type { WorkerMessage, WorkerReply } from "./compilerProtocol";
 
+const LOG_LEVELS: ("error" | "warn" | "info" | "log")[] = [
+    "error",
+    "warn",
+    "info",
+    "log",
+];
+
+function forwardLog(level: string, args: unknown[]) {
+    const message = args
+        .map((arg) =>
+            typeof arg === "string" ? arg : JSON.stringify(arg),
+        )
+        .join(" ");
+    const entry: WorkerReply = {
+        type: "log",
+        level,
+        message,
+        source: "worker",
+    };
+    workerScope.postMessage(entry);
+}
+
+function interceptWorkerConsole() {
+    for (const level of LOG_LEVELS) {
+        const original = console[level];
+        console[level] = (...args: unknown[]) => {
+            original.apply(console, args);
+            forwardLog(level, args);
+        };
+    }
+}
+
+interceptWorkerConsole();
+
 let compiler: ErgoWasmCompiler | null = null;
 let initialized = false;
 

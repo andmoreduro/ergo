@@ -65,6 +65,13 @@ export type WorkerRequest =
     | { type: "export_png_pages"; payload: { pixelPerPt: number } }
     | { type: "export_svg_pages" };
 
+export type WorkerLogEntry = {
+    type: "log";
+    level: string;
+    message: string;
+    source?: string;
+};
+
 export type RenderPagePayload = {
     pageIndex: number;
     width: number;
@@ -110,7 +117,8 @@ export type WorkerResponse =
     | { type: "export_pdf_done"; bytes: Uint8Array }
     | { type: "export_png_pages_done"; pages: Uint8Array[] }
     | { type: "export_svg_pages_done"; pages: string[] }
-    | { type: "error"; error: string };
+    | { type: "error"; error: string }
+    | WorkerLogEntry;
 
 export type WorkerMessage = WorkerRequest & { id?: number };
 

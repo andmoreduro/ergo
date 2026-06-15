@@ -48,9 +48,18 @@ function dispatchReply(data: WorkerReply) {
     }
 }
 
+function forwardWorkerLog(data: Extract<WorkerReply, { type: "log" }>) {
+    void TauriApi.logToFile(data.level, data.message, data.source ?? "worker");
+}
+
 function attachWorkerDispatcher(worker: Worker) {
     worker.onmessage = (event: MessageEvent<WorkerReply>) => {
-        dispatchReply(event.data);
+        const data = event.data;
+        if (data.type === "log") {
+            forwardWorkerLog(data as Extract<WorkerReply, { type: "log" }>);
+            return;
+        }
+        dispatchReply(data);
     };
 }
 

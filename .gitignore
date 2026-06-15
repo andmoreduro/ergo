@@ -33,3 +33,7 @@ src-tauri/out*.pdf
 src-tauri/test-*.*
 src-tauri/references.bib
 
+# Local planning/exploration notes (keep local, not in repo)
+docs/superpowers/plans/
+screenshots/
+

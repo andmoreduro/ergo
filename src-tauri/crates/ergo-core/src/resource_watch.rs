@@ -18,7 +18,7 @@ pub fn write_resource_files(
 ) {
     write_if_changed(vfs, RESOURCE_LIB, lib_source);
 
-    let seeds = assign_preview_pages(resource_seeds(ast, template));
+    let seeds = assign_preview_pages(resource_seeds(ast, template, vfs));
     let mut resource_source = String::new();
 
     let width_pt = template
@@ -82,7 +82,7 @@ pub fn build_resource_catalog(
     template: &TemplateSpec,
     vfs: &VirtualFileSystem,
 ) -> DocumentResources {
-    let seeds = assign_preview_pages(resource_seeds(ast, template));
+    let seeds = assign_preview_pages(resource_seeds(ast, template, vfs));
     let mut groups = Vec::new();
     for (kind, label) in [
         // Diagrams are grouped under Figures (a diagram is a generated-SVG image),
@@ -133,9 +133,11 @@ pub fn build_resource_catalog_with_failure(
     diagnostic: String,
 ) -> DocumentResources {
     let mut resources = build_resource_catalog(ast, template, vfs);
+    // Only overwrite entries that were actually going to be rendered. Missing
+    // assets already carry their own diagnostic and should keep it.
     for group in &mut resources.groups {
         for entry in &mut group.entries {
-            if entry.preview.status != ResourcePreviewStatus::Ready {
+            if entry.preview.status == ResourcePreviewStatus::Ready {
                 entry.preview = ResourcePreview {
                     status: ResourcePreviewStatus::Failed,
                     path: None,
@@ -218,14 +220,18 @@ fn linked_figure_asset_ids(ast: &DocumentAST) -> std::collections::HashSet<Strin
     linked
 }
 
-fn resource_seeds(ast: &DocumentAST, template: &TemplateSpec) -> Vec<ResourceSeed> {
+fn resource_seeds(
+    ast: &DocumentAST,
+    template: &TemplateSpec,
+    vfs: &VirtualFileSystem,
+) -> Vec<ResourceSeed> {
     let mut seeds = Vec::new();
     let linked_assets = linked_figure_asset_ids(ast);
     for asset in &ast.assets {
         if linked_assets.contains(&asset.id) {
             continue;
         }
-        seeds.push(file_seed(asset));
+        seeds.push(file_seed(asset, vfs));
     }
     for section in &ast.sections {
         let DocumentSection::Content(content) = section;
@@ -358,8 +364,29 @@ fn collect_element_seeds(
     }
 }
 
-fn file_seed(asset: &AssetEntry) -> ResourceSeed {
-    let body = if asset.kind == "image" || image_path(&asset.path) {
+fn file_seed(asset: &AssetEntry, vfs: &VirtualFileSystem) -> ResourceSeed {
+    let is_image = asset.kind == "image" || image_path(&asset.path);
+    let file_missing = vfs.read_file(&asset.path).is_err();
+
+    if file_missing {
+        return ResourceSeed {
+            id: asset.id.clone(),
+            kind: ResourceKind::File,
+            label: asset.caption.clone().unwrap_or_else(|| asset.path.clone()),
+            subtitle: Some(asset.path.clone()),
+            reference_token: reference_token(&asset.id),
+            source_element_id: None,
+            asset_id: Some(asset.id.clone()),
+            preview_source: None,
+            preview_page: None,
+            missing_diagnostic: Some(format!(
+                "Asset file not found in project: {}",
+                asset.path
+            )),
+        };
+    }
+
+    let body = if is_image {
         format!(
             "#image(\"{}\", width: 100%)",
             escape_typst_string(&asset.path)
@@ -487,9 +514,9 @@ fn write_if_changed(vfs: &VirtualFileSystem, path: &str, source: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AssetEntry, DocumentElement, DocumentSection, Equation, Figure, Paragraph};
+    use crate::ast::{AssetEntry, DocumentElement, DocumentSection, Equation};
     use crate::template_spec::load_bundled_template;
-    use crate::test_fixtures::{basic_document_ast, rich_text};
+    use crate::test_fixtures::basic_document_ast;
 
     #[test]
     fn resource_preview_typst_uses_same_lib_and_strips_page_chrome() {
@@ -516,15 +543,17 @@ mod tests {
     #[test]
     fn preview_pages_skip_seeds_without_preview_source() {
         let mut ast = basic_document_ast("Title", "");
+        // Present in VFS: will be assigned page 1.
         ast.assets.push(AssetEntry {
-            id: "asset-folder".to_string(),
-            path: "assets/standalone.png".to_string(),
+            id: "asset-present".to_string(),
+            path: "assets/present.png".to_string(),
             kind: "image".to_string(),
             caption: None,
         });
+        // Missing from VFS: must be skipped in page numbering.
         ast.assets.push(AssetEntry {
-            id: "asset-fig".to_string(),
-            path: "assets/figure.png".to_string(),
+            id: "asset-missing".to_string(),
+            path: "assets/missing.png".to_string(),
             kind: "image".to_string(),
             caption: None,
         });
@@ -536,38 +565,28 @@ mod tests {
             is_block: false,
             syntax: crate::ast::EquationSyntax::Typst,
         }));
-        content
-            .elements
-            .push(DocumentElement::Figure(Box::new(Figure {
-                id: "fig-1".to_string(),
-                asset_id: Some("asset-fig".to_string()),
-                caption: "Caption".to_string(),
-                placement: "here".to_string(),
-                content: DocumentElement::Paragraph(Paragraph {
-                    id: "fig-body".to_string(),
-                    content: vec![rich_text("")],
-                }),
-                extra_fields: std::collections::HashMap::new(),
-            })));
 
         let template = load_bundled_template("apa7").unwrap();
-        let seeds = assign_preview_pages(resource_seeds(&ast, &template));
-        let file_seed = seeds
+        let vfs = VirtualFileSystem::new();
+        vfs.write_file("assets/present.png", vec![0x89, 0x50, 0x4e, 0x47]);
+
+        let seeds = assign_preview_pages(resource_seeds(&ast, &template, &vfs));
+        let present_seed = seeds
             .iter()
-            .find(|seed| seed.kind == ResourceKind::File)
+            .find(|seed| seed.id == "asset-present")
+            .unwrap();
+        let missing_seed = seeds
+            .iter()
+            .find(|seed| seed.id == "asset-missing")
             .unwrap();
         let equation_seed = seeds
             .iter()
             .find(|seed| seed.kind == ResourceKind::Equation)
             .unwrap();
-        let figure_seed = seeds
-            .iter()
-            .find(|seed| seed.kind == ResourceKind::Figure)
-            .unwrap();
 
-        assert_eq!(file_seed.preview_page, Some(1));
+        assert_eq!(present_seed.preview_page, Some(1));
+        assert_eq!(missing_seed.preview_page, None);
         assert_eq!(equation_seed.preview_page, Some(2));
-        assert_eq!(figure_seed.preview_page, Some(3));
     }
 
     #[test]

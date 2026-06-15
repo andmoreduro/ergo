@@ -24,6 +24,20 @@ use typst::layout::PagedDocument;
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 
+#[cfg(target_arch = "wasm32")]
+use web_sys::console;
+
+fn wasm_log_engine(level: &str, message: &str) {
+    let formatted = format!("[ergo-engine {level}] {message}");
+    #[cfg(target_arch = "wasm32")]
+    console::log_1(&formatted.into());
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = formatted;
+        let _ = level;
+    }
+}
+
 static CUSTOM_FONTS: RwLock<Option<Arc<Vec<Font>>>> = RwLock::new(None);
 static CUSTOM_FONT_BOOK: RwLock<Option<LazyHash<FontBook>>> = RwLock::new(None);
 static FONT_STAMP: AtomicU64 = AtomicU64::new(0);
@@ -408,7 +422,21 @@ impl ErgoPreviewEngine {
         &mut self,
         page_number: usize,
     ) -> Result<PageSvg, String> {
+        wasm_log_engine(
+            "info",
+            &format!(
+                "render_resource_svg_page start page={page_number} resource_document={}",
+                self.resource_document.is_some()
+            ),
+        );
         self.ensure_resource_document_compiled()?;
+        wasm_log_engine(
+            "info",
+            &format!(
+                "render_resource_svg_page after ensure resource_document={}",
+                self.resource_document.is_some()
+            ),
+        );
         Self::render_document_svg_page(
             self.resource_document.as_deref(),
             page_number.saturating_sub(1),
@@ -419,7 +447,12 @@ impl ErgoPreviewEngine {
     /// against render races where the main preview has not yet triggered a
     /// resource compile (e.g. during sidebar resize before the first paint).
     fn ensure_resource_document_compiled(&mut self) -> Result<(), String> {
-        if self.resource_document.is_some() {
+        let had_resource = self.resource_document.is_some();
+        wasm_log_engine(
+            "info",
+            &format!("ensure_resource_document_compiled start had_resource={had_resource}"),
+        );
+        if had_resource {
             return Ok(());
         }
         let ast = self
@@ -427,15 +460,38 @@ impl ErgoPreviewEngine {
             .ast()
             .ok_or_else(|| "No AST available for resource preview compile".to_string())?;
         let template = load_template_for_ast(&ast).map_err(|e| e.to_string())?;
-        let (resource_document, resources) = compile_resource_previews(
+        let (resource_document, resources) = match compile_resource_previews(
             &self.resource_world,
             &self.vfs,
             &ast,
             &template,
-        )
-        .map_err(|e| e.to_string())?;
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                wasm_log_engine(
+                    "error",
+                    &format!("compile_resource_previews error: {error}"),
+                );
+                return Err(format!(
+                    "Resource preview compile failed (on demand): {error}"
+                ));
+            }
+        };
+        wasm_log_engine(
+            "info",
+            &format!(
+                "compile_resource_previews returned document={} groups={}",
+                resource_document.is_some(),
+                resources.groups.len()
+            ),
+        );
         if let Some(document) = resource_document {
+            let page_count = document.pages.len();
             self.resource_document = Some(Arc::new(document));
+            wasm_log_engine(
+                "info",
+                &format!("ensure_resource_document_compiled stored pages={page_count}"),
+            );
             return Ok(());
         }
         // compile_resource_previews returns Ok(None, ...) when the Typst compile
@@ -773,5 +829,75 @@ mod tests {
         assert!(pages.iter().all(|page| !page.changed));
         assert!(pages.iter().all(|page| page.width_pt.is_some()));
         assert!(pages.iter().all(|page| page.height_pt.is_some()));
+    }
+
+    #[test]
+    fn render_resource_svg_page_compiles_on_demand_before_main_preview() {
+        use ergo_core::ast::{DocumentElement, DocumentSection, Equation, EquationSyntax};
+        use crate::profile::load_bundled_template_packages;
+
+        let mut ast = basic_document_ast("Resource preview document", "");
+        match &mut ast.sections[0] {
+            DocumentSection::Content(content) => {
+                content.elements.push(DocumentElement::Equation(Equation {
+                    id: "eq-1".to_string(),
+                    latex_source: "x^2".to_string(),
+                    is_block: false,
+                    syntax: EquationSyntax::Typst,
+                }));
+            }
+        }
+
+        let mut engine = ErgoPreviewEngine::new();
+        load_bundled_template_packages(&engine);
+        engine
+            .sync_snapshot(ast)
+            .expect("snapshot sync should succeed");
+
+        // Do not call compile_preview first; resource previews should compile
+        // on demand when requested by the UI before the main preview completes.
+        let page = engine
+            .render_resource_svg_page(1)
+            .expect("resource preview should compile on demand and render");
+        assert!(page.svg.starts_with("<svg"));
+    }
+
+    #[test]
+    fn render_resource_svg_page_skips_missing_image_assets() {
+        use ergo_core::ast::{AssetEntry, DocumentElement, DocumentSection, Equation, EquationSyntax};
+        use crate::profile::load_bundled_template_packages;
+
+        let mut ast = basic_document_ast("Resource preview with missing asset", "");
+        // An image asset whose file is not in the VFS should not break the
+        // resource preview compile for other resources.
+        ast.assets.push(AssetEntry {
+            id: "missing-image".to_string(),
+            path: "assets/image-missing.png".to_string(),
+            kind: "image".to_string(),
+            caption: Some("Missing image".to_string()),
+        });
+        match &mut ast.sections[0] {
+            DocumentSection::Content(content) => {
+                content.elements.push(DocumentElement::Equation(Equation {
+                    id: "eq-1".to_string(),
+                    latex_source: "x^2".to_string(),
+                    is_block: false,
+                    syntax: EquationSyntax::Typst,
+                }));
+            }
+        }
+
+        let mut engine = ErgoPreviewEngine::new();
+        load_bundled_template_packages(&engine);
+        engine
+            .sync_snapshot(ast)
+            .expect("snapshot sync should succeed");
+
+        // Equation is the first (and only) renderable resource preview; the
+        // missing image asset should be skipped, so this should succeed.
+        let page = engine
+            .render_resource_svg_page(1)
+            .expect("renderable resource previews should compile despite missing asset");
+        assert!(page.svg.starts_with("<svg"));
     }
 }
