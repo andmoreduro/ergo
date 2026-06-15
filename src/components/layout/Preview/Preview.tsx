@@ -17,6 +17,7 @@ import {
     updatePreviewPointerAnchor,
 } from "../../../preview/previewPointerAnchor";
 import {
+    CSS_PX_PER_PT,
     pageSurfaceLayoutStyle,
     previewPageDisplaySizeStyle,
     setPreviewPageMetrics,
@@ -208,7 +209,7 @@ export const Preview = ({
         [],
     );
     // Compile may still inline SVG on bootstrap; incremental compiles are
-    // metadata-only and visible changed pages paint via `renderSvgPage`.
+    // metadata-only and visible changed pages paint via `renderPngPage`.
     const inlineSvgByPage = useMemo(() => {
         const map: Record<number, RenderedSvgPage | null> = {};
         if (previewRevision === null) {
@@ -714,6 +715,8 @@ interface RenderedSvgPage {
     revision: number;
     svg: string;
     metrics: PreviewPageMetrics;
+    /** Diagnostic flag: true when `svg` is actually an <img> wrapping a PNG data URL. */
+    isPng?: boolean;
 }
 
 const PreviewPageSvgComponent = ({
@@ -850,8 +853,9 @@ const PreviewPageSvgComponent = ({
         renderRequestIdRef.current = requestId;
         let cancelled = false;
         const workerStart = nowMs();
+        const pixelPerPt = zoom * CSS_PX_PER_PT;
 
-        void CompilerClient.renderSvgPage(pageIndex, requestId)
+        void CompilerClient.renderPngPage(pageIndex, pixelPerPt, requestId)
             .then((result) => {
                 if (cancelled || result.requestId !== renderRequestIdRef.current) {
                     return;
@@ -861,10 +865,11 @@ const PreviewPageSvgComponent = ({
                 const metrics = {
                     widthPt: result.widthPt,
                     heightPt: result.heightPt,
-                    pixelPerPt: 1,
+                    pixelPerPt,
                 };
+                const content = `<img src="${result.dataUrl}" style="width:100%;height:100%;display:block;" alt=""/>`;
                 const writeStart = nowMs();
-                element.innerHTML = result.svg;
+                element.innerHTML = content;
                 const domWriteMs = elapsedMs(writeStart, nowMs());
                 lastRenderRef.current = {
                     revision: previewRevision,
@@ -876,15 +881,16 @@ const PreviewPageSvgComponent = ({
                 onPageMetrics(pageNumber, metrics);
                 onPageSvg(pageNumber, {
                     revision: previewRevision,
-                    svg: result.svg,
+                    svg: content,
                     metrics,
+                    isPng: true,
                 });
                 hasRenderedRef.current = true;
                 lastRenderedRevisionRef.current = previewRevision;
                 reportPaint();
             })
             .catch((err) => {
-                console.error("Failed to render page to SVG:", err);
+                console.error("Failed to render page to PNG:", err);
             });
 
         return () => {

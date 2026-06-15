@@ -1,7 +1,7 @@
 mod engine;
 mod profile;
 
-pub use engine::{BootstrapPreviewOutput, ErgoPreviewEngine, PageImage, PageSvg, VfsFileEntry};
+pub use engine::{BootstrapPreviewOutput, ErgoPreviewEngine, PageImage, PagePng, PageSvg, VfsFileEntry};
 pub use profile::{
     run_wasm_preview_profile, WasmPreviewIteration, WasmPreviewProfileOptions,
     WasmPreviewProfileReport, WasmPreviewScenario, WasmPreviewTiming,
@@ -24,6 +24,7 @@ fn status_to_js(mut status: DocumentSessionStatus) -> Result<JsValue, JsValue> {
 
 use engine::ErgoPreviewEngine as Engine;
 use engine::PageImage as EnginePageImage;
+use engine::PagePng as EnginePagePng;
 use engine::PageSvg as EnginePageSvg;
 
 #[wasm_bindgen]
@@ -109,6 +110,42 @@ impl WasmPageSvg {
     #[wasm_bindgen(getter)]
     pub fn svg(&self) -> String {
         self.svg.clone()
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct WasmPagePng {
+    width_pt: f64,
+    height_pt: f64,
+    data_url: String,
+}
+
+impl From<EnginePagePng> for WasmPagePng {
+    fn from(page: EnginePagePng) -> Self {
+        Self {
+            width_pt: page.width_pt,
+            height_pt: page.height_pt,
+            data_url: page.data_url,
+        }
+    }
+}
+
+#[wasm_bindgen]
+impl WasmPagePng {
+    #[wasm_bindgen(getter, js_name = widthPt)]
+    pub fn width_pt(&self) -> f64 {
+        self.width_pt
+    }
+
+    #[wasm_bindgen(getter, js_name = heightPt)]
+    pub fn height_pt(&self) -> f64 {
+        self.height_pt
+    }
+
+    #[wasm_bindgen(getter, js_name = dataUrl)]
+    pub fn data_url(&self) -> String {
+        self.data_url.clone()
     }
 }
 
@@ -237,6 +274,18 @@ impl ErgoWasmCompiler {
         self.engine
             .render_svg_page(page_index)
             .map(WasmPageSvg::from)
+            .map_err(|error| JsValue::from_str(&error))
+    }
+
+    #[wasm_bindgen]
+    pub fn render_png_page(
+        &self,
+        page_index: usize,
+        pixel_per_pt: f32,
+    ) -> Result<WasmPagePng, JsValue> {
+        self.engine
+            .render_png_page(page_index, pixel_per_pt)
+            .map(WasmPagePng::from)
             .map_err(|error| JsValue::from_str(&error))
     }
 

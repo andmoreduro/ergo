@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use base64::Engine;
 use ergo_core::ast::DocumentAST;
 use ergo_core::compilation_types::{CompilationResult, CompilationStatus, PreviewPageFile};
 use ergo_core::compile_artifacts::fingerprint_page;
@@ -130,6 +131,13 @@ pub struct PageSvg {
     pub width_pt: f64,
     pub height_pt: f64,
     pub svg: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PagePng {
+    pub width_pt: f64,
+    pub height_pt: f64,
+    pub data_url: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -384,6 +392,14 @@ impl ErgoPreviewEngine {
         Self::render_document_svg_page(self.document.as_deref(), page_index)
     }
 
+    pub fn render_png_page(
+        &self,
+        page_index: usize,
+        pixel_per_pt: f32,
+    ) -> Result<PagePng, String> {
+        Self::render_document_png_page(self.document.as_deref(), page_index, pixel_per_pt)
+    }
+
     pub fn render_resource_svg_page(&self, page_number: usize) -> Result<PageSvg, String> {
         Self::render_document_svg_page(
             self.resource_document.as_deref(),
@@ -448,6 +464,33 @@ impl ErgoPreviewEngine {
             width_pt: size.x.to_pt(),
             height_pt: size.y.to_pt(),
             svg: typst_svg::svg(page),
+        })
+    }
+
+    fn render_document_png_page(
+        document: Option<&PagedDocument>,
+        page_index: usize,
+        pixel_per_pt: f32,
+    ) -> Result<PagePng, String> {
+        let doc = document.ok_or_else(|| "No compiled document available".to_string())?;
+
+        let page = doc
+            .pages
+            .get(page_index)
+            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
+
+        let size = page.frame.size();
+        let pixmap = typst_render::render(page, pixel_per_pt);
+        let png = pixmap
+            .encode_png()
+            .map_err(|e| format!("PNG encode failed: {e:?}"))?;
+        let base64 = base64::engine::general_purpose::STANDARD.encode(&png);
+        let data_url = format!("data:image/png;base64,{base64}");
+
+        Ok(PagePng {
+            width_pt: size.x.to_pt(),
+            height_pt: size.y.to_pt(),
+            data_url,
         })
     }
 
