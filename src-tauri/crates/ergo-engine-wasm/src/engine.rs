@@ -5,6 +5,7 @@ use base64::Engine;
 use ergo_core::ast::DocumentAST;
 use ergo_core::compilation_types::{CompilationResult, CompilationStatus, PreviewPageFile};
 use ergo_core::compile_artifacts::fingerprint_page;
+use ergo_core::document_resources::ResourcePreviewStatus;
 use ergo_core::document_session::DocumentSession;
 use ergo_core::document_session_types::{DocumentEvent, DocumentSessionStatus};
 use ergo_core::path_utils::file_id_for_virtual_path;
@@ -426,7 +427,7 @@ impl ErgoPreviewEngine {
             .ast()
             .ok_or_else(|| "No AST available for resource preview compile".to_string())?;
         let template = load_template_for_ast(&ast).map_err(|e| e.to_string())?;
-        let (resource_document, _) = compile_resource_previews(
+        let (resource_document, resources) = compile_resource_previews(
             &self.resource_world,
             &self.vfs,
             &ast,
@@ -435,8 +436,27 @@ impl ErgoPreviewEngine {
         .map_err(|e| e.to_string())?;
         if let Some(document) = resource_document {
             self.resource_document = Some(Arc::new(document));
+            return Ok(());
         }
-        Ok(())
+        // compile_resource_previews returns Ok(None, ...) when the Typst compile
+        // itself failed. Surface the first failed-entry diagnostic so the
+        // frontend/writer can see why resource previews did not render.
+        let diagnostic = resources
+            .groups
+            .iter()
+            .flat_map(|group| &group.entries)
+            .filter_map(|entry| {
+                if entry.preview.status == ResourcePreviewStatus::Failed {
+                    entry.preview.diagnostic.clone()
+                } else {
+                    None
+                }
+            })
+            .next()
+            .unwrap_or_else(|| "Resource preview compile produced no pages".to_string());
+        Err(format!(
+            "Resource preview compile failed (on demand): {diagnostic}"
+        ))
     }
 
     pub fn render_changed_pages(
