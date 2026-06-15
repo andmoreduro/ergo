@@ -54,11 +54,11 @@ stateDiagram-v2
     direction LR
     [*] --> Empty
     Empty --> Showing : project active
-    Showing --> Showing : replace changed page SVG
+    Showing --> Showing : replace changed page image
     Showing --> Empty : close project
 ```
 
-No visible compile-status UI may resize the preview pane during typing. The WASM worker renders main preview pages and resource thumbnails as serialized SVG markup plus compiled Typst page-frame metrics. React writes SVG into stable containers with `innerHTML`; unchanged pages keep their existing SVG content while changed visible pages are replaced in place.
+No visible compile-status UI may resize the preview pane during typing. The WASM worker renders main preview pages as raster PNG and resource thumbnails as serialized SVG markup, plus compiled Typst page-frame metrics for both. React writes the PNG `<img>` or SVG markup into stable containers with `innerHTML`; unchanged pages keep their existing content while changed visible pages are replaced in place.
 
 ## 5. Key Sequence Resolver Lifecycle
 
