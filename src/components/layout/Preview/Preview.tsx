@@ -636,7 +636,7 @@ export const Preview = ({
                     >
                     <div className={styles.svgContainer}>
                         {previewPages.length > 0 && previewRevision !== null ? (
-                            previewPages.slice(0, 3).map((page, index) => {
+                            previewPages.map((page, index) => {
                                 const pageNumber = page.page_number;
                                 return (
                                     <PreviewPageSvg
