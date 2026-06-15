@@ -17,8 +17,8 @@ sequenceDiagram
     State->>Worker: sync_events
     Worker->>Worker: Regenerate Typst + compile_preview
     Worker-->>State: CompilationResult
-    Preview->>Worker: render_svg_page
-    Worker-->>Preview: Page SVG
+    Preview->>Worker: render_png_page
+    Worker-->>Preview: Page PNG data URL
     Preview-->>User: Preview update
 ```
 
@@ -29,8 +29,8 @@ sequenceDiagram
 - Main preview and resource previews compile in WASM via `preview_pipeline`.
 - Resource preview VFS uses the same `lib.typ` and `#show: apply` as the main document; `resources.typ` adds preview page dimensions and `#set page` / `#show page` overrides for a white background without headers or numbering. Sidebar thumbnails cap height at 40vh.
 - Compiled outline comes from `document.introspector` on the paged document using the same heading filter as the PDF bookmark panel (`bookmarked: true`, or `bookmarked: auto` with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries scroll the preview to that page.
-- Incremental `compile_preview` returns page metadata only (no inline SVG). Bootstrap may inline the first page for a single-trip initial paint. Visible changed pages fetch SVG via `render_svg_page`.
-- Main preview pages render only viewport pages whose content changed; unchanged visible pages keep their existing `innerHTML`. Zoom updates page layout without requesting a page rerender.
+- Incremental `compile_preview` returns page metadata only (no inline SVG). Bootstrap may inline the first page for a single-trip initial paint. Visible changed main preview pages fetch PNG via `render_png_page`; resource thumbnails fetch SVG via `render_svg_page`.
+- Main preview pages render only viewport pages whose content changed; unchanged visible pages keep their existing `innerHTML`. Zoom updates page layout and requests a PNG rerender at the new pixel density.
 - Resource thumbnails use `render_resource_svg_page` and wait for the matching main preview revision to paint before replacing thumbnail SVG.
 - Failed compiles report localized toast notifications and keep the last successful preview-visible pages, outline, resources, source map, and preview revision.
 - Preview does not shift layout with compile-status chrome while typing.

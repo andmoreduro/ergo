@@ -56,8 +56,8 @@ flowchart TB
 ## Component Notes
 
 - **Frontend UI** follows atomic layers under `src/components/`: atoms (native controls), molecules (`Dialog`, `DropdownMenu`, `MenuPanel`, shared fields), organisms (feature editors and dialogs), layout (menubar and workspace regions), screens (welcome). Organisms do not import layout modules; shared types (e.g. outline targeting) live in `src/editor/` or bindings, not in layout files.
-- **Preview Engine** wraps `DocumentSession`, `preview_pipeline`, dual `ErgoWorld` instances (main + resource previews with comemo), `PreviewSyncState`, main page SVG serialization, and resource thumbnail SVG serialization.
-- **Preview Pages** own DOM layout, viewport observation, SVG page replacement, click coordinate conversion, and compile-driven page scroll. Main pages and resource thumbnails write worker-returned SVG markup into stable page containers.
+- **Preview Engine** wraps `DocumentSession`, `preview_pipeline`, dual `ErgoWorld` instances (main + resource previews with comemo), `PreviewSyncState`, main page raster PNG serialization, and resource thumbnail SVG serialization.
+- **Preview Pages** own DOM layout, viewport observation, page image replacement, click coordinate conversion, and compile-driven page scroll. Main pages write worker-returned PNG data URLs into `<img>` tags inside stable page containers; resource thumbnails write worker-returned SVG markup into stable thumbnail containers.
 - **DocumentSession (mirror)** on the backend applies the same typed events as WASM so `save_project` packs a consistent VFS. It does not compile on the IPC sync path.
 - **Tauri API Client** imports IPC DTOs only from generated `src/bindings/`.
 - **Action Runtime** dispatches stable action IDs for commands and shortcuts; Rust owns catalog, keymap schema, sequence resolution, and context matching.

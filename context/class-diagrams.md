@@ -209,6 +209,7 @@ classDiagram
         +sync_events(events)
         +compile_preview()
         +render_svg_page(pageIndex)
+        +render_png_page(pageIndex, pixelPerPt)
         +jump_from_click(...)
         +export_pdf()
     }
