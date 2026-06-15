@@ -3,7 +3,7 @@ export const PREVIEW_ZOOM_MAX = 3;
 export const PREVIEW_ZOOM_STEP = 0.1;
 /** Internal zoom factor shown as 100% in the preview toolbar. */
 export const PREVIEW_ZOOM_UI_BASE = 1;
-export const PREVIEW_ZOOM_DEFAULT = PREVIEW_ZOOM_UI_BASE;
+export const PREVIEW_ZOOM_DEFAULT = PREVIEW_ZOOM_UI_BASE * 0.5;
 export const PREVIEW_FIT_GAP_PX = 24;
 
 export function clampPreviewZoom(zoom: number): number {
