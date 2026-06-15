@@ -1,4 +1,5 @@
 import {
+    startTransition,
     useEffect,
     useRef,
     type Dispatch,
@@ -127,32 +128,41 @@ export function useDocumentCompilerSync({
             return;
         }
 
+        // Mark the preview update as a non-urgent transition so React keeps
+        // typing/caret responsive and renders (and repaints) the preview at lower
+        // priority — interrupting stale preview work when the user keeps typing.
+        // This trades a little preview latency for input responsiveness during
+        // bursts; it does not debounce (every change still compiles immediately).
         if (result.status === "succeeded") {
             latestRevisionRef.current = status.sourceRevision;
             previewRevisionRef.current = result.source_revision;
-            updateResourcePreviewRevisions(status);
-            setSourceMap(status.sourceMap);
-            setOutline(result.outline);
-            if (result.resources) {
-                setResources(result.resources);
-            }
-            setPreviewPages(result.preview_pages || []);
-            setPreviewRevision(result.source_revision);
-            setError(null);
-            if (
-                latestRevisionRef.current === null ||
-                result.source_revision >= latestRevisionRef.current
-            ) {
-                setIsCompiling(false);
-            }
+            startTransition(() => {
+                updateResourcePreviewRevisions(status);
+                setSourceMap(status.sourceMap);
+                setOutline(result.outline);
+                if (result.resources) {
+                    setResources(result.resources);
+                }
+                setPreviewPages(result.preview_pages || []);
+                setPreviewRevision(result.source_revision);
+                setError(null);
+                if (
+                    latestRevisionRef.current === null ||
+                    result.source_revision >= latestRevisionRef.current
+                ) {
+                    setIsCompiling(false);
+                }
+            });
         } else if (result.status === "failed") {
-            setError(result.diagnostics.join("\n") || "Compilation failed");
-            if (
-                latestRevisionRef.current === null ||
-                result.source_revision >= latestRevisionRef.current
-            ) {
-                setIsCompiling(false);
-            }
+            startTransition(() => {
+                setError(result.diagnostics.join("\n") || "Compilation failed");
+                if (
+                    latestRevisionRef.current === null ||
+                    result.source_revision >= latestRevisionRef.current
+                ) {
+                    setIsCompiling(false);
+                }
+            });
         }
     };
 
