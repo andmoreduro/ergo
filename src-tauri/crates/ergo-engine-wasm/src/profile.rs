@@ -239,7 +239,7 @@ fn measure_incremental_edit(
 /// Mount the bundled template Typst packages (`versatile-apa`, `umb-apa`) into the
 /// engine VFS, replicating the app's path-based mount (`<name>/…`, skipping the
 /// package's own `template/` starter). Reads from the repo's `typst_templates/`.
-fn load_bundled_template_packages(engine: &ErgoPreviewEngine) {
+pub fn load_bundled_template_packages(engine: &ErgoPreviewEngine) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../typst_templates");
     for mount in ["versatile-apa", "umb-apa"] {
         let base = root.join(mount);

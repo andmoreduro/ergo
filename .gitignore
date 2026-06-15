@@ -36,3 +36,7 @@ src-tauri/references.bib
 # Cursor / agent extracts
 .cursor-apa-guide-extract.txt
 
+# Local planning/exploration notes (keep local, not in repo)
+docs/superpowers/plans/
+screenshots/
+

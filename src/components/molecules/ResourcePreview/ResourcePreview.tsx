@@ -108,9 +108,15 @@ const ResourcePreviewSvg = ({
         requestIdRef.current = requestId;
         let cancelled = false;
 
+        console.log(
+            `[resource-preview] requesting page=${pageNumber} requestId=${requestId} canRender=${canRender}`,
+        );
         void CompilerClient.renderResourceSvgPage(pageNumber, requestId)
             .then((page) => {
                 if (cancelled || page.requestId !== requestIdRef.current) {
+                    console.log(
+                        `[resource-preview] stale request page=${pageNumber} requestId=${requestId}`,
+                    );
                     return;
                 }
                 if (!page.svg) {
@@ -122,9 +128,18 @@ const ResourcePreviewSvg = ({
                 setSvgStyle(
                     svgPreviewStyle(page.widthPt, page.heightPt, fitSize),
                 );
+                console.log(
+                    `[resource-preview] rendered page=${pageNumber} size=${page.widthPt}x${page.heightPt}`,
+                );
             })
             .catch((error) => {
-                console.error("Failed to render resource preview SVG:", error);
+                const detail =
+                    error instanceof Error
+                        ? `${error.message}\n${error.stack ?? ""}`
+                        : String(error);
+                console.error(
+                    `[resource-preview] failed page=${pageNumber}: ${detail}`,
+                );
             });
 
         return () => {
