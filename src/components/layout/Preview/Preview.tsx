@@ -120,6 +120,11 @@ export const Preview = ({
         previewRenderAtRef.current = { revision: previewRevision, at: nowMs() };
     }
 
+    // Keep the current revision in a ref so the paint callback can stay stable
+    // and avoid churning the memoized page components on every revision bump.
+    const previewRevisionRef = useRef(previewRevision);
+    previewRevisionRef.current = previewRevision;
+
     // Probe: timestamp when React finishes committing this revision (after DOM
     // mutation, before the browser paints). Splits `commit` (previewRenderAt →
     // page passive effect) into React render+commit vs browser paint, to locate
@@ -142,22 +147,21 @@ export const Preview = ({
     // loop. `markMainPreviewPainted` is itself idempotent per revision.
     const onFirstPagePainted = useCallback(
         (paintInfo: PagePaintInfo) => {
-            if (previewRevision === null) {
+            const revision = previewRevisionRef.current;
+            if (revision === null) {
                 return;
             }
             const renderAt = previewRenderAtRef.current;
             const committedAt = reactCommittedAtRef.current;
-            markMainPreviewPainted(previewRevision, {
+            markMainPreviewPainted(revision, {
                 ...paintInfo,
                 previewRenderAt:
-                    renderAt?.revision === previewRevision ? renderAt.at : null,
+                    renderAt?.revision === revision ? renderAt.at : null,
                 reactCommittedAt:
-                    committedAt?.revision === previewRevision
-                        ? committedAt.at
-                        : null,
+                    committedAt?.revision === revision ? committedAt.at : null,
             });
         },
-        [markMainPreviewPainted, previewRevision],
+        [markMainPreviewPainted],
     );
     const showTelemetry =
         isDebugMenuEnabled() && compiler.previewTelemetry !== null;
@@ -971,6 +975,7 @@ const previewPageSvgPropsAreEqual = (
         prev.inlineSvg !== next.inlineSvg ||
         prev.initialMetrics !== next.initialMetrics ||
         prev.previewScrollRef !== next.previewScrollRef ||
+        prev.onPagePainted !== next.onPagePainted ||
         prev.onPageMetrics !== next.onPageMetrics ||
         prev.onPageSvg !== next.onPageSvg
     ) {

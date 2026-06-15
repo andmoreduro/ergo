@@ -113,6 +113,11 @@ const ResourcePreviewSvg = ({
                 if (cancelled || page.requestId !== requestIdRef.current) {
                     return;
                 }
+                if (!page.svg) {
+                    console.warn(
+                        `[resource-preview] empty SVG for page ${pageNumber} (revision ${revision})`,
+                    );
+                }
                 element.innerHTML = page.svg;
                 setSvgStyle(
                     svgPreviewStyle(page.widthPt, page.heightPt, fitSize),
@@ -152,6 +157,12 @@ export const ResourcePreviewPanel = ({
     revision: number;
     canRender: boolean;
 }) => {
+    if (import.meta.env.DEV) {
+        console.log(
+            `[resource-preview] status=${preview.status} page=${preview.page_number} revision=${revision} canRender=${canRender}`,
+        );
+    }
+
     if (preview.status === "ready" && preview.page_number) {
         return (
             <ResourcePreviewSvg
