@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use base64::Engine;
 use ergo_core::ast::DocumentAST;
 use ergo_core::compilation_types::{CompilationResult, CompilationStatus, PreviewPageFile};
 use ergo_core::compile_artifacts::fingerprint_page;
@@ -444,10 +445,24 @@ impl ErgoPreviewEngine {
             .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
 
         let size = page.frame.size();
+
+        // Phase 6 experiment: render preview pages as raster PNG at 1× CSS
+        // resolution to test whether SVG generation + SVG DOM paint is the
+        // remaining bottleneck. The returned string is injected as innerHTML,
+        // so an <img> tag fills the existing sized page surface.
+        let pixmap = typst_render::render(page, 1.0);
+        let png = pixmap
+            .encode_png()
+            .map_err(|e| format!("PNG encode failed: {e:?}"))?;
+        let base64 = base64::engine::general_purpose::STANDARD.encode(&png);
+        let svg = format!(
+            r#"<img src="data:image/png;base64,{base64}" style="width:100%;height:100%;display:block;" alt=""/>"#
+        );
+
         Ok(PageSvg {
             width_pt: size.x.to_pt(),
             height_pt: size.y.to_pt(),
-            svg: typst_svg::svg(page),
+            svg,
         })
     }
 
