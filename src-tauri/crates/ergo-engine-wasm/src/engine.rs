@@ -8,7 +8,10 @@ use ergo_core::compile_artifacts::fingerprint_page;
 use ergo_core::document_session::DocumentSession;
 use ergo_core::document_session_types::{DocumentEvent, DocumentSessionStatus};
 use ergo_core::path_utils::file_id_for_virtual_path;
-use ergo_core::preview_pipeline::{apply_document_events, compile_preview_success};
+use ergo_core::preview_pipeline::{
+    apply_document_events, compile_preview_success, compile_resource_previews,
+    load_template_for_ast,
+};
 use ergo_core::preview_sync::PreviewSyncState;
 use ergo_core::resource_watch::RESOURCE_WATCH_MAIN;
 use ergo_core::vfs::VirtualFileSystem;
@@ -400,11 +403,40 @@ impl ErgoPreviewEngine {
         Self::render_document_png_page(self.document.as_deref(), page_index, pixel_per_pt)
     }
 
-    pub fn render_resource_svg_page(&self, page_number: usize) -> Result<PageSvg, String> {
+    pub fn render_resource_svg_page(
+        &mut self,
+        page_number: usize,
+    ) -> Result<PageSvg, String> {
+        self.ensure_resource_document_compiled()?;
         Self::render_document_svg_page(
             self.resource_document.as_deref(),
             page_number.saturating_sub(1),
         )
+    }
+
+    /// Compile the resource preview document if it is missing. This guards
+    /// against render races where the main preview has not yet triggered a
+    /// resource compile (e.g. during sidebar resize before the first paint).
+    fn ensure_resource_document_compiled(&mut self) -> Result<(), String> {
+        if self.resource_document.is_some() {
+            return Ok(());
+        }
+        let ast = self
+            .session
+            .ast()
+            .ok_or_else(|| "No AST available for resource preview compile".to_string())?;
+        let template = load_template_for_ast(&ast).map_err(|e| e.to_string())?;
+        let (resource_document, _) = compile_resource_previews(
+            &self.resource_world,
+            &self.vfs,
+            &ast,
+            &template,
+        )
+        .map_err(|e| e.to_string())?;
+        if let Some(document) = resource_document {
+            self.resource_document = Some(Arc::new(document));
+        }
+        Ok(())
     }
 
     pub fn render_changed_pages(

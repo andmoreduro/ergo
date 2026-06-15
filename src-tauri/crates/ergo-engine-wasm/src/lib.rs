@@ -290,7 +290,10 @@ impl ErgoWasmCompiler {
     }
 
     #[wasm_bindgen]
-    pub fn render_resource_svg_page(&self, page_number: usize) -> Result<WasmPageSvg, JsValue> {
+    pub fn render_resource_svg_page(
+        &mut self,
+        page_number: usize,
+    ) -> Result<WasmPageSvg, JsValue> {
         self.engine
             .render_resource_svg_page(page_number)
             .map(WasmPageSvg::from)
