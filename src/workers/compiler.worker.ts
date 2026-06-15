@@ -133,6 +133,23 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                 });
                 break;
             }
+            case "render_png_page": {
+                if (!compiler) return;
+                const { pageIndex, pixelPerPt, requestId } = message.payload;
+                const page = compiler.render_png_page(pageIndex, pixelPerPt);
+                reply({
+                    type: "render_png_done",
+                    payload: {
+                        pageIndex,
+                        widthPt: page.widthPt,
+                        heightPt: page.heightPt,
+                        dataUrl: page.dataUrl,
+                        requestId,
+                    },
+                    id,
+                });
+                break;
+            }
             case "render_resource_svg_page": {
                 if (!compiler) return;
                 const { pageNumber, requestId } = message.payload;

@@ -7,6 +7,7 @@ import type {
     BootstrapPreviewPayload,
     BootstrapPreviewResult,
     RenderPagePayload,
+    RenderPngPagePayload,
     RenderSvgPagePayload,
     VfsFileEntry,
 } from "./compilerProtocol";
@@ -117,7 +118,22 @@ export const CompilerClient = {
             "render_svg_done",
         );
         return reply.payload;
-    },
+    }
+
+    async renderPngPage(
+        pageIndex: number,
+        pixelPerPt: number,
+        requestId: number,
+    ): Promise<RenderPngPagePayload> {
+        const reply = await callWorker(
+            {
+                type: "render_png_page",
+                payload: { pageIndex, pixelPerPt, requestId },
+            },
+            "render_png_done",
+        );
+        return reply.payload;
+    }
 
     async renderResourceSvgPage(
         pageNumber: number,

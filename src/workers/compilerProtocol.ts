@@ -34,6 +34,14 @@ export type WorkerRequest =
           payload: { pageIndex: number; requestId: number };
       }
     | {
+          type: "render_png_page";
+          payload: {
+              pageIndex: number;
+              pixelPerPt: number;
+              requestId: number;
+          };
+      }
+    | {
           type: "render_resource_svg_page";
           payload: { pageNumber: number; requestId: number };
       }
@@ -75,6 +83,14 @@ export type RenderSvgPagePayload = {
     requestId: number;
 };
 
+export type RenderPngPagePayload = {
+    pageIndex: number;
+    widthPt: number;
+    heightPt: number;
+    dataUrl: string;
+    requestId: number;
+};
+
 export type WorkerResponse =
     | { type: "init_done" }
     | { type: "reset_fonts_done" }
@@ -84,6 +100,7 @@ export type WorkerResponse =
     | { type: "bootstrap_done"; payload: BootstrapPreviewResult }
     | { type: "render_done"; payload: RenderPagePayload }
     | { type: "render_svg_done"; payload: RenderSvgPagePayload }
+    | { type: "render_png_done"; payload: RenderPngPagePayload }
     | { type: "render_resource_svg_done"; payload: RenderSvgPagePayload }
     | { type: "write_file_done" }
     | { type: "write_files_done" }
