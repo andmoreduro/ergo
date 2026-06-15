@@ -37,7 +37,6 @@ import type { useCompiler } from "../../../hooks/useCompiler";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { PreviewContext } from "../../../actions/contexts/PreviewContext";
 import type { ExportFormat } from "../../../bindings/ExportFormat";
-import type { PreviewPageFile } from "../../../bindings/PreviewPageFile";
 import { m } from "../../../paraglide/messages.js";
 import {
     formatPreviewZoomPercent,
@@ -637,19 +636,34 @@ export const Preview = ({
                     >
                     <div className={styles.svgContainer}>
                         {previewPages.length > 0 && previewRevision !== null ? (
-                            <PreviewPageList
-                                previewPages={previewPages}
-                                previewRevision={previewRevision}
-                                effectiveZoom={effectiveZoom}
-                                inlineSvgByPage={inlineSvgByPage}
-                                initialMetricsByPage={initialMetricsByPage}
-                                renderedSvgPages={renderedSvgPages}
-                                renderedSvgPagesRef={renderedSvgPagesRef}
-                                previewScrollRef={previewScrollRef}
-                                onPagePainted={onFirstPagePainted}
-                                onPageMetrics={handlePageMetrics}
-                                onPageSvg={handlePageSvg}
-                            />
+                            previewPages.map((page, index) => {
+                                const pageNumber = page.page_number;
+                                return (
+                                    <PreviewPageSvg
+                                        key={pageNumber}
+                                        changed={page.changed}
+                                        cachedPage={
+                                            renderedSvgPages[pageNumber] ??
+                                            renderedSvgPagesRef.current[pageNumber] ??
+                                            null
+                                        }
+                                        inlineSvg={
+                                            inlineSvgByPage[pageNumber] ?? null
+                                        }
+                                        initialMetrics={
+                                            initialMetricsByPage[pageNumber] ?? null
+                                        }
+                                        pageIndex={index}
+                                        pageNumber={pageNumber}
+                                        previewRevision={previewRevision}
+                                        zoom={effectiveZoom}
+                                        previewScrollRef={previewScrollRef}
+                                        onPagePainted={onFirstPagePainted}
+                                        onPageMetrics={handlePageMetrics}
+                                        onPageSvg={handlePageSvg}
+                                    />
+                                );
+                            })
                         ) : (
                             <div className={styles.placeholder}>
                                 {m.workspace_preview_placeholder()}
@@ -963,62 +977,3 @@ const previewPageSvgPropsAreEqual = (
 };
 
 const PreviewPageSvg = memo(PreviewPageSvgComponent, previewPageSvgPropsAreEqual);
-
-interface PreviewPageListProps {
-    previewPages: PreviewPageFile[];
-    previewRevision: number;
-    effectiveZoom: number;
-    inlineSvgByPage: Record<number, RenderedSvgPage | null>;
-    initialMetricsByPage: Record<number, PagePtMetrics | null>;
-    renderedSvgPages: Record<number, RenderedSvgPage>;
-    renderedSvgPagesRef: RefObject<Record<number, RenderedSvgPage>>;
-    previewScrollRef: RefObject<HTMLElement | null>;
-    onPagePainted: (paintInfo: PagePaintInfo) => void;
-    onPageMetrics: (pageNumber: number, metrics: PagePtMetrics) => void;
-    onPageSvg: (pageNumber: number, renderedPage: RenderedSvgPage) => void;
-}
-
-const PreviewPageListComponent = ({
-    previewPages,
-    previewRevision,
-    effectiveZoom,
-    inlineSvgByPage,
-    initialMetricsByPage,
-    renderedSvgPages,
-    renderedSvgPagesRef,
-    previewScrollRef,
-    onPagePainted,
-    onPageMetrics,
-    onPageSvg,
-}: PreviewPageListProps) => {
-    return (
-        <>
-            {previewPages.map((page, index) => {
-                const pageNumber = page.page_number;
-                return (
-                    <PreviewPageSvg
-                        key={pageNumber}
-                        changed={page.changed}
-                        cachedPage={
-                            renderedSvgPages[pageNumber] ??
-                            renderedSvgPagesRef.current?.[pageNumber] ??
-                            null
-                        }
-                        inlineSvg={inlineSvgByPage[pageNumber] ?? null}
-                        initialMetrics={initialMetricsByPage[pageNumber] ?? null}
-                        pageIndex={index}
-                        pageNumber={pageNumber}
-                        previewRevision={previewRevision}
-                        zoom={effectiveZoom}
-                        previewScrollRef={previewScrollRef}
-                        onPagePainted={onPagePainted}
-                        onPageMetrics={onPageMetrics}
-                        onPageSvg={onPageSvg}
-                    />
-                );
-            })}
-        </>
-    );
-};
-
-const PreviewPageList = memo(PreviewPageListComponent);
