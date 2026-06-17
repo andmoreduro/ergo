@@ -60,6 +60,26 @@ const replyError = (id: number | undefined, error: unknown) => {
     reply({ type: "error", error: message, id });
 };
 
+/**
+ * Decode a rasterized band (straight RGBA from WASM) into a transferable
+ * `ImageBitmap`. Done in the worker so the decode/copy is off the main thread and
+ * only the (zero-copy transferable) bitmap crosses to the UI for `drawImage`.
+ */
+const regionToBitmap = async (region: {
+    pixels: Uint8Array;
+    bandWidth: number;
+    bandHeight: number;
+}): Promise<ImageBitmap> => {
+    const pixels = region.pixels;
+    const clamped = new Uint8ClampedArray(
+        pixels.buffer,
+        pixels.byteOffset,
+        pixels.length,
+    );
+    const imageData = new ImageData(clamped, region.bandWidth, region.bandHeight);
+    return createImageBitmap(imageData);
+};
+
 workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
     const message = event.data;
     const id = message.id;
@@ -182,6 +202,90 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                     },
                     id,
                 });
+                break;
+            }
+            case "render_region": {
+                if (!compiler) return;
+                const {
+                    pageIndex,
+                    pixelPerPt,
+                    xMinPt,
+                    xMaxPt,
+                    yMinPt,
+                    yMaxPt,
+                    requestId,
+                } = message.payload;
+                const region = compiler.render_region(
+                    pageIndex,
+                    pixelPerPt,
+                    xMinPt,
+                    xMaxPt,
+                    yMinPt,
+                    yMaxPt,
+                );
+                const bitmap = await regionToBitmap(region);
+                reply(
+                    {
+                        type: "render_region_done",
+                        payload: {
+                            bitmap,
+                            bandWidth: region.bandWidth,
+                            bandHeight: region.bandHeight,
+                            pageWidthPt: region.pageWidthPt,
+                            pageHeightPt: region.pageHeightPt,
+                            xMinPt: region.xMinPt,
+                            xMaxPt: region.xMaxPt,
+                            yMinPt: region.yMinPt,
+                            yMaxPt: region.yMaxPt,
+                            pixelPerPt,
+                            requestId,
+                        },
+                        id,
+                    },
+                    [bitmap],
+                );
+                break;
+            }
+            case "render_resource_region": {
+                if (!compiler) return;
+                const {
+                    pageNumber,
+                    targetWidthPx,
+                    xMinPt,
+                    xMaxPt,
+                    yMinPt,
+                    yMaxPt,
+                    requestId,
+                } = message.payload;
+                const region = compiler.render_resource_region(
+                    pageNumber,
+                    targetWidthPx,
+                    xMinPt,
+                    xMaxPt,
+                    yMinPt,
+                    yMaxPt,
+                );
+                const bitmap = await regionToBitmap(region);
+                reply(
+                    {
+                        type: "render_resource_region_done",
+                        payload: {
+                            bitmap,
+                            bandWidth: region.bandWidth,
+                            bandHeight: region.bandHeight,
+                            pageWidthPt: region.pageWidthPt,
+                            pageHeightPt: region.pageHeightPt,
+                            xMinPt: region.xMinPt,
+                            xMaxPt: region.xMaxPt,
+                            yMinPt: region.yMinPt,
+                            yMaxPt: region.yMaxPt,
+                            pixelPerPt: region.pixelPerPt,
+                            requestId,
+                        },
+                        id,
+                    },
+                    [bitmap],
+                );
                 break;
             }
             case "render_resource_svg_page": {

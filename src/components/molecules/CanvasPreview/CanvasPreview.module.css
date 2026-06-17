@@ -1,0 +1,17 @@
+/* Full display box for one page (or thumbnail). White is the placeholder shown
+   before/after rasterization and wherever the band canvas does not cover. */
+.surface {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    background-color: var(--color-page-surface);
+}
+
+/* The band canvas covers only the currently-visible vertical slice of the page;
+   its backing store is band-sized so raster cost and memory track the viewport,
+   not the page. Positioned within the surface so it tracks scroll for free. */
+.band {
+    position: absolute;
+    left: 0;
+    display: block;
+}

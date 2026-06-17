@@ -71,7 +71,7 @@
       { "id": "appendices", "kind": "appendix", "label": "Appendices", "show_rule": "appendix" }
     ],
     "resource_policy": {
-      "preview": { "width_pt": 360, "margin_pt": 8 },
+      "preview": { "margin_pt": 8 },
       "pasted_image": { "behavior": "figure", "wrapper": "apa-figure" }
     }
   },

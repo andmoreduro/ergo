@@ -12,6 +12,10 @@ pub struct PerfHarnessConfig {
     pub keystroke_count: usize,
     pub warmup_keystrokes: usize,
     pub keystroke_interval_ms: u32,
+    /// Manual preview zoom to apply before typing. High zoom exercises the
+    /// raster-bound regime where visible-band rasterization matters most. `None`
+    /// leaves the preview at its default zoom.
+    pub zoom: Option<f32>,
 }
 
 impl Default for PerfHarnessConfig {
@@ -23,6 +27,7 @@ impl Default for PerfHarnessConfig {
             keystroke_count: 30,
             warmup_keystrokes: 3,
             keystroke_interval_ms: 80,
+            zoom: None,
         }
     }
 }
@@ -94,6 +99,9 @@ pub fn get_perf_config() -> PerfHarnessConfig {
         keystroke_count: env_usize("ERGO_PERF_KEYSTROKE_COUNT", 30),
         warmup_keystrokes: env_usize("ERGO_PERF_WARMUP_KEYSTROKES", 3),
         keystroke_interval_ms: env_u32("ERGO_PERF_KEYSTROKE_INTERVAL_MS", 80),
+        zoom: std::env::var("ERGO_PERF_ZOOM")
+            .ok()
+            .and_then(|v| v.parse().ok()),
     }
 }
 
@@ -162,6 +170,7 @@ mod tests {
             "ERGO_PERF_KEYSTROKE_COUNT",
             "ERGO_PERF_WARMUP_KEYSTROKES",
             "ERGO_PERF_KEYSTROKE_INTERVAL_MS",
+            "ERGO_PERF_ZOOM",
         ] {
             std::env::remove_var(key);
         }
@@ -174,5 +183,6 @@ mod tests {
         assert_eq!(config.keystroke_count, 30);
         assert_eq!(config.warmup_keystrokes, 3);
         assert_eq!(config.keystroke_interval_ms, 80);
+        assert_eq!(config.zoom, None);
     }
 }

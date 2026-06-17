@@ -738,6 +738,20 @@ const documentEventFromAction = (
                 element_id: action.payload.elementId,
             };
 
+        case "DUPLICATE_ELEMENT": {
+            const location = elementLocation(nextAst, action.payload.elementId);
+            const copy = location.section.elements[location.index + 1];
+            if (!copy) {
+                throw new Error("Duplicated element not found");
+            }
+            return {
+                type: "insertElement",
+                section_id: location.section.id,
+                index: location.index + 1,
+                element: cloneValue(copy),
+            };
+        }
+
         default:
             return assertNever(action);
     }
@@ -746,7 +760,7 @@ const documentEventFromAction = (
 const inverseDocumentEventFromAction = (
     previousAst: DocumentAST,
     action: ASTAction,
-    _nextAst: DocumentAST,
+    nextAst: DocumentAST,
 ): DocumentEvent | DocumentEvent[] => {
     switch (action.type) {
         case "LOAD_DOCUMENT":
@@ -1108,6 +1122,18 @@ const inverseDocumentEventFromAction = (
                 });
             }
             return events;
+        }
+
+        case "DUPLICATE_ELEMENT": {
+            const location = elementLocation(nextAst, action.payload.elementId);
+            const copy = location.section.elements[location.index + 1];
+            if (!copy) {
+                throw new Error("Duplicated element not found");
+            }
+            return {
+                type: "removeElement",
+                element_id: elementIdOf(copy),
+            };
         }
 
         default:

@@ -2,8 +2,13 @@ import { memo, useRef, type RefObject } from "react";
 import type { DocumentOutline } from "../../../bindings/DocumentOutline";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
+import {
+    Book24Regular,
+    Shapes24Regular,
+    TextBulletListTree24Regular,
+} from "@fluentui/react-icons";
 import { useDocumentAstSelector } from "../../../state/DocumentContext";
-import { Accordion } from "../../molecules/Accordion/Accordion";
+import { Tabs } from "../../molecules/Tabs/Tabs";
 import { m } from "../../../paraglide/messages.js";
 import { SidebarBibliographyPanel } from "./SidebarBibliography";
 import { SidebarOutlinePanel } from "./SidebarOutline";
@@ -18,6 +23,7 @@ export interface SidebarProps {
     mainPreviewPaintedRevision?: number | null;
     previewScrollRef?: RefObject<HTMLElement | null>;
     zoteroTranslationServerEnabled?: boolean;
+    previewRasterizationDebounceMs?: number;
 }
 
 const SidebarComponent = ({
@@ -28,6 +34,7 @@ const SidebarComponent = ({
     mainPreviewPaintedRevision = null,
     previewScrollRef: previewScrollRefFromParent,
     zoteroTranslationServerEnabled = false,
+    previewRasterizationDebounceMs,
 }: SidebarProps) => {
     const fallbackPreviewScrollRef = useRef<HTMLElement>(null);
     const previewScrollRef =
@@ -39,26 +46,57 @@ const SidebarComponent = ({
 
     return (
         <aside className={styles.sidebar} data-editor-focus-lose-exempt="">
-            <Accordion title={m.sidebar_compiled_outline()} defaultOpen>
-                <SidebarOutlinePanel
-                    outline={outline}
-                    previewRevision={previewRevision}
-                    previewScrollRef={previewScrollRef}
-                />
-            </Accordion>
-            <Accordion title={m.sidebar_bibliography()} defaultOpen>
-                <SidebarBibliographyPanel
-                    references={references}
-                    zoteroTranslationServerEnabled={zoteroTranslationServerEnabled}
-                />
-            </Accordion>
-            <Accordion title={m.sidebar_resources()} defaultOpen>
-                <SidebarResourcesPanel
-                    resources={resources}
-                    resourcePreviewRevisions={resourcePreviewRevisions}
-                    mainPreviewPaintedRevision={mainPreviewPaintedRevision}
-                />
-            </Accordion>
+            <Tabs
+                ariaLabel={m.sidebar_sections()}
+                tabs={[
+                    {
+                        id: "outline",
+                        label: m.sidebar_compiled_outline(),
+                        icon: <TextBulletListTree24Regular />,
+                        panel: (
+                            <div className={styles.tabSection}>
+                                <SidebarOutlinePanel
+                                    outline={outline}
+                                    previewRevision={previewRevision}
+                                    previewScrollRef={previewScrollRef}
+                                />
+                            </div>
+                        ),
+                    },
+                    {
+                        id: "bibliography",
+                        label: m.sidebar_bibliography(),
+                        icon: <Book24Regular />,
+                        panel: (
+                            <div className={styles.tabSection}>
+                                <SidebarBibliographyPanel
+                                    references={references}
+                                    zoteroTranslationServerEnabled={
+                                        zoteroTranslationServerEnabled
+                                    }
+                                />
+                            </div>
+                        ),
+                    },
+                    {
+                        id: "resources",
+                        label: m.sidebar_resources(),
+                        icon: <Shapes24Regular />,
+                        panel: (
+                            <SidebarResourcesPanel
+                                resources={resources}
+                                resourcePreviewRevisions={resourcePreviewRevisions}
+                                mainPreviewPaintedRevision={
+                                    mainPreviewPaintedRevision
+                                }
+                                previewRasterizationDebounceMs={
+                                    previewRasterizationDebounceMs
+                                }
+                            />
+                        ),
+                    },
+                ]}
+            />
         </aside>
     );
 };

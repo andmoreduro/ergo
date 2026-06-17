@@ -45,6 +45,30 @@ export type WorkerRequest =
           type: "render_resource_svg_page";
           payload: { pageNumber: number; requestId: number };
       }
+    | {
+          type: "render_region";
+          payload: {
+              pageIndex: number;
+              pixelPerPt: number;
+              xMinPt: number;
+              xMaxPt: number;
+              yMinPt: number;
+              yMaxPt: number;
+              requestId: number;
+          };
+      }
+    | {
+          type: "render_resource_region";
+          payload: {
+              pageNumber: number;
+              targetWidthPx: number;
+              xMinPt: number;
+              xMaxPt: number;
+              yMinPt: number;
+              yMaxPt: number;
+              requestId: number;
+          };
+      }
     | { type: "write_file"; payload: { path: string; bytes: Uint8Array } }
     | { type: "write_files"; payload: VfsFileEntry[] }
     | { type: "write_source"; payload: { path: string; text: string } }
@@ -98,6 +122,26 @@ export type RenderPngPagePayload = {
     requestId: number;
 };
 
+/**
+ * A rasterized visible band, ready for `ctx.drawImage`. `bitmap` is a transferable
+ * `ImageBitmap` (already decoded off the main thread); `pageWidthPt`/`pageHeightPt`
+ * size the whole page, while `yMinPt`/`yMaxPt` and `bandWidth`/`bandHeight` place
+ * and size the band the worker actually rendered.
+ */
+export type RenderRegionPayload = {
+    bitmap: ImageBitmap;
+    bandWidth: number;
+    bandHeight: number;
+    pageWidthPt: number;
+    pageHeightPt: number;
+    xMinPt: number;
+    xMaxPt: number;
+    yMinPt: number;
+    yMaxPt: number;
+    pixelPerPt: number;
+    requestId: number;
+};
+
 export type WorkerResponse =
     | { type: "init_done" }
     | { type: "reset_fonts_done" }
@@ -109,6 +153,8 @@ export type WorkerResponse =
     | { type: "render_svg_done"; payload: RenderSvgPagePayload }
     | { type: "render_png_done"; payload: RenderPngPagePayload }
     | { type: "render_resource_svg_done"; payload: RenderSvgPagePayload }
+    | { type: "render_region_done"; payload: RenderRegionPayload }
+    | { type: "render_resource_region_done"; payload: RenderRegionPayload }
     | { type: "write_file_done" }
     | { type: "write_files_done" }
     | { type: "write_source_done" }

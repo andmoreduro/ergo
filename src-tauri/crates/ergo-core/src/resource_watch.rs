@@ -1,7 +1,7 @@
 use crate::ast::{AssetEntry, DocumentAST, DocumentElement, DocumentSection, ReferenceEntry};
 use crate::document_resources::{
-    DocumentResources, ResourceEntry, ResourceGroup, ResourceKind, ResourcePreview,
-    ResourcePreviewStatus,
+    resource_preview_paper_size, wrap_resource_preview_body, DocumentResources, ResourceEntry,
+    ResourceGroup, ResourceKind, ResourcePreview, ResourcePreviewStatus,
 };
 use crate::template_spec::TemplateSpec;
 use crate::typst_source::resource_preview_typst_for_element;
@@ -21,13 +21,6 @@ pub fn write_resource_files(
     let seeds = assign_preview_pages(resource_seeds(ast, template, vfs));
     let mut resource_source = String::new();
 
-    let width_pt = template
-        .typst
-        .resource_policy
-        .as_ref()
-        .and_then(|p| p.preview.as_ref())
-        .and_then(|p| p.width_pt)
-        .unwrap_or(360.0);
     let margin_pt = template
         .typst
         .resource_policy
@@ -35,39 +28,23 @@ pub fn write_resource_files(
         .and_then(|p| p.preview.as_ref())
         .and_then(|p| p.margin_pt)
         .unwrap_or(8.0);
+    let paper_size = resource_preview_paper_size(ast);
 
-    resource_source.push_str(
-        "#import \"/lib.typ\": *\n\
-         #show: apply\n",
-    );
-    resource_source.push_str(&format!(
-        "#set page(\n\
-           width: {}pt,\n\
-           height: auto,\n\
-           margin: {}pt,\n\
-           fill: white,\n\
-           header: none,\n\
-           footer: none,\n\
-           numbering: none,\n\
-         )\n\
-         #show page: set page(\n\
-           fill: white,\n\
-           header: none,\n\
-           footer: none,\n\
-           numbering: none,\n\
-         )\n\n",
-        format_pt(width_pt),
-        format_pt(margin_pt),
-    ));
+    resource_source.push_str("#import \"/lib.typ\": *\n#show: apply\n\n");
 
     let mut preview_page_index = 0usize;
     for seed in &seeds {
         if let Some(body) = &seed.preview_source {
             if preview_page_index > 0 {
-                resource_source.push_str("#pagebreak()\n\n");
+                resource_source.push('\n');
             }
             preview_page_index += 1;
-            resource_source.push_str(body);
+            resource_source.push_str(&wrap_resource_preview_body(
+                body,
+                seed.kind.preview_page_size(),
+                paper_size,
+                margin_pt,
+            ));
             resource_source.push_str("\n\n");
         }
     }
@@ -90,7 +67,6 @@ pub fn build_resource_catalog(
         (ResourceKind::Figure, "Figures"),
         (ResourceKind::Table, "Tables"),
         (ResourceKind::Equation, "Equations"),
-        (ResourceKind::File, "Assets"),
         (ResourceKind::Custom, "Custom"),
     ] {
         let entries: Vec<ResourceEntry> = seeds
@@ -197,42 +173,13 @@ fn assign_preview_pages(mut seeds: Vec<ResourceSeed>) -> Vec<ResourceSeed> {
     seeds
 }
 
-fn linked_figure_asset_ids(ast: &DocumentAST) -> std::collections::HashSet<String> {
-    let mut linked = std::collections::HashSet::new();
-    for section in &ast.sections {
-        let DocumentSection::Content(content) = section;
-        for element in &content.elements {
-            if let DocumentElement::Figure(figure) = element {
-                if let Some(asset_id) = figure.asset_id.as_ref() {
-                    if !asset_id.trim().is_empty() {
-                        linked.insert(asset_id.clone());
-                    }
-                }
-            } else if let DocumentElement::Diagram(diagram) = element {
-                if let Some(asset_id) = diagram.asset_id.as_ref() {
-                    if !asset_id.trim().is_empty() {
-                        linked.insert(asset_id.clone());
-                    }
-                }
-            }
-        }
-    }
-    linked
-}
-
 fn resource_seeds(
     ast: &DocumentAST,
     template: &TemplateSpec,
     vfs: &VirtualFileSystem,
 ) -> Vec<ResourceSeed> {
+    let _ = vfs;
     let mut seeds = Vec::new();
-    let linked_assets = linked_figure_asset_ids(ast);
-    for asset in &ast.assets {
-        if linked_assets.contains(&asset.id) {
-            continue;
-        }
-        seeds.push(file_seed(asset, vfs));
-    }
     for section in &ast.sections {
         let DocumentSection::Content(content) = section;
         for element in &content.elements {
@@ -261,7 +208,7 @@ fn collect_element_seeds(
                 reference_token: reference_token(&equation.id),
                 source_element_id: Some(equation.id.clone()),
                 asset_id: None,
-                preview_source: Some(wrap_body(&body)),
+                preview_source: Some(body),
                 preview_page: None,
                 missing_diagnostic: None,
             });
@@ -291,7 +238,7 @@ fn collect_element_seeds(
                 reference_token: reference_token(&diagram.id),
                 source_element_id: Some(diagram.id.clone()),
                 asset_id: diagram.asset_id.clone(),
-                preview_source: preview_body.map(|body| wrap_body(&body)),
+                preview_source: preview_body,
                 preview_page: None,
                 missing_diagnostic: Some("Diagram SVG has not been generated".to_string()),
             });
@@ -308,7 +255,7 @@ fn collect_element_seeds(
                 reference_token: reference_token(&table.id),
                 source_element_id: Some(table.id.clone()),
                 asset_id: None,
-                preview_source: Some(wrap_body(&preview_body)),
+                preview_source: Some(preview_body),
                 preview_page: None,
                 missing_diagnostic: None,
             });
@@ -335,7 +282,7 @@ fn collect_element_seeds(
                 reference_token: reference_token(&figure.id),
                 source_element_id: Some(figure.id.clone()),
                 asset_id: figure.asset_id.clone(),
-                preview_source: Some(wrap_body(&preview_body)),
+                preview_source: Some(preview_body),
                 preview_page: None,
                 missing_diagnostic: None,
             });
@@ -351,7 +298,7 @@ fn collect_element_seeds(
                 reference_token: reference_token(&custom.id),
                 source_element_id: Some(custom.id.clone()),
                 asset_id: None,
-                preview_source: Some(wrap_body(&body)),
+                preview_source: Some(body),
                 preview_page: None,
                 missing_diagnostic: None,
             });
@@ -361,50 +308,6 @@ fn collect_element_seeds(
         | DocumentElement::Quote(_)
         | DocumentElement::List(_)
         | DocumentElement::Enumeration(_) => {}
-    }
-}
-
-fn file_seed(asset: &AssetEntry, vfs: &VirtualFileSystem) -> ResourceSeed {
-    let is_image = asset.kind == "image" || image_path(&asset.path);
-    let file_missing = vfs.read_file(&asset.path).is_err();
-
-    if file_missing {
-        return ResourceSeed {
-            id: asset.id.clone(),
-            kind: ResourceKind::File,
-            label: asset.caption.clone().unwrap_or_else(|| asset.path.clone()),
-            subtitle: Some(asset.path.clone()),
-            reference_token: reference_token(&asset.id),
-            source_element_id: None,
-            asset_id: Some(asset.id.clone()),
-            preview_source: None,
-            preview_page: None,
-            missing_diagnostic: Some(format!(
-                "Asset file not found in project: {}",
-                asset.path
-            )),
-        };
-    }
-
-    let body = if is_image {
-        format!(
-            "#image(\"{}\", width: 100%)",
-            escape_typst_string(&asset.path)
-        )
-    } else {
-        format!("[{}]", escape_typst(&asset.path))
-    };
-    ResourceSeed {
-        id: asset.id.clone(),
-        kind: ResourceKind::File,
-        label: asset.caption.clone().unwrap_or_else(|| asset.path.clone()),
-        subtitle: Some(asset.path.clone()),
-        reference_token: reference_token(&asset.id),
-        source_element_id: None,
-        asset_id: Some(asset.id.clone()),
-        preview_source: Some(wrap_body(&body)),
-        preview_page: None,
-        missing_diagnostic: None,
     }
 }
 
@@ -446,10 +349,6 @@ fn legacy_figure_preview_body(asset_ref: Option<&AssetEntry>) -> String {
         .unwrap_or_else(|| "[Figure]".to_string())
 }
 
-fn wrap_body(body: &str) -> String {
-    format!("#block(width: 100%)[\n{body}\n]\n")
-}
-
 fn escape_typst(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -459,13 +358,6 @@ fn escape_typst(value: &str) -> String {
 
 fn escape_typst_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-fn image_path(path: &str) -> bool {
-    let lower = path.to_ascii_lowercase();
-    [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]
-        .iter()
-        .any(|ext| lower.ends_with(ext))
 }
 
 fn reference_token(id: &str) -> String {
@@ -494,17 +386,6 @@ fn path_id_for_id(id: &str) -> String {
     normalized.trim_matches('-').to_string()
 }
 
-fn format_pt(value: f32) -> String {
-    let mut s = format!("{value:.2}");
-    while s.contains('.') && s.ends_with('0') {
-        s.pop();
-    }
-    if s.ends_with('.') {
-        s.pop();
-    }
-    s
-}
-
 fn write_if_changed(vfs: &VirtualFileSystem, path: &str, source: &str) {
     if !vfs.is_source_equal(path, source) {
         vfs.write_source(path, source.to_string());
@@ -514,79 +395,90 @@ fn write_if_changed(vfs: &VirtualFileSystem, path: &str, source: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AssetEntry, DocumentElement, DocumentSection, Equation};
+    use crate::ast::{AssetEntry, DocumentElement, DocumentSection, Figure};
+    use crate::document_resources::resource_preview_lib_source;
     use crate::template_spec::load_bundled_template;
     use crate::test_fixtures::basic_document_ast;
 
     #[test]
-    fn resource_preview_typst_uses_same_lib_and_strips_page_chrome() {
-        use crate::template_spec::load_bundled_template;
+    fn resource_preview_figure_document_uses_project_paper_width_and_hugs_height() {
+        use std::sync::Arc;
 
-        let ast = basic_document_ast("Title", "");
+        use crate::compile_artifacts::compile_document;
+        use crate::path_utils::file_id_for_virtual_path;
+        use crate::test_fixtures::populate_versatile_apa;
+        use crate::world::ErgoWorld;
+
+        let mut ast = basic_document_ast("Title", "");
+        let DocumentSection::Content(content) = &mut ast.sections[0];
+        content.elements.push(DocumentElement::Figure(Box::new(Figure {
+            id: "figure-1".to_string(),
+            asset_id: None,
+            caption: "A figure".to_string(),
+            placement: "here".to_string(),
+            content: DocumentElement::Paragraph(crate::ast::Paragraph {
+                id: "figure-1-body".to_string(),
+                content: vec![],
+            }),
+            extra_fields: std::collections::HashMap::new(),
+        })));
+
         let template = load_bundled_template("apa7").unwrap();
-        let vfs = VirtualFileSystem::new();
-        let lib = crate::document_resources::resource_preview_lib_source(&ast, &template);
-
+        let vfs = Arc::new(VirtualFileSystem::new());
+        populate_versatile_apa(&vfs);
+        let lib = resource_preview_lib_source(&ast, &template);
         write_resource_files(&vfs, &ast, &template, &lib);
 
-        let lib_source = vfs.read_source(RESOURCE_LIB).unwrap();
-        assert!(lib_source.contains("#show: apa-style"));
-
-        let resources = vfs.read_source(RESOURCE_WATCH_MAIN).unwrap();
-        assert!(resources.contains("#show: apply"));
-        assert!(resources.contains("fill: white"));
-        assert!(resources.contains("#show page: set page"));
-        assert!(resources.contains("header: none"));
-        assert!(resources.contains("numbering: none"));
+        let world = ErgoWorld::new(
+            Arc::clone(&vfs),
+            file_id_for_virtual_path(RESOURCE_WATCH_MAIN),
+        );
+        let document = compile_document(&world).expect("figure resource preview should compile");
+        let page = &document.pages[0];
+        let width_pt = page.frame.size().x.to_pt();
+        let height_pt = page.frame.size().y.to_pt();
+        assert!(
+            (600.0..=625.0).contains(&width_pt),
+            "figure preview page should match project paper width, got {width_pt}pt"
+        );
+        assert!(
+            height_pt < 300.0,
+            "figure preview page should hug content height, got {height_pt}pt"
+        );
     }
 
     #[test]
-    fn preview_pages_skip_seeds_without_preview_source() {
+    fn file_assets_are_not_included_in_resource_catalog() {
         let mut ast = basic_document_ast("Title", "");
-        // Present in VFS: will be assigned page 1.
         ast.assets.push(AssetEntry {
-            id: "asset-present".to_string(),
-            path: "assets/present.png".to_string(),
+            id: "unlinked-asset".to_string(),
+            path: "assets/unlinked.png".to_string(),
             kind: "image".to_string(),
             caption: None,
         });
-        // Missing from VFS: must be skipped in page numbering.
-        ast.assets.push(AssetEntry {
-            id: "asset-missing".to_string(),
-            path: "assets/missing.png".to_string(),
-            kind: "image".to_string(),
-            caption: None,
-        });
-
         let DocumentSection::Content(content) = &mut ast.sections[0];
-        content.elements.push(DocumentElement::Equation(Equation {
-            id: "eq-1".to_string(),
-            latex_source: "E=mc^2".to_string(),
-            is_block: false,
-            syntax: crate::ast::EquationSyntax::Typst,
-        }));
+        content.elements.push(DocumentElement::Figure(Box::new(Figure {
+            id: "figure-1".to_string(),
+            asset_id: None,
+            caption: "A figure".to_string(),
+            placement: "here".to_string(),
+            content: DocumentElement::Paragraph(crate::ast::Paragraph {
+                id: "figure-1-body".to_string(),
+                content: vec![],
+            }),
+            extra_fields: std::collections::HashMap::new(),
+        })));
 
         let template = load_bundled_template("apa7").unwrap();
         let vfs = VirtualFileSystem::new();
-        vfs.write_file("assets/present.png", vec![0x89, 0x50, 0x4e, 0x47]);
+        let catalog = build_resource_catalog(&ast, &template, &vfs);
 
-        let seeds = assign_preview_pages(resource_seeds(&ast, &template, &vfs));
-        let present_seed = seeds
-            .iter()
-            .find(|seed| seed.id == "asset-present")
-            .unwrap();
-        let missing_seed = seeds
-            .iter()
-            .find(|seed| seed.id == "asset-missing")
-            .unwrap();
-        let equation_seed = seeds
-            .iter()
-            .find(|seed| seed.kind == ResourceKind::Equation)
-            .unwrap();
-
-        assert_eq!(present_seed.preview_page, Some(1));
-        assert_eq!(missing_seed.preview_page, None);
-        assert_eq!(equation_seed.preview_page, Some(2));
+        assert!(catalog.groups.iter().all(|group| {
+            group
+                .entries
+                .iter()
+                .all(|entry| entry.id != "unlinked-asset")
+        }));
     }
 
     #[test]
@@ -614,7 +506,6 @@ mod tests {
         let vfs = VirtualFileSystem::new();
         let catalog = build_resource_catalog(&ast, &template, &vfs);
 
-        // No standalone Diagrams group: the diagram seed is a Figure.
         assert!(catalog
             .groups
             .iter()

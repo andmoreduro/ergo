@@ -38,8 +38,15 @@ pub(crate) fn element_fragment(
     let kind = element_kind(element);
     let label = label_for_id(&element_id);
     let bibliography_keys = bibliography_citation_keys(references);
-    let builder =
-        generate_element_typst(element, &label, template, assets, &bibliography_keys, true);
+    let builder = generate_element_typst(
+        element,
+        &label,
+        template,
+        assets,
+        &bibliography_keys,
+        true,
+        true,
+    );
     let source = builder.source.clone();
     let field_source_map_ranges =
         builder.into_absolute_field_ranges(section_id, file_path, section_byte_start);
@@ -80,8 +87,15 @@ pub(crate) fn resource_preview_typst_for_element(
     let bibliography_keys = bibliography_citation_keys(references);
     let id = element_id(element);
     let label = label_for_id(&id);
-    let builder =
-        generate_element_typst(element, &label, template, assets, &bibliography_keys, false);
+    let builder = generate_element_typst(
+        element,
+        &label,
+        template,
+        assets,
+        &bibliography_keys,
+        false,
+        false,
+    );
     let source = builder.source.trim();
     if source.is_empty() {
         None
@@ -97,6 +111,7 @@ fn generate_element_typst(
     assets: &[AssetEntry],
     bibliography_keys: &HashMap<String, String>,
     adjust_asset_paths: bool,
+    include_wrapper_import: bool,
 ) -> SourceBuilder {
     let mut builder = SourceBuilder::default();
     if element_uses_latex_math(element) {
@@ -235,7 +250,9 @@ fn generate_element_typst(
                 .as_ref()
                 .and_then(|o| o.table.as_ref());
             let wrapper = element_figure_wrapper_name(table_override);
-            push_wrapper_symbol_import(template, wrapper, &mut builder);
+            if include_wrapper_import {
+                push_wrapper_symbol_import(template, wrapper, &mut builder);
+            }
 
             // An explicit table width (anything but the "auto" default) wraps the
             // `table(...)` in a sized `block` so it spans that width; columns then
@@ -356,7 +373,7 @@ fn generate_element_typst(
                     builder.push_generated_field_marker(
                         &figure.id,
                         &figure_body_field_id(&figure.id),
-                        "Figure content",
+                        "[Figure content]",
                         0,
                     );
                 } else {
@@ -400,6 +417,7 @@ fn generate_element_typst(
                     placement,
                     &figure.extra_fields,
                     &["caption", "width", "height"],
+                    include_wrapper_import,
                 );
                 builder.push_literal(&format!("<{label}>\n\n"));
             }
@@ -490,6 +508,7 @@ fn generate_element_typst(
                     placement,
                     &diagram.extra_fields,
                     &["caption", "width", "height"],
+                    include_wrapper_import,
                 );
                 builder.push_literal(&format!("<{label}>\n\n"));
             }

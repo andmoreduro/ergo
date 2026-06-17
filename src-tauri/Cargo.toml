@@ -12,6 +12,7 @@ resolver = "2"
 members = [
     "crates/ergo-core",
     "crates/ergo-engine-wasm",
+    "crates/ergo-typst-render",
 ]
 
 [lib]

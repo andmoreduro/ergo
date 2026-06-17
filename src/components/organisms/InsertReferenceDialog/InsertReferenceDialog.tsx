@@ -34,6 +34,7 @@ export interface InsertReferenceDialogProps {
     outlineEntries: TargetedOutlineEntry[];
     resourcePreviewRevisions: ResourcePreviewRevisions;
     mainPreviewPaintedRevision: number | null;
+    previewRasterizationDebounceMs?: number;
     onClose: () => void;
     onSelect: (pick: ReferencePick) => void;
 }
@@ -67,6 +68,7 @@ export const InsertReferenceDialog = ({
     outlineEntries,
     resourcePreviewRevisions,
     mainPreviewPaintedRevision,
+    previewRasterizationDebounceMs,
     onClose,
     onSelect,
 }: InsertReferenceDialogProps) => {
@@ -94,6 +96,7 @@ export const InsertReferenceDialog = ({
                                     resourceRevision,
                                     mainPreviewPaintedRevision,
                                 )}
+                                resizeDebounceMs={previewRasterizationDebounceMs}
                             />
                         ),
                         onPick: () =>

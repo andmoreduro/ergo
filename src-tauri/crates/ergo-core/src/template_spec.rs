@@ -420,6 +420,8 @@ pub struct ResourcePolicySpec {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ResourcePreviewPolicySpec {
+    /// Deprecated. Per-kind preview page sizing is defined by
+    /// `ResourceKind::preview_page_size()` (`ResourcePreviewPageSize`).
     #[serde(default)]
     pub width_pt: Option<f32>,
     #[serde(default)]

@@ -52,13 +52,14 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> Empty
-    Empty --> Showing : project active
-    Showing --> Showing : replace changed page image
-    Showing --> Empty : close project
+    [*] --> Placeholder
+    Placeholder --> Banded : visible & band measured
+    Banded --> Banded : revision/zoom/scroll → re-rasterize band
+    Banded --> Placeholder : leaves viewport (reclaim canvas)
+    Banded --> [*] : close project
 ```
 
-No visible compile-status UI may resize the preview pane during typing. The WASM worker renders main preview pages as raster PNG and resource thumbnails as serialized SVG markup, plus compiled Typst page-frame metrics for both. React writes the PNG `<img>` or SVG markup into stable containers with `innerHTML`; unchanged pages keep their existing content while changed visible pages are replaced in place.
+No visible compile-status UI may resize the preview pane during typing. Each preview page and resource thumbnail is a `<canvas>` showing a white placeholder until its content is drawn. The WASM worker rasterizes the visible rectangular region (`render_region`, with `x` and `y` bounds) at the page's pixel density into straight-alpha RGBA, decodes it into a transferable `ImageBitmap`, and the page composites it with `drawImage`; compiled Typst page-frame metrics accompany each render. By default only on-screen content is rasterized (an advanced overscan setting widens the region). Leaving the viewport drops the canvas backing store so off-screen pages cost no raster memory; zoom and scroll re-rasterize the revealed region (promptly when uncovering new area, after a debounce when only sharpening).
 
 ## 5. Key Sequence Resolver Lifecycle
 

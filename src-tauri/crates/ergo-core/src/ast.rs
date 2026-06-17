@@ -68,6 +68,25 @@ pub struct GlobalSettings {
     /// Runs the Zotero translation server in a fixed-name Docker container on localhost.
     #[serde(default)]
     pub zotero_translation_server_enabled: Option<bool>,
+    /// Scale factor applied to preview page rasterization while the user is typing.
+    /// Full resolution (1.0) is used after an idle window.
+    #[serde(default)]
+    pub preview_draft_render_factor: Option<f32>,
+    /// Fraction of the viewport rasterized beyond the visible edges of each preview
+    /// page (advanced). `0.0` rasterizes exactly what is on screen; a positive value
+    /// pre-renders a margin so scrolling reveals content with less delay.
+    #[serde(default)]
+    pub preview_render_overscan_factor: Option<f32>,
+    /// Milliseconds to wait before re-rasterizing preview canvases after zoom,
+    /// scroll sharpening, or sidebar resize. A short debounce keeps gestures
+    /// smooth; zero re-rasterizes on every notification.
+    #[serde(default)]
+    pub preview_rasterization_debounce_ms: Option<usize>,
+    /// Milliseconds to wait before re-rasterizing when scrolling or zooming out
+    /// reveals area the current bitmap no longer covers. Zero repaints
+    /// immediately; a positive value reduces work during fast scroll.
+    #[serde(default)]
+    pub preview_reveal_debounce_ms: Option<usize>,
 }
 
 impl Default for GlobalSettings {
@@ -88,6 +107,10 @@ impl Default for GlobalSettings {
             autosave_on_project_close: Some(true),
             default_equation_syntax: Some(EquationSyntax::Typst),
             zotero_translation_server_enabled: Some(false),
+            preview_draft_render_factor: Some(1.0),
+            preview_render_overscan_factor: Some(0.0),
+            preview_rasterization_debounce_ms: Some(200),
+            preview_reveal_debounce_ms: Some(0),
         }
     }
 }

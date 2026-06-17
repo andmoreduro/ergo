@@ -144,6 +144,27 @@ pub struct PageImage {
     pub pixels: Vec<u8>,
 }
 
+/// A rasterized vertical band of a page for the canvas preview.
+///
+/// `band_width`/`band_height` are the rendered band's device-pixel dimensions;
+/// `page_width_pt`/`page_height_pt` are the full page in points (so the canvas can
+/// size the whole page); `y_min_pt`/`y_max_pt` are the clamped band the engine
+/// actually rendered. `pixels` is **straight** (non-premultiplied) RGBA so it can
+/// back an `ImageData`/`ImageBitmap` without colour fringing.
+#[derive(Clone, Debug)]
+pub struct PageRegionImage {
+    pub band_width: u32,
+    pub band_height: u32,
+    pub page_width_pt: f64,
+    pub page_height_pt: f64,
+    pub x_min_pt: f64,
+    pub x_max_pt: f64,
+    pub y_min_pt: f64,
+    pub y_max_pt: f64,
+    pub pixel_per_pt: f32,
+    pub pixels: Vec<u8>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PageSvg {
     pub width_pt: f64,
@@ -416,6 +437,122 @@ impl ErgoPreviewEngine {
         pixel_per_pt: f32,
     ) -> Result<PagePng, String> {
         Self::render_document_png_page(self.document.as_deref(), page_index, pixel_per_pt)
+    }
+
+    /// Rasterize the visible region `[x_min,x_max) × [y_min,y_max)` of a page.
+    pub fn render_page_region(
+        &self,
+        page_index: usize,
+        pixel_per_pt: f32,
+        x_min_pt: f64,
+        x_max_pt: f64,
+        y_min_pt: f64,
+        y_max_pt: f64,
+    ) -> Result<PageRegionImage, String> {
+        Self::render_document_region(
+            self.document.as_deref(),
+            page_index,
+            pixel_per_pt,
+            x_min_pt,
+            x_max_pt,
+            y_min_pt,
+            y_max_pt,
+        )
+    }
+
+    /// Rasterize the visible region of a resource-preview page at the density
+    /// needed for a bitmap `target_width_px` pixels wide, compiling the resource
+    /// document on demand if the main preview has not produced it yet.
+    pub fn render_resource_region(
+        &mut self,
+        page_number: usize,
+        target_width_px: u32,
+        x_min_pt: f64,
+        x_max_pt: f64,
+        y_min_pt: f64,
+        y_max_pt: f64,
+    ) -> Result<PageRegionImage, String> {
+        self.ensure_resource_document_compiled()?;
+        let doc = self
+            .resource_document
+            .as_deref()
+            .ok_or_else(|| "No compiled document available".to_string())?;
+        let page_index = page_number.saturating_sub(1);
+        let page = doc
+            .pages
+            .get(page_index)
+            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
+        let page_width_pt = page.frame.size().x.to_pt();
+        let pixel_per_pt = if page_width_pt > 0.0 {
+            (target_width_px as f64 / page_width_pt) as f32
+        } else {
+            1.0f32
+        };
+        Self::render_document_region(
+            Some(doc),
+            page_index,
+            pixel_per_pt,
+            x_min_pt,
+            x_max_pt,
+            y_min_pt,
+            y_max_pt,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_document_region(
+        document: Option<&PagedDocument>,
+        page_index: usize,
+        pixel_per_pt: f32,
+        x_min_pt: f64,
+        x_max_pt: f64,
+        y_min_pt: f64,
+        y_max_pt: f64,
+    ) -> Result<PageRegionImage, String> {
+        let doc = document.ok_or_else(|| "No compiled document available".to_string())?;
+
+        let page = doc
+            .pages
+            .get(page_index)
+            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
+
+        let size = page.frame.size();
+        let page_width_pt = size.x.to_pt();
+        let page_height_pt = size.y.to_pt();
+        let x0 = x_min_pt.clamp(0.0, page_width_pt);
+        let x1 = x_max_pt.clamp(x0, page_width_pt);
+        let y0 = y_min_pt.clamp(0.0, page_height_pt);
+        let y1 = y_max_pt.clamp(y0, page_height_pt);
+
+        let pixmap = ergo_typst_render::render_region(page, pixel_per_pt, x0, x1, y0, y1);
+
+        // Demultiply: typst/tiny-skia pixmaps are premultiplied RGBA, but
+        // `ImageData`/`ImageBitmap` expect straight alpha. Opaque pixels (most
+        // glyph interiors) are unchanged; this only corrects AA edges and
+        // translucent fills, which would otherwise fringe dark on the canvas.
+        let mut pixels = Vec::with_capacity((pixmap.width() * pixmap.height() * 4) as usize);
+        for px in pixmap.pixels() {
+            let color = px.demultiply();
+            pixels.extend_from_slice(&[
+                color.red(),
+                color.green(),
+                color.blue(),
+                color.alpha(),
+            ]);
+        }
+
+        Ok(PageRegionImage {
+            band_width: pixmap.width(),
+            band_height: pixmap.height(),
+            page_width_pt,
+            page_height_pt,
+            x_min_pt: x0,
+            x_max_pt: x1,
+            y_min_pt: y0,
+            y_max_pt: y1,
+            pixel_per_pt,
+            pixels,
+        })
     }
 
     pub fn render_resource_svg_page(
@@ -829,6 +966,158 @@ mod tests {
         assert!(pages.iter().all(|page| !page.changed));
         assert!(pages.iter().all(|page| page.width_pt.is_some()));
         assert!(pages.iter().all(|page| page.height_pt.is_some()));
+    }
+
+    #[test]
+    fn render_page_region_matches_full_render_crop() {
+        use crate::profile::load_bundled_template_packages;
+
+        let ast = basic_document_ast("Banded page", "Some body text for the band.");
+
+        let mut engine = ErgoPreviewEngine::new();
+        load_bundled_template_packages(&engine);
+        engine
+            .sync_snapshot(ast)
+            .expect("snapshot sync should succeed");
+        let result = engine.compile_preview();
+        assert_eq!(result.status, CompilationStatus::Succeeded);
+
+        let ppp = 2.0_f32;
+        let full = engine
+            .render_page(0, ppp)
+            .expect("full page should render");
+
+        // A band covering the top third of the page.
+        let band_max_pt = full.height_pt / 3.0;
+        let region = engine
+            .render_page_region(0, ppp, 0.0, f64::INFINITY, 0.0, band_max_pt)
+            .expect("page band should render");
+
+        assert_eq!(region.band_width, full.width, "band width == page width");
+        let expected_band_h = (ppp * band_max_pt as f32).round() as u32;
+        assert!(
+            region.band_height.abs_diff(expected_band_h) <= 1,
+            "band height {} should match {expected_band_h}",
+            region.band_height
+        );
+        assert!(
+            region.band_height < full.height,
+            "a top-third band must be shorter than the full page"
+        );
+        assert_eq!(region.pixels.len(), (region.band_width * region.band_height * 4) as usize);
+
+        // The band's pixels should equal the top rows of a full render. The full
+        // render is premultiplied; the band is straight RGBA. For opaque pixels
+        // they match exactly, so compare on a mostly-opaque page by checking that
+        // a large majority of band rows are identical to the full render's rows.
+        let row_bytes = (full.width * 4) as usize;
+        let mut matching_rows = 0u32;
+        for row in 0..region.band_height {
+            let start = (row * full.width * 4) as usize;
+            let band_row = &region.pixels[start..start + row_bytes];
+            let full_row = &full.pixels[start..start + row_bytes];
+            if band_row == full_row {
+                matching_rows += 1;
+            }
+        }
+        assert!(
+            matching_rows >= region.band_height * 9 / 10,
+            "expected >=90% of band rows to match the full render crop, got {matching_rows}/{}",
+            region.band_height
+        );
+
+        // A band starting partway down the page (y0 > 0) must show that slice's
+        // content, positioned at the band top — not the page top. Compare against
+        // the corresponding rows of the full render.
+        let mid_min_pt = full.height_pt / 3.0;
+        let mid_max_pt = full.height_pt * 2.0 / 3.0;
+        let mid = engine
+            .render_page_region(0, ppp, 0.0, f64::INFINITY, mid_min_pt, mid_max_pt)
+            .expect("middle band should render");
+        let y_offset_px = (ppp * mid_min_pt as f32).round() as u32;
+        let mut mid_matching = 0u32;
+        for row in 0..mid.band_height {
+            let band_start = (row * mid.band_width * 4) as usize;
+            let full_start = ((row + y_offset_px) * full.width * 4) as usize;
+            if full_start + row_bytes > full.pixels.len() {
+                break;
+            }
+            if mid.pixels[band_start..band_start + row_bytes]
+                == full.pixels[full_start..full_start + row_bytes]
+            {
+                mid_matching += 1;
+            }
+        }
+        assert!(
+            mid_matching >= mid.band_height * 9 / 10,
+            "middle band should match the full render's middle rows, got {mid_matching}/{}",
+            mid.band_height
+        );
+
+        // Horizontal clipping: a left-half region is narrower than the full page
+        // and its rows match the left portion of the full render's rows.
+        let left = engine
+            .render_page_region(0, ppp, 0.0, full.width_pt / 2.0, 0.0, full.height_pt)
+            .expect("left-half region should render");
+        assert!(
+            left.band_width < full.width,
+            "a left-half region must be narrower than the full page"
+        );
+        let left_row_bytes = (left.band_width * 4) as usize;
+        let mut left_matching = 0u32;
+        for row in 0..left.band_height {
+            let band_start = (row * left.band_width * 4) as usize;
+            let full_start = (row * full.width * 4) as usize;
+            if band_start + left_row_bytes > left.pixels.len()
+                || full_start + left_row_bytes > full.pixels.len()
+            {
+                break;
+            }
+            if left.pixels[band_start..band_start + left_row_bytes]
+                == full.pixels[full_start..full_start + left_row_bytes]
+            {
+                left_matching += 1;
+            }
+        }
+        assert!(
+            left_matching >= left.band_height * 9 / 10,
+            "left-half region should match the full render's left columns, got {left_matching}/{}",
+            left.band_height
+        );
+    }
+
+    #[test]
+    fn render_resource_region_compiles_on_demand() {
+        use ergo_core::ast::{DocumentElement, DocumentSection, Equation, EquationSyntax};
+        use crate::profile::load_bundled_template_packages;
+
+        let mut ast = basic_document_ast("Resource region document", "");
+        match &mut ast.sections[0] {
+            DocumentSection::Content(content) => {
+                content.elements.push(DocumentElement::Equation(Equation {
+                    id: "eq-1".to_string(),
+                    latex_source: "x^2".to_string(),
+                    is_block: false,
+                    syntax: EquationSyntax::Typst,
+                }));
+            }
+        }
+
+        let mut engine = ErgoPreviewEngine::new();
+        load_bundled_template_packages(&engine);
+        engine
+            .sync_snapshot(ast)
+            .expect("snapshot sync should succeed");
+
+        // No prior compile_preview: resource band should compile on demand.
+        let region = engine
+            .render_resource_region(1, 600, 0.0, f64::INFINITY, 0.0, f64::INFINITY)
+            .expect("resource band should compile on demand and render");
+        assert!(region.band_width > 0 && region.band_height > 0);
+        assert_eq!(
+            region.pixels.len(),
+            (region.band_width * region.band_height * 4) as usize
+        );
     }
 
     #[test]

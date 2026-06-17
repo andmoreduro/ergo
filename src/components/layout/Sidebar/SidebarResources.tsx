@@ -1,23 +1,15 @@
 import { memo, useMemo } from "react";
-import type { AssetEntry } from "../../../bindings/AssetEntry";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { ResourceEntry } from "../../../bindings/ResourceEntry";
 import type { ResourceKind } from "../../../bindings/ResourceKind";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
-import { useDocument, useDocumentActions } from "../../../state/DocumentContext";
+import { useDocument } from "../../../state/DocumentContext";
 import { ResourcesPanelContext } from "../../../actions/contexts/ResourcesPanelContext";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { defaultFieldIdForElement } from "../../../editor/fieldIds";
-import { isInsertableImageAsset } from "../../../editor/assets/imageAsset";
-import { isGeneratedDiagramAssetPath } from "../../../editor/diagram/diagramAsset";
-import {
-    insertFigureWithAsset,
-    lastContentElementId,
-} from "../../../editor/insertFigureWithAsset";
-import { Image24Regular } from "@fluentui/react-icons";
-import { IconButton } from "../../atoms/IconButton/IconButton";
 import { NavItemButton } from "../../atoms/NavItemButton/NavItemButton";
+import { Accordion } from "../../molecules/Accordion/Accordion";
 import { ResourcePreviewPanel } from "../../molecules/ResourcePreview/ResourcePreview";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./Sidebar.module.css";
@@ -28,34 +20,8 @@ const findElementById = (
 ): DocumentElement | null =>
     elements.find((element) => element.id === elementId) ?? null;
 
-const findElementByAssetId = (
-    elements: DocumentElement[],
-    assetId: string,
-): DocumentElement | null => {
-    for (const element of elements) {
-        if (
-            (element.type === "Figure" || element.type === "Diagram") &&
-            element.asset_id === assetId
-        ) {
-            return element;
-        }
-    }
-    return null;
-};
-
-const canInsertFileAsFigure = (
-    kind: ResourceKind,
-    asset: AssetEntry | undefined,
-): boolean =>
-    kind === "file" &&
-    asset !== undefined &&
-    isInsertableImageAsset(asset.kind, asset.path) &&
-    !isGeneratedDiagramAssetPath(asset.path);
-
 const resourceGroupLabel = (kind: ResourceKind): string => {
     switch (kind) {
-        case "file":
-            return m.resources_group_file();
         case "figure":
             return m.resources_group_figure();
         case "diagram":
@@ -75,13 +41,14 @@ export const SidebarResourcesPanel = memo(({
     resources,
     resourcePreviewRevisions,
     mainPreviewPaintedRevision,
+    previewRasterizationDebounceMs,
 }: {
     resources: DocumentResources | null;
     resourcePreviewRevisions: ResourcePreviewRevisions;
     mainPreviewPaintedRevision: number | null;
+    previewRasterizationDebounceMs?: number;
 }) => {
     const { state, dispatch } = useDocument();
-    const { setDocumentFocus } = useDocumentActions();
     const dispatchAction = useActionDispatcher();
 
     const elements = useMemo(
@@ -111,34 +78,49 @@ export const SidebarResourcesPanel = memo(({
             if (element) {
                 focusResourceElement(element);
             }
-            return;
-        }
-
-        if (entry.asset_id) {
-            const element = findElementByAssetId(elements, entry.asset_id);
-            if (element) {
-                focusResourceElement(element);
-            }
         }
     };
 
-    const insertFileAsFigure = (assetId: string) => {
-        insertFigureWithAsset(
-            state,
-            assetId,
-            dispatch,
-            setDocumentFocus,
-            lastContentElementId(state),
-        );
+    const duplicateFigure = (entry: ResourceEntry) => {
+        if (!entry.source_element_id) {
+            return;
+        }
+        const element = findElementById(elements, entry.source_element_id);
+        if (!element || element.type !== "Figure") {
+            return;
+        }
+        dispatch({
+            type: "DUPLICATE_ELEMENT",
+            payload: {
+                elementId: element.id,
+            },
+        });
+    };
+
+    const handleResourceClick = (
+        entry: ResourceEntry,
+        event: React.MouseEvent,
+    ) => {
+        if (event.ctrlKey || event.metaKey) {
+            if (entry.kind === "figure") {
+                duplicateFigure(entry);
+            }
+            return;
+        }
+        openResource(entry);
     };
 
     return (
         <ResourcesPanelContext>
-        <div className={styles.referencePanel}>
+        <div className={styles.resourceAccordions}>
             {resources && resources.groups.length > 0 ? (
                 resources.groups.map((group) => (
-                    <section className={styles.resourceGroup} key={group.kind}>
-                        <h3>{resourceGroupLabel(group.kind)}</h3>
+                    <Accordion
+                        key={group.kind}
+                        title={resourceGroupLabel(group.kind)}
+                        defaultOpen
+                        contentClassName={styles.resourceAccordionContent}
+                    >
                         <div className={styles.navList}>
                             {group.entries.map((entry) => {
                                 const resourceRevision =
@@ -147,50 +129,38 @@ export const SidebarResourcesPanel = memo(({
                                     mainPreviewPaintedRevision === null
                                         ? resourceRevision === 0
                                         : resourceRevision <= mainPreviewPaintedRevision;
-                                const asset = entry.asset_id
-                                    ? state.assets.find(
-                                          (item) => item.id === entry.asset_id,
-                                      )
-                                    : undefined;
-                                const showInsertFigure = canInsertFileAsFigure(
-                                    group.kind,
-                                    asset,
-                                );
 
                                 return (
                                     <div className={styles.resourceRow} key={entry.id}>
                                         <NavItemButton
                                             className={styles.resourceRowNav}
                                             variant="sidebar"
-                                            onClick={() => openResource(entry)}
+                                            onClick={(event) =>
+                                                handleResourceClick(
+                                                    entry,
+                                                    event as React.MouseEvent,
+                                                )
+                                            }
                                         >
                                             <ResourcePreviewPanel
                                                 preview={entry.preview}
                                                 revision={resourceRevision}
                                                 canRender={canRender}
+                                                resizeDebounceMs={
+                                                    previewRasterizationDebounceMs ??
+                                                    200
+                                                }
                                             />
                                             <span>{entry.label}</span>
                                             {entry.subtitle && (
                                                 <small>{entry.subtitle}</small>
                                             )}
                                         </NavItemButton>
-                                        {showInsertFigure && entry.asset_id && (
-                                            <IconButton
-                                                title={m.resources_insert_figure()}
-                                                aria-label={m.resources_insert_figure()}
-                                                onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    insertFileAsFigure(entry.asset_id!);
-                                                }}
-                                            >
-                                                <Image24Regular />
-                                            </IconButton>
-                                        )}
                                     </div>
                                 );
                             })}
                         </div>
-                    </section>
+                    </Accordion>
                 ))
             ) : (
                 <p className={styles.empty}>{m.sidebar_empty_resources()}</p>

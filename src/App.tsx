@@ -171,13 +171,6 @@ const AppShellContent = () => {
         globalSettings,
         rememberProject,
     });
-    usePerfReplay({
-        hasActiveProject,
-        openProject,
-        dispatch,
-        ast: astStore.getSnapshot(),
-        commitDocumentEvents,
-    });
     const [settingsPanel, setSettingsPanel] = useState<SettingsPanel | null>(null);
     const [templateSpec, setTemplateSpec] = useState<TemplateSpec | null>(null);
     const [templateVariants, setTemplateVariants] = useState<TemplateVariantSpec[]>([]);
@@ -188,6 +181,18 @@ const AppShellContent = () => {
     const [previewZoom, setPreviewZoom] = useState(PREVIEW_ZOOM_DEFAULT);
     const [previewZoomMode, setPreviewZoomMode] =
         useState<PreviewZoomMode>("manual");
+    usePerfReplay({
+        hasActiveProject,
+        openProject,
+        dispatch,
+        ast: astStore.getSnapshot(),
+        commitDocumentEvents,
+        setPreviewZoom,
+        setPreviewZoomManual: useCallback(
+            () => setPreviewZoomMode("manual"),
+            [],
+        ),
+    });
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [isFindBarOpen, setFindBarOpen] = useState(false);
     const [isOpenRecentDialogOpen, setOpenRecentDialogOpen] = useState(false);
@@ -889,6 +894,19 @@ const AppShellContent = () => {
                             zoteroTranslationServerEnabled={
                                 globalSettings.zotero_translation_server_enabled ??
                                 false
+                            }
+                            previewDraftRenderFactor={
+                                globalSettings.preview_draft_render_factor ?? 1
+                            }
+                            previewRenderOverscanFactor={
+                                globalSettings.preview_render_overscan_factor ?? 0
+                            }
+                            previewRasterizationDebounceMs={
+                                globalSettings.preview_rasterization_debounce_ms ??
+                                200
+                            }
+                            previewRevealDebounceMs={
+                                globalSettings.preview_reveal_debounce_ms ?? 0
                             }
                             onExportDocument={exportDocument}
                         />

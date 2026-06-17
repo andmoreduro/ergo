@@ -81,8 +81,11 @@ pub(crate) fn push_custom_wrapper_figure_element(
     placement: Option<&str>,
     extra_fields: &std::collections::HashMap<String, serde_json::Value>,
     skip_extra_keys: &[&str],
+    include_wrapper_import: bool,
 ) {
-    push_wrapper_symbol_import(template, wrapper, builder);
+    if include_wrapper_import {
+        push_wrapper_symbol_import(template, wrapper, builder);
+    }
     builder.push_literal(&format!("#{wrapper}(\n"));
 
     if let Some(path) = asset_path {
@@ -100,7 +103,7 @@ pub(crate) fn push_custom_wrapper_figure_element(
         builder.push_generated_field_marker(
             element_id,
             &figure_body_field_id(element_id),
-            "Figure content",
+            "[Figure content]",
             0,
         );
         builder.push_literal("\n");
