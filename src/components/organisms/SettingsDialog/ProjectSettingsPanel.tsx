@@ -354,10 +354,6 @@ export const ProjectSettingsPanel = ({
                 </FormField>
             </div>
         </section>
-        <section className={styles.settingsGroup}>
-            <h3>{m.settings_group_advanced()}</h3>
-            <div className={styles.fieldGrid} />
-        </section>
     </div>
     );
 };

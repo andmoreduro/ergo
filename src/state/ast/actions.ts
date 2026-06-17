@@ -360,6 +360,13 @@ export type RemoveElementAction = {
   };
 };
 
+export type DuplicateElementAction = {
+  type: 'DUPLICATE_ELEMENT';
+  payload: {
+    elementId: string;
+  };
+};
+
 export type ConvertElementAction = {
   type: 'CONVERT_ELEMENT';
   payload: {
@@ -412,4 +419,5 @@ export type ASTAction =
   | UpdateAssetAction
   | RemoveAssetAction
   | RemoveElementAction
+  | DuplicateElementAction
   | ConvertElementAction;

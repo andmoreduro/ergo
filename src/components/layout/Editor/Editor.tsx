@@ -131,6 +131,7 @@ export interface EditorProps {
     mainPreviewPaintedRevision: number | null;
     findBarOpen: boolean;
     onFindBarOpenChange: (open: boolean) => void;
+    previewRasterizationDebounceMs?: number;
 }
 
 const EditorComponent = ({
@@ -140,6 +141,7 @@ const EditorComponent = ({
     mainPreviewPaintedRevision,
     findBarOpen,
     onFindBarOpenChange,
+    previewRasterizationDebounceMs,
 }: EditorProps) => {
     // Narrow subscriptions: the editor shell must not re-render on body typing.
     // `dispatchAst` is identity-stable; live AST/focus are read imperatively in
@@ -445,6 +447,9 @@ const EditorComponent = ({
                     outlineEntries={outlineEntries}
                     resourcePreviewRevisions={resourcePreviewRevisions}
                     mainPreviewPaintedRevision={mainPreviewPaintedRevision}
+                    previewRasterizationDebounceMs={
+                        previewRasterizationDebounceMs
+                    }
                     onClose={() => setReferenceDialogOpen(false)}
                     onSelect={applyReferenceInsert}
                 />

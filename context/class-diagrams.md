@@ -208,8 +208,8 @@ classDiagram
         +sync_snapshot(ast)
         +sync_events(events)
         +compile_preview()
-        +render_svg_page(pageIndex)
-        +render_png_page(pageIndex, pixelPerPt)
+        +render_page_region(pageIndex, pixelPerPt, xMinPt, xMaxPt, yMinPt, yMaxPt)
+        +render_resource_region(pageNumber, pixelPerPt, xMinPt, xMaxPt, yMinPt, yMaxPt)
         +jump_from_click(...)
         +export_pdf()
     }

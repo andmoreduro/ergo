@@ -17,6 +17,7 @@ import {
 } from "./defaults";
 import { appendListItem, updateListItemAtPath } from "./listItem";
 import { convertElement } from "./convertElement";
+import { duplicateElement } from "./duplicateElement";
 import { trailingParagraphAction } from "../../editor/ensureTrailingParagraph";
 import { applyMinimumContentParagraph } from "./contentInvariant";
 import { generatedDiagramAssetForElement } from "../documentEvents/helpers";
@@ -817,6 +818,32 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                 }
 
                 return convertElement(element, targetKind, { headingLevel });
+            });
+        }
+
+        case "DUPLICATE_ELEMENT": {
+            const { elementId } = action.payload;
+
+            return mapSections(state, (section) => {
+                if (section.type !== "Content") {
+                    return section;
+                }
+
+                const index = section.elements.findIndex(
+                    (element) => element.id === elementId,
+                );
+                if (index === -1) {
+                    return section;
+                }
+
+                const copy = duplicateElement(section.elements[index]);
+                const elements = [...section.elements];
+                elements.splice(index + 1, 0, copy);
+
+                return {
+                    ...section,
+                    elements,
+                };
             });
         }
 

@@ -1,78 +1,29 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ResourcePreview as ResourcePreviewDto } from "../../../bindings/ResourcePreview";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./ResourcePreview.module.css";
 
-const parseCssLengthPx = (value: string): number | null => {
-    const trimmed = value.trim();
-    if (!trimmed || trimmed === "none") {
-        return null;
-    }
-
-    if (trimmed.endsWith("px")) {
-        const px = Number.parseFloat(trimmed);
-        return Number.isFinite(px) ? px : null;
-    }
-
-    if (trimmed.endsWith("rem")) {
-        const rem = Number.parseFloat(trimmed);
-        if (!Number.isFinite(rem)) {
-            return null;
-        }
-        const rootSize = Number.parseFloat(
-            getComputedStyle(document.documentElement).fontSize,
-        );
-        return rem * (Number.isFinite(rootSize) ? rootSize : 16);
-    }
-
-    if (trimmed.endsWith("vh")) {
-        const vh = Number.parseFloat(trimmed);
-        return Number.isFinite(vh) ? (window.innerHeight * vh) / 100 : null;
-    }
-
-    if (trimmed.endsWith("dvh")) {
-        const dvh = Number.parseFloat(trimmed);
-        return Number.isFinite(dvh) ? (window.innerHeight * dvh) / 100 : null;
-    }
-
-    return null;
-};
-
-const previewMaxHeightPx = (element: HTMLElement): number => {
-    const maxHeight = getComputedStyle(element).maxHeight;
-    return parseCssLengthPx(maxHeight) ?? 120;
-};
-
-const svgPreviewStyle = (
-    widthPt: number,
-    heightPt: number,
-    fitSize: { width: number; height: number },
-): CSSProperties => {
-    const scale = Math.min(fitSize.width / widthPt, fitSize.height / heightPt);
-    const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-    return {
-        width: `${widthPt * safeScale}px`,
-        height: `${heightPt * safeScale}px`,
-    };
-};
-
-const ResourcePreviewSvg = ({
+const ResourcePreviewCanvas = ({
     pageNumber,
     revision,
     canRender,
+    resizeDebounceMs,
 }: {
     pageNumber: number;
     revision: number;
     canRender: boolean;
+    resizeDebounceMs: number;
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const svgRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const requestIdRef = useRef(0);
-    const [fitSize, setFitSize] = useState({ width: 0, height: 0 });
-    const [svgStyle, setSvgStyle] = useState<CSSProperties | undefined>(
-        undefined,
-    );
+    const hasRenderedRef = useRef(false);
+    const renderTimerRef = useRef<number | null>(null);
+    const [fitWidth, setFitWidth] = useState(0);
+    const [aspectRatio, setAspectRatio] = useState<string | null>(null);
+    const [visible, setVisible] = useState(false);
+    const [ready, setReady] = useState(false);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -80,85 +31,135 @@ const ResourcePreviewSvg = ({
             return;
         }
 
-        const updateFitSize = () => {
-            setFitSize({
-                width: container.clientWidth,
-                height: previewMaxHeightPx(container),
-            });
+        const updateFitWidth = () => {
+            setFitWidth(Math.max(0, Math.round(container.clientWidth)));
         };
 
-        updateFitSize();
+        updateFitWidth();
 
         if (typeof ResizeObserver === "undefined") {
             return;
         }
 
-        const observer = new ResizeObserver(updateFitSize);
+        const observer = new ResizeObserver(updateFitWidth);
         observer.observe(container);
         return () => observer.disconnect();
     }, []);
 
     useEffect(() => {
-        const element = svgRef.current;
-        if (!element || !canRender || fitSize.width <= 0 || fitSize.height <= 0) {
+        const root = containerRef.current;
+        if (!root || typeof IntersectionObserver === "undefined") {
+            setVisible(true);
+            return;
+        }
+        const observer = new IntersectionObserver(
+            ([entry]) => setVisible(entry.isIntersecting),
+            { root: null, rootMargin: "64px", threshold: 0 },
+        );
+        observer.observe(root);
+        return () => observer.disconnect();
+    }, []);
+
+    const renderThumbnail = useCallback(() => {
+        if (!canRender || !visible || fitWidth <= 0) {
             return;
         }
 
         const requestId = requestIdRef.current + 1;
         requestIdRef.current = requestId;
-        let cancelled = false;
+        const widthAtRequest = fitWidth;
 
-        console.log(
-            `[resource-preview] requesting page=${pageNumber} requestId=${requestId} canRender=${canRender}`,
-        );
-        void CompilerClient.renderResourceSvgPage(pageNumber, requestId)
-            .then((page) => {
-                if (cancelled || page.requestId !== requestIdRef.current) {
-                    console.log(
-                        `[resource-preview] stale request page=${pageNumber} requestId=${requestId}`,
-                    );
+        const dpr =
+            typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+        const targetWidthPx = Math.max(1, Math.round(widthAtRequest * dpr));
+
+        void CompilerClient.renderResourceRegion(
+            pageNumber,
+            targetWidthPx,
+            0,
+            Number.MAX_SAFE_INTEGER,
+            0,
+            Number.MAX_SAFE_INTEGER,
+            requestId,
+        )
+            .then((payload) => {
+                if (requestId !== requestIdRef.current) {
+                    payload.bitmap.close();
                     return;
                 }
-                if (!page.svg) {
-                    console.warn(
-                        `[resource-preview] empty SVG for page ${pageNumber} (revision ${revision})`,
-                    );
+                if (payload.bandWidth <= 0 || payload.bandHeight <= 0) {
+                    payload.bitmap.close();
+                    return;
                 }
-                element.innerHTML = page.svg;
-                setSvgStyle(
-                    svgPreviewStyle(page.widthPt, page.heightPt, fitSize),
-                );
-                console.log(
-                    `[resource-preview] rendered page=${pageNumber} size=${page.widthPt}x${page.heightPt}`,
-                );
+
+                const canvas = canvasRef.current;
+                if (!canvas) {
+                    payload.bitmap.close();
+                    return;
+                }
+
+                // The backing store carries the page's intrinsic pixel
+                // dimensions; CSS scales it to fill the container box. The
+                // canvas is positioned out of flow (see the stylesheet), so it
+                // never contributes its intrinsic width to ancestor min-content
+                // sizing — the container width stays purely top-down, which is
+                // what lets the thumbnail shrink with the sidebar.
+                canvas.width = payload.bandWidth;
+                canvas.height = payload.bandHeight;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) {
+                    payload.bitmap.close();
+                    return;
+                }
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(payload.bitmap, 0, 0);
+                payload.bitmap.close();
+
+                hasRenderedRef.current = true;
+                setAspectRatio(`${payload.bandWidth} / ${payload.bandHeight}`);
+                setReady(true);
             })
             .catch((error) => {
-                const detail =
-                    error instanceof Error
-                        ? `${error.message}\n${error.stack ?? ""}`
-                        : String(error);
                 console.error(
-                    `[resource-preview] failed page=${pageNumber}: ${detail}`,
+                    `Resource preview render failed (page ${pageNumber}):`,
+                    error,
                 );
             });
+    }, [canRender, visible, fitWidth, pageNumber]);
 
+    useEffect(() => {
+        if (!canRender || !visible || fitWidth <= 0) {
+            return;
+        }
+        if (renderTimerRef.current !== null) {
+            clearTimeout(renderTimerRef.current);
+        }
+        const delay = hasRenderedRef.current ? resizeDebounceMs : 0;
+        renderTimerRef.current = window.setTimeout(() => {
+            renderTimerRef.current = null;
+            renderThumbnail();
+        }, delay);
         return () => {
-            cancelled = true;
+            if (renderTimerRef.current !== null) {
+                clearTimeout(renderTimerRef.current);
+                renderTimerRef.current = null;
+            }
         };
-    }, [canRender, fitSize, pageNumber, revision]);
+    }, [canRender, visible, fitWidth, revision, renderThumbnail, resizeDebounceMs]);
+
+    // Drive the container height from the rasterized aspect ratio so the box
+    // stays proportional as the column resizes (the canvas fills it). `minHeight`
+    // clears the loading-placeholder floor once a real thumbnail exists.
+    const previewStyle =
+        ready && aspectRatio
+            ? { aspectRatio, minHeight: 0 }
+            : undefined;
 
     return (
-        <div ref={containerRef} className={styles.preview}>
-            {fitSize.width > 0 ? (
-                <div
-                    ref={svgRef}
-                    aria-hidden="true"
-                    className={styles.svgHost}
-                    style={svgStyle}
-                />
-            ) : (
-                <span className={styles.loading} aria-hidden="true" />
-            )}
+        <div ref={containerRef} className={styles.preview} style={previewStyle}>
+            <canvas ref={canvasRef} className={styles.canvas} aria-hidden="true" />
+            {!ready ? <span className={styles.loading} aria-hidden="true" /> : null}
         </div>
     );
 };
@@ -167,23 +168,20 @@ export const ResourcePreviewPanel = ({
     preview,
     revision,
     canRender,
+    resizeDebounceMs = 200,
 }: {
     preview: ResourcePreviewDto;
     revision: number;
     canRender: boolean;
+    resizeDebounceMs?: number;
 }) => {
-    if (import.meta.env.DEV) {
-        console.log(
-            `[resource-preview] status=${preview.status} page=${preview.page_number} revision=${revision} canRender=${canRender}`,
-        );
-    }
-
     if (preview.status === "ready" && preview.page_number) {
         return (
-            <ResourcePreviewSvg
+            <ResourcePreviewCanvas
                 pageNumber={preview.page_number}
                 revision={revision}
                 canRender={canRender}
+                resizeDebounceMs={resizeDebounceMs}
             />
         );
     }

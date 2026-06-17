@@ -1431,6 +1431,7 @@ dependencies = [
  "comemo",
  "console_error_panic_hook",
  "ergo-core",
+ "ergo-typst-render",
  "js-sys",
  "parking_lot",
  "rayon",
@@ -1444,6 +1445,24 @@ dependencies = [
  "typst-svg",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "ergo-typst-render"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "comemo",
+ "hayro",
+ "image",
+ "pixglyph",
+ "resvg",
+ "tiny-skia",
+ "ttf-parser",
+ "typst-assets",
+ "typst-library",
+ "typst-macros",
+ "typst-timing",
 ]
 
 [[package]]

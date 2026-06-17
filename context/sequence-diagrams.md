@@ -17,9 +17,9 @@ sequenceDiagram
     State->>Worker: sync_events
     Worker->>Worker: Regenerate Typst + compile_preview
     Worker-->>State: CompilationResult
-    Preview->>Worker: render_png_page
-    Worker-->>Preview: Page PNG data URL
-    Preview-->>User: Preview update
+    Preview->>Worker: render_region (visible x/y region)
+    Worker-->>Preview: ImageBitmap (transferred)
+    Preview-->>User: drawImage onto page canvas
 ```
 
 - Bootstrap (open/new project): `CompilerClient.bootstrap` clears the WASM VFS and `DocumentSession`, resets compiled preview state, resets WASM fonts, awaits lazy load of non-bundled project font families (all faces per family), then compiles; `sync_document_snapshot` on the backend completes before the document sync barrier drains. The UI clears preview pages on `sessionId` change and ignores compile results from a prior session. Edits compile without reloading fonts.
@@ -27,11 +27,11 @@ sequenceDiagram
 - The WASM preview session materializes only the files Typst compiles (`main.typ`, `lib.typ`, per-element `elements/*.typ`, `references.bib`). The `.ergproj/*.json` sidecars are written only by the backend session, which owns archive I/O. The field source map is worker-internal; the main thread consumes `source_revision`, `source_map`, and `dirty_resource_ids` from a sync.
 - `sync_document_events` applies the full event batch with one `apply_events` call (one source regeneration), matching the WASM worker.
 - Main preview and resource previews compile in WASM via `preview_pipeline`.
-- Resource preview VFS uses the same `lib.typ` and `#show: apply` as the main document; `resources.typ` adds preview page dimensions and `#set page` / `#show page` overrides for a white background without headers or numbering. Sidebar thumbnails cap height at 40vh.
+- Resource preview VFS uses the same `lib.typ` and document-level `#show: apply` as the main document. Each resource in `resources.typ` is wrapped in an explicit `#page(…)[…]` whose `ResourcePreviewPageSize` policy sets axis sizing while keeping pages white with no headers, footers, or numbering. Every resource preview matches project `paper_size` horizontally and hugs content vertically.
 - Compiled outline comes from `document.introspector` on the paged document using the same heading filter as the PDF bookmark panel (`bookmarked: true`, or `bookmarked: auto` with `outlined: true`). The sidebar lists every compiled entry; editor headings match by text (including empty → `Untitled heading`), and other entries scroll the preview to that page.
-- Incremental `compile_preview` returns page metadata only (no inline SVG). Bootstrap may inline the first page for a single-trip initial paint. Visible changed main preview pages fetch PNG via `render_png_page`; resource thumbnails fetch SVG via `render_svg_page`.
-- Main preview pages render only viewport pages whose content changed; unchanged visible pages keep their existing `innerHTML`. Zoom updates page layout and requests a PNG rerender at the new pixel density.
-- Resource thumbnails use `render_resource_svg_page` and wait for the matching main preview revision to paint before replacing thumbnail SVG.
+- Incremental `compile_preview` returns page metadata only. Visible main preview pages rasterize only their on-screen rectangular region (page rect intersected with the pane on both axes) via `render_region`, which the worker returns as a transferable `ImageBitmap` drawn onto a region-sized canvas. By default nothing off-screen is rasterized; an advanced overscan setting widens the region. Off-screen pages reserve their box (`content-visibility`) and hold no backing store.
+- Main preview pages rasterize only viewport pages whose content changed; unchanged visible pages keep their drawn region. Zoom rescales the existing bitmap immediately (CSS); a reveal (zoom-out/scroll uncovering new area) re-rasterizes after a configurable reveal debounce (`GlobalSettings.preview_reveal_debounce_ms`, default zero), while a covered density change sharpens after a configurable gesture debounce (`GlobalSettings.preview_rasterization_debounce_ms`). While content changes, an optional draft factor rasterizes at reduced density and promotes to full density after an idle window.
+- Resource thumbnails rasterize the full (small) page at the displayed width via `render_resource_region` into an `ImageBitmap`, gated on sidebar visibility; the canvas fills the sidebar width (height follows the page aspect) and re-rasterizes after the same debounce when the sidebar is resized.
 - Failed compiles report localized toast notifications and keep the last successful preview-visible pages, outline, resources, source map, and preview revision.
 - Preview does not shift layout with compile-status chrome while typing.
 - **Undo/redo:** apply the stored `inverseEvents` / `forwardEvents` locally, queue them for WASM `sync_events`, and mark the backend mirror dirty. Destructive inverses carry restore payloads (`RestoreElement`, `RestoreTableRow`, `RestoreTableColumn`).

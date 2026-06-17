@@ -178,6 +178,11 @@ const createLocalOverrides = () => ({
     autosave_on_app_close: true,
     autosave_on_project_close: true,
     default_equation_syntax: "typst" as const,
+    zotero_translation_server_enabled: false,
+    preview_draft_render_factor: 1.0,
+    preview_render_overscan_factor: 0.0,
+    preview_rasterization_debounce_ms: 200,
+    preview_reveal_debounce_ms: 0,
 });
 
 export const createDocumentAST = (

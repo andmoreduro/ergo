@@ -18,6 +18,9 @@ interface UsePerfReplayOptions {
         forward: DocumentEvent[],
         inverse: DocumentEvent[],
     ) => void;
+    /** Apply a manual preview zoom (used to exercise the raster-bound regime). */
+    setPreviewZoom: (zoom: number) => void;
+    setPreviewZoomManual: () => void;
 }
 
 const sleep = (ms: number): Promise<void> =>
@@ -67,6 +70,8 @@ export const usePerfReplay = ({
     dispatch,
     ast,
     commitDocumentEvents,
+    setPreviewZoom,
+    setPreviewZoomManual,
 }: UsePerfReplayOptions): void => {
     const configRef = useRef<PerfHarnessConfig | null>(null);
     const startedRef = useRef(false);
@@ -92,13 +97,20 @@ export const usePerfReplay = ({
         })();
     }, [openProject]);
 
-    // Step 2: once the project is active, start the replay.
+    // Step 2: once the project is active, apply the configured zoom and start
+    // the replay. A high zoom makes a page span several viewports, so the
+    // visible-band raster path (not full-page raster) is what gets measured.
     useEffect(() => {
         if (!hasActiveProject || !configRef.current || bootstrapped) {
             return;
         }
+        const { zoom } = configRef.current;
+        if (zoom != null && zoom > 0) {
+            setPreviewZoomManual();
+            setPreviewZoom(zoom);
+        }
         setBootstrapped(true);
-    }, [hasActiveProject, bootstrapped]);
+    }, [hasActiveProject, bootstrapped, setPreviewZoom, setPreviewZoomManual]);
 
     // Step 3: typing loop + telemetry collection.
     useEffect(() => {

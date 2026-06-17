@@ -21,6 +21,10 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     autosave_on_project_close: true,
     default_equation_syntax: "typst",
     zotero_translation_server_enabled: false,
+    preview_draft_render_factor: 1.0,
+    preview_render_overscan_factor: 0.0,
+    preview_rasterization_debounce_ms: 200,
+    preview_reveal_debounce_ms: 0,
 };
 
 export const DEFAULT_KEYMAP_SETTINGS: KeymapSettings = normalizeKeymapSettings({

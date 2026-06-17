@@ -8,6 +8,7 @@ import type {
     BootstrapPreviewResult,
     RenderPagePayload,
     RenderPngPagePayload,
+    RenderRegionPayload,
     RenderSvgPagePayload,
     VfsFileEntry,
 } from "./compilerProtocol";
@@ -131,6 +132,60 @@ export const CompilerClient = {
                 payload: { pageIndex, pixelPerPt, requestId },
             },
             "render_png_done",
+        );
+        return reply.payload;
+    },
+
+    async renderPageRegion(
+        pageIndex: number,
+        pixelPerPt: number,
+        xMinPt: number,
+        xMaxPt: number,
+        yMinPt: number,
+        yMaxPt: number,
+        requestId: number,
+    ): Promise<RenderRegionPayload> {
+        const reply = await callWorker(
+            {
+                type: "render_region",
+                payload: {
+                    pageIndex,
+                    pixelPerPt,
+                    xMinPt,
+                    xMaxPt,
+                    yMinPt,
+                    yMaxPt,
+                    requestId,
+                },
+            },
+            "render_region_done",
+        );
+        return reply.payload;
+    },
+
+    async renderResourceRegion(
+        pageNumber: number,
+        targetWidthPx: number,
+        xMinPt: number,
+        xMaxPt: number,
+        yMinPt: number,
+        yMaxPt: number,
+        requestId: number,
+    ): Promise<RenderRegionPayload> {
+        const reply = await callWorker(
+            {
+                type: "render_resource_region",
+                payload: {
+                    pageNumber,
+                    targetWidthPx,
+                    xMinPt,
+                    xMaxPt,
+                    yMinPt,
+                    yMaxPt,
+                    requestId,
+                },
+            },
+            "render_resource_region_done",
         );
         return reply.payload;
     },

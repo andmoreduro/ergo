@@ -60,12 +60,34 @@ pub(crate) fn format_typst_length_number(value: &serde_json::Number) -> Option<S
 }
 
 pub(crate) fn generate_lib_typst(ast: &DocumentAST, template: &TemplateSpec) -> SourceBuilder {
+    generate_lib_typst_inner(ast, template, true)
+}
+
+/// Resource previews share the main document `apply` wrapper (template show rule and
+/// project text settings) but omit `#set page(paper: …)` from `lib.typ`; per-kind
+/// page sizing and stripped preview chrome live in `resources.typ`.
+pub(crate) fn generate_resource_preview_lib_typst(
+    ast: &DocumentAST,
+    template: &TemplateSpec,
+) -> SourceBuilder {
+    let mut builder = generate_lib_typst_inner(ast, template, false);
+    push_resource_preview_wrapper_imports(template, &mut builder);
+    builder
+}
+
+fn generate_lib_typst_inner(
+    ast: &DocumentAST,
+    template: &TemplateSpec,
+    include_document_page_settings: bool,
+) -> SourceBuilder {
     let fallbacks = RequiredInputFallbacks::from_ast(template, ast);
     let mut builder = SourceBuilder::default();
     push_package_imports(template, &mut builder);
     builder.push_literal("#let apply(body) = [\n");
     push_document_show_rule(ast, template, &fallbacks, &mut builder);
-    push_project_page_settings(ast, &mut builder);
+    if include_document_page_settings {
+        push_project_page_settings(ast, &mut builder);
+    }
     push_project_text_settings(ast, &mut builder);
     builder.push_literal("  #body\n");
     builder.push_literal("]\n");
@@ -99,6 +121,34 @@ pub(crate) fn push_wrapper_symbol_import(
         template.typst.package.import_target(),
         wrapper
     ));
+}
+
+/// Import non-standard figure/table wrapper symbols once in resource preview `lib.typ`.
+/// Per-element fragments keep their own imports because they compile as separate files.
+pub(crate) fn push_resource_preview_wrapper_imports(
+    template: &TemplateSpec,
+    builder: &mut SourceBuilder,
+) {
+    use crate::typst_source::figures::element_figure_wrapper_name;
+
+    let mut wrappers = std::collections::BTreeSet::new();
+    if let Some(overrides) = &template.typst.element_overrides {
+        if let Some(figure) = &overrides.figure {
+            let wrapper = element_figure_wrapper_name(Some(figure));
+            if wrapper != "figure" {
+                wrappers.insert(wrapper.to_string());
+            }
+        }
+        if let Some(table) = &overrides.table {
+            let wrapper = element_figure_wrapper_name(Some(table));
+            if wrapper != "figure" {
+                wrappers.insert(wrapper.to_string());
+            }
+        }
+    }
+    for wrapper in wrappers {
+        push_wrapper_symbol_import(template, &wrapper, builder);
+    }
 }
 
 fn push_document_show_rule(

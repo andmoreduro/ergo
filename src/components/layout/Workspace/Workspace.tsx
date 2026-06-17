@@ -29,6 +29,10 @@ export interface WorkspaceProps {
     onPreviewZoomChange: Dispatch<SetStateAction<number>>;
     onPreviewZoomModeChange: Dispatch<SetStateAction<PreviewZoomMode>>;
     zoteroTranslationServerEnabled?: boolean;
+    previewDraftRenderFactor?: number;
+    previewRenderOverscanFactor?: number;
+    previewRasterizationDebounceMs?: number;
+    previewRevealDebounceMs?: number;
     findBarOpen: boolean;
     onFindBarOpenChange: (open: boolean) => void;
     onExportDocument: (
@@ -42,6 +46,10 @@ export const Workspace = ({
     onPreviewZoomChange,
     onPreviewZoomModeChange,
     zoteroTranslationServerEnabled = false,
+    previewDraftRenderFactor = 1,
+    previewRenderOverscanFactor = 0,
+    previewRasterizationDebounceMs,
+    previewRevealDebounceMs,
     findBarOpen,
     onFindBarOpenChange,
     onExportDocument,
@@ -60,6 +68,9 @@ export const Workspace = ({
     const previewScrollRef = useRef<HTMLDivElement>(null);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const toastTimeoutRef = useRef<number | null>(null);
+    // Tracks whether the toast currently on screen is the compile-error one, so a
+    // later successful compile can dismiss it without wiping unrelated toasts.
+    const compileErrorToastActiveRef = useRef(false);
     const { outlineEntries } = useSidebarOutline(
         compiler.outline,
         compiler.previewRevision,
@@ -95,17 +106,37 @@ export const Workspace = ({
         [],
     );
 
+    // Show the compile-error toast on every failed compile. `error` is reset to
+    // null at the start of each sync, so this is the only reliable "show" signal.
     useEffect(() => {
         if (!compiler.error) {
             return;
         }
-
+        compileErrorToastActiveRef.current = true;
         showToast(
             m.preview_compile_failed_toast({
                 message: compiler.error,
             }),
         );
     }, [compiler.error, showToast]);
+
+    // A successful compile advances the preview revision (only the success path
+    // does). Use that — not a transient `error → null` — to dismiss a lingering
+    // compile-error toast immediately instead of waiting out its auto-dismiss.
+    useEffect(() => {
+        if (
+            compiler.previewRevision === null ||
+            !compileErrorToastActiveRef.current
+        ) {
+            return;
+        }
+        compileErrorToastActiveRef.current = false;
+        if (toastTimeoutRef.current !== null) {
+            window.clearTimeout(toastTimeoutRef.current);
+            toastTimeoutRef.current = null;
+        }
+        setToastMessage(null);
+    }, [compiler.previewRevision]);
 
     useEffect(() => {
         void notifyUnavailableProjectFonts(state.metadata.project_settings);
@@ -118,6 +149,9 @@ export const Workspace = ({
                 return;
             }
 
+            // Not a compile-error toast, so a later successful compile must not
+            // clear it out from under the user.
+            compileErrorToastActiveRef.current = false;
             showToast(detail.message);
         };
 
@@ -147,6 +181,9 @@ export const Workspace = ({
                             zoteroTranslationServerEnabled={
                                 zoteroTranslationServerEnabled
                             }
+                            previewRasterizationDebounceMs={
+                                previewRasterizationDebounceMs
+                            }
                         />
                     </div>
                     <ColumnResizeHandle {...handle1} />
@@ -162,6 +199,9 @@ export const Workspace = ({
                             }
                             findBarOpen={findBarOpen}
                             onFindBarOpenChange={onFindBarOpenChange}
+                            previewRasterizationDebounceMs={
+                                previewRasterizationDebounceMs
+                            }
                         />
                     </div>
                     <ColumnResizeHandle {...handle2} />
@@ -174,6 +214,12 @@ export const Workspace = ({
                             onZoomModeChange={onPreviewZoomModeChange}
                             onExport={onExportDocument}
                             scrollRef={previewScrollRef}
+                            draftRenderFactor={previewDraftRenderFactor}
+                            renderOverscanFactor={previewRenderOverscanFactor}
+                            rasterizationDebounceMs={
+                                previewRasterizationDebounceMs ?? 200
+                            }
+                            revealDebounceMs={previewRevealDebounceMs ?? 0}
                         />
                     </div>
                     {toastMessage ? <Toast message={toastMessage} /> : null}

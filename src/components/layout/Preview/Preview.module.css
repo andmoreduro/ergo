@@ -81,7 +81,7 @@
 
 .pageSurface {
     position: relative;
-    background-color: var(--color-bg-primary);
+    background-color: var(--color-page-surface);
     outline: var(--border-width-sm) solid var(--color-border);
     /* Each page is its own layout + paint boundary, so rewriting one page's SVG
        repaints only that page instead of invalidating the shared preview layer. */
@@ -97,7 +97,7 @@
 .svgPageContent {
     display: block;
     overflow: hidden;
-    background-color: var(--color-bg-primary);
+    background-color: var(--color-page-surface);
 }
 
 .svgPageContent > svg {

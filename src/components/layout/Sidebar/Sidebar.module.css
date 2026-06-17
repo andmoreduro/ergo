@@ -17,6 +17,27 @@
 .navList {
     display: flex;
     flex-direction: column;
+    /* Belt-and-braces against a child's intrinsic width flooring the column. */
+    min-width: 0;
+}
+
+/* Padding for the non-resource tab panels (outline, bibliography), replacing the
+   inset the surrounding accordion used to provide. */
+.tabSection {
+    padding: var(--space-2) var(--space-3);
+}
+
+/* Resource kinds stack as contiguous accordions inside the Resources tab. */
+.resourceAccordions {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* Thumbnails sit flush with the panel: drop the accordion content's horizontal
+   inset (doubled class outranks Accordion's `.content` regardless of order). */
+.resourceAccordionContent.resourceAccordionContent {
+    padding-inline: 0;
 }
 
 .referencePanel {
@@ -69,6 +90,14 @@
 .resourceRowNav {
     flex: 1;
     min-width: 0;
+}
+
+/* Drop the sidebar nav button's horizontal inset for resource rows so the
+   thumbnail spans the full panel width instead of being double-indented. The
+   descendant selector outranks NavItemButton's `.sidebar` padding regardless of
+   stylesheet order. */
+.resourceRow .resourceRowNav {
+    padding-inline: 0;
 }
 
 .empty {

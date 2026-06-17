@@ -10,4 +10,27 @@ default_equation_syntax: EquationSyntax | null,
 /**
  * Runs the Zotero translation server in a fixed-name Docker container on localhost.
  */
-zotero_translation_server_enabled: boolean | null, };
+zotero_translation_server_enabled: boolean | null, 
+/**
+ * Scale factor applied to preview page rasterization while the user is typing.
+ * Full resolution (1.0) is used after an idle window.
+ */
+preview_draft_render_factor: number | null, 
+/**
+ * Fraction of the viewport rasterized beyond the visible edges of each preview
+ * page (advanced). `0.0` rasterizes exactly what is on screen; a positive value
+ * pre-renders a margin so scrolling reveals content with less delay.
+ */
+preview_render_overscan_factor: number | null, 
+/**
+ * Milliseconds to wait before re-rasterizing preview canvases after zoom,
+ * scroll sharpening, or sidebar resize. A short debounce keeps gestures
+ * smooth; zero re-rasterizes on every notification.
+ */
+preview_rasterization_debounce_ms: number | null, 
+/**
+ * Milliseconds to wait before re-rasterizing when scrolling or zooming out
+ * reveals area the current bitmap no longer covers. Zero repaints
+ * immediately; a positive value reduces work during fast scroll.
+ */
+preview_reveal_debounce_ms: number | null, };

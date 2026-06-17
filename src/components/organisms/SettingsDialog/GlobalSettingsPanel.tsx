@@ -285,6 +285,96 @@ export const GlobalSettingsPanel = ({
                         }
                     />
                 </FormField>
+                <FormField label={m.settings_preview_draft_render_factor()}>
+                    <Select
+                        aria-label={m.settings_preview_draft_render_factor()}
+                        fullWidth
+                        value={String(settings.preview_draft_render_factor ?? 1.0)}
+                        options={[
+                            { value: "1", label: "100% (crisp)" },
+                            { value: "0.75", label: "75%" },
+                            { value: "0.5", label: "50%" },
+                            { value: "0.25", label: "25%" },
+                        ]}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                preview_draft_render_factor:
+                                    event.target.value === "1"
+                                        ? 1.0
+                                        : Number.parseFloat(event.target.value),
+                            })
+                        }
+                    />
+                </FormField>
+                <p className={styles.settingHint}>
+                    {m.settings_preview_draft_render_factor_hint()}
+                </p>
+                <FormField label={m.settings_preview_render_overscan_factor()}>
+                    <Select
+                        aria-label={m.settings_preview_render_overscan_factor()}
+                        fullWidth
+                        value={String(
+                            settings.preview_render_overscan_factor ?? 0,
+                        )}
+                        options={[
+                            { value: "0", label: "0% (exact)" },
+                            { value: "0.25", label: "25%" },
+                            { value: "0.5", label: "50%" },
+                            { value: "1", label: "100%" },
+                        ]}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                preview_render_overscan_factor:
+                                    Number.parseFloat(event.target.value),
+                            })
+                        }
+                    />
+                </FormField>
+                <p className={styles.settingHint}>
+                    {m.settings_preview_render_overscan_factor_hint()}
+                </p>
+                <FormField label={m.settings_preview_rasterization_debounce_ms()}>
+                    <TextInput
+                        aria-label={m.settings_preview_rasterization_debounce_ms()}
+                        fullWidth
+                        min="0"
+                        type="number"
+                        value={String(settings.preview_rasterization_debounce_ms ?? 200)}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                preview_rasterization_debounce_ms: toOptionalNumber(
+                                    event.target.value,
+                                ),
+                            })
+                        }
+                    />
+                </FormField>
+                <p className={styles.settingHint}>
+                    {m.settings_preview_rasterization_debounce_ms_hint()}
+                </p>
+                <FormField label={m.settings_preview_reveal_debounce_ms()}>
+                    <TextInput
+                        aria-label={m.settings_preview_reveal_debounce_ms()}
+                        fullWidth
+                        min="0"
+                        type="number"
+                        value={String(settings.preview_reveal_debounce_ms ?? 0)}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                preview_reveal_debounce_ms: toOptionalNumber(
+                                    event.target.value,
+                                ),
+                            })
+                        }
+                    />
+                </FormField>
+                <p className={styles.settingHint}>
+                    {m.settings_preview_reveal_debounce_ms_hint()}
+                </p>
             </div>
         </section>
     </div>
