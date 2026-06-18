@@ -38,6 +38,8 @@ export interface UsePreviewSyncOptions {
     caret: PreviewCaret | null;
     /** Revision the caret was resolved for; gates the content-change scroll. */
     caretRevision: number | null;
+    /** Effective zoom; a change re-anchors the view so the caret stays visible. */
+    zoom: number;
 }
 
 export function usePreviewSync({
@@ -47,12 +49,14 @@ export function usePreviewSync({
     dispatchAction,
     caret,
     caretRevision,
+    zoom,
 }: UsePreviewSyncOptions) {
     const anchorPageRef = useRef<number | null>(null);
     const userOverrodeScrollRef = useRef(false);
     const programmaticScrollRef = useRef(false);
     const lastForwardScrollKeyRef = useRef<string | null>(null);
     const prevRevisionRef = useRef<number | null>(null);
+    const prevZoomRef = useRef(zoom);
     const handledRevisionRef = useRef<number | null>(null);
     const pageVisibilityRef = useRef<Map<number, number>>(new Map());
 
@@ -212,6 +216,25 @@ export function usePreviewSync({
             programmaticScrollRef.current = false;
         });
     }, [previewPages, previewRevision, scrollRef, caret, caretRevision]);
+
+    // Zooming changes every page's pixel size, so a caret that was on screen would
+    // otherwise slide out of view. Re-anchor the scroll to keep the caret centered
+    // on a zoom change only (not on caret moves), so the cue stays visible.
+    useEffect(() => {
+        if (prevZoomRef.current === zoom) {
+            return;
+        }
+        prevZoomRef.current = zoom;
+        const scrollRoot = scrollRef.current;
+        if (!scrollRoot || !caret) {
+            return;
+        }
+        programmaticScrollRef.current = true;
+        scrollPreviewToCaret(scrollRoot, caret, { forceCenter: true });
+        requestAnimationFrame(() => {
+            programmaticScrollRef.current = false;
+        });
+    }, [zoom, caret, scrollRef]);
 
     const handlePreviewClick = useCallback(
         (event: MouseEvent<HTMLElement>) => {

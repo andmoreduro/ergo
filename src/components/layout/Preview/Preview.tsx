@@ -204,6 +204,7 @@ export const Preview = ({
         dispatchAction,
         caret: previewCaret,
         caretRevision: previewCaretRevision,
+        zoom,
     });
 
     const handlePageMetrics = useCallback(

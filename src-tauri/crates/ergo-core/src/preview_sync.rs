@@ -312,43 +312,82 @@ impl PreviewSyncState {
             }
         };
 
-        let mut positions = if let Some(caret_utf16_offset) = caret_in_entry {
-            let Some(preferred_offset) = source_offset_for_caret(entry, caret_utf16_offset) else {
-                return PreviewElementPositionsResult::NoMatch {
-                    source_revision: Some(preview.source_revision),
-                    reason: "Field caret is not present in the displayed preview revision"
-                        .to_string(),
-                };
-            };
+        let mut positions = match caret_in_entry {
+            Some(caret_utf16_offset) => match source_offset_for_caret(entry, caret_utf16_offset) {
+                Some(preferred_offset) => roundtrip_positions_for_field_caret(
+                    &preview,
+                    entry,
+                    &source,
+                    &target.element_id,
+                    caret_utf16_offset,
+                    field_id,
+                    target.caret_utf16_offset.unwrap_or(caret_utf16_offset),
+                    preferred_offset,
+                    target.anchor_page_number,
+                ),
+                None => Vec::new(),
+            },
+            None => {
+                let preferred_offset = entry
+                    .segments
+                    .first()
+                    .map(|segment| segment.source_byte_start)
+                    .unwrap_or(entry.byte_start);
 
-            roundtrip_positions_for_field_caret(
-                &preview,
-                entry,
-                &source,
-                &target.element_id,
-                caret_utf16_offset,
-                field_id,
-                target.caret_utf16_offset.unwrap_or(caret_utf16_offset),
-                preferred_offset,
-                target.anchor_page_number,
-            )
-        } else {
-            let preferred_offset = entry
-                .segments
-                .first()
-                .map(|segment| segment.source_byte_start)
-                .unwrap_or(entry.byte_start);
-
-            positions_for_field_entry(
-                &preview,
-                entry,
-                &source,
-                &target.element_id,
-                field_id,
-                preferred_offset,
-                target.anchor_page_number,
-            )
+                positions_for_field_entry(
+                    &preview,
+                    entry,
+                    &source,
+                    &target.element_id,
+                    field_id,
+                    preferred_offset,
+                    target.anchor_page_number,
+                )
+            }
         };
+
+        // A field can occupy several source spots: e.g. the title is emitted both
+        // as `#set document(title: …)` metadata, which renders nowhere, and as the
+        // rendered front-matter title. The closest entry can be the non-rendering
+        // one, so if it didn't resolve, try the field's other entries with the same
+        // caret before giving up.
+        if positions.is_empty() {
+            if let Some(global_caret) = target.caret_utf16_offset {
+                for &candidate in &entry_refs {
+                    if std::ptr::eq(candidate, entry) {
+                        continue;
+                    }
+                    let Ok(candidate_source) =
+                        preview.source_snapshot.source_for_path(&candidate.file_path)
+                    else {
+                        continue;
+                    };
+                    let local_caret = if entry_refs.len() > 1 {
+                        local_caret_in_content_block_entry(candidate, &entry_refs, global_caret)
+                    } else {
+                        global_caret
+                    };
+                    let Some(preferred_offset) = source_offset_for_caret(candidate, local_caret)
+                    else {
+                        continue;
+                    };
+                    positions = roundtrip_positions_for_field_caret(
+                        &preview,
+                        candidate,
+                        &candidate_source,
+                        &target.element_id,
+                        local_caret,
+                        field_id,
+                        global_caret,
+                        preferred_offset,
+                        target.anchor_page_number,
+                    );
+                    if !positions.is_empty() {
+                        break;
+                    }
+                }
+            }
+        }
 
         if positions.is_empty() && target.caret_utf16_offset.is_none() {
             for fallback_field_id in
