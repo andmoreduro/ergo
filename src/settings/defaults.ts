@@ -25,6 +25,20 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     preview_render_overscan_factor: 0.0,
     preview_rasterization_debounce_ms: 200,
     preview_reveal_debounce_ms: 0,
+    preview_forward_sync_debounce_ms: 0,
+    preview_draft_promote_ms: 180,
+};
+
+/**
+ * Read a setting that must be present, throwing if it is null/undefined. Default
+ * values belong only in DEFAULT_GLOBAL_SETTINGS — call sites should not re-specify
+ * them with `?? fallback`, which silently masks a missing-default bug.
+ */
+export const requireSetting = <T>(value: T | null | undefined, name: string): T => {
+    if (value == null) {
+        throw new Error(`Missing required setting: ${name}`);
+    }
+    return value;
 };
 
 export const DEFAULT_KEYMAP_SETTINGS: KeymapSettings = normalizeKeymapSettings({
@@ -77,12 +91,24 @@ export const mergeRecentProjectLists = (
 
 export const mergeGlobalSettings = (
     settings: Partial<GlobalSettings> | null | undefined,
-): GlobalSettings => ({
-    ...DEFAULT_GLOBAL_SETTINGS,
-    ...(settings ?? {}),
-    recent_projects: settings?.recent_projects ?? [],
-    keymap_overrides: settings?.keymap_overrides ?? [],
-});
+): GlobalSettings => {
+    // Drop null/undefined fields before spreading so a persisted file that omits
+    // a setting (older configs deserialize those Option fields to `null`) falls
+    // back to its default instead of clobbering it — otherwise a non-null default
+    // like preview_render_overscan_factor: 0 would be overwritten by null and
+    // then trip requireSetting at the call site.
+    const defined = Object.fromEntries(
+        Object.entries(settings ?? {}).filter(
+            ([, value]) => value !== null && value !== undefined,
+        ),
+    ) as Partial<GlobalSettings>;
+    return {
+        ...DEFAULT_GLOBAL_SETTINGS,
+        ...defined,
+        recent_projects: settings?.recent_projects ?? [],
+        keymap_overrides: settings?.keymap_overrides ?? [],
+    };
+};
 
 export const mergeKeymapSettings = (
     settings: Partial<KeymapSettings> | null | undefined,

@@ -87,6 +87,16 @@ pub struct GlobalSettings {
     /// immediately; a positive value reduces work during fast scroll.
     #[serde(default)]
     pub preview_reveal_debounce_ms: Option<usize>,
+    /// Milliseconds to wait before resolving the editor caret's position in the
+    /// preview (forward sync). Zero resolves on every caret move; a positive
+    /// value coalesces bursts while typing.
+    #[serde(default)]
+    pub preview_forward_sync_debounce_ms: Option<usize>,
+    /// Milliseconds a draft (reduced-resolution) preview render waits while idle
+    /// before being promoted to full resolution. Only applies when the draft
+    /// render factor is below 1.
+    #[serde(default)]
+    pub preview_draft_promote_ms: Option<usize>,
 }
 
 impl Default for GlobalSettings {
@@ -111,6 +121,8 @@ impl Default for GlobalSettings {
             preview_render_overscan_factor: Some(0.0),
             preview_rasterization_debounce_ms: Some(200),
             preview_reveal_debounce_ms: Some(0),
+            preview_forward_sync_debounce_ms: Some(0),
+            preview_draft_promote_ms: Some(180),
         }
     }
 }

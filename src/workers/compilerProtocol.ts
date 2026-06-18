@@ -3,6 +3,8 @@ import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import type { CompilationResult } from "../bindings/CompilationResult";
 import type { PreviewJumpResult } from "../bindings/PreviewJumpResult";
+import type { PreviewElementPositionsResult } from "../bindings/PreviewElementPositionsResult";
+import type { PreviewFocusTarget } from "../bindings/PreviewFocusTarget";
 import type { ProjectFile } from "../bindings/ProjectFile";
 
 export type VfsFileEntry = { path: string; bytes: Uint8Array };
@@ -85,6 +87,7 @@ export type WorkerRequest =
               sourceRevision: number;
           };
       }
+    | { type: "positions_for_focus"; payload: { target: PreviewFocusTarget } }
     | { type: "export_pdf" }
     | { type: "export_png_pages"; payload: { pixelPerPt: number } }
     | { type: "export_svg_pages" };
@@ -160,6 +163,7 @@ export type WorkerResponse =
     | { type: "write_source_done" }
     | { type: "apply_patch_done" }
     | { type: "jump_done"; result: PreviewJumpResult }
+    | { type: "positions_done"; result: PreviewElementPositionsResult }
     | { type: "export_pdf_done"; bytes: Uint8Array }
     | { type: "export_png_pages_done"; pages: Uint8Array[] }
     | { type: "export_svg_pages_done"; pages: string[] }

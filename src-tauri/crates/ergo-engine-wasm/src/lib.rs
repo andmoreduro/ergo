@@ -465,6 +465,19 @@ impl ErgoWasmCompiler {
         serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
+    /// Forward sync: positions (with caret cue) for an editor focus target.
+    /// `target` is a serialized `PreviewFocusTarget`; its `sourceRevision`
+    /// gates the lookup against the retained preview.
+    #[wasm_bindgen]
+    pub fn positions_for_focus(&self, target: JsValue) -> Result<JsValue, JsValue> {
+        let target: ergo_core::preview_sync_types::PreviewFocusTarget =
+            serde_wasm_bindgen::from_value(target)
+                .map_err(|error| JsValue::from_str(&error.to_string()))?;
+        let source_revision = target.source_revision;
+        let result = self.engine.positions_for_focus(&target, source_revision);
+        serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
+    }
+
     #[wasm_bindgen]
     pub fn export_pdf(&mut self) -> Result<Vec<u8>, JsValue> {
         self.engine

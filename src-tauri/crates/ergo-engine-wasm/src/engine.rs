@@ -750,6 +750,16 @@ impl ErgoPreviewEngine {
             .jump_from_click(page_number, x_pt, y_pt, source_revision)
     }
 
+    /// Forward sync: map an editor focus target (element/field/caret) to its
+    /// rendered position(s) in the preview, for drawing a caret cue.
+    pub fn positions_for_focus(
+        &self,
+        target: &ergo_core::preview_sync_types::PreviewFocusTarget,
+        source_revision: u64,
+    ) -> ergo_core::preview_sync_types::PreviewElementPositionsResult {
+        self.sync_state.positions_for_focus(target, source_revision)
+    }
+
     pub fn export_pdf(&mut self) -> Result<Vec<u8>, String> {
         let result = self.compile_preview();
         if result.status != CompilationStatus::Succeeded {

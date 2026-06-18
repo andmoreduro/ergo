@@ -25,6 +25,59 @@ export function closestChangedPageNumber(
     return best;
 }
 
+/**
+ * Scroll the preview so the forward-sync caret is in view. The page's CSS-per-pt
+ * scale is read from the rendered page box (so zoom/fit need not be threaded in).
+ * Unless `forceCenter` is set, a caret already comfortably inside the viewport is
+ * left undisturbed, so typing within the visible area never jitters the view.
+ */
+export function scrollPreviewToCaret(
+    scrollRoot: HTMLElement,
+    caret: { pageNumber: number; topYPt: number; heightPt: number },
+    options?: { forceCenter?: boolean; behavior?: ScrollBehavior },
+): boolean {
+    const page = scrollRoot.querySelector<HTMLElement>(
+        `[data-preview-page-number="${caret.pageNumber}"]`,
+    );
+    if (!page) {
+        return false;
+    }
+    const surface =
+        page.querySelector<HTMLElement>('[data-preview-page-surface="true"]') ??
+        page;
+    const content = page.querySelector<HTMLElement>(
+        "[data-preview-page-content]",
+    );
+    const heightPt = Number(content?.dataset.pageHeightPt);
+    const pageRect = surface.getBoundingClientRect();
+    if (!Number.isFinite(heightPt) || heightPt <= 0 || pageRect.height <= 0) {
+        return false;
+    }
+
+    const cssPerPt = pageRect.height / heightPt;
+    const rootRect = scrollRoot.getBoundingClientRect();
+    const caretTop = pageRect.top - rootRect.top + caret.topYPt * cssPerPt;
+    const caretHeight = caret.heightPt * cssPerPt;
+
+    if (!options?.forceCenter) {
+        const margin = Math.min(rootRect.height * 0.25, 96);
+        if (
+            caretTop >= margin &&
+            caretTop + caretHeight <= rootRect.height - margin
+        ) {
+            return true;
+        }
+    }
+
+    const targetTop =
+        scrollRoot.scrollTop + caretTop + caretHeight / 2 - rootRect.height / 2;
+    scrollRoot.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: options?.behavior ?? "instant",
+    });
+    return true;
+}
+
 /** Scroll the preview so the given page is near the top of the viewport. */
 export function scrollPreviewToPage(
     scrollRoot: HTMLElement,

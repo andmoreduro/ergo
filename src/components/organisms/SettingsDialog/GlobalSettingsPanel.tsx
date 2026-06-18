@@ -375,6 +375,47 @@ export const GlobalSettingsPanel = ({
                 <p className={styles.settingHint}>
                     {m.settings_preview_reveal_debounce_ms_hint()}
                 </p>
+                <FormField label={m.settings_preview_forward_sync_debounce_ms()}>
+                    <TextInput
+                        aria-label={m.settings_preview_forward_sync_debounce_ms()}
+                        fullWidth
+                        min="0"
+                        type="number"
+                        value={String(
+                            settings.preview_forward_sync_debounce_ms ?? 0,
+                        )}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                preview_forward_sync_debounce_ms:
+                                    toOptionalNumber(event.target.value),
+                            })
+                        }
+                    />
+                </FormField>
+                <p className={styles.settingHint}>
+                    {m.settings_preview_forward_sync_debounce_ms_hint()}
+                </p>
+                <FormField label={m.settings_preview_draft_promote_ms()}>
+                    <TextInput
+                        aria-label={m.settings_preview_draft_promote_ms()}
+                        fullWidth
+                        min="0"
+                        type="number"
+                        value={String(settings.preview_draft_promote_ms ?? 180)}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                preview_draft_promote_ms: toOptionalNumber(
+                                    event.target.value,
+                                ),
+                            })
+                        }
+                    />
+                </FormField>
+                <p className={styles.settingHint}>
+                    {m.settings_preview_draft_promote_ms_hint()}
+                </p>
             </div>
         </section>
     </div>

@@ -29,6 +29,7 @@ import { CanvasPreview } from "../../molecules/CanvasPreview/CanvasPreview";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { isDebugMenuEnabled } from "../../../config/debug";
 import { useDocumentFocusSelector } from "../../../state/DocumentContext";
+import { usePreviewCaret, type PreviewCaret } from "../../../hooks/usePreviewCaret";
 import type { useCompiler } from "../../../hooks/useCompiler";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { PreviewContext } from "../../../actions/contexts/PreviewContext";
@@ -83,13 +84,17 @@ export interface PreviewProps {
     onExport: (format: import("../../../bindings/ExportFormat").ExportFormat) => void | Promise<void>;
     scrollRef?: RefObject<HTMLDivElement | null>;
     /** Draft resolution factor for preview pages while typing (1 = full res). */
-    draftRenderFactor?: number;
+    draftRenderFactor: number;
     /** Fraction of the viewport rasterized beyond the visible edges (0 = exact). */
-    renderOverscanFactor?: number;
+    renderOverscanFactor: number;
     /** Milliseconds to debounce zoom sharpening re-rasterization. */
-    rasterizationDebounceMs?: number;
+    rasterizationDebounceMs: number;
     /** Milliseconds to debounce scroll/zoom-out reveal re-rasterization. */
-    revealDebounceMs?: number;
+    revealDebounceMs: number;
+    /** Milliseconds to debounce resolving the editor caret's preview position. */
+    forwardSyncDebounceMs: number;
+    /** Milliseconds an idle draft render waits before promoting to full res. */
+    draftPromoteMs: number;
 }
 
 export const Preview = ({
@@ -100,10 +105,12 @@ export const Preview = ({
     onZoomModeChange,
     onExport,
     scrollRef,
-    draftRenderFactor = 1,
-    renderOverscanFactor = 0,
-    rasterizationDebounceMs = 200,
-    revealDebounceMs = 0,
+    draftRenderFactor,
+    renderOverscanFactor,
+    rasterizationDebounceMs,
+    revealDebounceMs,
+    forwardSyncDebounceMs,
+    draftPromoteMs,
 }: PreviewProps) => {
     const dispatchAction = useActionDispatcher();
     const {
@@ -182,6 +189,9 @@ export const Preview = ({
     >({});
     const pageMetricsCacheRef = useRef<Record<number, PagePtMetrics>>({});
     const focusElementId = useDocumentFocusSelector((focus) => focus.elementId);
+    // Forward sync: where the editor caret currently lands in the preview.
+    const { caret: previewCaret, resolvedRevision: previewCaretRevision } =
+        usePreviewCaret(previewRevision, forwardSyncDebounceMs);
     const activeSource = useMemo(
         () => sourceMap.find((entry) => entry.elementId === focusElementId),
         [focusElementId, sourceMap],
@@ -192,6 +202,8 @@ export const Preview = ({
         previewRevision,
         previewPages,
         dispatchAction,
+        caret: previewCaret,
+        caretRevision: previewCaretRevision,
     });
 
     const handlePageMetrics = useCallback(
@@ -602,12 +614,19 @@ export const Preview = ({
                                         previewRevision={previewRevision}
                                         zoom={effectiveZoom}
                                         draftFactor={draftRenderFactor}
+                                        idlePromoteMs={draftPromoteMs}
                                         overscanFactor={renderOverscanFactor}
                                         rasterizationDebounceMs={
                                             rasterizationDebounceMs
                                         }
                                         revealDebounceMs={revealDebounceMs}
                                         previewScrollRef={previewScrollRef}
+                                        caret={
+                                            previewCaret?.pageNumber ===
+                                            pageNumber
+                                                ? previewCaret
+                                                : null
+                                        }
                                         onPagePainted={onFirstPagePainted}
                                         onPageMetrics={handlePageMetrics}
                                     />
@@ -652,11 +671,15 @@ interface PreviewPageCanvasProps {
     previewRevision: number;
     zoom: number;
     draftFactor: number;
+    /** Milliseconds an idle draft render waits before promoting to full res. */
+    idlePromoteMs: number;
     /** Fraction of the viewport rasterized beyond the visible edges (0 = exact). */
     overscanFactor: number;
     rasterizationDebounceMs: number;
     revealDebounceMs: number;
     previewScrollRef: RefObject<HTMLElement | null>;
+    /** Forward-sync caret to draw on this page (null when it's not here). */
+    caret: PreviewCaret | null;
     onPagePainted: (paintInfo: PagePaintInfo) => void;
     onPageMetrics: (pageNumber: number, metrics: PagePtMetrics) => void;
 }
@@ -672,10 +695,12 @@ const PreviewPageCanvasComponent = ({
     previewRevision,
     zoom,
     draftFactor,
+    idlePromoteMs,
     overscanFactor,
     rasterizationDebounceMs,
     revealDebounceMs,
     previewScrollRef,
+    caret,
     onPagePainted,
     onPageMetrics,
 }: PreviewPageCanvasProps) => {
@@ -872,12 +897,24 @@ const PreviewPageCanvasComponent = ({
                     revision={contentRevision}
                     visible={isInViewport && band !== null}
                     draftFactor={draftFactor}
+                    idlePromoteMs={idlePromoteMs}
                     resizeDebounceMs={rasterizationDebounceMs}
                     revealDebounceMs={revealDebounceMs}
                     renderRegion={renderRegion}
                     previewContentMarker="canvas"
                     onPainted={onPagePainted}
                 />
+                {caret ? (
+                    <div
+                        className={styles.previewCaret}
+                        style={{
+                            left: `${caret.xPt * zoom * CSS_PX_PER_PT}px`,
+                            top: `${caret.topYPt * zoom * CSS_PX_PER_PT}px`,
+                            height: `${caret.heightPt * zoom * CSS_PX_PER_PT}px`,
+                        }}
+                        aria-hidden="true"
+                    />
+                ) : null}
             </div>
         </div>
     );
@@ -897,12 +934,14 @@ const previewPageCanvasPropsAreEqual = (
         prev.pageNumber !== next.pageNumber ||
         prev.zoom !== next.zoom ||
         prev.draftFactor !== next.draftFactor ||
+        prev.idlePromoteMs !== next.idlePromoteMs ||
         prev.overscanFactor !== next.overscanFactor ||
         prev.rasterizationDebounceMs !== next.rasterizationDebounceMs ||
         prev.revealDebounceMs !== next.revealDebounceMs ||
         prev.changed !== next.changed ||
         prev.initialMetrics !== next.initialMetrics ||
         prev.previewScrollRef !== next.previewScrollRef ||
+        prev.caret !== next.caret ||
         prev.onPagePainted !== next.onPagePainted ||
         prev.onPageMetrics !== next.onPageMetrics
     ) {
