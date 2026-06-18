@@ -33,4 +33,16 @@ preview_rasterization_debounce_ms: number | null,
  * reveals area the current bitmap no longer covers. Zero repaints
  * immediately; a positive value reduces work during fast scroll.
  */
-preview_reveal_debounce_ms: number | null, };
+preview_reveal_debounce_ms: number | null, 
+/**
+ * Milliseconds to wait before resolving the editor caret's position in the
+ * preview (forward sync). Zero resolves on every caret move; a positive
+ * value coalesces bursts while typing.
+ */
+preview_forward_sync_debounce_ms: number | null, 
+/**
+ * Milliseconds a draft (reduced-resolution) preview render waits while idle
+ * before being promoted to full resolution. Only applies when the draft
+ * render factor is below 1.
+ */
+preview_draft_promote_ms: number | null, };

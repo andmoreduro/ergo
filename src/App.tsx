@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Workspace } from "./components/layout/Workspace/Workspace";
+import { requireSetting } from "./settings/defaults";
 import { Menubar } from "./components/layout/Menubar/Menubar";
 import { WelcomeScreen } from "./components/screens/WelcomeScreen/WelcomeScreen";
 import { ErrorBoundary } from "./components/screens/ErrorBoundary/ErrorBoundary";
@@ -895,19 +896,30 @@ const AppShellContent = () => {
                                 globalSettings.zotero_translation_server_enabled ??
                                 false
                             }
-                            previewDraftRenderFactor={
-                                globalSettings.preview_draft_render_factor ?? 1
-                            }
-                            previewRenderOverscanFactor={
-                                globalSettings.preview_render_overscan_factor ?? 0
-                            }
-                            previewRasterizationDebounceMs={
-                                globalSettings.preview_rasterization_debounce_ms ??
-                                200
-                            }
-                            previewRevealDebounceMs={
-                                globalSettings.preview_reveal_debounce_ms ?? 0
-                            }
+                            previewDraftRenderFactor={requireSetting(
+                                globalSettings.preview_draft_render_factor,
+                                "preview_draft_render_factor",
+                            )}
+                            previewRenderOverscanFactor={requireSetting(
+                                globalSettings.preview_render_overscan_factor,
+                                "preview_render_overscan_factor",
+                            )}
+                            previewRasterizationDebounceMs={requireSetting(
+                                globalSettings.preview_rasterization_debounce_ms,
+                                "preview_rasterization_debounce_ms",
+                            )}
+                            previewRevealDebounceMs={requireSetting(
+                                globalSettings.preview_reveal_debounce_ms,
+                                "preview_reveal_debounce_ms",
+                            )}
+                            previewForwardSyncDebounceMs={requireSetting(
+                                globalSettings.preview_forward_sync_debounce_ms,
+                                "preview_forward_sync_debounce_ms",
+                            )}
+                            previewDraftPromoteMs={requireSetting(
+                                globalSettings.preview_draft_promote_ms,
+                                "preview_draft_promote_ms",
+                            )}
                             onExportDocument={exportDocument}
                         />
                     </ActionContextProvider>

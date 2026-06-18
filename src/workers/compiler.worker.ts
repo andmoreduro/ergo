@@ -353,6 +353,14 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
                 reply({ type: "jump_done", result, id });
                 break;
             }
+            case "positions_for_focus": {
+                if (!compiler) return;
+                const result = compiler.positions_for_focus(
+                    message.payload.target,
+                );
+                reply({ type: "positions_done", result, id });
+                break;
+            }
             case "export_pdf": {
                 if (!compiler) return;
                 const bytes = compiler.export_pdf();

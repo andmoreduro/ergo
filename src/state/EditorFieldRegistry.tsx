@@ -2,6 +2,7 @@ import {
     createContext,
     useCallback,
     useContext,
+    useEffect,
     useLayoutEffect,
     useMemo,
     useRef,
@@ -231,6 +232,10 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
     const lastAppliedRequestRef = useRef<number | null>(null);
     const isApplyingProgrammaticFocusRef = useRef(false);
     const programmaticFocusTimeoutRef = useRef<number | null>(null);
+    // Last caret offset published as native focus, so the continuous
+    // selectionchange push below skips no-op re-publishes.
+    const lastNativeCaretRef = useRef<number | null>(null);
+    const selectionHandlerRef = useRef<(() => void) | null>(null);
 
     const ref = useCallback<RefCallback<T>>(
         (node) => {
@@ -247,7 +252,7 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
         [elementId, fieldId, registry],
     );
 
-    const onBlur = useEditorFocusLostRecovery(fieldId, registry);
+    const recoverFocusOnBlur = useEditorFocusLostRecovery(fieldId, registry);
 
     const updateNativeFocus = useCallback(
         (node: T) => {
@@ -261,24 +266,26 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
                 return;
             }
 
+            const caret = caretOffsetFromNode(node);
+
             if (
+                caret != null &&
                 elementId !== projectInputElementId &&
                 elementId !== backendInputsElementId
             ) {
-                const caret = caretOffsetFromNode(node);
-                if (caret != null) {
-                    rememberBodyFocus({
-                        elementId,
-                        fieldId,
-                        caretUtf16Offset: caret,
-                    });
-                }
+                rememberBodyFocus({
+                    elementId,
+                    fieldId,
+                    caretUtf16Offset: caret,
+                });
             }
 
+            lastNativeCaretRef.current = caret;
             setDocumentFocus({
                 elementId,
                 fieldId,
-                caretUtf16Offset: caretOffsetFromNode(node),
+                caretUtf16Offset: caret,
+                selectionEndUtf16Offset: null,
                 sourceRevision: null,
                 anchorPageNumber: null,
                 forcePreviewScroll: false,
@@ -288,10 +295,77 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
         [elementId, fieldId, registry, setDocumentFocus],
     );
 
-    const onFocus = useCallback<FocusEventHandler<T>>(
-        (event) => updateNativeFocus(event.currentTarget),
-        [updateNativeFocus],
+    // Republish the live caret as the user moves it (arrow keys, typing) so the
+    // preview's forward-sync caret tracks form/template fields in real time, the
+    // way the ProseMirror body editor already does. Deduped against the last
+    // published offset and skipped while programmatic focus is being applied.
+    const pushNativeCaret = useCallback(
+        (node: T) => {
+            if (
+                isApplyingProgrammaticFocusRef.current ||
+                isUiOnlyComposerFieldId(fieldId)
+            ) {
+                return;
+            }
+            const caret = caretOffsetFromNode(node);
+            if (caret === lastNativeCaretRef.current) {
+                return;
+            }
+            lastNativeCaretRef.current = caret;
+            setDocumentFocus({
+                elementId,
+                fieldId,
+                caretUtf16Offset: caret,
+                selectionEndUtf16Offset: null,
+                sourceRevision: null,
+                anchorPageNumber: null,
+                forcePreviewScroll: false,
+                focusSource: "native",
+            });
+        },
+        [elementId, fieldId, setDocumentFocus],
     );
+
+    const detachSelectionListener = useCallback(() => {
+        if (selectionHandlerRef.current) {
+            document.removeEventListener(
+                "selectionchange",
+                selectionHandlerRef.current,
+            );
+            selectionHandlerRef.current = null;
+        }
+    }, []);
+
+    // Attach a document `selectionchange` listener only while this field holds
+    // focus (one active listener at a time), guarded so it only acts when this
+    // field is the active element.
+    const onFocus = useCallback<FocusEventHandler<T>>(
+        (event) => {
+            updateNativeFocus(event.currentTarget);
+            if (selectionHandlerRef.current) {
+                return;
+            }
+            const handler = () => {
+                const node = nodeRef.current;
+                if (node && document.activeElement === node) {
+                    pushNativeCaret(node);
+                }
+            };
+            selectionHandlerRef.current = handler;
+            document.addEventListener("selectionchange", handler);
+        },
+        [updateNativeFocus, pushNativeCaret],
+    );
+
+    const onBlur = useCallback<FocusEventHandler<T>>(
+        (event) => {
+            detachSelectionListener();
+            recoverFocusOnBlur(event);
+        },
+        [detachSelectionListener, recoverFocusOnBlur],
+    );
+
+    useEffect(() => detachSelectionListener, [detachSelectionListener]);
 
     const onSelect = useCallback(
         (event: SyntheticEvent<T>) => updateNativeFocus(event.currentTarget),

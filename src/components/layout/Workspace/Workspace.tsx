@@ -29,10 +29,12 @@ export interface WorkspaceProps {
     onPreviewZoomChange: Dispatch<SetStateAction<number>>;
     onPreviewZoomModeChange: Dispatch<SetStateAction<PreviewZoomMode>>;
     zoteroTranslationServerEnabled?: boolean;
-    previewDraftRenderFactor?: number;
-    previewRenderOverscanFactor?: number;
-    previewRasterizationDebounceMs?: number;
-    previewRevealDebounceMs?: number;
+    previewDraftRenderFactor: number;
+    previewRenderOverscanFactor: number;
+    previewRasterizationDebounceMs: number;
+    previewRevealDebounceMs: number;
+    previewForwardSyncDebounceMs: number;
+    previewDraftPromoteMs: number;
     findBarOpen: boolean;
     onFindBarOpenChange: (open: boolean) => void;
     onExportDocument: (
@@ -46,10 +48,12 @@ export const Workspace = ({
     onPreviewZoomChange,
     onPreviewZoomModeChange,
     zoteroTranslationServerEnabled = false,
-    previewDraftRenderFactor = 1,
-    previewRenderOverscanFactor = 0,
+    previewDraftRenderFactor,
+    previewRenderOverscanFactor,
     previewRasterizationDebounceMs,
     previewRevealDebounceMs,
+    previewForwardSyncDebounceMs,
+    previewDraftPromoteMs,
     findBarOpen,
     onFindBarOpenChange,
     onExportDocument,
@@ -216,10 +220,10 @@ export const Workspace = ({
                             scrollRef={previewScrollRef}
                             draftRenderFactor={previewDraftRenderFactor}
                             renderOverscanFactor={previewRenderOverscanFactor}
-                            rasterizationDebounceMs={
-                                previewRasterizationDebounceMs ?? 200
-                            }
-                            revealDebounceMs={previewRevealDebounceMs ?? 0}
+                            rasterizationDebounceMs={previewRasterizationDebounceMs}
+                            revealDebounceMs={previewRevealDebounceMs}
+                            forwardSyncDebounceMs={previewForwardSyncDebounceMs}
+                            draftPromoteMs={previewDraftPromoteMs}
                         />
                     </div>
                     {toastMessage ? <Toast message={toastMessage} /> : null}

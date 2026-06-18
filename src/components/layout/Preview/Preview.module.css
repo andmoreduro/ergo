@@ -88,6 +88,19 @@
     contain: layout paint;
 }
 
+/* Forward-sync caret: a translucent accent bar marking where the editor caret
+   maps onto the page (the inverse of clicking the preview to move the editor
+   caret). Static and semi-transparent so it reads as a cue, not a real caret. */
+.previewCaret {
+    position: absolute;
+    width: 2px;
+    min-height: 2px;
+    background-color: var(--color-primary);
+    opacity: 0.55;
+    pointer-events: none;
+    z-index: 2;
+}
+
 .zoomMenuRoot {
     position: relative;
     display: inline-flex;

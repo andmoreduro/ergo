@@ -100,7 +100,8 @@
 
     /* Control targets (width & height) */
     --size-icon-sm: 0.875rem;
-    --size-icon: 1rem;
+    /* Shared icon size for toolbars, controls, and tabs (20px middle ground). */
+    --size-icon: 1.25rem;
     --size-icon-lg: 1.25rem;
     --size-control-sm: 1.5rem;
     --size-control: 1.75rem;

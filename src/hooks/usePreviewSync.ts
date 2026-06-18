@@ -11,9 +11,11 @@ import {
     anchorPageFromVisibility,
     closestChangedPageNumber,
     schedulePreviewPageScroll,
+    scrollPreviewToCaret,
 } from "../preview/previewScroll";
 import { CompilerClient } from "../workers/compilerClient";
 import type { ActionInvocation } from "../bindings/ActionInvocation";
+import type { PreviewCaret } from "./usePreviewCaret";
 
 // IntersectionObserver thresholds at 5% steps so the visible-height map updates
 // as pages scroll through the viewport without a callback per scrolled pixel.
@@ -32,6 +34,10 @@ export interface UsePreviewSyncOptions {
     previewRevision: number | null;
     previewPages: PreviewPageDescriptor[];
     dispatchAction: (invocation: ActionInvocation) => Promise<boolean>;
+    /** Forward-sync caret position (null when it has no rendered spot). */
+    caret: PreviewCaret | null;
+    /** Revision the caret was resolved for; gates the content-change scroll. */
+    caretRevision: number | null;
 }
 
 export function usePreviewSync({
@@ -39,12 +45,15 @@ export function usePreviewSync({
     previewRevision,
     previewPages,
     dispatchAction,
+    caret,
+    caretRevision,
 }: UsePreviewSyncOptions) {
     const anchorPageRef = useRef<number | null>(null);
     const userOverrodeScrollRef = useRef(false);
     const programmaticScrollRef = useRef(false);
     const lastForwardScrollKeyRef = useRef<string | null>(null);
     const prevRevisionRef = useRef<number | null>(null);
+    const handledRevisionRef = useRef<number | null>(null);
     const pageVisibilityRef = useRef<Map<number, number>>(new Map());
 
     // Stable while the set of page numbers is unchanged (the common case while
@@ -124,12 +133,27 @@ export function usePreviewSync({
         if (previewRevision === null) {
             return;
         }
+        const scrollRoot = scrollRef.current;
+        if (!scrollRoot) {
+            return;
+        }
 
+        // A new compile re-engages auto-scroll (the user is editing again).
         if (prevRevisionRef.current !== previewRevision) {
             userOverrodeScrollRef.current = false;
             prevRevisionRef.current = previewRevision;
         }
 
+        // Only a content change (a fresh compile that actually changed pages)
+        // makes the preview chase the caret — never a bare cursor move or zoom, so
+        // the user is free to scroll/look elsewhere while editing. Act once per
+        // revision, and only after forward sync has resolved the caret for it.
+        if (caretRevision !== previewRevision) {
+            return;
+        }
+        if (handledRevisionRef.current === previewRevision) {
+            return;
+        }
         if (userOverrodeScrollRef.current) {
             return;
         }
@@ -141,13 +165,21 @@ export function usePreviewSync({
             return;
         }
 
-        const scrollKey = `${previewRevision}:${changedPages.join(",")}`;
-        if (lastForwardScrollKeyRef.current === scrollKey) {
+        // Precise spot available: scroll to keep the caret in view (with its
+        // comfortably-visible dead zone), the inverse of click-to-source.
+        if (caret) {
+            handledRevisionRef.current = previewRevision;
+            programmaticScrollRef.current = true;
+            scrollPreviewToCaret(scrollRoot, caret);
+            requestAnimationFrame(() => {
+                programmaticScrollRef.current = false;
+            });
             return;
         }
 
-        const scrollRoot = scrollRef.current;
-        if (!scrollRoot) {
+        // No caret cue — fall back to the nearest changed page.
+        const scrollKey = `${previewRevision}:${changedPages.join(",")}`;
+        if (lastForwardScrollKeyRef.current === scrollKey) {
             return;
         }
 
@@ -159,6 +191,7 @@ export function usePreviewSync({
         if (targetPage === null) {
             return;
         }
+        handledRevisionRef.current = previewRevision;
 
         // If the changed page is already the one dominating the viewport, the
         // user is looking right at it — snapping would only cost a full-preview
@@ -178,7 +211,7 @@ export function usePreviewSync({
         requestAnimationFrame(() => {
             programmaticScrollRef.current = false;
         });
-    }, [previewPages, previewRevision, scrollRef]);
+    }, [previewPages, previewRevision, scrollRef, caret, caretRevision]);
 
     const handlePreviewClick = useCallback(
         (event: MouseEvent<HTMLElement>) => {

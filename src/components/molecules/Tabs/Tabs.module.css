@@ -37,9 +37,15 @@
 }
 
 /* Icon glyph follows the tab's text colour (currentColor), so it turns the
-   accent colour when the tab is active. */
+   accent colour when the tab is active. Sized to the shared icon token so tabs
+   match toolbar/control icons instead of rendering the raw 24px variant. */
 .tabIcon {
     display: inline-flex;
+}
+
+.tabIcon svg {
+    width: var(--size-icon);
+    height: var(--size-icon);
 }
 
 .tab:hover {

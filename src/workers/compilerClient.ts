@@ -3,6 +3,8 @@ import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import type { CompilationResult } from "../bindings/CompilationResult";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { PreviewJumpResult } from "../bindings/PreviewJumpResult";
+import type { PreviewElementPositionsResult } from "../bindings/PreviewElementPositionsResult";
+import type { PreviewFocusTarget } from "../bindings/PreviewFocusTarget";
 import type {
     BootstrapPreviewPayload,
     BootstrapPreviewResult,
@@ -236,6 +238,16 @@ export const CompilerClient = {
                 payload: { pageNumber, xPt, yPt, sourceRevision },
             },
             "jump_done",
+        );
+        return reply.result;
+    },
+
+    async positionsForFocus(
+        target: PreviewFocusTarget,
+    ): Promise<PreviewElementPositionsResult> {
+        const reply = await callWorker(
+            { type: "positions_for_focus", payload: { target } },
+            "positions_done",
         );
         return reply.result;
     },

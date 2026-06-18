@@ -1,6 +1,8 @@
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentAST } from "../../bindings/DocumentAST";
 import type { TemplateSpec } from "../../bindings/TemplateSpec";
+import type { GlobalSettings } from "../../bindings/GlobalSettings";
+import { DEFAULT_GLOBAL_SETTINGS } from "../../settings/defaults";
 import {
     defaultTemplateVariantId,
     projectSettingsFromTemplate,
@@ -163,27 +165,9 @@ export const DEFAULT_PROJECT_TEMPLATE_ID = "apa7";
 export const UMB_APA_TEMPLATE_ID = "umb-apa";
 export const NO_TEMPLATE_ID = "none";
 
-const createLocalOverrides = () => ({
-    default_font: null,
-    default_font_size: null,
-    theme_mode: "system",
-    locale: "en",
-    recent_projects: [],
-    keymap_profile: "Default",
-    keymap_overrides: [],
-    history_limit: 100,
-    autosave_enabled: true,
-    autosave_interval_ms: 30_000,
-    autosave_on_window_blur: true,
-    autosave_on_app_close: true,
-    autosave_on_project_close: true,
-    default_equation_syntax: "typst" as const,
-    zotero_translation_server_enabled: false,
-    preview_draft_render_factor: 1.0,
-    preview_render_overscan_factor: 0.0,
-    preview_rasterization_debounce_ms: 200,
-    preview_reveal_debounce_ms: 0,
-});
+// A new document's local overrides start as a copy of the global defaults, so
+// derive them from the single default object instead of re-listing every field.
+const createLocalOverrides = (): GlobalSettings => ({ ...DEFAULT_GLOBAL_SETTINGS });
 
 export const createDocumentAST = (
     templateId: string = DEFAULT_PROJECT_TEMPLATE_ID,
