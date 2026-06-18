@@ -109,6 +109,11 @@ export function usePreviewCaret(
     // trailing space) but drop it once content changed (revision advanced) and
     // the new caret can't be placed, so the page-scroll fallback can take over.
     const cueRevisionRef = useRef<number | null>(null);
+    // Page the cue was last resolved on. Passed as the anchor so that when a field
+    // renders in several spots (e.g. a title in both the front matter and a running
+    // head) the backend picks the rendered position closest to where the caret
+    // already is, keeping it stable instead of jumping between copies.
+    const lastPageRef = useRef<number | null>(null);
 
     const applyCaret = useCallback((next: PreviewCaret | null) => {
         if (!sameCaret(caretRef.current, next)) {
@@ -142,7 +147,7 @@ export function usePreviewCaret(
             elementId: mapped.elementId,
             fieldId: mapped.fieldId,
             caretUtf16Offset: target.caretUtf16Offset,
-            anchorPageNumber: null,
+            anchorPageNumber: lastPageRef.current,
             sourceRevision: target.previewRevision,
         })
             .then((result) => {
@@ -165,6 +170,7 @@ export function usePreviewCaret(
                 } else {
                     const cue = caretCueFor(position);
                     cueRevisionRef.current = target.previewRevision;
+                    lastPageRef.current = position.pageNumber;
                     applyCaret({
                         pageNumber: position.pageNumber,
                         xPt: position.xPt,
