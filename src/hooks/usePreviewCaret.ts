@@ -25,6 +25,29 @@ interface CaretTarget {
     previewRevision: number | null;
 }
 
+/** Fallback caret height (pt) when the backend resolves a position but no exact
+ *  caret box — e.g. template inputs matched at the field/element level. */
+const DEFAULT_CARET_HEIGHT_PT = 12;
+
+/**
+ * The backend's exact caret box when it has one, otherwise a cue synthesized
+ * around the resolved position's vertical center. Without this, fields that
+ * resolve to a rendered spot but no precise box (template form inputs) would
+ * show no cue at all.
+ */
+const caretCueFor = (position: {
+    yPt: number;
+    caretCue: { topYPt: number; heightPt: number } | null;
+}): { topYPt: number; heightPt: number } => {
+    if (position.caretCue) {
+        return position.caretCue;
+    }
+    return {
+        topYPt: Math.max(0, position.yPt - DEFAULT_CARET_HEIGHT_PT * 0.5),
+        heightPt: DEFAULT_CARET_HEIGHT_PT,
+    };
+};
+
 const sameCaret = (a: PreviewCaret | null, b: PreviewCaret | null): boolean => {
     if (a === b) {
         return true;
@@ -124,11 +147,11 @@ export function usePreviewCaret(
         })
             .then((result) => {
                 inFlightRef.current = false;
-                if (
-                    result.status !== "matched" ||
-                    result.positions.length === 0 ||
-                    !result.positions[0].caretCue
-                ) {
+                const position =
+                    result.status === "matched" && result.positions.length > 0
+                        ? result.positions[0]
+                        : null;
+                if (!position) {
                     // No rendered spot for the caret. Keep the cue only if it was
                     // resolved for this same revision (a transient move, e.g. onto
                     // a collapsed trailing space). If the revision advanced and the
@@ -140,14 +163,13 @@ export function usePreviewCaret(
                         applyCaret(null);
                     }
                 } else {
-                    const position = result.positions[0];
+                    const cue = caretCueFor(position);
                     cueRevisionRef.current = target.previewRevision;
                     applyCaret({
                         pageNumber: position.pageNumber,
                         xPt: position.xPt,
-                        // caretCue is non-null here (guarded above).
-                        topYPt: position.caretCue!.topYPt,
-                        heightPt: position.caretCue!.heightPt,
+                        topYPt: cue.topYPt,
+                        heightPt: cue.heightPt,
                     });
                 }
                 setResolvedRevision(target.previewRevision);
