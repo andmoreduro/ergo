@@ -123,6 +123,42 @@ export function anchorPageFromVisibility(
     return bestPage;
 }
 
+/**
+ * Page whose rendered box contains (or lies nearest to) the vertical center of
+ * the preview viewport — i.e. the page the user is actually looking at. Used to
+ * anchor forward-sync resolution so a field rendered in several spots resolves to
+ * the copy on the current page, not whichever copy the caret last sat on.
+ */
+export function pageNumberAtViewportCenter(
+    scrollRoot: HTMLElement,
+): number | null {
+    const rootRect = scrollRoot.getBoundingClientRect();
+    const centerY = rootRect.top + rootRect.height / 2;
+    let best: number | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const element of scrollRoot.querySelectorAll<HTMLElement>(
+        "[data-preview-page-number]",
+    )) {
+        const pageNumber = Number(element.dataset.previewPageNumber);
+        if (!Number.isFinite(pageNumber)) {
+            continue;
+        }
+        const rect = element.getBoundingClientRect();
+        if (centerY >= rect.top && centerY <= rect.bottom) {
+            return pageNumber;
+        }
+        const distance =
+            centerY < rect.top ? rect.top - centerY : centerY - rect.bottom;
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            best = pageNumber;
+        }
+    }
+
+    return best;
+}
+
 /** Scroll to a page, retrying until the page node exists in the DOM. */
 export function schedulePreviewPageScroll(
     scrollRoot: HTMLElement,

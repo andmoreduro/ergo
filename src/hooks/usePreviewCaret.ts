@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type RefObject,
+} from "react";
 import { logPreviewSyncError } from "../config/previewSync";
 import { backendFocusIdsForEditorField } from "../editor/fieldIds";
+import { pageNumberAtViewportCenter } from "../preview/previewScroll";
 import { useDocumentFocusSelector } from "../state/DocumentContext";
 import { CompilerClient } from "../workers/compilerClient";
 
@@ -83,6 +90,7 @@ const sameTarget = (a: CaretTarget, b: CaretTarget): boolean =>
  * is null whenever the caret has no rendered position.
  */
 export function usePreviewCaret(
+    scrollRef: RefObject<HTMLElement | null>,
     previewRevision: number | null,
     debounceMs = 0,
 ): PreviewCaretState {
@@ -109,10 +117,8 @@ export function usePreviewCaret(
     // trailing space) but drop it once content changed (revision advanced) and
     // the new caret can't be placed, so the page-scroll fallback can take over.
     const cueRevisionRef = useRef<number | null>(null);
-    // Page the cue was last resolved on. Passed as the anchor so that when a field
-    // renders in several spots (e.g. a title in both the front matter and a running
-    // head) the backend picks the rendered position closest to where the caret
-    // already is, keeping it stable instead of jumping between copies.
+    // Page the cue was last resolved on; fallback anchor before the viewport is
+    // measurable (e.g. the very first resolution).
     const lastPageRef = useRef<number | null>(null);
 
     const applyCaret = useCallback((next: PreviewCaret | null) => {
@@ -142,12 +148,21 @@ export function usePreviewCaret(
             target.fieldId,
         );
 
+        // Anchor resolution to the page at the viewport center — the page the user
+        // is actually looking at — so a field rendered in several spots (e.g. a
+        // title in both the front matter and a running head) resolves to the copy
+        // on screen instead of pulling the view to another copy.
+        const scrollRoot = scrollRef.current;
+        const anchorPageNumber =
+            (scrollRoot ? pageNumberAtViewportCenter(scrollRoot) : null) ??
+            lastPageRef.current;
+
         inFlightRef.current = true;
         void CompilerClient.positionsForFocus({
             elementId: mapped.elementId,
             fieldId: mapped.fieldId,
             caretUtf16Offset: target.caretUtf16Offset,
-            anchorPageNumber: lastPageRef.current,
+            anchorPageNumber,
             sourceRevision: target.previewRevision,
         })
             .then((result) => {
@@ -189,7 +204,7 @@ export function usePreviewCaret(
                 inFlightRef.current = false;
                 logPreviewSyncError("positionsForFocus", error);
             });
-    }, [applyCaret]);
+    }, [applyCaret, scrollRef]);
 
     useEffect(() => {
         targetRef.current = {

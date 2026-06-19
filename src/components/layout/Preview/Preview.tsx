@@ -191,7 +191,7 @@ export const Preview = ({
     const focusElementId = useDocumentFocusSelector((focus) => focus.elementId);
     // Forward sync: where the editor caret currently lands in the preview.
     const { caret: previewCaret, resolvedRevision: previewCaretRevision } =
-        usePreviewCaret(previewRevision, forwardSyncDebounceMs);
+        usePreviewCaret(previewScrollRef, previewRevision, forwardSyncDebounceMs);
     const activeSource = useMemo(
         () => sourceMap.find((entry) => entry.elementId === focusElementId),
         [focusElementId, sourceMap],
