@@ -675,7 +675,14 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                         ? element.content
                         : element.content.type === "Paragraph"
                           ? paragraphWithText(element.content, bodyText)
-                          : createParagraph(bodyText);
+                          : // Match Rust update_figure_body and the event log:
+                            // a body-text edit on a non-paragraph figure body
+                            // replaces it with a paragraph carrying a stable id.
+                            {
+                              type: "Paragraph" as const,
+                              id: `${element.id}-body`,
+                              content: bodyText ? [createRichText(bodyText)] : [],
+                            };
 
                 return {
                     ...element,

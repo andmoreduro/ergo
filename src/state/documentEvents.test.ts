@@ -8,6 +8,7 @@ import { createTestDocumentAST } from "../test/documentAstFixture";
 import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
 import type { DocumentAST } from "../bindings/DocumentAST";
+import type { DocumentElement } from "../bindings/DocumentElement";
 
 const contentSectionId = (ast: DocumentAST): string => {
     const section = ast.sections.find((entry) => entry.type === "Content");
@@ -482,5 +483,69 @@ describe("applyDocumentEventToAst round-trip parity", () => {
         const next = applyDocumentEvents(ast, forwardEvents);
 
         expect(next.metadata.keywords).toEqual([]);
+    });
+
+    it("updateFigure body_text on a non-paragraph figure body replaces it with a paragraph (reducer == event log)", () => {
+        // A body-text edit cannot be undone via a body-text event when the
+        // body type changes, so this asserts forward parity (the property the
+        // reducer/event-log duplication risks breaking) rather than a full
+        // inverse round-trip.
+        const base = createTestDocumentAST();
+        const sectionId = contentSectionId(base);
+        const withFigure = astReducer(base, {
+            type: "ADD_FIGURE",
+            payload: { sectionId, figureId: "fig-2" },
+        });
+        // Force a non-paragraph figure body so the replacement branch runs.
+        const ast: DocumentAST = {
+            ...withFigure,
+            sections: withFigure.sections.map((section) =>
+                section.type === "Content"
+                    ? {
+                          ...section,
+                          elements: section.elements.map((element) =>
+                              element.type === "Figure" && element.id === "fig-2"
+                                  ? {
+                                        ...element,
+                                        content: {
+                                            type: "List",
+                                            id: "fig-2-list",
+                                            items: [],
+                                        },
+                                    }
+                                  : element,
+                          ),
+                      }
+                    : section,
+            ),
+        };
+        const action: ASTAction = {
+            type: "UPDATE_FIGURE",
+            payload: {
+                figureId: "fig-2",
+                caption: null,
+                placement: null,
+                bodyText: "Caption text",
+                assetId: null,
+            },
+        };
+        const expected = astReducer(ast, action);
+        const { forwardEvents } = createDocumentEventHistoryEntry(
+            ast,
+            action,
+            expected,
+        );
+        const next = applyDocumentEvents(ast, forwardEvents);
+
+        // Both paths must produce the same figure body: a paragraph with the
+        // stable "{figureId}-body" id, matching Rust update_figure_body.
+        expect(next).toEqual(expected);
+        const figure = next.sections
+            .flatMap((s) => (s.type === "Content" ? s.elements : []))
+            .find((e): e is Extract<DocumentElement, { type: "Figure" }> =>
+                e.type === "Figure" ? e.id === "fig-2" : false,
+            );
+        expect(figure?.content.type).toBe("Paragraph");
+        expect(figure?.content.id).toBe("fig-2-body");
     });
 });

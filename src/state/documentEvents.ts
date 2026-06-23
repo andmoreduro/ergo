@@ -350,20 +350,28 @@ export const applyDocumentEventToAst = (
                 if (element.type !== "Figure") {
                     return element;
                 }
+                const content =
+                    event.body_text === null || event.body_text === undefined
+                        ? element.content
+                        : element.content.type === "Paragraph"
+                          ? {
+                                ...element.content,
+                                content: richTextFromString(event.body_text),
+                            }
+                          : // Match the reducer and Rust update_figure_body: a
+                            // body-text edit on a non-paragraph figure body
+                            // replaces the body with a paragraph holding the text.
+                            {
+                                type: "Paragraph" as const,
+                                id: `${element.id}-body`,
+                                content: richTextFromString(event.body_text),
+                            };
                 return {
                     ...element,
                     caption: event.caption ?? element.caption,
                     placement: event.placement ?? element.placement,
                     asset_id: event.asset_id ?? element.asset_id,
-                    content:
-                        event.body_text === null
-                            ? element.content
-                            : element.content.type === "Paragraph"
-                              ? {
-                                    ...element.content,
-                                    content: richTextFromString(event.body_text),
-                                }
-                              : element.content,
+                    content,
                 };
             });
         case "updateDiagram":
