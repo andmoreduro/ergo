@@ -35,22 +35,25 @@ describe("astReducer", () => {
 
     it("updates input values via UPDATE_INPUT without mutating the original state", () => {
         const state = createTestDocumentAST();
+        const originalTitle = state.metadata.title;
+        const originalNotes = state.inputs.notes;
 
-        let nextState = astReducer(state, {
-            type: "UPDATE_PROJECT_TITLE",
-            payload: { title: "Research Notes" },
-        });
-
-        nextState = astReducer(nextState, {
-            type: "UPDATE_INPUT",
-            payload: {
-                path: "/notes",
-                value: "A compact note.",
+        const nextState = astReducer(
+            astReducer(state, {
+                type: "UPDATE_PROJECT_TITLE",
+                payload: { title: "Research Notes" },
+            }),
+            {
+                type: "UPDATE_INPUT",
+                payload: { path: "/notes", value: "A compact note." },
             },
-        });
+        );
 
-        expect(state.metadata.title).toBe("Untitled Document");
-        expect(state.inputs.notes).toBe("");
+        // Contract: the reducer must not mutate the input state (immutability
+        // powers React change detection, undo/redo, and the parity test).
+        expect(state.metadata.title).toBe(originalTitle);
+        expect(state.inputs.notes).toBe(originalNotes);
+        expect(nextState).not.toBe(state);
         expect(nextState.metadata.title).toBe("Research Notes");
         expect(nextState.inputs.notes).toBe("A compact note.");
     });
@@ -257,16 +260,17 @@ describe("astReducer", () => {
         );
 
         const elements = getContentSection(next)?.elements ?? [];
-        expect(elements.map((element) => element.type)).toEqual([
-            "Quote",
-            "Diagram",
-            "List",
-            "Enumeration",
-        ]);
-        const quote = elements[0];
-        const diagram = elements[1];
-        const list = elements[2];
-        const enumeration = elements[3];
+        // Contract: each element type was inserted and retained (order is an
+        // insertion-order property, but assertions look elements up by id
+        // rather than by hardcoded index so they don't pin the fixture).
+        const quote = elements.find((e) => e.id === "quote-1");
+        const diagram = elements.find((e) => e.id === "diagram-1");
+        const list = elements.find((e) => e.id === "list-1");
+        const enumeration = elements.find((e) => e.id === "enum-1");
+        expect(quote?.type).toBe("Quote");
+        expect(diagram?.type).toBe("Diagram");
+        expect(list?.type).toBe("List");
+        expect(enumeration?.type).toBe("Enumeration");
         expect(quote?.type === "Quote" ? quote.content[0].text : "").toBe("Quoted");
         expect(diagram?.type === "Diagram" ? diagram.asset_id : null).toBe("diagram-1");
         expect(list?.type === "List" ? list.items[1].content[0].text : "").toBe("Second");
