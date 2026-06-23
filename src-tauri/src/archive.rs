@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tauri::State;
 
 use ergo_core::bundled_templates::{
@@ -32,7 +32,49 @@ pub fn save_project_to_path(state: &TauriAppState, path: impl AsRef<Path>) -> Re
         .collect::<Vec<_>>();
     files.sort_by(|(left, _), (right, _)| left.cmp(right));
 
-    let file = File::create(path).map_err(|e| e.to_string())?;
+    // Atomic save: write the archive to a sibling temp file, fsync, then rename
+    // over the target. File::create truncates the destination before writing, so
+    // a crash or kill mid-save (e.g. during the fire-and-forget autosave
+    // interval) would leave a truncated archive with no End-of-Central-Directory
+    // record ("Could not find EOCD" on reopen). Writing to a temp file first
+    // guarantees the destination is either the previous complete archive or the
+    // new one — never a partial write.
+    let target = path.as_ref();
+    let temp_path = temp_path_for(target);
+    if let Err(err) = write_archive(&temp_path, &files) {
+        // Clean up the partial temp file so it doesn't confuse a later save.
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(err);
+    }
+
+    // fsync the temp file's directory so the rename survives a crash.
+    if let Some(parent) = temp_path.parent() {
+        let _ = std::fs::File::open(parent).and_then(|dir| dir.sync_all());
+    }
+
+    std::fs::rename(&temp_path, target)
+        .map_err(|e| format!("Failed to finalize save (rename): {e}"))?;
+
+    Ok(())
+}
+
+/// Build a sibling temp path (e.g. `project.ergproj` → `project.ergproj.tmp`).
+fn temp_path_for(path: &Path) -> PathBuf {
+    let mut tmp = path.to_path_buf();
+    let extension = tmp.extension().map(|ext| {
+        let mut owned = ext.to_owned();
+        owned.push(".tmp");
+        owned
+    });
+    match extension {
+        Some(ext) => tmp.set_extension(ext),
+        None => tmp.set_extension("tmp"),
+    };
+    tmp
+}
+
+fn write_archive(temp_path: &Path, files: &[(String, Vec<u8>)]) -> Result<File, String> {
+    let file = File::create(temp_path).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipWriter::new(file);
 
     let options = zip::write::SimpleFileOptions::default()
@@ -41,12 +83,10 @@ pub fn save_project_to_path(state: &TauriAppState, path: impl AsRef<Path>) -> Re
 
     for (name, content) in files {
         zip.start_file(name, options).map_err(|e| e.to_string())?;
-        zip.write_all(&content).map_err(|e| e.to_string())?;
+        zip.write_all(content).map_err(|e| e.to_string())?;
     }
 
-    zip.finish().map_err(|e| e.to_string())?;
-
-    Ok(())
+    zip.finish().map_err(|e| e.to_string())
 }
 
 #[derive(serde::Serialize, ts_rs::TS)]
@@ -492,5 +532,41 @@ mod tests {
 
         assert!(error.contains(".ergproj/document_state.json"));
         assert_eq!(error, ".ergproj/document_state.json is required");
+    }
+
+    #[test]
+    fn save_leaves_no_temp_file_and_replaces_previous_archive() {
+        // Regression guard for the atomic-save fix: a second save must replace
+        // the prior complete archive (not truncate it mid-write) and must not
+        // leave a stale .tmp sibling. A kill during the old File::create path
+        // left a truncated archive ("Could not find EOCD" on reopen).
+        let state = test_state();
+        state
+            .document_session
+            .sync_snapshot(basic_document_ast("First", ""))
+            .unwrap();
+        let path = temp_project_path();
+
+        // First save establishes a valid archive.
+        save_project_to_path(&state, &path).unwrap();
+        let first_names = zip_names(&path);
+
+        // Second save with different content replaces it atomically.
+        state
+            .document_session
+            .sync_snapshot(basic_document_ast("Second", ""))
+            .unwrap();
+        save_project_to_path(&state, &path).unwrap();
+        let second_names = zip_names(&path);
+
+        // Both archives must be readable (valid EOCD) and contain the document.
+        assert!(first_names.contains(".ergproj/document_state.json"));
+        assert_eq!(first_names, second_names);
+
+        // No stale temp file left behind.
+        let temp_path = temp_path_for(&path);
+        assert!(!temp_path.exists(), "temp file should be renamed away");
+
+        fs::remove_file(&path).ok();
     }
 }
