@@ -79,6 +79,7 @@ import { createInputArrayItem } from "../../../editor/inputArrayEntry/createInpu
 import { InputArrayEntryProvider } from "../../../editor/inputArrayEntry/InputArrayEntryContext";
 import { useInputArrayEntryContext } from "../../../editor/inputArrayEntry/InputArrayEntryContext";
 import { fieldLabelImportance } from "../../../template/fieldImportance";
+import { getValueAtPathByString as getValueAtPath } from "../../../state/documentEvents/helpers";
 
 /** Shared stable empty array so selectors don't return a fresh `[]` each call. */
 const EMPTY_ARRAY: readonly unknown[] = [];
@@ -86,23 +87,6 @@ const EMPTY_ARRAY: readonly unknown[] = [];
 /** Element-wise string-array equality so the section-id selector stays stable while typing. */
 const stringArrayEquals = (a: readonly string[], b: readonly string[]): boolean =>
     a.length === b.length && a.every((value, index) => value === b[index]);
-
-const getValueAtPath = (obj: any, path: string): any => {
-    const parts = path.split("/").filter(Boolean);
-    let current = obj;
-    for (const part of parts) {
-        if (current === null || current === undefined) {
-            return undefined;
-        }
-        if (Array.isArray(current)) {
-            const index = parseInt(part, 10);
-            current = current[index];
-        } else {
-            current = current[part];
-        }
-    }
-    return current;
-};
 
 const focusedAuthorIndex = (elementId: string | null, fieldId: string | null) => {
     if (
@@ -1104,7 +1088,9 @@ const DynamicFieldArray = ({ schema, path, label }: DynamicFieldProps) => {
     const t = useTemplateTranslation(spec);
     const { dispatch } = useDocumentActions();
     const items =
-        useDocumentAstSelector((s) => getValueAtPath(s.inputs, path)) ?? EMPTY_ARRAY;
+        (useDocumentAstSelector((s) => getValueAtPath(s.inputs, path)) as
+            | unknown[]
+            | undefined) ?? EMPTY_ARRAY;
 
     if (schema.items?.type === "reference" && schema.items.target) {
         return (

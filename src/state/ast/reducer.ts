@@ -20,50 +20,9 @@ import { convertElement } from "./convertElement";
 import { duplicateElement } from "./duplicateElement";
 import { trailingParagraphAction } from "../../editor/ensureTrailingParagraph";
 import { applyMinimumContentParagraph } from "./contentInvariant";
-import { generatedDiagramAssetForElement } from "../documentEvents/helpers";
+import { generatedDiagramAssetForElement, setValueAtPath, getValueAtPath } from "../documentEvents/helpers";
 
 type ParagraphElement = Extract<DocumentElement, { type: "Paragraph" }>;
-
-function setValueAtPath(obj: any, pathParts: string[], value: any): any {
-    if (pathParts.length === 0) {
-        return value;
-    }
-
-    const [current, ...rest] = pathParts;
-
-    if (Array.isArray(obj)) {
-        const index = parseInt(current, 10);
-        if (isNaN(index)) {
-            throw new Error(`Invalid array index in path: ${current}`);
-        }
-        const nextArray = [...obj];
-        while (nextArray.length <= index) {
-            nextArray.push(null);
-        }
-        nextArray[index] = setValueAtPath(nextArray[index], rest, value);
-        return nextArray;
-    } else {
-        const nextObj = { ...obj };
-        nextObj[current] = setValueAtPath(nextObj[current], rest, value);
-        return nextObj;
-    }
-}
-
-function getValueAtPath(obj: any, pathParts: string[]): any {
-    let current = obj;
-    for (const part of pathParts) {
-        if (current === undefined || current === null) {
-            return undefined;
-        }
-        if (Array.isArray(current)) {
-            const index = parseInt(part, 10);
-            current = current[index];
-        } else {
-            current = current[part];
-        }
-    }
-    return current;
-}
 
 const insertElement = (
     elements: DocumentElement[],
@@ -161,7 +120,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         case "UPDATE_INPUT": {
             const { path, value } = action.payload;
             const pathParts = path.split("/").filter(Boolean);
-            const nextInputs = setValueAtPath(state.inputs, pathParts, value);
+            const nextInputs = setValueAtPath<DocumentAST["inputs"]>(state.inputs, pathParts, value);
             const nextMetadata = { ...state.metadata };
             if (path === "/title" || path === "title") {
                 nextMetadata.title = value;
@@ -189,7 +148,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
             nextArray.splice(index, 0, value);
             return {
                 ...state,
-                inputs: setValueAtPath(state.inputs, pathParts, nextArray),
+                inputs: setValueAtPath<DocumentAST["inputs"]>(state.inputs, pathParts, nextArray),
             };
         }
 
@@ -203,7 +162,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
             const nextArray = currentArray.filter((_, idx) => idx !== index);
             return {
                 ...state,
-                inputs: setValueAtPath(state.inputs, pathParts, nextArray),
+                inputs: setValueAtPath<DocumentAST["inputs"]>(state.inputs, pathParts, nextArray),
             };
         }
 
