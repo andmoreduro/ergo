@@ -71,15 +71,6 @@ export function previewPageDisplaySizeStyle(
     };
 }
 
-export function setPreviewPageMetrics(
-    element: HTMLElement,
-    metrics: PreviewPageMetrics,
-): void {
-    element.dataset.pageWidthPt = String(metrics.widthPt);
-    element.dataset.pageHeightPt = String(metrics.heightPt);
-    element.dataset.pixelPerPt = String(metrics.pixelPerPt);
-}
-
 export function readPreviewPageMetrics(
     element: HTMLElement | null,
 ): PreviewPageMetrics | null {
@@ -150,33 +141,3 @@ export function pageSurfaceLayoutStyle(
 }
 
 export type PagePtMetrics = Pick<PreviewPageMetrics, "widthPt" | "heightPt">;
-
-/** Resolve Typst page dimensions from a page container or fallbacks. */
-export function resolvePreviewPageMetrics(
-    pageElement?: HTMLElement | null,
-    fallback?: PagePtMetrics | null,
-): PagePtMetrics | null {
-    if (pageElement) {
-        const nested = pageElement.querySelector("[data-preview-page-content]");
-        if (nested instanceof HTMLElement) {
-            const fromNested = readPreviewPageMetrics(nested);
-            if (fromNested) {
-                return fromNested;
-            }
-        }
-
-        const fromPage = readPreviewPageMetrics(pageElement);
-        if (fromPage) {
-            return fromPage;
-        }
-    }
-
-    if (fallback) {
-        return fallback;
-    }
-
-    return {
-        widthPt: DEFAULT_PAGE_WIDTH_PT,
-        heightPt: DEFAULT_PAGE_HEIGHT_PT,
-    };
-}
