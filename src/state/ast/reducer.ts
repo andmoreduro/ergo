@@ -20,7 +20,7 @@ import { convertElement } from "./convertElement";
 import { duplicateElement } from "./duplicateElement";
 import { trailingParagraphAction } from "../../editor/ensureTrailingParagraph";
 import { applyMinimumContentParagraph } from "./contentInvariant";
-import { generatedDiagramAssetForElement, setValueAtPath, getValueAtPath } from "../documentEvents/helpers";
+import { assertNever, generatedDiagramAssetForElement, setValueAtPath, getValueAtPath } from "../documentEvents/helpers";
 
 type ParagraphElement = Extract<DocumentElement, { type: "Paragraph" }>;
 
@@ -834,6 +834,6 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
         }
 
         default:
-            return state;
+            return assertNever(action);
     }
 }

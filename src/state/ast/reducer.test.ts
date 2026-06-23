@@ -12,14 +12,6 @@ const getContentSection = (state: DocumentAST) => {
 };
 
 describe("astReducer", () => {
-    it("returns the same state for unknown actions", () => {
-        const state = createTestDocumentAST();
-        const action = { type: "UNKNOWN_ACTION" } as unknown as ASTAction;
-        const nextState = astReducer(state, action);
-
-        expect(nextState).toBe(state);
-    });
-
     it("loads a complete document snapshot", () => {
         const state = createTestDocumentAST();
         const nextDocument = {
