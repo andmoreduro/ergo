@@ -3,6 +3,7 @@ import {
     useEffect,
     useRef,
     type MouseEvent,
+    type MutableRefObject,
     type RefObject,
 } from "react";
 import { logPreviewSyncError } from "../config/previewSync";
@@ -16,13 +17,6 @@ import {
 import { CompilerClient } from "../workers/compilerClient";
 import type { ActionInvocation } from "../bindings/ActionInvocation";
 import type { PreviewCaret } from "./usePreviewCaret";
-
-// IntersectionObserver thresholds at 5% steps so the visible-height map updates
-// as pages scroll through the viewport without a callback per scrolled pixel.
-const PAGE_VISIBILITY_THRESHOLDS = Array.from(
-    { length: 21 },
-    (_, index) => index / 20,
-);
 
 export interface PreviewPageDescriptor {
     page_number: number;
@@ -40,6 +34,19 @@ export interface UsePreviewSyncOptions {
     caretRevision: number | null;
     /** Effective zoom; a change re-anchors the view so the caret stays visible. */
     zoom: number;
+    /** Page dominating the viewport, maintained by `usePreviewViewportAnchor`. */
+    anchorPageRef: MutableRefObject<number | null>;
+    /** page number -> visible height (px), maintained by the same observer. */
+    pageVisibilityRef: MutableRefObject<Map<number, number>>;
+    /**
+     * True once the user has scrolled the caret's page out of view — i.e. they
+     * are browsing elsewhere. While set, the preview neither chases the caret on
+     * a content change nor re-centers, and forward sync searches from the
+     * viewport center instead of following the caret. Shared with
+     * `usePreviewCaret`. Cleared on a preview click and when the caret's page
+     * scrolls back into view.
+     */
+    userScrolledAwayRef: MutableRefObject<boolean>;
 }
 
 export function usePreviewSync({
@@ -50,69 +57,18 @@ export function usePreviewSync({
     caret,
     caretRevision,
     zoom,
+    anchorPageRef,
+    pageVisibilityRef,
+    userScrolledAwayRef,
 }: UsePreviewSyncOptions) {
-    const anchorPageRef = useRef<number | null>(null);
-    const userOverrodeScrollRef = useRef(false);
     const programmaticScrollRef = useRef(false);
     const lastForwardScrollKeyRef = useRef<string | null>(null);
-    const prevRevisionRef = useRef<number | null>(null);
     const prevZoomRef = useRef(zoom);
     const handledRevisionRef = useRef<number | null>(null);
-    const pageVisibilityRef = useRef<Map<number, number>>(new Map());
-
-    // Stable while the set of page numbers is unchanged (the common case while
-    // typing), so the observer is only rebuilt when pages are added or removed.
-    const pageNumbersKey = previewPages
-        .map((page) => page.page_number)
-        .join(",");
-
-    // Track which page occupies the most of the viewport without measuring: an
-    // IntersectionObserver keeps a page-number -> visible-height map, so the
-    // anchor is a cheap map read instead of a `getBoundingClientRect` sweep over
-    // every page that forced a full preview reflow on every keystroke.
-    useEffect(() => {
-        const scrollRoot = scrollRef.current;
-        if (!scrollRoot || typeof IntersectionObserver === "undefined") {
-            return;
-        }
-
-        const visibility = pageVisibilityRef.current;
-        const observer = new IntersectionObserver(
-            (entries) => {
-                for (const entry of entries) {
-                    const element = entry.target as HTMLElement;
-                    const pageNumber = Number(element.dataset.previewPageNumber);
-                    if (!Number.isFinite(pageNumber)) {
-                        continue;
-                    }
-                    if (
-                        entry.isIntersecting &&
-                        entry.intersectionRect.height > 0
-                    ) {
-                        visibility.set(pageNumber, entry.intersectionRect.height);
-                    } else {
-                        visibility.delete(pageNumber);
-                    }
-                }
-                const anchor = anchorPageFromVisibility(visibility);
-                if (anchor !== null) {
-                    anchorPageRef.current = anchor;
-                }
-            },
-            { root: scrollRoot, threshold: PAGE_VISIBILITY_THRESHOLDS },
-        );
-
-        for (const element of scrollRoot.querySelectorAll<HTMLElement>(
-            "[data-preview-page-number]",
-        )) {
-            observer.observe(element);
-        }
-
-        return () => {
-            observer.disconnect();
-            visibility.clear();
-        };
-    }, [scrollRef, pageNumbersKey]);
+    // Latest caret cue, read inside the scroll listener (whose closure is built
+    // once) to decide whether the user has scrolled away from it.
+    const caretRef = useRef<PreviewCaret | null>(caret);
+    caretRef.current = caret;
 
     useEffect(() => {
         const scrollRoot = scrollRef.current;
@@ -121,17 +77,20 @@ export function usePreviewSync({
         }
 
         const onUserScroll = () => {
-            // The anchor is maintained by the IntersectionObserver above; a user
-            // scroll only needs to flag that auto-scroll should yield to them.
             if (programmaticScrollRef.current) {
                 return;
             }
-            userOverrodeScrollRef.current = true;
+            // "Browsing away" = the caret's page is no longer visible. Derived
+            // from the IntersectionObserver map (a cheap lookup, no measuring),
+            // it self-clears when the user scrolls the caret back into view.
+            const cuePage = caretRef.current?.pageNumber ?? null;
+            userScrolledAwayRef.current =
+                cuePage !== null && !pageVisibilityRef.current.has(cuePage);
         };
 
         scrollRoot.addEventListener("scroll", onUserScroll, { passive: true });
         return () => scrollRoot.removeEventListener("scroll", onUserScroll);
-    }, [scrollRef]);
+    }, [scrollRef, pageVisibilityRef, userScrolledAwayRef]);
 
     useEffect(() => {
         if (previewRevision === null) {
@@ -140,12 +99,6 @@ export function usePreviewSync({
         const scrollRoot = scrollRef.current;
         if (!scrollRoot) {
             return;
-        }
-
-        // A new compile re-engages auto-scroll (the user is editing again).
-        if (prevRevisionRef.current !== previewRevision) {
-            userOverrodeScrollRef.current = false;
-            prevRevisionRef.current = previewRevision;
         }
 
         // Only a content change (a fresh compile that actually changed pages)
@@ -158,7 +111,11 @@ export function usePreviewSync({
         if (handledRevisionRef.current === previewRevision) {
             return;
         }
-        if (userOverrodeScrollRef.current) {
+        // The user is browsing away from the caret — don't yank them back. Unlike
+        // the old "reset on every compile", this persists across edits until they
+        // scroll the caret back into view (or click the preview), so editing a
+        // field while looking elsewhere keeps the view put.
+        if (userScrolledAwayRef.current) {
             return;
         }
 
@@ -210,7 +167,7 @@ export function usePreviewSync({
         schedulePreviewPageScroll(scrollRoot, targetPage, {
             lastScrollKeyRef: lastForwardScrollKeyRef,
             scrollKey,
-            isCancelled: () => userOverrodeScrollRef.current,
+            isCancelled: () => userScrolledAwayRef.current,
         });
         requestAnimationFrame(() => {
             programmaticScrollRef.current = false;
@@ -266,7 +223,7 @@ export function usePreviewSync({
             )
                 .then((result) => {
                     if (result.status === "field") {
-                        userOverrodeScrollRef.current = false;
+                        userScrolledAwayRef.current = false;
                         void dispatchAction({
                             id: "editor::FocusField",
                             payload: result.target,

@@ -35,6 +35,7 @@ export interface WorkspaceProps {
     previewRevealDebounceMs: number;
     previewForwardSyncDebounceMs: number;
     previewDraftPromoteMs: number;
+    previewMultiCaret: boolean;
     findBarOpen: boolean;
     onFindBarOpenChange: (open: boolean) => void;
     onExportDocument: (
@@ -54,6 +55,7 @@ export const Workspace = ({
     previewRevealDebounceMs,
     previewForwardSyncDebounceMs,
     previewDraftPromoteMs,
+    previewMultiCaret,
     findBarOpen,
     onFindBarOpenChange,
     onExportDocument,
@@ -224,6 +226,7 @@ export const Workspace = ({
                             revealDebounceMs={previewRevealDebounceMs}
                             forwardSyncDebounceMs={previewForwardSyncDebounceMs}
                             draftPromoteMs={previewDraftPromoteMs}
+                            multiCaret={previewMultiCaret}
                         />
                     </div>
                     {toastMessage ? <Toast message={toastMessage} /> : null}

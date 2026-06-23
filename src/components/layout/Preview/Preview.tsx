@@ -11,6 +11,7 @@ import {
     type SetStateAction,
 } from "react";
 import { usePreviewSync } from "../../../hooks/usePreviewSync";
+import { usePreviewViewportAnchor } from "../../../hooks/usePreviewViewportAnchor";
 import { usePreviewZoomInput } from "../../../hooks/usePreviewZoomInput";
 import {
     clearPreviewPointerAnchor,
@@ -95,6 +96,8 @@ export interface PreviewProps {
     forwardSyncDebounceMs: number;
     /** Milliseconds an idle draft render waits before promoting to full res. */
     draftPromoteMs: number;
+    /** Draw a caret cue at every visible rendered spot, not just the nearest. */
+    multiCaret: boolean;
 }
 
 export const Preview = ({
@@ -111,6 +114,7 @@ export const Preview = ({
     revealDebounceMs,
     forwardSyncDebounceMs,
     draftPromoteMs,
+    multiCaret,
 }: PreviewProps) => {
     const dispatchAction = useActionDispatcher();
     const {
@@ -189,13 +193,46 @@ export const Preview = ({
     >({});
     const pageMetricsCacheRef = useRef<Record<number, PagePtMetrics>>({});
     const focusElementId = useDocumentFocusSelector((focus) => focus.elementId);
+    // Viewport page geometry, tracked by a single IntersectionObserver and shared
+    // by forward-sync resolution and the content-change scroll — so neither has to
+    // sweep page rects (a full reflow) on every keystroke.
+    const { anchorPageRef, centerPageRef, pageVisibilityRef } =
+        usePreviewViewportAnchor(previewScrollRef, previewPages);
+    // True while the user has scrolled the caret's page out of view; switches
+    // forward sync from "follow the caret" to "search from the viewport center"
+    // and suppresses the content-change scroll so the view isn't yanked back.
+    const userScrolledAwayRef = useRef(false);
     // Forward sync: where the editor caret currently lands in the preview.
-    const { caret: previewCaret, resolvedRevision: previewCaretRevision } =
-        usePreviewCaret(previewScrollRef, previewRevision, forwardSyncDebounceMs);
+    const {
+        caret: previewCaret,
+        carets: previewCarets,
+        resolvedRevision: previewCaretRevision,
+    } = usePreviewCaret({
+        previewRevision,
+        debounceMs: forwardSyncDebounceMs,
+        centerPageRef,
+        userScrolledAwayRef,
+        multiCaret,
+    });
     const activeSource = useMemo(
         () => sourceMap.find((entry) => entry.elementId === focusElementId),
         [focusElementId, sourceMap],
     );
+
+    // Group cues by page so each page gets a stable array reference (an unchanged
+    // page keeps the shared empty array and skips re-render via the memo below).
+    const caretsByPage = useMemo(() => {
+        const byPage = new Map<number, PreviewCaret[]>();
+        for (const caret of previewCarets) {
+            const list = byPage.get(caret.pageNumber);
+            if (list) {
+                list.push(caret);
+            } else {
+                byPage.set(caret.pageNumber, [caret]);
+            }
+        }
+        return byPage;
+    }, [previewCarets]);
 
     const { handlePreviewClick } = usePreviewSync({
         scrollRef: previewScrollRef,
@@ -205,6 +242,9 @@ export const Preview = ({
         caret: previewCaret,
         caretRevision: previewCaretRevision,
         zoom,
+        anchorPageRef,
+        pageVisibilityRef,
+        userScrolledAwayRef,
     });
 
     const handlePageMetrics = useCallback(
@@ -622,11 +662,9 @@ export const Preview = ({
                                         }
                                         revealDebounceMs={revealDebounceMs}
                                         previewScrollRef={previewScrollRef}
-                                        caret={
-                                            previewCaret?.pageNumber ===
-                                            pageNumber
-                                                ? previewCaret
-                                                : null
+                                        carets={
+                                            caretsByPage.get(pageNumber) ??
+                                            NO_CARETS
                                         }
                                         onPagePainted={onFirstPagePainted}
                                         onPageMetrics={handlePageMetrics}
@@ -679,14 +717,17 @@ interface PreviewPageCanvasProps {
     rasterizationDebounceMs: number;
     revealDebounceMs: number;
     previewScrollRef: RefObject<HTMLElement | null>;
-    /** Forward-sync caret to draw on this page (null when it's not here). */
-    caret: PreviewCaret | null;
+    /** Forward-sync cues to draw on this page (empty when none are here). */
+    carets: PreviewCaret[];
     onPagePainted: (paintInfo: PagePaintInfo) => void;
     onPageMetrics: (pageNumber: number, metrics: PagePtMetrics) => void;
 }
 
 /** Quantize band bounds (pt) so small scrolls don't churn the render. */
 const BAND_STEP_PT = 24;
+
+/** Shared stable empty caret list so cue-free pages never re-render. */
+const NO_CARETS: PreviewCaret[] = [];
 
 const PreviewPageCanvasComponent = ({
     changed,
@@ -701,7 +742,7 @@ const PreviewPageCanvasComponent = ({
     rasterizationDebounceMs,
     revealDebounceMs,
     previewScrollRef,
-    caret,
+    carets,
     onPagePainted,
     onPageMetrics,
 }: PreviewPageCanvasProps) => {
@@ -905,8 +946,9 @@ const PreviewPageCanvasComponent = ({
                     previewContentMarker="canvas"
                     onPainted={onPagePainted}
                 />
-                {caret ? (
+                {carets.map((caret, index) => (
                     <div
+                        key={`${caret.xPt}:${caret.topYPt}:${index}`}
                         className={styles.previewCaret}
                         style={{
                             left: `${caret.xPt * zoom * CSS_PX_PER_PT}px`,
@@ -915,7 +957,7 @@ const PreviewPageCanvasComponent = ({
                         }}
                         aria-hidden="true"
                     />
-                ) : null}
+                ))}
             </div>
         </div>
     );
@@ -942,7 +984,7 @@ const previewPageCanvasPropsAreEqual = (
         prev.changed !== next.changed ||
         prev.initialMetrics !== next.initialMetrics ||
         prev.previewScrollRef !== next.previewScrollRef ||
-        prev.caret !== next.caret ||
+        prev.carets !== next.carets ||
         prev.onPagePainted !== next.onPagePainted ||
         prev.onPageMetrics !== next.onPageMetrics
     ) {
