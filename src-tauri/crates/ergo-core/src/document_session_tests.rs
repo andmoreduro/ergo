@@ -334,6 +334,15 @@ fn applies_document_event_variants_to_backend_ast() {
             ]),
         })
         .unwrap();
+    // Cross-stack contract: a /keywords input update must mirror into
+    // metadata.keywords (read by document_session_generation) and coerce
+    // non-arrays to empty. Matches the TS reducer and event-log paths.
+    session
+        .apply_event(DocumentEvent::UpdateInput {
+            path: "/keywords".to_string(),
+            value: serde_json::json!(["ergonomics", "typst"]),
+        })
+        .unwrap();
     session
         .apply_event(DocumentEvent::InsertElement {
             section_id: "content-section".to_string(),
@@ -498,6 +507,11 @@ fn applies_document_event_variants_to_backend_ast() {
             { "name": "Ana" }
         ]))
     );
+    // /keywords input update mirrors into metadata.keywords as a string array.
+    assert_eq!(
+        ast.metadata.keywords,
+        vec!["ergonomics".to_string(), "typst".to_string()]
+    );
 
     match &ast.sections[0] {
         DocumentSection::Content(content) => {
@@ -540,11 +554,69 @@ fn applies_document_event_variants_to_backend_ast() {
                 DocumentElement::Figure(figure) => {
                     assert_eq!(figure.caption, "Figura con ñ");
                     assert_eq!(figure.placement, "top");
+                    // body_text update replaced the paragraph body's text.
+                    match &figure.content {
+                        DocumentElement::Paragraph(paragraph) => {
+                            assert_eq!(paragraph.content, rich_text("Contenido de figura"));
+                        }
+                        _ => panic!("expected paragraph figure body"),
+                    }
                 }
                 _ => panic!("figure missing"),
             }
         }
         _ => panic!("content section missing"),
+    }
+}
+
+#[test]
+fn update_figure_body_text_replaces_non_paragraph_content() {
+    // Cross-stack contract: a figure body-text edit on a figure whose body
+    // is not a Paragraph must replace the body with a Paragraph carrying the
+    // stable "{figureId}-body" id. Matches the TS reducer and event-log paths.
+    let mut seed = basic_document_ast("Doc", "");
+    let figure_with_list_body = DocumentElement::Figure(Box::new(crate::ast::Figure {
+        id: "figure-list".to_string(),
+        asset_id: None,
+        content: DocumentElement::List(crate::ast::List {
+            id: "figure-list-body".to_string(),
+            items: vec![],
+        }),
+        caption: String::new(),
+        placement: String::new(),
+        extra_fields: std::collections::HashMap::new(),
+    }));
+    if let DocumentSection::Content(content) = &mut seed.sections[0] {
+        content.elements.insert(0, figure_with_list_body);
+    }
+
+    let vfs = Arc::new(VirtualFileSystem::new());
+    let session = DocumentSession::new(Arc::clone(&vfs));
+    session.sync_snapshot(seed).unwrap();
+    session
+        .apply_event(DocumentEvent::UpdateFigure {
+            element_id: "figure-list".to_string(),
+            caption: None,
+            placement: None,
+            body_text: Some("Caption text".to_string()),
+            asset_id: None,
+        })
+        .unwrap();
+
+    let result = persisted_ast(&vfs);
+    let figure = match &result.sections[0] {
+        DocumentSection::Content(content) => match &content.elements[0] {
+            DocumentElement::Figure(figure) => figure,
+            _ => panic!("expected figure"),
+        },
+        _ => panic!("expected content section"),
+    };
+    match &figure.content {
+        DocumentElement::Paragraph(paragraph) => {
+            assert_eq!(paragraph.id, "figure-list-body");
+            assert_eq!(paragraph.content, rich_text("Caption text"));
+        }
+        other => panic!("expected paragraph body, got {:?}", other),
     }
 }
 
