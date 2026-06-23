@@ -126,6 +126,18 @@ export const getValueAtPath = (obj: unknown, pathParts: string[]): unknown => {
     return current;
 };
 
+/** Split a `/`-separated path (e.g. `"/authors/0/name"`) into normalized parts. */
+export const splitInputPath = (path: string): string[] =>
+    path.split("/").filter(Boolean);
+
+/**
+ * Convenience getter for callers that work with `/`-separated input paths
+ * (e.g. selectors reading `inputs`). Equivalent to
+ * `getValueAtPath(obj, path.split("/").filter(Boolean))`.
+ */
+export const getValueAtPathByString = (obj: unknown, path: string): unknown =>
+    getValueAtPath(obj, splitInputPath(path));
+
 export const contentSection = (ast: DocumentAST, sectionId: string) => {
     const section = ast.sections.find(
         (entry) => entry.type === "Content" && entry.id === sectionId,
