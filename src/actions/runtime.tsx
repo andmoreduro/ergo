@@ -11,7 +11,6 @@ import {
 } from "react";
 import { TauriApi } from "../api/tauri";
 import { buildActionContextSnapshot } from "../editor/buildActionContextSnapshot";
-import { resolveBodyEditorInsertShortcut } from "../editor/editorBodyShortcuts";
 import {
     isHistoryRedoShortcut,
     isHistoryUndoShortcut,
@@ -297,19 +296,13 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
                 return;
             }
 
-            if (inBodyEditor) {
-                const bodyShortcut = resolveBodyEditorInsertShortcut(event);
-                if (bodyShortcut) {
-                    event.preventDefault();
-                    preventedBySelf = true;
-                    void dispatchAction(bodyShortcut).then((handled) => {
-                        if (handled) {
-                            event.preventDefault();
-                        }
-                    });
-                    return;
-                }
-            }
+            // Body editor insert shortcuts (Ctrl+Alt+P, etc.) are resolved by
+            // the Rust keymap resolver below, not by a local hardcoded map. The
+            // chord is already preventDefault'd above for Ctrl+Alt/AltGr shapes
+            // so ProseMirror does not insert the literal character; the async
+            // resolver then dispatches whatever the user actually bound, so
+            // keymap overrides are honored (AGENTS.md: Rust is the sole keymap
+            // authority, no frontend fallback resolver).
 
             // Resolve keys after the target (ProseMirror, inputs, …) runs so synchronous
             // handlers can call preventDefault first. The capture listener used to start
