@@ -160,6 +160,27 @@ describe("applyDocumentEventToAst round-trip parity", () => {
             }),
         },
         {
+            name: "UPDATE_INPUT keywords metadata coerces to string array",
+            setup: () => {
+                const base = createTestDocumentAST();
+                // Seed inputs.keywords so forward+inverse is a true round-trip
+                // (the default fixture omits the key).
+                const ast = applyDocumentEvents(base, [
+                    { type: "updateInput", path: "/keywords", value: [] },
+                ]);
+                return {
+                    ast,
+                    action: {
+                        type: "UPDATE_INPUT",
+                        payload: {
+                            path: "/keywords",
+                            value: ["ergonomics", "typst"],
+                        },
+                    },
+                };
+            },
+        },
+        {
             name: "INSERT_INPUT_ARRAY_ITEM",
             setup: () => ({
                 ast: createTestDocumentAST(),
@@ -425,5 +446,41 @@ describe("applyDocumentEventToAst round-trip parity", () => {
             type: "REMOVE_ASSET",
             payload: { assetId: "asset-1" },
         });
+    });
+
+    it("updateInput /keywords mirrors inputs.keywords into metadata.keywords", () => {
+        const ast = createTestDocumentAST();
+        const { forwardEvents } = createDocumentEventHistoryEntry(
+            ast,
+            {
+                type: "UPDATE_INPUT",
+                payload: { path: "/keywords", value: ["ergonomics", "typst"] },
+            },
+            astReducer(ast, {
+                type: "UPDATE_INPUT",
+                payload: { path: "/keywords", value: ["ergonomics", "typst"] },
+            }),
+        );
+        const next = applyDocumentEvents(ast, forwardEvents);
+
+        expect(next.metadata.keywords).toEqual(["ergonomics", "typst"]);
+    });
+
+    it("updateInput /keywords coerces a non-array value to an empty array", () => {
+        const ast = createTestDocumentAST();
+        const { forwardEvents } = createDocumentEventHistoryEntry(
+            ast,
+            {
+                type: "UPDATE_INPUT",
+                payload: { path: "/keywords", value: "not-an-array" },
+            },
+            astReducer(ast, {
+                type: "UPDATE_INPUT",
+                payload: { path: "/keywords", value: "not-an-array" },
+            }),
+        );
+        const next = applyDocumentEvents(ast, forwardEvents);
+
+        expect(next.metadata.keywords).toEqual([]);
     });
 });
