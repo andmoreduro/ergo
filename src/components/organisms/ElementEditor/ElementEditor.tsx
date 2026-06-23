@@ -5,6 +5,10 @@ import {
     type ActionHandlerMap,
 } from "../../../actions/runtime";
 import { useDocumentAst } from "../../../state/DocumentContext";
+import {
+    parseRemoveTableColumnPayload,
+    parseRemoveTableRowPayload,
+} from "../../../editor/tableActionPayloads";
 import { ElementContent } from "./ElementContent";
 import styles from "./ElementEditor.module.css";
 
@@ -48,14 +52,9 @@ export const ElementEditor = memo(function ElementEditor({
                     return false;
                 }
 
-                const payload = invocation.payload;
                 const rowIndex =
-                    typeof payload === "object" &&
-                    payload !== null &&
-                    "rowIndex" in payload &&
-                    typeof payload.rowIndex === "number"
-                        ? payload.rowIndex
-                        : tableRows - 1;
+                    parseRemoveTableRowPayload(invocation.payload) ??
+                    tableRows - 1;
 
                 dispatch({
                     type: "REMOVE_TABLE_ROW",
@@ -71,14 +70,9 @@ export const ElementEditor = memo(function ElementEditor({
                     return false;
                 }
 
-                const payload = invocation.payload;
                 const colIndex =
-                    typeof payload === "object" &&
-                    payload !== null &&
-                    "colIndex" in payload &&
-                    typeof payload.colIndex === "number"
-                        ? payload.colIndex
-                        : tableCols - 1;
+                    parseRemoveTableColumnPayload(invocation.payload) ??
+                    tableCols - 1;
 
                 dispatch({
                     type: "REMOVE_TABLE_COLUMN",

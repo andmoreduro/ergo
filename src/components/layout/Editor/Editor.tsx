@@ -23,6 +23,10 @@ import {
     type ActionHandlerMap,
 } from "../../../actions/runtime";
 import { buildReferenceInsertAction } from "../../../editor/insertReference";
+import {
+    parseRemoveTableColumnPayload,
+    parseRemoveTableRowPayload,
+} from "../../../editor/tableActionPayloads";
 import { InsertReferenceDialog } from "../../organisms/InsertReferenceDialog/InsertReferenceDialog";
 import type { TargetedOutlineEntry } from "../../../editor/outlineMatching";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
@@ -310,14 +314,9 @@ const EditorComponent = ({
                 if (focused?.type !== "Table") {
                     return false;
                 }
-                const payload = invocation.payload;
                 const rowIndex =
-                    typeof payload === "object" &&
-                    payload !== null &&
-                    "rowIndex" in payload &&
-                    typeof payload.rowIndex === "number"
-                        ? payload.rowIndex
-                        : focused.rows - 1;
+                    parseRemoveTableRowPayload(invocation.payload) ??
+                    focused.rows - 1;
                 dispatchAst({
                     type: "REMOVE_TABLE_ROW",
                     payload: {
@@ -332,14 +331,9 @@ const EditorComponent = ({
                 if (focused?.type !== "Table") {
                     return false;
                 }
-                const payload = invocation.payload;
                 const colIndex =
-                    typeof payload === "object" &&
-                    payload !== null &&
-                    "colIndex" in payload &&
-                    typeof payload.colIndex === "number"
-                        ? payload.colIndex
-                        : focused.cols - 1;
+                    parseRemoveTableColumnPayload(invocation.payload) ??
+                    focused.cols - 1;
                 dispatchAst({
                     type: "REMOVE_TABLE_COLUMN",
                     payload: {
