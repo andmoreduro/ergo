@@ -23,6 +23,7 @@ import {
     type ActionHandlerMap,
 } from "../../../actions/runtime";
 import { buildReferenceInsertAction } from "../../../editor/insertReference";
+import { convertToHandlers } from "../../../editor/convertToHandlers";
 import {
     parseRemoveTableColumnPayload,
     parseRemoveTableRowPayload,
@@ -343,6 +344,7 @@ const EditorComponent = ({
                 });
                 return true;
             },
+            ...convertToHandlers(getFocusedContentElement, dispatchAst),
         }),
         [
             deleteFocusedElement,
