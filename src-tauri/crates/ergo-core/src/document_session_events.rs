@@ -27,6 +27,23 @@ pub(crate) fn apply_document_event(
                     ast.metadata.title = title.to_string();
                 }
             }
+            // Mirror /keywords into metadata.keywords so Typst generation
+            // (document_session_generation) and the TS reducer/event-log agree.
+            // A non-array value coerces to an empty list, matching the TS paths.
+            if path == "/keywords" || path.starts_with("/keywords") {
+                ast.metadata.keywords = value
+                    .as_array()
+                    .map(|entries| {
+                        entries
+                            .iter()
+                            .map(|entry| match entry {
+                                serde_json::Value::String(s) => s.clone(),
+                                other => other.to_string(),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+            }
             set_value_at_path(&mut ast.inputs, &path, value)
         }
         DocumentEvent::InsertInputArrayItem { path, index, value } => {
