@@ -195,3 +195,58 @@ fn stale_revision_is_unavailable() {
         PreviewElementPositionsResult::Unavailable { .. }
     ));
 }
+
+fn caret_position(page_number: usize, y_pt: f64, source_offset: usize) -> (PreviewElementPosition, usize) {
+    (
+        PreviewElementPosition {
+            element_id: Some("inputs".to_string()),
+            field_id: Some("/title".to_string()),
+            caret_utf16_offset: Some(3),
+            page_number,
+            x_pt: 10.0,
+            y_pt,
+            caret_cue: Some(PreviewCaretCue {
+                top_y_pt: y_pt,
+                height_pt: 12.0,
+            }),
+            source_revision: 1,
+        },
+        source_offset,
+    )
+}
+
+#[test]
+fn collect_caret_positions_returns_every_rendered_spot_anchor_first() {
+    // The same caret rendered on three pages (e.g. a title echoed in the running
+    // head), plus a duplicate hit on page 2 from the leading/trailing boundary.
+    let candidates = vec![
+        caret_position(1, 700.0, 40),
+        caret_position(3, 50.0, 40),
+        caret_position(2, 80.0, 41),
+        caret_position(2, 80.0, 40),
+    ];
+
+    let positions = collect_caret_positions(candidates, 40, Some(2));
+
+    // Duplicate spot collapsed: three distinct rendered positions.
+    assert_eq!(positions.len(), 3);
+    // Anchored on page 2, so the page-2 copy is primary, then nearest pages.
+    assert_eq!(positions[0].page_number, 2);
+    assert!(positions
+        .iter()
+        .map(|position| position.page_number)
+        .eq([2, 1, 3]));
+}
+
+#[test]
+fn collect_caret_positions_keeps_closest_source_offset_per_spot() {
+    let candidates = vec![
+        caret_position(2, 80.0, 45),
+        caret_position(2, 80.0, 40),
+    ];
+
+    let positions = collect_caret_positions(candidates, 40, None);
+
+    assert_eq!(positions.len(), 1);
+    assert_eq!(positions[0].page_number, 2);
+}

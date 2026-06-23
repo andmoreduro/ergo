@@ -411,6 +411,8 @@
   "settings_preview_forward_sync_debounce_ms_hint": "Delay before locating the editor caret in the preview (the cue showing where the cursor maps). Zero updates on every cursor move; higher values coalesce bursts while typing.",
   "settings_preview_draft_promote_ms": "Preview Draft Promote Delay (ms)",
   "settings_preview_draft_promote_ms_hint": "When the draft render factor is below 1, how long an idle page waits before re-rendering at full resolution. Higher values keep draft quality longer after editing stops.",
+  "settings_preview_multi_caret": "Caret cue at every rendered spot",
+  "settings_preview_multi_caret_hint": "Draw the forward-sync caret cue at every visible place the focused content renders, not just the nearest — for example a title that also appears in the running head. Turn off to show only the closest cue.",
   "settings_autosave_enabled": "Autosave",
   "settings_autosave_interval_ms": "Autosave interval (ms)",
   "settings_autosave_on_window_blur": "Save when app loses focus",

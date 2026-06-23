@@ -416,6 +416,21 @@ export const GlobalSettingsPanel = ({
                 <p className={styles.settingHint}>
                     {m.settings_preview_draft_promote_ms_hint()}
                 </p>
+                <div className={styles.fieldCheckbox}>
+                    <Checkbox
+                        checked={settings.preview_multi_caret ?? true}
+                        label={m.settings_preview_multi_caret()}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                preview_multi_caret: event.target.checked,
+                            })
+                        }
+                    />
+                </div>
+                <p className={styles.settingHint}>
+                    {m.settings_preview_multi_caret_hint()}
+                </p>
             </div>
         </section>
     </div>

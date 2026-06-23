@@ -45,4 +45,10 @@ preview_forward_sync_debounce_ms: number | null,
  * before being promoted to full resolution. Only applies when the draft
  * render factor is below 1.
  */
-preview_draft_promote_ms: number | null, };
+preview_draft_promote_ms: number | null, 
+/**
+ * Draw a forward-sync caret cue at every visible place the focused source
+ * renders (advanced), not just the one nearest the viewport — useful for
+ * content repeated across pages such as a title in the running head.
+ */
+preview_multi_caret: boolean | null, };

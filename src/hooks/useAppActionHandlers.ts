@@ -13,7 +13,10 @@ import {
     backendInputsElementId,
     defaultFieldIdForElement,
     editorFocusIdsForBackendField,
+    projectInputElementId,
+    projectInputFieldId,
 } from "../editor/fieldIds";
+import { isRegisteredEditorField } from "../state/EditorFieldRegistry";
 import { getValueAtPath } from "../state/documentEvents/helpers";
 import type { DocumentFocusInput } from "../state/DocumentContext";
 
@@ -135,6 +138,35 @@ export const useAppActionHandlers = ({
             const fieldId =
                 target.fieldId ??
                 defaultFieldIdForFocus(getState(), target.elementId);
+
+            // A simple-list entry (`/affiliations/0`) is its own registered
+            // editor input, unlike a `content_blocks` paragraph (`/abstract/0`)
+            // which is one slice of a combined ParagraphsField. They share the
+            // `/base/index` id shape and are indistinguishable by value, so ask
+            // the field registry: if an independent input is registered at the
+            // indexed id, focus it directly with its local caret — no
+            // parent-collapse, no global-caret remap.
+            if (
+                target.elementId === backendInputsElementId &&
+                fieldId &&
+                parseIndexedInputFieldPath(fieldId)
+            ) {
+                const indexedEditorFieldId = projectInputFieldId(fieldId);
+                if (isRegisteredEditorField(indexedEditorFieldId)) {
+                    setDocumentFocus({
+                        elementId: projectInputElementId,
+                        fieldId: indexedEditorFieldId,
+                        caretUtf16Offset: target.caretUtf16Offset,
+                        selectionEndUtf16Offset: null,
+                        sourceRevision: target.sourceRevision,
+                        anchorPageNumber: target.anchorPageNumber,
+                        forcePreviewScroll: target.forcePreviewScroll,
+                        focusSource: "preview",
+                    });
+                    return true;
+                }
+            }
+
             const editorTarget = editorFocusIdsForBackendField(
                 target.elementId,
                 fieldId,
@@ -161,6 +193,7 @@ export const useAppActionHandlers = ({
                 elementId: editorTarget.elementId,
                 fieldId: editorTarget.fieldId,
                 caretUtf16Offset,
+                selectionEndUtf16Offset: null,
                 sourceRevision: target.sourceRevision,
                 anchorPageNumber: target.anchorPageNumber,
                 forcePreviewScroll: target.forcePreviewScroll,

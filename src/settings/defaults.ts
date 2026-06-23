@@ -27,6 +27,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     preview_reveal_debounce_ms: 0,
     preview_forward_sync_debounce_ms: 0,
     preview_draft_promote_ms: 180,
+    preview_multi_caret: true,
 };
 
 /**

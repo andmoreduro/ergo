@@ -589,7 +589,74 @@ fn roundtrip_positions_for_field_caret(
         }
     }
 
-    pick_closest_preview_position(candidates, preferred_source_offset, anchor_page_number)
+    collect_caret_positions(candidates, preferred_source_offset, anchor_page_number)
+}
+
+/// Every distinct rendered spot the caret maps to, ordered so the copy nearest
+/// the anchor page comes first. Unlike [`pick_closest_preview_position`], which
+/// keeps only that nearest copy, this returns them all — a field repeated across
+/// the document (a title in the running head, a heading echoed in the outline)
+/// renders the same caret in several places, and the multi-caret preview draws a
+/// cue at each one. All candidates here already round-trip to the same focus, so
+/// they are the *same* caret; only their rendered position differs.
+fn collect_caret_positions(
+    candidates: Vec<(PreviewElementPosition, usize)>,
+    preferred_source_offset: usize,
+    anchor_page_number: Option<usize>,
+) -> Vec<PreviewElementPosition> {
+    use std::collections::HashMap;
+
+    // Collapse duplicate hits on the same rendered spot (the leading and trailing
+    // boundary of one caret resolve to the same point), keeping the closest
+    // source offset. Quantize the point so floating-point jitter doesn't split a
+    // spot in two.
+    let mut best: HashMap<(usize, i64, i64), (PreviewElementPosition, usize)> = HashMap::new();
+    for (position, offset) in candidates {
+        let key = (
+            position.page_number,
+            (position.x_pt * 100.0).round() as i64,
+            (position.y_pt * 100.0).round() as i64,
+        );
+        let distance = offset.abs_diff(preferred_source_offset);
+        match best.get(&key) {
+            Some((_, existing_offset))
+                if existing_offset.abs_diff(preferred_source_offset) <= distance => {}
+            _ => {
+                best.insert(key, (position, offset));
+            }
+        }
+    }
+
+    let mut positions: Vec<(PreviewElementPosition, usize)> = best.into_values().collect();
+    positions.sort_by(|left, right| {
+        page_distance_from_anchor(left.0.page_number, anchor_page_number)
+            .cmp(&page_distance_from_anchor(
+                right.0.page_number,
+                anchor_page_number,
+            ))
+            .then_with(|| {
+                left.1
+                    .abs_diff(preferred_source_offset)
+                    .cmp(&right.1.abs_diff(preferred_source_offset))
+            })
+            .then_with(|| left.0.page_number.cmp(&right.0.page_number))
+            .then_with(|| {
+                left.0
+                    .y_pt
+                    .partial_cmp(&right.0.y_pt)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| {
+                left.0
+                    .x_pt
+                    .partial_cmp(&right.0.x_pt)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    });
+    positions
+        .into_iter()
+        .map(|(position, _)| position)
+        .collect()
 }
 
 fn page_distance_from_anchor(page_number: usize, anchor_page_number: Option<usize>) -> usize {

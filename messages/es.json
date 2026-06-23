@@ -411,6 +411,8 @@
   "settings_preview_forward_sync_debounce_ms_hint": "Retraso antes de localizar el cursor del editor en la vista previa (la marca que muestra dónde cae el cursor). Cero actualiza en cada movimiento del cursor; valores más altos agrupan ráfagas al escribir.",
   "settings_preview_draft_promote_ms": "Retraso de promoción del borrador de vista previa (ms)",
   "settings_preview_draft_promote_ms_hint": "Cuando el factor de resolución del borrador es menor que 1, cuánto espera una página inactiva antes de volver a renderizar a resolución completa. Valores más altos mantienen la calidad de borrador más tiempo tras dejar de editar.",
+  "settings_preview_multi_caret": "Cursor en cada lugar renderizado",
+  "settings_preview_multi_caret_hint": "Dibuja el cursor de sincronización en cada lugar visible donde se renderiza el contenido enfocado, no solo en el más cercano —por ejemplo, un título que también aparece en el encabezado. Desactívalo para mostrar solo el cursor más cercano.",
   "settings_autosave_enabled": "Guardado automático",
     "settings_autosave_interval_ms": "Intervalo de guardado automático (ms)",
     "settings_autosave_on_window_blur": "Guardar cuando la app pierde el foco",

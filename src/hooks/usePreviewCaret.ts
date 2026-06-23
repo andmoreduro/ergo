@@ -3,11 +3,10 @@ import {
     useEffect,
     useRef,
     useState,
-    type RefObject,
+    type MutableRefObject,
 } from "react";
 import { logPreviewSyncError } from "../config/previewSync";
 import { backendFocusIdsForEditorField } from "../editor/fieldIds";
-import { pageNumberAtViewportCenter } from "../preview/previewScroll";
 import { useDocumentFocusSelector } from "../state/DocumentContext";
 import { CompilerClient } from "../workers/compilerClient";
 
@@ -19,7 +18,11 @@ export interface PreviewCaret {
 }
 
 export interface PreviewCaretState {
+    /** Primary cue (nearest the anchor): drives follow/auto-scroll. Null = none. */
     caret: PreviewCaret | null;
+    /** Every cue to draw. With multi-caret off, just the primary; with it on, the
+     *  caret at each rendered spot (copies on off-screen pages sit off-screen). */
+    carets: PreviewCaret[];
     /** The preview revision the caret (or its absence) was resolved for; lets the
      *  scroll logic know forward sync has settled before falling back. */
     resolvedRevision: number | null;
@@ -70,6 +73,36 @@ const sameCaret = (a: PreviewCaret | null, b: PreviewCaret | null): boolean => {
     );
 };
 
+const sameCarets = (a: PreviewCaret[], b: PreviewCaret[]): boolean => {
+    if (a === b) {
+        return true;
+    }
+    if (a.length !== b.length) {
+        return false;
+    }
+    for (let index = 0; index < a.length; index += 1) {
+        if (!sameCaret(a[index], b[index])) {
+            return false;
+        }
+    }
+    return true;
+};
+
+const caretFromPosition = (position: {
+    pageNumber: number;
+    xPt: number;
+    yPt: number;
+    caretCue: { topYPt: number; heightPt: number } | null;
+}): PreviewCaret => {
+    const cue = caretCueFor(position);
+    return {
+        pageNumber: position.pageNumber,
+        xPt: position.xPt,
+        topYPt: cue.topYPt,
+        heightPt: cue.heightPt,
+    };
+};
+
 const sameTarget = (a: CaretTarget, b: CaretTarget): boolean =>
     a.elementId === b.elementId &&
     a.fieldId === b.fieldId &&
@@ -89,22 +122,35 @@ const sameTarget = (a: CaretTarget, b: CaretTarget): boolean =>
  * also compiling. Debounced and gated on the displayed preview revision; `caret`
  * is null whenever the caret has no rendered position.
  */
-export function usePreviewCaret(
-    scrollRef: RefObject<HTMLElement | null>,
-    previewRevision: number | null,
+export interface UsePreviewCaretOptions {
+    previewRevision: number | null;
+    debounceMs?: number;
+    /** Page the viewport center falls in; the search anchor while browsing away. */
+    centerPageRef: MutableRefObject<number | null>;
+    /** True while the user has scrolled the caret's page out of view. */
+    userScrolledAwayRef: MutableRefObject<boolean>;
+    /** Draw a cue at every rendered spot, not just the one nearest the anchor. */
+    multiCaret: boolean;
+}
+
+export function usePreviewCaret({
+    previewRevision,
     debounceMs = 0,
-): PreviewCaretState {
+    centerPageRef,
+    userScrolledAwayRef,
+    multiCaret,
+}: UsePreviewCaretOptions): PreviewCaretState {
     const elementId = useDocumentFocusSelector((focus) => focus.elementId);
     const fieldId = useDocumentFocusSelector((focus) => focus.fieldId);
     const caretUtf16Offset = useDocumentFocusSelector(
         (focus) => focus.caretUtf16Offset,
     );
 
-    const [caret, setCaret] = useState<PreviewCaret | null>(null);
+    const [carets, setCarets] = useState<PreviewCaret[]>([]);
     const [resolvedRevision, setResolvedRevision] = useState<number | null>(
         null,
     );
-    const caretRef = useRef<PreviewCaret | null>(null);
+    const caretsRef = useRef<PreviewCaret[]>([]);
     const targetRef = useRef<CaretTarget>({
         elementId: null,
         fieldId: null,
@@ -121,10 +167,10 @@ export function usePreviewCaret(
     // measurable (e.g. the very first resolution).
     const lastPageRef = useRef<number | null>(null);
 
-    const applyCaret = useCallback((next: PreviewCaret | null) => {
-        if (!sameCaret(caretRef.current, next)) {
-            caretRef.current = next;
-            setCaret(next);
+    const applyCarets = useCallback((next: PreviewCaret[]) => {
+        if (!sameCarets(caretsRef.current, next)) {
+            caretsRef.current = next;
+            setCarets(next);
         }
     }, []);
 
@@ -135,7 +181,7 @@ export function usePreviewCaret(
         const target = targetRef.current;
         if (target.previewRevision === null || !target.elementId) {
             cueRevisionRef.current = null;
-            applyCaret(null);
+            applyCarets([]);
             setResolvedRevision(target.previewRevision);
             return;
         }
@@ -148,14 +194,16 @@ export function usePreviewCaret(
             target.fieldId,
         );
 
-        // Anchor resolution to the page at the viewport center — the page the user
-        // is actually looking at — so a field rendered in several spots (e.g. a
-        // title in both the front matter and a running head) resolves to the copy
-        // on screen instead of pulling the view to another copy.
-        const scrollRoot = scrollRef.current;
-        const anchorPageNumber =
-            (scrollRoot ? pageNumberAtViewportCenter(scrollRoot) : null) ??
-            lastPageRef.current;
+        // Default: follow the caret — anchor to the page the cue was last on, so
+        // a field rendered in several spots stays on the copy the caret already
+        // tracks. This costs nothing (no viewport measuring) on the typing hot
+        // path. Only once the user has scrolled the caret's page out of view do we
+        // search from the page the viewport center falls in, so the cue lands on
+        // the copy they're looking at without the per-keystroke sweep that made
+        // typing slow.
+        const anchorPageNumber = userScrolledAwayRef.current
+            ? (centerPageRef.current ?? lastPageRef.current)
+            : lastPageRef.current;
 
         inFlightRef.current = true;
         void CompilerClient.positionsForFocus({
@@ -167,11 +215,11 @@ export function usePreviewCaret(
         })
             .then((result) => {
                 inFlightRef.current = false;
-                const position =
-                    result.status === "matched" && result.positions.length > 0
-                        ? result.positions[0]
-                        : null;
-                if (!position) {
+                // The backend returns every rendered spot, primary (nearest the
+                // anchor) first.
+                const positions =
+                    result.status === "matched" ? result.positions : [];
+                if (positions.length === 0) {
                     // No rendered spot for the caret. Keep the cue only if it was
                     // resolved for this same revision (a transient move, e.g. onto
                     // a collapsed trailing space). If the revision advanced and the
@@ -180,18 +228,16 @@ export function usePreviewCaret(
                     // editing is confusing.
                     if (cueRevisionRef.current !== target.previewRevision) {
                         cueRevisionRef.current = null;
-                        applyCaret(null);
+                        applyCarets([]);
                     }
                 } else {
-                    const cue = caretCueFor(position);
                     cueRevisionRef.current = target.previewRevision;
-                    lastPageRef.current = position.pageNumber;
-                    applyCaret({
-                        pageNumber: position.pageNumber,
-                        xPt: position.xPt,
-                        topYPt: cue.topYPt,
-                        heightPt: cue.heightPt,
-                    });
+                    lastPageRef.current = positions[0].pageNumber;
+                    // With multi-caret on, draw a cue at every rendered spot;
+                    // otherwise only the primary. Off-screen copies just sit on
+                    // their (scrolled-out) page, so this needs no viewport filter.
+                    const selected = multiCaret ? positions : [positions[0]];
+                    applyCarets(selected.map(caretFromPosition));
                 }
                 setResolvedRevision(target.previewRevision);
                 // Trailing: the caret moved while this query was in flight — go
@@ -204,7 +250,7 @@ export function usePreviewCaret(
                 inFlightRef.current = false;
                 logPreviewSyncError("positionsForFocus", error);
             });
-    }, [applyCaret, scrollRef]);
+    }, [applyCarets, centerPageRef, userScrolledAwayRef, multiCaret]);
 
     useEffect(() => {
         targetRef.current = {
@@ -217,5 +263,5 @@ export function usePreviewCaret(
         return () => window.clearTimeout(timer);
     }, [elementId, fieldId, caretUtf16Offset, previewRevision, debounceMs, run]);
 
-    return { caret, resolvedRevision };
+    return { caret: carets[0] ?? null, carets, resolvedRevision };
 }

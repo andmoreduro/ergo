@@ -97,6 +97,11 @@ pub struct GlobalSettings {
     /// render factor is below 1.
     #[serde(default)]
     pub preview_draft_promote_ms: Option<usize>,
+    /// Draw a forward-sync caret cue at every visible place the focused source
+    /// renders (advanced), not just the one nearest the viewport — useful for
+    /// content repeated across pages such as a title in the running head.
+    #[serde(default)]
+    pub preview_multi_caret: Option<bool>,
 }
 
 impl Default for GlobalSettings {
@@ -123,6 +128,7 @@ impl Default for GlobalSettings {
             preview_reveal_debounce_ms: Some(0),
             preview_forward_sync_debounce_ms: Some(0),
             preview_draft_promote_ms: Some(180),
+            preview_multi_caret: Some(true),
         }
     }
 }

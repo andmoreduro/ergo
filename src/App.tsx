@@ -920,6 +920,9 @@ const AppShellContent = () => {
                                 globalSettings.preview_draft_promote_ms,
                                 "preview_draft_promote_ms",
                             )}
+                            previewMultiCaret={
+                                globalSettings.preview_multi_caret ?? true
+                            }
                             onExportDocument={exportDocument}
                         />
                     </ActionContextProvider>
