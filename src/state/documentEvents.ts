@@ -124,16 +124,24 @@ export const applyDocumentEventToAst = (
                 pathParts,
                 event.value,
             );
-            const nextMetadata =
-                event.path === "/title" || event.path === "title"
-                    ? {
-                          ...ast.metadata,
-                          title:
-                              typeof event.value === "string"
-                                  ? event.value
-                                  : ast.metadata.title,
-                      }
-                    : ast.metadata;
+            // The reducer mirrors title and keywords from the `/title` and
+            // `/keywords` input paths into `metadata` so Typst generation
+            // (Rust `document_session_generation`) and the UI read the same
+            // values. This event-log path is the runtime mutation authority,
+            // so it must keep both in sync — otherwise editing keywords
+            // updates `inputs.keywords` but leaves `metadata.keywords` stale.
+            const nextMetadata = { ...ast.metadata };
+            if (event.path === "/title" || event.path === "title") {
+                nextMetadata.title =
+                    typeof event.value === "string"
+                        ? event.value
+                        : nextMetadata.title;
+            }
+            if (event.path === "/keywords" || pathParts[0] === "keywords") {
+                nextMetadata.keywords = Array.isArray(event.value)
+                    ? event.value.map((entry) => String(entry))
+                    : [];
+            }
             return {
                 ...ast,
                 inputs: nextInputs,
