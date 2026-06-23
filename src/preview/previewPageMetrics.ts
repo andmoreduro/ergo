@@ -81,6 +81,11 @@ export function readPreviewPageMetrics(
     const widthPt = Number(element.dataset.pageWidthPt);
     const heightPt = Number(element.dataset.pageHeightPt);
     const pixelPerPt = Number(element.dataset.pixelPerPt);
+    // pixelPerPt is written by CanvasPreview alongside width/height as a
+    // sanity gate confirming this element is a rendered preview surface.
+    // No consumer uses the value for computation (click→pt mapping recomputes
+    // from getBoundingClientRect); it is only checked here for presence.
+    // The full dataset bus is retired in the Wave 3 metrics-store unification.
     if (
         !Number.isFinite(widthPt) ||
         !Number.isFinite(heightPt) ||
