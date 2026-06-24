@@ -24,6 +24,7 @@ import {
 } from "../../../actions/runtime";
 import { buildReferenceInsertAction } from "../../../editor/insertReference";
 import { convertToHandlers } from "../../../editor/convertToHandlers";
+import { parseRemoveAuthorPayload } from "../../../editor/authorActionPayloads";
 import {
     parseRemoveTableColumnPayload,
     parseRemoveTableRowPayload,
@@ -236,9 +237,11 @@ const EditorComponent = ({
         const elementId = focus.elementId;
         const authorIndex = focusedAuthorIndex(elementId, focus.fieldId);
         if (authorIndex !== null) {
-            dispatchAst({
-                type: "REMOVE_INPUT_ARRAY_ITEM",
-                payload: { path: "/authors", index: authorIndex },
+            // Route author removal through the dedicated action rather than
+            // dispatching REMOVE_INPUT_ARRAY_ITEM behind editor::DeleteElement.
+            void dispatchAction({
+                id: "editor::RemoveAuthor",
+                payload: { index: authorIndex },
             });
             return true;
         }
@@ -255,7 +258,7 @@ const EditorComponent = ({
             astStore.getSnapshot(),
             elementId,
         );
-    }, [astStore, dispatchAst, focusStore]);
+    }, [astStore, dispatchAction, focusStore]);
 
     const canDeleteFocusedTarget =
         Boolean(focusElementId && focusElementId !== "project") ||
@@ -345,6 +348,33 @@ const EditorComponent = ({
                 return true;
             },
             ...convertToHandlers(getFocusedContentElement, dispatchAst),
+            "editor::AddAuthor": () => {
+                dispatchAst({
+                    type: "INSERT_INPUT_ARRAY_ITEM",
+                    payload: {
+                        path: "/authors",
+                        index: 0,
+                        value: { name: "", affiliations: [] },
+                    },
+                });
+                return true;
+            },
+            "editor::RemoveAuthor": (invocation) => {
+                const authorIndex =
+                    parseRemoveAuthorPayload(invocation.payload) ??
+                    focusedAuthorIndex(
+                        focusStore.getSnapshot().elementId,
+                        focusStore.getSnapshot().fieldId,
+                    );
+                if (authorIndex === null) {
+                    return false;
+                }
+                dispatchAst({
+                    type: "REMOVE_INPUT_ARRAY_ITEM",
+                    payload: { path: "/authors", index: authorIndex },
+                });
+                return true;
+            },
         }),
         [
             deleteFocusedElement,
