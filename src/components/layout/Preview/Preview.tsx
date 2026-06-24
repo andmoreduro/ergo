@@ -35,6 +35,7 @@ import type { useCompiler } from "../../../hooks/useCompiler";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { PreviewContext } from "../../../actions/contexts/PreviewContext";
 import type { ExportFormat } from "../../../bindings/ExportFormat";
+import type { ActionId } from "../../../bindings/ActionId";
 import { m } from "../../../paraglide/messages.js";
 import {
     formatPreviewZoomPercent,
@@ -63,6 +64,12 @@ import {
 
 const EXPORT_FORMATS: ExportFormat[] = ["pdf", "png", "svg"];
 
+const EXPORT_ACTION_ID: Record<ExportFormat, ActionId> = {
+    pdf: "workspace::ExportPdf",
+    png: "workspace::ExportPng",
+    svg: "workspace::ExportSvg",
+};
+
 const exportFormatLabel = (format: ExportFormat): string => {
     switch (format) {
         case "pdf":
@@ -82,7 +89,6 @@ export interface PreviewProps {
     zoomMode: PreviewZoomMode;
     onZoomChange: Dispatch<SetStateAction<number>>;
     onZoomModeChange: Dispatch<SetStateAction<PreviewZoomMode>>;
-    onExport: (format: import("../../../bindings/ExportFormat").ExportFormat) => void | Promise<void>;
     scrollRef?: RefObject<HTMLDivElement | null>;
     /** Draft resolution factor for preview pages while typing (1 = full res). */
     draftRenderFactor: number;
@@ -106,7 +112,6 @@ export const Preview = ({
     zoomMode,
     onZoomChange,
     onZoomModeChange,
-    onExport,
     scrollRef,
     draftRenderFactor,
     renderOverscanFactor,
@@ -622,7 +627,10 @@ export const Preview = ({
                             variant="dropdown"
                             onClick={() => {
                                 setExportMenuOpen(false);
-                                void onExport(format);
+                                void dispatchAction({
+                                    id: EXPORT_ACTION_ID[format],
+                                    payload: null,
+                                });
                             }}
                         >
                             {exportFormatLabel(format)}

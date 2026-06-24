@@ -49,6 +49,20 @@ export const workspaceCommands = (deps: WorkspaceCommandDeps): Command[] => [
         label: m.menubar_export(),
         scope: "project",
         isEnabled: (context) => context.hasActiveProject,
+        run: () => deps.exportDocument("svg"),
+    },
+    {
+        id: "workspace::ExportPdf",
+        label: m.menubar_export(),
+        scope: "project",
+        isEnabled: (context) => context.hasActiveProject,
         run: () => deps.exportDocument("pdf"),
+    },
+    {
+        id: "workspace::ExportPng",
+        label: m.menubar_export(),
+        scope: "project",
+        isEnabled: (context) => context.hasActiveProject,
+        run: () => deps.exportDocument("png"),
     },
 ];

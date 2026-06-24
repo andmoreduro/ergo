@@ -923,7 +923,6 @@ const AppShellContent = () => {
                             previewMultiCaret={
                                 globalSettings.preview_multi_caret ?? true
                             }
-                            onExportDocument={exportDocument}
                         />
                     </ActionContextProvider>
                 ) : (

@@ -52,6 +52,22 @@ pub fn action_catalog() -> Vec<ActionDescriptor> {
             true,
         ),
         descriptor(
+            ActionId::WorkspaceExportPdf,
+            "action_workspace_export_pdf",
+            "workspace",
+            "workspace && !input",
+            true,
+            true,
+        ),
+        descriptor(
+            ActionId::WorkspaceExportPng,
+            "action_workspace_export_png",
+            "workspace",
+            "workspace && !input",
+            true,
+            true,
+        ),
+        descriptor(
             ActionId::EditUndo,
             "action_edit_undo",
             "edit",
