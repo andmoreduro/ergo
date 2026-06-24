@@ -191,6 +191,10 @@ pub enum ActionId {
     WorkspaceCloseProject,
     #[serde(rename = "workspace::ExportSvg")]
     WorkspaceExportSvg,
+    #[serde(rename = "workspace::ExportPdf")]
+    WorkspaceExportPdf,
+    #[serde(rename = "workspace::ExportPng")]
+    WorkspaceExportPng,
     #[serde(rename = "edit::Undo")]
     EditUndo,
     #[serde(rename = "edit::Redo")]
@@ -322,6 +326,8 @@ impl ActionId {
             ActionId::WorkspaceSaveProject => "workspace::SaveProject",
             ActionId::WorkspaceCloseProject => "workspace::CloseProject",
             ActionId::WorkspaceExportSvg => "workspace::ExportSvg",
+            ActionId::WorkspaceExportPdf => "workspace::ExportPdf",
+            ActionId::WorkspaceExportPng => "workspace::ExportPng",
             ActionId::EditUndo => "edit::Undo",
             ActionId::EditRedo => "edit::Redo",
             ActionId::EditorDeleteElement => "editor::DeleteElement",
@@ -403,6 +409,8 @@ impl FromStr for ActionId {
             "workspace::SaveProject" => Ok(ActionId::WorkspaceSaveProject),
             "workspace::CloseProject" => Ok(ActionId::WorkspaceCloseProject),
             "workspace::ExportSvg" => Ok(ActionId::WorkspaceExportSvg),
+            "workspace::ExportPdf" => Ok(ActionId::WorkspaceExportPdf),
+            "workspace::ExportPng" => Ok(ActionId::WorkspaceExportPng),
             "edit::Undo" => Ok(ActionId::EditUndo),
             "edit::Redo" => Ok(ActionId::EditRedo),
             "editor::DeleteElement" => Ok(ActionId::EditorDeleteElement),

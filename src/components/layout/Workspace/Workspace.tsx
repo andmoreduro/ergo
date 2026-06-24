@@ -38,9 +38,6 @@ export interface WorkspaceProps {
     previewMultiCaret: boolean;
     findBarOpen: boolean;
     onFindBarOpenChange: (open: boolean) => void;
-    onExportDocument: (
-        format: import("../../../bindings/ExportFormat").ExportFormat,
-    ) => void | Promise<void>;
 }
 
 export const Workspace = ({
@@ -58,7 +55,6 @@ export const Workspace = ({
     previewMultiCaret,
     findBarOpen,
     onFindBarOpenChange,
-    onExportDocument,
 }: WorkspaceProps) => {
     const { state } = useDocumentAst();
     const { events, sessionId, ackDocumentEvents, eventsVersion, bootstrapFiles } =
@@ -218,7 +214,6 @@ export const Workspace = ({
                             zoomMode={previewZoomMode}
                             onZoomChange={onPreviewZoomChange}
                             onZoomModeChange={onPreviewZoomModeChange}
-                            onExport={onExportDocument}
                             scrollRef={previewScrollRef}
                             draftRenderFactor={previewDraftRenderFactor}
                             renderOverscanFactor={previewRenderOverscanFactor}
