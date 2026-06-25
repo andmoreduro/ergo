@@ -39,12 +39,35 @@ import type { ActionContextSnapshot } from "../bindings/ActionContextSnapshot";
 import type { ActionId } from "../bindings/ActionId";
 import type { ActionInvocation } from "../bindings/ActionInvocation";
 import type { LogicalKeyEvent } from "../bindings/LogicalKeyEvent";
+import type { PayloadOf } from "../commands/actionPayloads";
 
 export type ActionHandler = (
     invocation: ActionInvocation,
 ) => boolean | void | Promise<boolean | void>;
 
 export type ActionHandlerMap = Partial<Record<ActionId, ActionHandler>>;
+
+/**
+ * A handler narrowed to a specific action id's payload type. Register via
+ * `typedHandler("editor::RemoveTableRow", (payload) => { ... })` so the
+ * payload is typed without a runtime cast. Falls back to `unknown` for
+ * unmapped action ids.
+ */
+export type TypedActionHandler<Id extends ActionId> = (
+    payload: PayloadOf<Id> | null,
+    invocation: ActionInvocation,
+) => boolean | void | Promise<boolean | void>;
+
+/**
+ * Wrap a typed handler so it can be registered in an `ActionHandlerMap`.
+ * The typed handler receives the narrowed payload; the wrapper handles the
+ * `unknown → PayloadOf` cast at the boundary.
+ */
+export const typedHandler = <Id extends ActionId>(
+    _id: Id,
+    handler: TypedActionHandler<Id>,
+): ActionHandler => (invocation) =>
+    handler(invocation.payload as PayloadOf<Id> | null, invocation);
 
 interface RegisteredContextNode extends ActionContextNode {
     handlers: ActionHandlerMap;
