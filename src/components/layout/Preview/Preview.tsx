@@ -416,6 +416,7 @@ export const Preview = ({
         previewColumnRef,
         effectiveZoom,
         manualZoomFromInteraction,
+        onZoomModeChange,
     );
 
     useEffect(() => {
@@ -460,11 +461,13 @@ export const Preview = ({
 
     const applyManualZoom = useCallback(
         (value: number) => {
-            onZoomModeChange("manual");
-            onZoomChange(value);
+            void dispatchAction({
+                id: "view::SetZoomPercent",
+                payload: { percent: Math.round(value * 100) },
+            });
             setZoomMenuOpen(false);
         },
-        [onZoomChange, onZoomModeChange],
+        [dispatchAction],
     );
 
     const commitZoomDraft = useCallback(() => {
@@ -562,7 +565,10 @@ export const Preview = ({
                                 role="menuitem"
                                 variant="dropdown"
                                 onClick={() => {
-                                    onZoomModeChange("fit-width");
+                                    void dispatchAction({
+                                        id: "view::FitWidth",
+                                        payload: null,
+                                    });
                                     setZoomMenuOpen(false);
                                 }}
                             >
@@ -572,7 +578,10 @@ export const Preview = ({
                                 role="menuitem"
                                 variant="dropdown"
                                 onClick={() => {
-                                    onZoomModeChange("fit-height");
+                                    void dispatchAction({
+                                        id: "view::FitHeight",
+                                        payload: null,
+                                    });
                                     setZoomMenuOpen(false);
                                 }}
                             >
