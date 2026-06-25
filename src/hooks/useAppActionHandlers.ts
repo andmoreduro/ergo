@@ -6,6 +6,7 @@ import type { CommandRegistry } from "../commands/registry";
 import type { CommandContext } from "../commands/types";
 import { parseHeadingInsertLevel } from "../editor/headingInsert";
 import { toggleActiveElementSettings } from "../editor/elementSettingsBridge";
+import { previewSetZoomPercent } from "../preview/previewZoomBridge";
 import type { ElementType, InsertElementOptions } from "../commands/editorCommands";
 import { parseInputContentBlocks } from "../editor/contentBlocks";
 import { globalCaretInContentBlocks, parseIndexedInputFieldPath } from "../editor/contentBlocksCaret";
@@ -128,6 +129,21 @@ export const useAppActionHandlers = ({
 
         handlers["editor::OpenElementSettings"] = () =>
             toggleActiveElementSettings();
+
+        handlers["view::SetZoomPercent"] = (invocation) => {
+            const percent =
+                typeof invocation.payload === "object" &&
+                invocation.payload !== null &&
+                "percent" in invocation.payload &&
+                typeof invocation.payload.percent === "number"
+                    ? invocation.payload.percent
+                    : null;
+            if (percent === null) {
+                return false;
+            }
+            previewSetZoomPercent(percent);
+            return true;
+        };
 
         handlers["editor::FocusField"] = (invocation) => {
             const target = parseFocusFieldPayload(invocation.payload);

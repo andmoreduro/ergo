@@ -297,6 +297,12 @@ pub enum ActionId {
     ViewZoomIn,
     #[serde(rename = "view::ZoomOut")]
     ViewZoomOut,
+    #[serde(rename = "view::FitWidth")]
+    ViewFitWidth,
+    #[serde(rename = "view::FitHeight")]
+    ViewFitHeight,
+    #[serde(rename = "view::SetZoomPercent")]
+    ViewSetZoomPercent,
     #[serde(rename = "theme::UseSystem")]
     ThemeUseSystem,
     #[serde(rename = "theme::UseLight")]
@@ -379,6 +385,9 @@ impl ActionId {
             ActionId::ViewOpenCommandPalette => "view::OpenCommandPalette",
             ActionId::ViewZoomIn => "view::ZoomIn",
             ActionId::ViewZoomOut => "view::ZoomOut",
+            ActionId::ViewFitWidth => "view::FitWidth",
+            ActionId::ViewFitHeight => "view::FitHeight",
+            ActionId::ViewSetZoomPercent => "view::SetZoomPercent",
             ActionId::ThemeUseSystem => "theme::UseSystem",
             ActionId::ThemeUseLight => "theme::UseLight",
             ActionId::ThemeUseDark => "theme::UseDark",
@@ -462,6 +471,9 @@ impl FromStr for ActionId {
             "view::OpenCommandPalette" => Ok(ActionId::ViewOpenCommandPalette),
             "view::ZoomIn" => Ok(ActionId::ViewZoomIn),
             "view::ZoomOut" => Ok(ActionId::ViewZoomOut),
+            "view::FitWidth" => Ok(ActionId::ViewFitWidth),
+            "view::FitHeight" => Ok(ActionId::ViewFitHeight),
+            "view::SetZoomPercent" => Ok(ActionId::ViewSetZoomPercent),
             "theme::UseSystem" => Ok(ActionId::ThemeUseSystem),
             "theme::UseLight" => Ok(ActionId::ThemeUseLight),
             "theme::UseDark" => Ok(ActionId::ThemeUseDark),

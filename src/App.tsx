@@ -73,7 +73,7 @@ import { bibliographyCommands } from "./commands/bibliographyCommands";
 import { defaultFindCommandDeps, findCommands } from "./commands/findCommands";
 import { exportReferencesBib } from "./bibliography/exportReferencesBib";
 import { saveBibliographyDialog } from "./platform/bibliographyExport";
-import { previewZoomIn, previewZoomOut } from "./preview/previewZoomBridge";
+import { previewZoomIn, previewZoomOut, previewFitWidth, previewFitHeight } from "./preview/previewZoomBridge";
 import { applyRichTextMarkToFocusedField } from "./editor/richTextMarks";
 import {
     applyBodyMark,
@@ -266,6 +266,14 @@ const AppShellContent = () => {
     const zoomPreviewOut = useCallback(() => {
         setPreviewZoomMode("manual");
         previewZoomOut();
+    }, []);
+
+    const fitPreviewWidth = useCallback(() => {
+        previewFitWidth();
+    }, []);
+
+    const fitPreviewHeight = useCallback(() => {
+        previewFitHeight();
     }, []);
 
     const insertInlineEquation = useCallback((syntax: EquationSyntax = "typst") => {
@@ -794,6 +802,8 @@ const AppShellContent = () => {
                 setCommandPaletteOpen,
                 zoomPreviewIn,
                 zoomPreviewOut,
+                fitPreviewWidth,
+                fitPreviewHeight,
                 isPreviewZoomEnabled: () => hasActiveProject,
             }),
             ...themeCommands({
@@ -830,6 +840,8 @@ const AppShellContent = () => {
             hasActiveProject,
             zoomPreviewIn,
             zoomPreviewOut,
+            fitPreviewWidth,
+            fitPreviewHeight,
         ],
     );
     const commandRegistry = useMemo(

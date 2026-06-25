@@ -5,6 +5,8 @@ export interface ViewCommandDeps {
     setCommandPaletteOpen: (open: boolean) => void;
     zoomPreviewIn: () => void;
     zoomPreviewOut: () => void;
+    fitPreviewWidth: () => void;
+    fitPreviewHeight: () => void;
     isPreviewZoomEnabled: () => boolean;
 }
 
@@ -28,5 +30,19 @@ export const viewCommands = (deps: ViewCommandDeps): Command[] => [
         scope: "global",
         isEnabled: () => deps.isPreviewZoomEnabled(),
         run: () => deps.zoomPreviewOut(),
+    },
+    {
+        id: "view::FitWidth",
+        label: m.preview_zoom_fit_width(),
+        scope: "global",
+        isEnabled: () => deps.isPreviewZoomEnabled(),
+        run: () => deps.fitPreviewWidth(),
+    },
+    {
+        id: "view::FitHeight",
+        label: m.preview_zoom_fit_height(),
+        scope: "global",
+        isEnabled: () => deps.isPreviewZoomEnabled(),
+        run: () => deps.fitPreviewHeight(),
     },
 ];
