@@ -4,9 +4,9 @@
  * Several actions (`editor::RemoveTableRow`, `editor::RemoveTableColumn`) are
  * dispatched from more than one focused context (the element editor and the
  * body editor shell), and each carried a verbatim copy of the same payload
- * parse. Centralizing it here is the seed of the typed ActionPayload map
- * (see Wave 2): callers narrow `unknown` once and apply a context-specific
- * fallback.
+ * parse. The payload shapes are declared in
+ * `commands/actionPayloads.ts` (`PayloadOf<"editor::RemoveTableRow">`); these
+ * helpers validate `unknown` at runtime and return the field value (or null).
  */
 import type { ActionInvocation } from "../bindings/ActionInvocation";
 

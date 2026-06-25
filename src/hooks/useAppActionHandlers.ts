@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import type { ActionHandlerMap } from "../actions/runtime";
+import { typedHandler } from "../actions/runtime";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { CommandRegistry } from "../commands/registry";
 import type { CommandContext } from "../commands/types";
@@ -130,20 +131,16 @@ export const useAppActionHandlers = ({
         handlers["editor::OpenElementSettings"] = () =>
             toggleActiveElementSettings();
 
-        handlers["view::SetZoomPercent"] = (invocation) => {
-            const percent =
-                typeof invocation.payload === "object" &&
-                invocation.payload !== null &&
-                "percent" in invocation.payload &&
-                typeof invocation.payload.percent === "number"
-                    ? invocation.payload.percent
-                    : null;
-            if (percent === null) {
-                return false;
-            }
-            previewSetZoomPercent(percent);
-            return true;
-        };
+        handlers["view::SetZoomPercent"] = typedHandler(
+            "view::SetZoomPercent",
+            (payload) => {
+                if (!payload || typeof payload.percent !== "number") {
+                    return false;
+                }
+                previewSetZoomPercent(payload.percent);
+                return true;
+            },
+        );
 
         handlers["editor::FocusField"] = (invocation) => {
             const target = parseFocusFieldPayload(invocation.payload);
