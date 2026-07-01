@@ -10,9 +10,9 @@ import {
     type RefObject,
     type SetStateAction,
 } from "react";
-import { usePreviewSync } from "../../../hooks/usePreviewSync";
-import { usePreviewViewportAnchor } from "../../../hooks/usePreviewViewportAnchor";
 import { usePreviewZoomInput } from "../../../hooks/usePreviewZoomInput";
+import { usePreviewForwardSync } from "../../../hooks/usePreviewForwardSync";
+import type { PreviewCaret } from "../../../hooks/usePreviewForwardSync";
 import {
     clearPreviewPointerAnchor,
     updatePreviewPointerAnchor,
@@ -30,7 +30,6 @@ import { CanvasPreview } from "../../molecules/CanvasPreview/CanvasPreview";
 import { CompilerClient } from "../../../workers/compilerClient";
 import { isDebugMenuEnabled } from "../../../config/debug";
 import { useDocumentFocusSelector } from "../../../state/DocumentContext";
-import { usePreviewCaret, type PreviewCaret } from "../../../hooks/usePreviewCaret";
 import type { useCompiler } from "../../../hooks/useCompiler";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { PreviewContext } from "../../../actions/contexts/PreviewContext";
@@ -198,58 +197,22 @@ export const Preview = ({
     >({});
     const pageMetricsCacheRef = useRef<Record<number, PagePtMetrics>>({});
     const focusElementId = useDocumentFocusSelector((focus) => focus.elementId);
-    // Viewport page geometry, tracked by a single IntersectionObserver and shared
-    // by forward-sync resolution and the content-change scroll — so neither has to
-    // sweep page rects (a full reflow) on every keystroke.
-    const { anchorPageRef, centerPageRef, pageVisibilityRef } =
-        usePreviewViewportAnchor(previewScrollRef, previewPages);
-    // True while the user has scrolled the caret's page out of view; switches
-    // forward sync from "follow the caret" to "search from the viewport center"
-    // and suppresses the content-change scroll so the view isn't yanked back.
-    const userScrolledAwayRef = useRef(false);
-    // Forward sync: where the editor caret currently lands in the preview.
-    const {
-        caret: previewCaret,
-        carets: previewCarets,
-        resolvedRevision: previewCaretRevision,
-    } = usePreviewCaret({
-        previewRevision,
-        debounceMs: forwardSyncDebounceMs,
-        centerPageRef,
-        userScrolledAwayRef,
-        multiCaret,
-    });
     const activeSource = useMemo(
         () => sourceMap.find((entry) => entry.elementId === focusElementId),
         [focusElementId, sourceMap],
     );
 
-    // Group cues by page so each page gets a stable array reference (an unchanged
-    // page keeps the shared empty array and skips re-render via the memo below).
-    const caretsByPage = useMemo(() => {
-        const byPage = new Map<number, PreviewCaret[]>();
-        for (const caret of previewCarets) {
-            const list = byPage.get(caret.pageNumber);
-            if (list) {
-                list.push(caret);
-            } else {
-                byPage.set(caret.pageNumber, [caret]);
-            }
-        }
-        return byPage;
-    }, [previewCarets]);
-
-    const { handlePreviewClick } = usePreviewSync({
+    // Forward sync — editor caret → preview cue, viewport anchor tracking, and
+    // follow/click-to-source scrolling — coordinated by a single hook so this
+    // component doesn't thread the four mutable refs that those pieces share.
+    const { caretsByPage, handlePreviewClick } = usePreviewForwardSync({
         scrollRef: previewScrollRef,
         previewRevision,
         previewPages,
         dispatchAction,
-        caret: previewCaret,
-        caretRevision: previewCaretRevision,
         zoom,
-        anchorPageRef,
-        pageVisibilityRef,
-        userScrolledAwayRef,
+        forwardSyncDebounceMs,
+        multiCaret,
     });
 
     const handlePageMetrics = useCallback(
