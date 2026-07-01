@@ -7,6 +7,7 @@ import { useDocumentAst } from "../../state/DocumentContext";
 import { m } from "../../paraglide/messages.js";
 import { diagramAssetPath } from "./diagramAsset";
 import { renderMermaidSvg } from "./renderMermaidSvg";
+import { showToast } from "../notifyBridge";
 
 const DIAGRAM_RENDER_DEBOUNCE_MS = 350;
 
@@ -83,13 +84,7 @@ export const useDiagramMermaidAsset = (
                     }
 
                 } catch {
-                    window.dispatchEvent(
-                        new CustomEvent("ergo:toast", {
-                            detail: {
-                                message: m.editor_diagram_render_failed(),
-                            },
-                        }),
-                    );
+                    showToast(m.editor_diagram_render_failed(), "error");
                 }
             })();
         }, DIAGRAM_RENDER_DEBOUNCE_MS);

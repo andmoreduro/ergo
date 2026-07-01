@@ -3,6 +3,7 @@ import type { ProjectFontAvailability } from "../bindings/ProjectFontAvailabilit
 import type { ProjectSettings } from "../bindings/ProjectSettings";
 import { TauriApi } from "../api/tauri";
 import { m } from "../paraglide/messages.js";
+import { showToast } from "../editor/notifyBridge";
 
 const unavailableFonts = (
     availability: ProjectFontAvailability,
@@ -46,11 +47,7 @@ export function projectFontsUnavailableToastMessage(
 }
 
 export function emitProjectFontToast(message: string): void {
-    window.dispatchEvent(
-        new CustomEvent("ergo:toast", {
-            detail: { message },
-        }),
-    );
+    showToast(message);
 }
 
 export async function notifyUnavailableProjectFonts(
