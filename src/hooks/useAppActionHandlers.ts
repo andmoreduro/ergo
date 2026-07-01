@@ -7,7 +7,6 @@ import type { CommandRegistry } from "../commands/registry";
 import type { CommandContext } from "../commands/types";
 import { parseHeadingInsertLevel } from "../editor/headingInsert";
 import { toggleActiveElementSettings } from "../editor/elementSettingsBridge";
-import { showToast } from "../editor/notifyBridge";
 import { previewSetZoomPercent } from "../preview/previewZoomBridge";
 import type { ElementType, InsertElementOptions } from "../commands/editorCommands";
 import { parseInputContentBlocks } from "../editor/contentBlocks";
@@ -139,17 +138,6 @@ export const useAppActionHandlers = ({
                     return false;
                 }
                 previewSetZoomPercent(payload.percent);
-                return true;
-            },
-        );
-
-        handlers["workspace::Notify"] = typedHandler(
-            "workspace::Notify",
-            (payload) => {
-                if (!payload || typeof payload.message !== "string") {
-                    return false;
-                }
-                showToast(payload.message, payload.variant);
                 return true;
             },
         );

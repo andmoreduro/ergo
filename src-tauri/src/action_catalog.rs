@@ -68,14 +68,6 @@ pub fn action_catalog() -> Vec<ActionDescriptor> {
             true,
         ),
         descriptor(
-            ActionId::WorkspaceNotify,
-            "action_workspace_notify",
-            "workspace",
-            "workspace",
-            true,
-            false,
-        ),
-        descriptor(
             ActionId::EditUndo,
             "action_edit_undo",
             "edit",
