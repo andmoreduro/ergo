@@ -21,6 +21,10 @@ import type { PreviewCaret } from "./usePreviewCaret";
 export interface PreviewPageDescriptor {
     page_number: number;
     changed: boolean;
+    /** Page width in Typst points (null until the compile reports it). */
+    width_pt: number | null;
+    /** Page height in Typst points (null until the compile reports it). */
+    height_pt: number | null;
 }
 
 export interface UsePreviewSyncOptions {
@@ -69,6 +73,15 @@ export function usePreviewSync({
     // once) to decide whether the user has scrolled away from it.
     const caretRef = useRef<PreviewCaret | null>(caret);
     caretRef.current = caret;
+
+    /** Look up a page's Typst height, or null if unknown/not reported yet. */
+    const pageHeightPtFor = (pageNumber: number): number | null => {
+        const page = previewPages.find(
+            (entry) => entry.page_number === pageNumber,
+        );
+        const height = page?.height_pt;
+        return height && height > 0 ? height : null;
+    };
 
     useEffect(() => {
         const scrollRoot = scrollRef.current;
@@ -129,12 +142,15 @@ export function usePreviewSync({
         // Precise spot available: scroll to keep the caret in view (with its
         // comfortably-visible dead zone), the inverse of click-to-source.
         if (caret) {
-            handledRevisionRef.current = previewRevision;
-            programmaticScrollRef.current = true;
-            scrollPreviewToCaret(scrollRoot, caret);
-            requestAnimationFrame(() => {
-                programmaticScrollRef.current = false;
-            });
+            const caretHeightPt = pageHeightPtFor(caret.pageNumber);
+            if (caretHeightPt !== null) {
+                handledRevisionRef.current = previewRevision;
+                programmaticScrollRef.current = true;
+                scrollPreviewToCaret(scrollRoot, caret, caretHeightPt);
+                requestAnimationFrame(() => {
+                    programmaticScrollRef.current = false;
+                });
+            }
             return;
         }
 
@@ -186,12 +202,18 @@ export function usePreviewSync({
         if (!scrollRoot || !caret) {
             return;
         }
+        const caretHeightPt = pageHeightPtFor(caret.pageNumber);
+        if (caretHeightPt === null) {
+            return;
+        }
         programmaticScrollRef.current = true;
-        scrollPreviewToCaret(scrollRoot, caret, { forceCenter: true });
+        scrollPreviewToCaret(scrollRoot, caret, caretHeightPt, {
+            forceCenter: true,
+        });
         requestAnimationFrame(() => {
             programmaticScrollRef.current = false;
         });
-    }, [zoom, caret, scrollRef]);
+    }, [zoom, caret, scrollRef, previewPages]);
 
     const handlePreviewClick = useCallback(
         (event: MouseEvent<HTMLElement>) => {
@@ -206,9 +228,21 @@ export function usePreviewSync({
             const pageContent = pageElement?.querySelector(
                 "[data-preview-page-content]",
             );
+            const pageEntry = previewPages.find(
+                (entry) => entry.page_number === pageNumber,
+            );
             const point =
-                pageContent instanceof HTMLElement
-                    ? previewPointFromPageMouseEvent(event.nativeEvent, pageContent)
+                pageContent instanceof HTMLElement &&
+                pageEntry?.width_pt &&
+                pageEntry?.height_pt
+                    ? previewPointFromPageMouseEvent(
+                          event.nativeEvent,
+                          pageContent,
+                          {
+                              widthPt: pageEntry.width_pt,
+                              heightPt: pageEntry.height_pt,
+                          },
+                      )
                     : null;
 
             if (!pageElement || !Number.isFinite(pageNumber) || !point) {
@@ -265,7 +299,7 @@ export function usePreviewSync({
                     logPreviewSyncError("jumpFromClick", error);
                 });
         },
-        [dispatchAction, previewRevision],
+        [dispatchAction, previewRevision, previewPages],
     );
 
     return { handlePreviewClick };

@@ -51,7 +51,6 @@ function displaySizeForContainerFit(
 export type PreviewPageMetrics = {
     widthPt: number;
     heightPt: number;
-    pixelPerPt: number;
 };
 
 export function previewPageDisplaySizeStyle(
@@ -71,40 +70,23 @@ export function previewPageDisplaySizeStyle(
     };
 }
 
-export function readPreviewPageMetrics(
-    element: HTMLElement | null,
-): PreviewPageMetrics | null {
-    if (!element) {
-        return null;
-    }
-
-    const widthPt = Number(element.dataset.pageWidthPt);
-    const heightPt = Number(element.dataset.pageHeightPt);
-    const pixelPerPt = Number(element.dataset.pixelPerPt);
-    // pixelPerPt is written by CanvasPreview alongside width/height as a
-    // sanity gate confirming this element is a rendered preview surface.
-    // No consumer uses the value for computation (click→pt mapping recomputes
-    // from getBoundingClientRect); it is only checked here for presence.
-    // The full dataset bus is retired in the Wave 3 metrics-store unification.
-    if (
-        !Number.isFinite(widthPt) ||
-        !Number.isFinite(heightPt) ||
-        !Number.isFinite(pixelPerPt) ||
-        widthPt <= 0 ||
-        heightPt <= 0 ||
-        pixelPerPt <= 0
-    ) {
-        return null;
-    }
-    return { widthPt, heightPt, pixelPerPt };
-}
-
+/**
+ * Map a pointer position on a rendered page surface into page-space points.
+ * The caller supplies the page's Typst size (it already tracks it in React
+ * state); only the live pixel box is read from the DOM, since that reflects
+ * the element's current on-screen layout.
+ */
 export function previewPointFromPageMouseEvent(
     event: MouseEvent,
     pageContent: HTMLElement,
+    metrics: PreviewPageMetrics,
 ): { xPt: number; yPt: number } | null {
-    const metrics = readPreviewPageMetrics(pageContent);
-    if (!metrics) {
+    if (
+        !Number.isFinite(metrics.widthPt) ||
+        !Number.isFinite(metrics.heightPt) ||
+        metrics.widthPt <= 0 ||
+        metrics.heightPt <= 0
+    ) {
         return null;
     }
 

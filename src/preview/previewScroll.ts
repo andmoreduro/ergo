@@ -27,13 +27,17 @@ export function closestChangedPageNumber(
 
 /**
  * Scroll the preview so the forward-sync caret is in view. The page's CSS-per-pt
- * scale is read from the rendered page box (so zoom/fit need not be threaded in).
+ * scale is read from the rendered page box (so zoom/fit need not be threaded in);
+ * the page's Typst height is passed in explicitly by the caller, which already
+ * tracks it in React state.
+ *
  * Unless `forceCenter` is set, a caret already comfortably inside the viewport is
  * left undisturbed, so typing within the visible area never jitters the view.
  */
 export function scrollPreviewToCaret(
     scrollRoot: HTMLElement,
     caret: { pageNumber: number; topYPt: number; heightPt: number },
+    pageHeightPt: number,
     options?: { forceCenter?: boolean; behavior?: ScrollBehavior },
 ): boolean {
     const page = scrollRoot.querySelector<HTMLElement>(
@@ -45,10 +49,7 @@ export function scrollPreviewToCaret(
     const surface =
         page.querySelector<HTMLElement>('[data-preview-page-surface="true"]') ??
         page;
-    const content = page.querySelector<HTMLElement>(
-        "[data-preview-page-content]",
-    );
-    const heightPt = Number(content?.dataset.pageHeightPt);
+    const heightPt = pageHeightPt;
     const pageRect = surface.getBoundingClientRect();
     if (!Number.isFinite(heightPt) || heightPt <= 0 || pageRect.height <= 0) {
         return false;

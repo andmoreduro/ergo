@@ -384,21 +384,6 @@ export const CanvasPreview = ({
 
     useEffect(() => clearTimers, [clearTimers]);
 
-    // Keep the click-sync metrics in sync (ratio mapping reads these to convert a
-    // pointer position into page points). Only when this canvas is a preview page.
-    useEffect(() => {
-        if (!previewContentMarker) {
-            return;
-        }
-        const el = surfaceRef.current;
-        if (!el) {
-            return;
-        }
-        el.dataset.pageWidthPt = String(pageWidthPt);
-        el.dataset.pageHeightPt = String(pageHeightPt);
-        el.dataset.pixelPerPt = String(basePixelPerPt);
-    }, [previewContentMarker, pageWidthPt, pageHeightPt, basePixelPerPt]);
-
     const surfaceStyle: CSSProperties = {
         width: `${cssWidth}px`,
         height: `${cssHeight}px`,
