@@ -21,6 +21,7 @@ import type { PreviewZoomMode } from "../../../preview/previewZoom";
 import { Toast } from "../../molecules/Toast/Toast";
 import { m } from "../../../paraglide/messages.js";
 import { notifyUnavailableProjectFonts } from "../../../settings/projectFontNotifications";
+import { registerToastHandler } from "../../../editor/notifyBridge";
 import styles from "./Workspace.module.css";
 
 export interface WorkspaceProps {
@@ -145,20 +146,17 @@ export const Workspace = ({
     }, [sessionId]);
 
     useEffect(() => {
-        const onToast = (event: Event) => {
-            const detail = (event as CustomEvent<{ message?: string }>).detail;
-            if (!detail?.message) {
-                return;
-            }
-
+        // Register the toast handler so non-React modules (font notifications,
+        // diagram rendering) can trigger toasts via the notifyBridge instead of
+        // the legacy ergo:toast CustomEvent. The workspace::Notify action also
+        // routes through this bridge.
+        registerToastHandler((message) => {
             // Not a compile-error toast, so a later successful compile must not
             // clear it out from under the user.
             compileErrorToastActiveRef.current = false;
-            showToast(detail.message);
-        };
-
-        window.addEventListener("ergo:toast", onToast);
-        return () => window.removeEventListener("ergo:toast", onToast);
+            showToast(message);
+        });
+        return () => registerToastHandler(null);
     }, [showToast]);
 
     return (
