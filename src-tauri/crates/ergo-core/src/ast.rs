@@ -195,8 +195,6 @@ pub enum ActionId {
     WorkspaceExportPdf,
     #[serde(rename = "workspace::ExportPng")]
     WorkspaceExportPng,
-    #[serde(rename = "workspace::Notify")]
-    WorkspaceNotify,
     #[serde(rename = "edit::Undo")]
     EditUndo,
     #[serde(rename = "edit::Redo")]
@@ -336,7 +334,6 @@ impl ActionId {
             ActionId::WorkspaceExportSvg => "workspace::ExportSvg",
             ActionId::WorkspaceExportPdf => "workspace::ExportPdf",
             ActionId::WorkspaceExportPng => "workspace::ExportPng",
-            ActionId::WorkspaceNotify => "workspace::Notify",
             ActionId::EditUndo => "edit::Undo",
             ActionId::EditRedo => "edit::Redo",
             ActionId::EditorDeleteElement => "editor::DeleteElement",
@@ -423,7 +420,6 @@ impl FromStr for ActionId {
             "workspace::ExportSvg" => Ok(ActionId::WorkspaceExportSvg),
             "workspace::ExportPdf" => Ok(ActionId::WorkspaceExportPdf),
             "workspace::ExportPng" => Ok(ActionId::WorkspaceExportPng),
-            "workspace::Notify" => Ok(ActionId::WorkspaceNotify),
             "edit::Undo" => Ok(ActionId::EditUndo),
             "edit::Redo" => Ok(ActionId::EditRedo),
             "editor::DeleteElement" => Ok(ActionId::EditorDeleteElement),

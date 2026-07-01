@@ -35,13 +35,6 @@ export interface ActionPayloadMap {
     "editor::InsertHeading": { level: number };
     "editor::FocusField": FocusFieldPayload;
     "view::SetZoomPercent": { percent: number };
-    "workspace::Notify": NotifyPayload;
-}
-
-/** Toast notification payload for `workspace::Notify`. */
-export interface NotifyPayload {
-    message: string;
-    variant?: "default" | "error";
 }
 
 /** Resolve the payload type for an action id, or `unknown` if unmapped. */

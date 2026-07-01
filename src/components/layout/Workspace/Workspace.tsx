@@ -147,9 +147,9 @@ export const Workspace = ({
 
     useEffect(() => {
         // Register the toast handler so non-React modules (font notifications,
-        // diagram rendering) can trigger toasts via the notifyBridge instead of
-        // the legacy ergo:toast CustomEvent. The workspace::Notify action also
-        // routes through this bridge.
+        // diagram rendering) can trigger toasts via the notifyBridge — a
+        // system→UI feedback channel, separate from the user-intent action
+        // runtime. Replaces the legacy ergo:toast CustomEvent.
         registerToastHandler((message) => {
             // Not a compile-error toast, so a later successful compile must not
             // clear it out from under the user.
