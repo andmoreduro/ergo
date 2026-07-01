@@ -6,10 +6,8 @@ import {
     getActiveBodyView,
     getActiveTableCellEditor,
     getBodyAstDispatch,
-    peekBodyTabModifiers,
 } from "./activeView";
 import { selectCurrentElement } from "./bodySelection";
-import { runBodyTab } from "./bodyTabCommand";
 import { enterLockedWholeBlock, runBodyNavigate } from "./bodyTableCommands";
 import { handleTableCellBoundaryArrow } from "./table/tableCellBoundary";
 import {
@@ -143,18 +141,13 @@ export const bodyEditorActionHandlers = (): ActionHandlerMap => ({
         }
         return enterLockedWholeBlock(view);
     },
-    "editor::Tab": () => {
-        const view = getActiveBodyView();
-        if (!view) {
-            return false;
-        }
-        const tab = peekBodyTabModifiers();
-        return runBodyTab(view, {
-            shiftKey: tab.shiftKey,
-            ctrlKey: tab.ctrlKey,
-            metaKey: tab.metaKey,
-        });
-    },
+    // editor::Tab is NOT registered here. Body Tab is handled synchronously in
+    // the runtime capture phase (runtime.tsx) via runBodyTab, before the async
+    // action resolver runs. Registering it here would be dead code — if the
+    // capture phase's runBodyTab returned false, re-running it here returns
+    // false too. Field-navigation Tab (Ctrl+Shift+Tab / Ctrl+Tab) is handled
+    // in the editor context (Editor.tsx), which fires when the body context
+    // is not focused.
     "editor::BodyNavigateLeft": withBodyNavigate("left"),
     "editor::BodyNavigateRight": withBodyNavigate("right"),
     "editor::BodyNavigateUp": withBodyNavigate("up"),
