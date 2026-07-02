@@ -16,7 +16,7 @@ import {
     clearPreviewPointerAnchor,
     updatePreviewPointerAnchor,
 } from "../../../preview/previewPointerAnchor";
-import { type PagePtMetrics } from "../../../preview/previewPageMetrics";
+import { usePreviewPageMetrics } from "../../../hooks/usePreviewPageMetrics";
 import { nowMs, type PagePaintInfo } from "../../../hooks/previewTelemetry";
 import { isDebugMenuEnabled } from "../../../config/debug";
 import { useDocumentFocusSelector } from "../../../state/DocumentContext";
@@ -151,10 +151,6 @@ export const Preview = ({
     const horizontalScrollRef = useRef<HTMLDivElement>(null);
     const previewColumnRef = useRef<HTMLElement>(null);
     const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
-    const [renderedPageMetrics, setRenderedPageMetrics] = useState<
-        Record<number, PagePtMetrics>
-    >({});
-    const pageMetricsCacheRef = useRef<Record<number, PagePtMetrics>>({});
     const focusElementId = useDocumentFocusSelector((focus) => focus.elementId);
     const activeSource = useMemo(
         () => sourceMap.find((entry) => entry.elementId === focusElementId),
@@ -174,70 +170,11 @@ export const Preview = ({
         multiCaret,
     });
 
-    const handlePageMetrics = useCallback(
-        (pageNumber: number, metrics: PagePtMetrics) =>
-            setRenderedPageMetrics((current) => ({
-                ...current,
-                [pageNumber]: metrics,
-            })),
-        [],
-    );
-    // Stable per-page initial metrics so memoized page components keep the same
-    // prop identity between keystrokes (reuse cached objects when values match).
-    const initialMetricsByPage = useMemo(() => {
-        const cache = pageMetricsCacheRef.current;
-        const map: Record<number, PagePtMetrics | null> = {};
-        for (const page of previewPages) {
-            if (page.width_pt && page.height_pt) {
-                const existing = cache[page.page_number];
-                if (
-                    existing &&
-                    existing.widthPt === page.width_pt &&
-                    existing.heightPt === page.height_pt
-                ) {
-                    map[page.page_number] = existing;
-                } else {
-                    const metrics = {
-                        widthPt: page.width_pt,
-                        heightPt: page.height_pt,
-                    };
-                    cache[page.page_number] = metrics;
-                    map[page.page_number] = metrics;
-                }
-            } else {
-                map[page.page_number] =
-                    renderedPageMetrics[page.page_number] ?? null;
-            }
-        }
-        return map;
-    }, [previewPages, renderedPageMetrics]);
-
-    // Drop metrics for page numbers no longer in the compile result (e.g. after
-    // opening a shorter project). Also clear caches while revision is unset.
-    useEffect(() => {
-        if (previewRevision === null) {
-            setRenderedPageMetrics({});
-            return;
-        }
-
-        const activePageNumbers = new Set(
-            previewPages.map((page) => page.page_number),
-        );
-
-        setRenderedPageMetrics((current) => {
-            let changed = false;
-            const next: Record<number, PagePtMetrics> = {};
-            for (const [key, metrics] of Object.entries(current)) {
-                const pageNumber = Number(key);
-                if (activePageNumbers.has(pageNumber)) {
-                    next[pageNumber] = metrics;
-                } else {
-                    changed = true;
-                }
-            }
-            return changed ? next : current;
-        });
-    }, [previewRevision, previewPages]);
+    // Per-page Typst size: compile result → identity-stable cache → echo-back
+    // accumulator, unified in one hook. Exposes both the per-page record (for
+    // page components) and the aligned array (for zoom-fit math).
+    const { initialMetricsByPage, previewPageSizes, handlePageMetrics } =
+        usePreviewPageMetrics(previewPages, previewRevision);
 
     useLayoutEffect(() => {
         const element = previewScrollRef.current;
@@ -258,16 +195,6 @@ export const Preview = ({
         observer.observe(element);
         return () => observer.disconnect();
     }, [previewScrollRef]);
-
-    const previewPageSizes = useMemo<PreviewPageSize[]>(() => {
-        return previewPages.map((page) => {
-            const pageMetrics = renderedPageMetrics[page.page_number];
-            return {
-                widthPt: page.width_pt ?? pageMetrics?.widthPt ?? 0,
-                heightPt: page.height_pt ?? pageMetrics?.heightPt ?? 0,
-            };
-        });
-    }, [previewPages, renderedPageMetrics]);
 
     const fallbackPageSize = useMemo<PreviewPageSize>(
         () => ({ widthPt: 612, heightPt: 792 }),
