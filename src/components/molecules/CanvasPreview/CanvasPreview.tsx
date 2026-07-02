@@ -11,6 +11,7 @@ import {
     nowMs,
     type PagePaintInfo,
 } from "../../../hooks/previewTelemetry";
+import { layoutBandCanvas } from "../../../preview/canvasBandLayout";
 import styles from "./CanvasPreview.module.css";
 
 export interface CanvasPreviewProps {
@@ -151,14 +152,7 @@ export const CanvasPreview = ({
         if (!canvas || !band) {
             return;
         }
-        const { cssWidth: w, cssHeight: h, pageWidthPt: pw, pageHeightPt: ph } =
-            geomRef.current;
-        const perPtX = pw > 0 ? w / pw : 0;
-        const perPtY = ph > 0 ? h / ph : 0;
-        canvas.style.left = `${band.xMinPt * perPtX}px`;
-        canvas.style.top = `${band.yMinPt * perPtY}px`;
-        canvas.style.width = `${(band.xMaxPt - band.xMinPt) * perPtX}px`;
-        canvas.style.height = `${(band.yMaxPt - band.yMinPt) * perPtY}px`;
+        layoutBandCanvas(canvas, band, geomRef.current);
     }, []);
 
     const paintRegion = useCallback(
@@ -190,16 +184,9 @@ export const CanvasPreview = ({
                         return;
                     }
                     const workerRenderMs = elapsedMs(workerStart, nowMs());
-                    const { cssWidth: w, pageWidthPt: pw, pageHeightPt: ph } =
-                        geomAtRequest;
-                    const perPtX = pw > 0 ? w / pw : 0;
-                    const perPtY = ph > 0 ? geomAtRequest.cssHeight / ph : 0;
 
                     const writeStart = nowMs();
-                    canvas.style.left = `${payload.xMinPt * perPtX}px`;
-                    canvas.style.top = `${payload.yMinPt * perPtY}px`;
-                    canvas.style.width = `${(payload.xMaxPt - payload.xMinPt) * perPtX}px`;
-                    canvas.style.height = `${(payload.yMaxPt - payload.yMinPt) * perPtY}px`;
+                    layoutBandCanvas(canvas, payload, geomAtRequest);
                     // Resize clears the backing store; fill white then blit so a
                     // transparent clear never shows the surface (or stale GPU tiles).
                     canvas.width = payload.bandWidth;
