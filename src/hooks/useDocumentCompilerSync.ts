@@ -18,7 +18,7 @@ import {
     documentAstForCompile,
     documentEventsForCompile,
 } from "../settings/documentAstForCompile";
-import { CompilerClient } from "../workers/compilerClient";
+import { CompilerClient, loadDocumentFontsLazy } from "../workers/compilerClient";
 import { projectFilesToVfsEntries } from "../workers/compilerProtocol";
 import type { QueuedDocumentEvent } from "../state/DocumentContext";
 import {
@@ -280,7 +280,13 @@ export function useDocumentCompilerSync({
                 // pages paint via `renderSvgPage` in PreviewPageSvg; inlining SVG
                 // during compile (after forward scroll expands visible indices) was
                 // adding raster work to every keystroke.
-                const compileOutput = await CompilerClient.compile(currentAst, []);
+                //
+                // Font loading is keyed + coalesced (no-op once the font set is
+                // loaded for this session), but must precede compile so a mid-
+                // session font change actually takes effect. It's explicit here
+                // rather than hidden inside compile().
+                await loadDocumentFontsLazy(currentAst);
+                const compileOutput = await CompilerClient.compile([]);
                 const compileFinished = nowMs();
                 setPendingPreviewTelemetry({
                     revision: compileOutput.result.source_revision,
