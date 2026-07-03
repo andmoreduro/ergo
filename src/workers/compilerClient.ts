@@ -53,14 +53,7 @@ export const CompilerClient = {
         return reply.status;
     },
 
-    async compile(
-        ast: DocumentAST,
-        svgPageIndices: number[] = [],
-    ): Promise<CompilePreviewResponse> {
-        // Keyed + coalesced: a no-op when the font set is unchanged, but a
-        // mid-session font change loads the new font before this render so the
-        // change actually takes effect (bootstrap alone won't, it's per-session).
-        await loadDocumentFontsLazy(ast);
+    async compile(svgPageIndices: number[] = []): Promise<CompilePreviewResponse> {
         const reply = await callWorker({
             type: "compile",
             payload: { svgPageIndices },
@@ -230,17 +223,12 @@ export const CompilerClient = {
         return reply.result;
     },
 
-    async exportPdf(ast: DocumentAST): Promise<Uint8Array> {
-        await loadDocumentFontsLazy(ast);
+    async exportPdf(): Promise<Uint8Array> {
         const reply = await callWorker({ type: "export_pdf" });
         return reply.bytes;
     },
 
-    async exportPngPages(
-        ast: DocumentAST,
-        pixelPerPt: number,
-    ): Promise<Uint8Array[]> {
-        await loadDocumentFontsLazy(ast);
+    async exportPngPages(pixelPerPt: number): Promise<Uint8Array[]> {
         const reply = await callWorker({
             type: "export_png_pages",
             payload: { pixelPerPt },
@@ -248,8 +236,7 @@ export const CompilerClient = {
         return reply.pages;
     },
 
-    async exportSvgPages(ast: DocumentAST): Promise<string[]> {
-        await loadDocumentFontsLazy(ast);
+    async exportSvgPages(): Promise<string[]> {
         const reply = await callWorker({ type: "export_svg_pages" });
         return reply.pages;
     },

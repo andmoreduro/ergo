@@ -58,7 +58,11 @@ import type { ExportFormat } from "./bindings/ExportFormat";
 import type { RichText } from "./bindings/RichText";
 import { exportPdfFileNameFromProjectPath } from "./project/paths";
 import { pageExportFileName, saveExportDialog } from "./platform/export";
-import { CompilerClient, warmupCompiler } from "./workers/compilerClient";
+import {
+    CompilerClient,
+    loadDocumentFontsLazy,
+    warmupCompiler,
+} from "./workers/compilerClient";
 import {
     editorCommands,
     type ElementType,
@@ -690,6 +694,7 @@ const AppShellContent = () => {
         async (format: ExportFormat) => {
             try {
                 const state = getState();
+                await loadDocumentFontsLazy(state);
                 if (format === "pdf") {
                     const path = await saveExportDialog(
                         "pdf",
@@ -699,7 +704,7 @@ const AppShellContent = () => {
                     if (!path) {
                         return;
                     }
-                    const bytes = await CompilerClient.exportPdf(state);
+                    const bytes = await CompilerClient.exportPdf();
                     await TauriApi.writeBytesToPath(path, bytes);
                     return;
                 }
@@ -707,8 +712,8 @@ const AppShellContent = () => {
                 const pixelPerPt = 2;
                 const pages =
                     format === "png"
-                        ? await CompilerClient.exportPngPages(state, pixelPerPt)
-                        : (await CompilerClient.exportSvgPages(state)).map((svg) =>
+                        ? await CompilerClient.exportPngPages(pixelPerPt)
+                        : (await CompilerClient.exportSvgPages()).map((svg) =>
                               new TextEncoder().encode(svg),
                           );
 
