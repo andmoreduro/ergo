@@ -2,10 +2,12 @@ import type { DocumentAST } from "../bindings/DocumentAST";
 import { TauriApi } from "../api/tauri";
 import wasmUrl from "../wasm-compiler/ergo_engine_wasm_bg.wasm?url";
 import type {
+    RequestReplyMap,
     WorkerMessage,
     WorkerReply,
     WorkerRequest,
 } from "./compilerProtocol";
+import { REQUEST_REPLY_TYPES } from "./compilerProtocol";
 
 let globalWorkerPromise: Promise<Worker> | null = null;
 let fontsLoadPromise: Promise<void> | null = null;
@@ -55,8 +57,13 @@ function forwardWorkerLog(data: Extract<WorkerReply, { type: "log" }>) {
 function attachWorkerDispatcher(worker: Worker) {
     worker.onmessage = (event: MessageEvent<WorkerReply>) => {
         const data = event.data;
-        if (data.type === "log") {
-            forwardWorkerLog(data as Extract<WorkerReply, { type: "log" }>);
+        // Notifications (unsolicited, no id): route immediately. Only `log`
+        // today; an unsolicited `error` during init is handled by the init
+        // listener before the dispatcher takes over.
+        if (data.id === undefined) {
+            if (data.type === "log") {
+                forwardWorkerLog(data as Extract<WorkerReply, { type: "log" }>);
+            }
             return;
         }
         dispatchReply(data);
@@ -135,7 +142,6 @@ export function loadDocumentFontsLazy(ast: DocumentAST): Promise<void> {
                 await callWorkerOn(
                     worker,
                     { type: "load_fonts", payload: fontBuffers },
-                    "load_fonts_done",
                 );
             }
             loadedFontsKey = key;
@@ -167,19 +173,30 @@ export function warmupCompiler(): void {
     void getWorker();
 }
 
-export async function callWorkerOn<T extends WorkerReply["type"]>(
+/**
+ * Send a request to the worker and await its reply. The expected reply type is
+ * derived from the request type via `RequestReplyMap`, so callers can't pass a
+ * mismatched literal — the type system knows `{ type: "compile" }` yields a
+ * `compile_done` reply.
+ */
+export async function callWorkerOn<K extends WorkerRequest["type"]>(
     worker: Worker,
-    request: WorkerRequest,
-    expected: T,
+    request: Extract<WorkerRequest, { type: K }>,
     transfer?: Transferable[],
-): Promise<Extract<WorkerReply, { type: T }>> {
+): Promise<Extract<WorkerReply, { type: RequestReplyMap[K] }>> {
+    const expected = replyTypeFor(request.type);
     const id = nextMessageId++;
 
     return new Promise((resolve, reject) => {
         pendingMessages.set(id, {
             resolve: (reply) => {
                 if (reply.type === expected) {
-                    resolve(reply as Extract<WorkerReply, { type: T }>);
+                    resolve(
+                        reply as Extract<
+                            WorkerReply,
+                            { type: RequestReplyMap[K] }
+                        >,
+                    );
                 } else if (reply.type === "error") {
                     reject(new Error(reply.error));
                 } else {
@@ -194,11 +211,17 @@ export async function callWorkerOn<T extends WorkerReply["type"]>(
     });
 }
 
-export async function callWorker<T extends WorkerReply["type"]>(
-    request: WorkerRequest,
-    expected: T,
+export async function callWorker<K extends WorkerRequest["type"]>(
+    request: Extract<WorkerRequest, { type: K }>,
     transfer?: Transferable[],
-): Promise<Extract<WorkerReply, { type: T }>> {
+): Promise<Extract<WorkerReply, { type: RequestReplyMap[K] }>> {
     const worker = await getWorker();
-    return callWorkerOn(worker, request, expected, transfer);
+    return callWorkerOn(worker, request, transfer);
+}
+
+/** Resolve the reply type a request expects, from the single mapping source. */
+function replyTypeFor<K extends WorkerRequest["type"]>(
+    requestType: K,
+): RequestReplyMap[K] {
+    return REQUEST_REPLY_TYPES[requestType] as RequestReplyMap[K];
 }
