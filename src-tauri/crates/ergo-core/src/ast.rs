@@ -732,6 +732,24 @@ pub enum DocumentElement {
     Custom(CustomElement),
 }
 
+impl DocumentElement {
+    /// The stable id of this element, regardless of variant.
+    pub fn id(&self) -> &str {
+        match self {
+            DocumentElement::Heading(e) => &e.id,
+            DocumentElement::Paragraph(e) => &e.id,
+            DocumentElement::Quote(e) => &e.id,
+            DocumentElement::List(e) => &e.id,
+            DocumentElement::Enumeration(e) => &e.id,
+            DocumentElement::Table(e) => &e.id,
+            DocumentElement::Equation(e) => &e.id,
+            DocumentElement::Figure(e) => &e.id,
+            DocumentElement::Diagram(e) => &e.id,
+            DocumentElement::Custom(e) => &e.id,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct CustomElement {

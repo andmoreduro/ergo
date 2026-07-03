@@ -531,7 +531,7 @@ fn element_mut<'a>(
             DocumentSection::Content(content) => content
                 .elements
                 .iter_mut()
-                .find(|element| element_id_of(element) == element_id),
+                .find(|element| element.id() == element_id),
         })
         .ok_or_else(|| format!("Element {element_id} was not found"))
 }
@@ -578,7 +578,7 @@ fn remove_element(ast: &mut DocumentAST, element_id: &str) -> Result<(), String>
                 if let Some(index) = content
                     .elements
                     .iter()
-                    .position(|element| element_id_of(element) == element_id)
+                    .position(|element| element.id() == element_id)
                 {
                     content.elements.remove(index);
                     if let Some(asset_id) = generated_asset_id {
@@ -779,19 +779,4 @@ pub(crate) fn rich_text_from_string(text: String) -> Vec<RichText> {
         equation_syntax: EquationSyntax::Typst,
         ..Default::default()
     }]
-}
-
-fn element_id_of(element: &DocumentElement) -> &str {
-    match element {
-        DocumentElement::Heading(heading) => &heading.id,
-        DocumentElement::Paragraph(paragraph) => &paragraph.id,
-        DocumentElement::Quote(quote) => &quote.id,
-        DocumentElement::List(list) => &list.id,
-        DocumentElement::Enumeration(enumeration) => &enumeration.id,
-        DocumentElement::Table(table) => &table.id,
-        DocumentElement::Equation(equation) => &equation.id,
-        DocumentElement::Figure(figure) => &figure.id,
-        DocumentElement::Diagram(diagram) => &diagram.id,
-        DocumentElement::Custom(custom) => &custom.id,
-    }
 }

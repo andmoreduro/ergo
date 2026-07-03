@@ -17,6 +17,7 @@ use crate::bundled_templates::{
     has_bundled_template_spec, sync_bundled_template_package, TEMPLATE_SPEC_PATH,
 };
 use crate::template_spec::{load_template_spec_for_project, TemplateSpec};
+use crate::typst_source::path_id_for_id;
 use crate::vfs::VirtualFileSystem;
 
 pub(crate) const MAIN_PATH: &str = "main.typ";
@@ -472,30 +473,6 @@ fn section_elements(section: &DocumentSection) -> &[DocumentElement] {
 
 fn element_vfs_path(element_id: &str) -> String {
     format!("elements/{}.typ", path_id_for_id(element_id))
-}
-
-fn path_id_for_id(id: &str) -> String {
-    let mut normalized = String::new();
-    let mut previous_was_dash = false;
-    for character in id.to_lowercase().chars() {
-        let next = if character.is_ascii_alphanumeric() || character == '_' {
-            Some(character)
-        } else {
-            Some('-')
-        };
-        if let Some(character) = next {
-            if character == '-' {
-                if !previous_was_dash {
-                    normalized.push(character);
-                }
-                previous_was_dash = true;
-            } else {
-                normalized.push(character);
-                previous_was_dash = false;
-            }
-        }
-    }
-    normalized.trim_matches('-').to_string()
 }
 
 fn write_source_if_changed(vfs: &VirtualFileSystem, path: &str, source: &str) -> u64 {
