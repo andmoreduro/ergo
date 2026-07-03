@@ -36,20 +36,20 @@ export type CompilePreviewResponse = {
 
 export const CompilerClient = {
     async syncSnapshot(ast: DocumentAST): Promise<DocumentSessionStatus> {
-        const reply = await callWorker(
-            { type: "sync_snapshot", payload: ast },
-            "sync_done",
-        );
+        const reply = await callWorker({
+            type: "sync_snapshot",
+            payload: ast,
+        });
         return reply.status;
     },
 
     async syncEvents(
         events: DocumentEvent[],
     ): Promise<DocumentSessionStatus> {
-        const reply = await callWorker(
-            { type: "sync_events", payload: events },
-            "sync_done",
-        );
+        const reply = await callWorker({
+            type: "sync_events",
+            payload: events,
+        });
         return reply.status;
     },
 
@@ -61,10 +61,10 @@ export const CompilerClient = {
         // mid-session font change loads the new font before this render so the
         // change actually takes effect (bootstrap alone won't, it's per-session).
         await loadDocumentFontsLazy(ast);
-        const reply = await callWorker(
-            { type: "compile", payload: { svgPageIndices } },
-            "compile_done",
-        );
+        const reply = await callWorker({
+            type: "compile",
+            payload: { svgPageIndices },
+        });
         return {
             result: reply.result,
             compileMs: reply.compileMs,
@@ -76,22 +76,21 @@ export const CompilerClient = {
     ): Promise<BootstrapPreviewResult> {
         resetDocumentFontsCache();
         const worker = await getWorker();
-        await callWorkerOn(worker, { type: "reset_fonts" }, "reset_fonts_done");
+        await callWorkerOn(worker, { type: "reset_fonts" });
         try {
             await loadDocumentFontsLazy(payload.ast);
         } catch {
             // Preview with bundled Typst fonts only.
         }
-        const reply = await callWorkerOn(
-            worker,
-            { type: "bootstrap", payload },
-            "bootstrap_done",
-        );
+        const reply = await callWorkerOn(worker, {
+            type: "bootstrap",
+            payload,
+        });
         return reply.payload;
     },
 
     async writeFiles(files: VfsFileEntry[]): Promise<void> {
-        await callWorker({ type: "write_files", payload: files }, "write_files_done");
+        await callWorker({ type: "write_files", payload: files });
     },
 
     async renderPage(
@@ -99,13 +98,10 @@ export const CompilerClient = {
         pixelPerPt: number,
         requestId: number,
     ): Promise<RenderPagePayload> {
-        const reply = await callWorker(
-            {
-                type: "render_page",
-                payload: { pageIndex, pixelPerPt, requestId },
-            },
-            "render_done",
-        );
+        const reply = await callWorker({
+            type: "render_page",
+            payload: { pageIndex, pixelPerPt, requestId },
+        });
         return reply.payload;
     },
 
@@ -113,13 +109,10 @@ export const CompilerClient = {
         pageIndex: number,
         requestId: number,
     ): Promise<RenderSvgPagePayload> {
-        const reply = await callWorker(
-            {
-                type: "render_svg_page",
-                payload: { pageIndex, requestId },
-            },
-            "render_svg_done",
-        );
+        const reply = await callWorker({
+            type: "render_svg_page",
+            payload: { pageIndex, requestId },
+        });
         return reply.payload;
     },
 
@@ -128,13 +121,10 @@ export const CompilerClient = {
         pixelPerPt: number,
         requestId: number,
     ): Promise<RenderPngPagePayload> {
-        const reply = await callWorker(
-            {
-                type: "render_png_page",
-                payload: { pageIndex, pixelPerPt, requestId },
-            },
-            "render_png_done",
-        );
+        const reply = await callWorker({
+            type: "render_png_page",
+            payload: { pageIndex, pixelPerPt, requestId },
+        });
         return reply.payload;
     },
 
@@ -147,21 +137,18 @@ export const CompilerClient = {
         yMaxPt: number,
         requestId: number,
     ): Promise<RenderRegionPayload> {
-        const reply = await callWorker(
-            {
-                type: "render_region",
-                payload: {
-                    pageIndex,
-                    pixelPerPt,
-                    xMinPt,
-                    xMaxPt,
-                    yMinPt,
-                    yMaxPt,
-                    requestId,
-                },
+        const reply = await callWorker({
+            type: "render_region",
+            payload: {
+                pageIndex,
+                pixelPerPt,
+                xMinPt,
+                xMaxPt,
+                yMinPt,
+                yMaxPt,
+                requestId,
             },
-            "render_region_done",
-        );
+        });
         return reply.payload;
     },
 
@@ -174,21 +161,18 @@ export const CompilerClient = {
         yMaxPt: number,
         requestId: number,
     ): Promise<RenderRegionPayload> {
-        const reply = await callWorker(
-            {
-                type: "render_resource_region",
-                payload: {
-                    pageNumber,
-                    targetWidthPx,
-                    xMinPt,
-                    xMaxPt,
-                    yMinPt,
-                    yMaxPt,
-                    requestId,
-                },
+        const reply = await callWorker({
+            type: "render_resource_region",
+            payload: {
+                pageNumber,
+                targetWidthPx,
+                xMinPt,
+                xMaxPt,
+                yMinPt,
+                yMaxPt,
+                requestId,
             },
-            "render_resource_region_done",
-        );
+        });
         return reply.payload;
     },
 
@@ -196,22 +180,19 @@ export const CompilerClient = {
         pageNumber: number,
         requestId: number,
     ): Promise<RenderSvgPagePayload> {
-        const reply = await callWorker(
-            {
-                type: "render_resource_svg_page",
-                payload: { pageNumber, requestId },
-            },
-            "render_resource_svg_done",
-        );
+        const reply = await callWorker({
+            type: "render_resource_svg_page",
+            payload: { pageNumber, requestId },
+        });
         return reply.payload;
     },
 
     async writeFile(path: string, bytes: Uint8Array): Promise<void> {
-        await callWorker({ type: "write_file", payload: { path, bytes } }, "write_file_done");
+        await callWorker({ type: "write_file", payload: { path, bytes } });
     },
 
     async writeSource(path: string, text: string): Promise<void> {
-        await callWorker({ type: "write_source", payload: { path, text } }, "write_source_done");
+        await callWorker({ type: "write_source", payload: { path, text } });
     },
 
     async applyPatch(
@@ -220,10 +201,10 @@ export const CompilerClient = {
         end: number,
         text: string,
     ): Promise<void> {
-        await callWorker(
-            { type: "apply_patch", payload: { path, start, end, text } },
-            "apply_patch_done",
-        );
+        await callWorker({
+            type: "apply_patch",
+            payload: { path, start, end, text },
+        });
     },
 
     async jumpFromClick(
@@ -232,29 +213,26 @@ export const CompilerClient = {
         yPt: number,
         sourceRevision: number,
     ): Promise<PreviewJumpResult> {
-        const reply = await callWorker(
-            {
-                type: "jump_from_click",
-                payload: { pageNumber, xPt, yPt, sourceRevision },
-            },
-            "jump_done",
-        );
+        const reply = await callWorker({
+            type: "jump_from_click",
+            payload: { pageNumber, xPt, yPt, sourceRevision },
+        });
         return reply.result;
     },
 
     async positionsForFocus(
         target: PreviewFocusTarget,
     ): Promise<PreviewElementPositionsResult> {
-        const reply = await callWorker(
-            { type: "positions_for_focus", payload: { target } },
-            "positions_done",
-        );
+        const reply = await callWorker({
+            type: "positions_for_focus",
+            payload: { target },
+        });
         return reply.result;
     },
 
     async exportPdf(ast: DocumentAST): Promise<Uint8Array> {
         await loadDocumentFontsLazy(ast);
-        const reply = await callWorker({ type: "export_pdf" }, "export_pdf_done");
+        const reply = await callWorker({ type: "export_pdf" });
         return reply.bytes;
     },
 
@@ -263,19 +241,16 @@ export const CompilerClient = {
         pixelPerPt: number,
     ): Promise<Uint8Array[]> {
         await loadDocumentFontsLazy(ast);
-        const reply = await callWorker(
-            { type: "export_png_pages", payload: { pixelPerPt } },
-            "export_png_pages_done",
-        );
+        const reply = await callWorker({
+            type: "export_png_pages",
+            payload: { pixelPerPt },
+        });
         return reply.pages;
     },
 
     async exportSvgPages(ast: DocumentAST): Promise<string[]> {
         await loadDocumentFontsLazy(ast);
-        const reply = await callWorker(
-            { type: "export_svg_pages" },
-            "export_svg_pages_done",
-        );
+        const reply = await callWorker({ type: "export_svg_pages" });
         return reply.pages;
     },
 };

@@ -174,6 +174,47 @@ export type WorkerMessage = WorkerRequest & { id?: number };
 
 export type WorkerReply = WorkerResponse & { id?: number };
 
+/**
+ * Unsolicited worker messages — emitted without a request `id`, never correlated
+ * to a pending request. Only `log` today; kept distinct from request replies so
+ * the dispatcher routes these immediately instead of probing the pending map.
+ */
+export type WorkerNotification = WorkerLogEntry;
+
+/**
+ * Runtime map from each request type to the reply type it pairs with, and the
+ * type derived from it. `callWorker` looks up the expected reply from the
+ * request, so callers can't pass a mismatched literal (e.g. `{ type:
+ * "sync_snapshot" }` paired with `"compile_done"`). This is the single source of
+ * truth for the request→reply pairing.
+ */
+export const REQUEST_REPLY_TYPES = {
+    init: "init_done",
+    reset_fonts: "reset_fonts_done",
+    load_fonts: "load_fonts_done",
+    sync_snapshot: "sync_done",
+    sync_events: "sync_done",
+    compile: "compile_done",
+    bootstrap: "bootstrap_done",
+    render_page: "render_done",
+    render_svg_page: "render_svg_done",
+    render_png_page: "render_png_done",
+    render_resource_svg_page: "render_resource_svg_done",
+    render_region: "render_region_done",
+    render_resource_region: "render_resource_region_done",
+    write_file: "write_file_done",
+    write_files: "write_files_done",
+    write_source: "write_source_done",
+    apply_patch: "apply_patch_done",
+    jump_from_click: "jump_done",
+    positions_for_focus: "positions_done",
+    export_pdf: "export_pdf_done",
+    export_png_pages: "export_png_pages_done",
+    export_svg_pages: "export_svg_pages_done",
+} satisfies Record<WorkerRequest["type"], WorkerResponse["type"]>;
+
+export type RequestReplyMap = typeof REQUEST_REPLY_TYPES;
+
 export function projectFilesToVfsEntries(files: ProjectFile[]): VfsFileEntry[] {
     return files.map((file) => ({
         path: file.path,
