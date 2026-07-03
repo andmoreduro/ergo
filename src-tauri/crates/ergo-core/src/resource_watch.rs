@@ -4,6 +4,7 @@ use crate::document_resources::{
     ResourceGroup, ResourceKind, ResourcePreview, ResourcePreviewStatus,
 };
 use crate::template_spec::TemplateSpec;
+use crate::typst_source::path_id_for_id;
 use crate::typst_source::resource_preview_typst_for_element;
 use crate::vfs::VirtualFileSystem;
 
@@ -362,28 +363,6 @@ fn escape_typst_string(value: &str) -> String {
 
 fn reference_token(id: &str) -> String {
     format!("@ergo-{}", path_id_for_id(id))
-}
-
-fn path_id_for_id(id: &str) -> String {
-    let mut normalized = String::new();
-    let mut prev_dash = false;
-    for ch in id.to_lowercase().chars() {
-        let next = if ch.is_ascii_alphanumeric() || ch == '_' {
-            ch
-        } else {
-            '-'
-        };
-        if next == '-' {
-            if !prev_dash {
-                normalized.push(next);
-            }
-            prev_dash = true;
-        } else {
-            normalized.push(next);
-            prev_dash = false;
-        }
-    }
-    normalized.trim_matches('-').to_string()
 }
 
 fn write_if_changed(vfs: &VirtualFileSystem, path: &str, source: &str) {

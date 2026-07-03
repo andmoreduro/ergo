@@ -12,18 +12,7 @@ pub(crate) fn asset_path_relative_to_element(root_relative_path: &str) -> String
 }
 
 pub(crate) fn element_id(element: &DocumentElement) -> String {
-    match element {
-        DocumentElement::Heading(heading) => heading.id.clone(),
-        DocumentElement::Paragraph(paragraph) => paragraph.id.clone(),
-        DocumentElement::Quote(quote) => quote.id.clone(),
-        DocumentElement::List(list) => list.id.clone(),
-        DocumentElement::Enumeration(enumeration) => enumeration.id.clone(),
-        DocumentElement::Table(table) => table.id.clone(),
-        DocumentElement::Equation(equation) => equation.id.clone(),
-        DocumentElement::Figure(figure) => figure.id.clone(),
-        DocumentElement::Diagram(diagram) => diagram.id.clone(),
-        DocumentElement::Custom(custom) => custom.id.clone(),
-    }
+    element.id().to_string()
 }
 
 pub(crate) fn element_kind(element: &DocumentElement) -> &'static str {
