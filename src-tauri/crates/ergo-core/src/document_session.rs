@@ -14,7 +14,8 @@ pub use crate::document_session_types::{
     ProjectSourceLayout, SourceMapEntry,
 };
 use crate::bundled_templates::{
-    has_bundled_template_spec, sync_bundled_template_package, TEMPLATE_SPEC_PATH,
+    has_bundled_template_spec, sync_bundled_template_package, sync_bundled_template_spec,
+    TEMPLATE_SPEC_PATH,
 };
 use crate::template_spec::{load_template_spec_for_project, TemplateSpec};
 use crate::typst_source::path_id_for_id;
@@ -200,6 +201,12 @@ impl DocumentSession {
             resolved
         };
         if self.write_sidecar_files {
+            // Keep `.ergproj/template_spec.json` aligned with the bundled
+            // manifest so a stale VFS snapshot from a prior session doesn't
+            // override the app-shipped spec. Done here (not inside
+            // load_template_spec_for_project) so loading is a pure read and
+            // VFS mutation stays behind the write_sidecar_files gate.
+            sync_bundled_template_spec(&self.vfs, &ast.metadata.template_id)?;
             sync_bundled_template_package(
                 &self.vfs,
                 &ast.metadata.template_id,

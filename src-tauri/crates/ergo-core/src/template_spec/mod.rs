@@ -153,7 +153,9 @@ pub fn load_template_from_zip(path: &std::path::Path) -> Result<TemplateSpec, St
     Ok(spec)
 }
 
-/// Resolve the template spec for an open project.
+/// Resolve the template spec for an open project. Pure read — does not mutate
+/// the VFS. Callers that need the bundled spec written to `.ergproj/` (e.g. on
+/// save) call `sync_bundled_template_spec` separately.
 ///
 /// App-shipped templates (`apa7`, `umb-apa`) always track the binary: the bundled
 /// manifest wins over any stale `.ergproj/template_spec.json` left in the VFS from a
@@ -163,7 +165,7 @@ pub fn load_template_spec_for_project(
     ast: &crate::ast::DocumentAST,
 ) -> Result<TemplateSpec, String> {
     use crate::bundled_templates::{
-        has_bundled_template_spec, sync_bundled_template_spec, TEMPLATE_SPEC_PATH,
+        has_bundled_template_spec, TEMPLATE_SPEC_PATH,
     };
 
     let variant = ast
@@ -173,7 +175,6 @@ pub fn load_template_spec_for_project(
         .map(typst_template_variant_id);
 
     if has_bundled_template_spec(&ast.metadata.template_id) {
-        sync_bundled_template_spec(vfs, &ast.metadata.template_id)?;
         let spec = load_bundled_template(&ast.metadata.template_id)?;
         return Ok(resolve_template_variant(&spec, variant));
     }
@@ -721,6 +722,7 @@ mod tests {
         let ast: DocumentAST = default_umb_apa_project_ast();
         let resolved = load_template_spec_for_project(&vfs, &ast).unwrap();
 
+        // The bundled spec wins regardless of the stale VFS snapshot.
         assert_eq!(resolved.metadata.name, "UMB's APA7");
         assert!(
             resolved
@@ -729,6 +731,15 @@ mod tests {
                 .iter()
                 .any(|input| input.id.as_deref() == Some("dedication"))
         );
+
+        // load_template_spec_for_project is a pure read — the VFS still holds
+        // the stale snapshot until the caller explicitly syncs it.
+        let still_stale: TemplateSpec =
+            serde_json::from_str(&vfs.read_source(TEMPLATE_SPEC_PATH).unwrap()).unwrap();
+        assert_eq!(still_stale.metadata.name, "Stale");
+
+        // The caller syncs the bundled spec into the VFS explicitly.
+        crate::bundled_templates::sync_bundled_template_spec(&vfs, "umb-apa").unwrap();
         let refreshed: TemplateSpec =
             serde_json::from_str(&vfs.read_source(TEMPLATE_SPEC_PATH).unwrap()).unwrap();
         assert_eq!(refreshed.metadata.name, "UMB's APA7");
