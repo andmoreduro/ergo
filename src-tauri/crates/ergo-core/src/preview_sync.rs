@@ -389,42 +389,6 @@ impl PreviewSyncState {
             }
         }
 
-        if positions.is_empty() && target.caret_utf16_offset.is_none() {
-            for fallback_field_id in
-                related_template_input_field_ids(field_id, entry, source.text())
-            {
-                let Some(fallback_entry) = preview.field_source_map.iter().find(|candidate| {
-                    candidate.element_id == target.element_id
-                        && candidate.field_id == fallback_field_id
-                }) else {
-                    continue;
-                };
-                let Ok(fallback_source) = preview
-                    .source_snapshot
-                    .source_for_path(&fallback_entry.file_path)
-                else {
-                    continue;
-                };
-                let fallback_offset = fallback_entry
-                    .segments
-                    .first()
-                    .map(|segment| segment.source_byte_start)
-                    .unwrap_or(fallback_entry.byte_start);
-                positions = positions_for_field_entry(
-                    &preview,
-                    fallback_entry,
-                    &fallback_source,
-                    &target.element_id,
-                    field_id,
-                    fallback_offset,
-                    target.anchor_page_number,
-                );
-                if !positions.is_empty() {
-                    break;
-                }
-            }
-        }
-
         if positions.is_empty() {
             PreviewElementPositionsResult::NoMatch {
                 source_revision: Some(preview.source_revision),
@@ -864,40 +828,6 @@ fn candidate_roundtrips_to_focus(
     target.element_id == element_id
         && target.field_id.as_deref() == Some(field_id)
         && target.caret_utf16_offset == Some(caret_utf16_offset)
-}
-
-fn related_template_input_field_ids(
-    field_id: &str,
-    entry: &FieldSourceMapEntry,
-    source_text: &str,
-) -> Vec<String> {
-    let parts = field_id
-        .strip_prefix('/')
-        .map(|path| path.split('/').collect::<Vec<_>>())
-        .unwrap_or_default();
-    if parts.len() != 4 || parts[0] != "authors" || parts[2] != "affiliations" {
-        return Vec::new();
-    }
-
-    let mut fallback_ids = vec![format!("/authors/{}/name", parts[1])];
-    let reference = field_text(entry, source_text);
-    if let Some(index) = reference
-        .trim()
-        .parse::<usize>()
-        .ok()
-        .and_then(|value| value.checked_sub(1))
-    {
-        fallback_ids.push(format!("/affiliations/{index}"));
-    }
-    fallback_ids
-}
-
-fn field_text(entry: &FieldSourceMapEntry, source_text: &str) -> String {
-    entry
-        .segments
-        .iter()
-        .filter_map(|segment| source_text.get(segment.source_byte_start..segment.source_byte_end))
-        .collect()
 }
 
 #[cfg(test)]
