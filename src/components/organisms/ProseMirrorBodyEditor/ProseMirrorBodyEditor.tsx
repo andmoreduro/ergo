@@ -70,7 +70,6 @@ import {
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { contentSectionFromAst } from "../../../editor/prosemirror/sectionReconcileGuard";
 import { elementIdOf } from "../../../state/documentEvents/helpers";
-import { setBodyEditorInsertDeps } from "../../../editor/bodyContentInsert";
 import { DEFAULT_GLOBAL_SETTINGS } from "../../../settings/defaults";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
 import { enterBlockEditById } from "../../../editor/prosemirror/bodyTableCommands";
@@ -250,7 +249,27 @@ const ProseMirrorBodyEditorImpl = ({
         portalRegistryRef.current.getSnapshot,
     );
 
-    const bodyHandlers = useMemo(() => bodyEditorActionHandlers(), []);
+    const bodyInsertDeps = useMemo(
+        () => ({
+            getAst: () => astStore.getSnapshot(),
+            dispatch: (action: Parameters<typeof dispatchRef.current>[0]) =>
+                dispatchRef.current(action),
+            setDocumentFocus: (focus: Parameters<typeof setFocusRef.current>[0]) =>
+                setFocusRef.current(focus),
+            defaultEquationSyntax:
+                DEFAULT_GLOBAL_SETTINGS.default_equation_syntax ?? "typst",
+            quotePolicy: templateSpecRef.current?.editor.quote_policy ?? null,
+        }),
+        // Intentionally empty: the object reads live values through refs, so a
+        // stable identity keeps the handler map memoized for the component's
+        // lifetime without capturing stale state.
+        [],
+    );
+
+    const bodyHandlers = useMemo(
+        () => bodyEditorActionHandlers(bodyInsertDeps),
+        [bodyInsertDeps],
+    );
 
     const commitRef = useRef(commitDocumentEvents);
     commitRef.current = commitDocumentEvents;
@@ -303,18 +322,6 @@ const ProseMirrorBodyEditorImpl = ({
         setBodyAstDispatch((action) => dispatchRef.current(action));
         return () => setBodyAstDispatch(null);
     }, []);
-
-    useLayoutEffect(() => {
-        setBodyEditorInsertDeps({
-            getAst: () => astStore.getSnapshot(),
-            dispatch: (action) => dispatchRef.current(action),
-            setDocumentFocus: (focus) => setFocusRef.current(focus),
-            defaultEquationSyntax:
-                DEFAULT_GLOBAL_SETTINGS.default_equation_syntax ?? "typst",
-            quotePolicy: templateSpecRef.current?.editor.quote_policy ?? null,
-        });
-        return () => setBodyEditorInsertDeps(null);
-    }, [astStore, templateSpec]);
 
     useLayoutEffect(() => {
         setBodyClipboardPasteDeps({

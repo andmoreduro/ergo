@@ -1,7 +1,7 @@
 import type { ActionHandlerMap } from "../../actions/runtime";
 import type { ActionInvocation } from "../../bindings/ActionInvocation";
 import type { ElementType } from "../../commands/editorCommands";
-import { tryBodyContentInsert } from "../bodyContentInsert";
+import { tryBodyContentInsert, type BodyEditorInsertDeps } from "../bodyContentInsert";
 import {
     getActiveBodyView,
     getActiveTableCellEditor,
@@ -98,26 +98,26 @@ const withBodyNavigate = (
 };
 
 const bodyInsertHandler =
-    (elementType: ElementType) =>
+    (deps: BodyEditorInsertDeps, elementType: ElementType) =>
     (invocation: ActionInvocation): boolean => {
-        if (tryBodyContentInsert(elementType, undefined, invocation.payload)) {
+        if (tryBodyContentInsert(deps, elementType, undefined, invocation.payload)) {
             return true;
         }
         return false;
     };
 
-const insertHandlers = (): ActionHandlerMap => ({
-    "editor::InsertParagraph": bodyInsertHandler("paragraph"),
-    "editor::InsertHeading": bodyInsertHandler("heading"),
-    "editor::InsertQuote": bodyInsertHandler("quote"),
-    "editor::InsertList": bodyInsertHandler("list"),
-    "editor::InsertEnumeration": bodyInsertHandler("enumeration"),
-    "editor::InsertTable": bodyInsertHandler("table"),
-    "editor::InsertEquation": bodyInsertHandler("equation"),
-    "editor::InsertBlockEquation": bodyInsertHandler("equation"),
-    "editor::InsertInlineEquation": bodyInsertHandler("inlineEquation"),
-    "editor::InsertFigure": bodyInsertHandler("figure"),
-    "editor::InsertDiagram": bodyInsertHandler("diagram"),
+const insertHandlers = (deps: BodyEditorInsertDeps): ActionHandlerMap => ({
+    "editor::InsertParagraph": bodyInsertHandler(deps, "paragraph"),
+    "editor::InsertHeading": bodyInsertHandler(deps, "heading"),
+    "editor::InsertQuote": bodyInsertHandler(deps, "quote"),
+    "editor::InsertList": bodyInsertHandler(deps, "list"),
+    "editor::InsertEnumeration": bodyInsertHandler(deps, "enumeration"),
+    "editor::InsertTable": bodyInsertHandler(deps, "table"),
+    "editor::InsertEquation": bodyInsertHandler(deps, "equation"),
+    "editor::InsertBlockEquation": bodyInsertHandler(deps, "equation"),
+    "editor::InsertInlineEquation": bodyInsertHandler(deps, "inlineEquation"),
+    "editor::InsertFigure": bodyInsertHandler(deps, "figure"),
+    "editor::InsertDiagram": bodyInsertHandler(deps, "diagram"),
 });
 
 const tableCellForbiddenHandlers = (): ActionHandlerMap => {
@@ -128,8 +128,10 @@ const tableCellForbiddenHandlers = (): ActionHandlerMap => {
     return handlers;
 };
 
-export const bodyEditorActionHandlers = (): ActionHandlerMap => ({
-    ...insertHandlers(),
+export const bodyEditorActionHandlers = (
+    deps: BodyEditorInsertDeps,
+): ActionHandlerMap => ({
+    ...insertHandlers(deps),
     ...tableCellForbiddenHandlers(),
     "editor::SelectCurrentElement": withBodyView((view) =>
         selectCurrentElement(view.state, view.dispatch.bind(view)),

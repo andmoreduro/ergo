@@ -84,7 +84,7 @@ import {
     getActiveBodyView,
     getActiveTableCellEditor,
 } from "./editor/prosemirror/activeView";
-import { tryBodyContentInsert } from "./editor/bodyContentInsert";
+import { tryBodyContentInsert, type BodyEditorInsertDeps } from "./editor/bodyContentInsert";
 import { resolveContentInsertAnchor } from "./editor/insertContext";
 import { resolveBodyInsertAnchor } from "./editor/bodyInsertAnchor";
 import { parseHeadingInsertLevel } from "./editor/headingInsert";
@@ -420,7 +420,15 @@ const AppShellContent = () => {
         options?: InsertElementOptions,
         invocationPayload?: unknown,
     ) => {
-        if (tryBodyContentInsert(elementType, options, invocationPayload)) {
+        const bodyInsertDeps: BodyEditorInsertDeps = {
+            getAst: getState,
+            dispatch,
+            setDocumentFocus,
+            defaultEquationSyntax:
+                globalSettings.default_equation_syntax ?? "typst",
+            quotePolicy: templateSpec?.editor.quote_policy ?? null,
+        };
+        if (tryBodyContentInsert(bodyInsertDeps, elementType, options, invocationPayload)) {
             return;
         }
 
