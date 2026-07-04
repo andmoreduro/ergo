@@ -29,12 +29,6 @@ export interface BodyEditorInsertDeps {
     quotePolicy: QuotePolicySpec | null;
 }
 
-let bodyEditorInsertDeps: BodyEditorInsertDeps | null = null;
-
-export const setBodyEditorInsertDeps = (deps: BodyEditorInsertDeps | null): void => {
-    bodyEditorInsertDeps = deps;
-};
-
 const afterElementFromBodySelection = (): string | null => {
     const view = getActiveBodyView();
     if (!view) {
@@ -89,6 +83,7 @@ const removeReplacedEmptyBlock = (
  * Insert a block after the ProseMirror selection in the main body editor.
  */
 export const tryBodyContentInsert = (
+    deps: BodyEditorInsertDeps,
     elementType: ElementType,
     options?: InsertElementOptions,
     invocationPayload?: unknown,
@@ -97,11 +92,6 @@ export const tryBodyContentInsert = (
         return false;
     }
     if (isTableCellForbiddenInsert(elementType)) {
-        return false;
-    }
-
-    const deps = bodyEditorInsertDeps;
-    if (!deps) {
         return false;
     }
 
