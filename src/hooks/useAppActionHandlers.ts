@@ -17,9 +17,10 @@ import {
     projectInputElementId,
     projectInputFieldId,
 } from "../editor/fieldIds";
-import { isRegisteredEditorField } from "../state/EditorFieldRegistry";
+import { isSimpleListEntryField } from "../editor/fieldNavigation";
 import { getValueAtPath } from "../state/documentEvents/helpers";
 import type { DocumentFocusInput } from "../state/DocumentContext";
+import type { TemplateSpec } from "../bindings/TemplateSpec";
 
 interface FocusFieldPayload {
     elementId: string;
@@ -44,6 +45,9 @@ interface UseAppActionHandlersOptions {
     closeProject: () => Promise<void>;
     /** Apply a manual zoom percent (0–100), switching out of fit mode. */
     setZoomPercent: (percent: number) => void;
+    /** Template spec used to discriminate input field types (simple_list vs
+     * content_blocks) without consulting mounted DOM. */
+    templateSpec: TemplateSpec | null;
     actionOverrides?: ActionHandlerMap;
 }
 
@@ -108,6 +112,7 @@ export const useAppActionHandlers = ({
     insertElement,
     closeProject,
     setZoomPercent,
+    templateSpec,
     actionOverrides,
 }: UseAppActionHandlersOptions): ActionHandlerMap => {
     return useMemo<ActionHandlerMap>(() => {
@@ -154,32 +159,32 @@ export const useAppActionHandlers = ({
                 target.fieldId ??
                 defaultFieldIdForFocus(getState(), target.elementId);
 
-            // A simple-list entry (`/affiliations/0`) is its own registered
-            // editor input, unlike a `content_blocks` paragraph (`/abstract/0`)
-            // which is one slice of a combined ParagraphsField. They share the
+            // A simple-list entry (`/affiliations/0`) is its own independent
+            // input, unlike a `content_blocks` paragraph (`/abstract/0`) which
+            // is one slice of a combined ParagraphsField. They share the
             // `/base/index` id shape and are indistinguishable by value, so ask
-            // the field registry: if an independent input is registered at the
-            // indexed id, focus it directly with its local caret — no
-            // parent-collapse, no global-caret remap.
+            // the template spec which input type the base path declares: a
+            // `simple_list` input has independent per-entry inputs and is
+            // focused directly with its local caret — no parent-collapse, no
+            // global-caret remap.
             if (
                 target.elementId === backendInputsElementId &&
                 fieldId &&
-                parseIndexedInputFieldPath(fieldId)
+                parseIndexedInputFieldPath(fieldId) &&
+                isSimpleListEntryField(templateSpec, fieldId)
             ) {
                 const indexedEditorFieldId = projectInputFieldId(fieldId);
-                if (isRegisteredEditorField(indexedEditorFieldId)) {
-                    setDocumentFocus({
-                        elementId: projectInputElementId,
-                        fieldId: indexedEditorFieldId,
-                        caretUtf16Offset: target.caretUtf16Offset,
-                        selectionEndUtf16Offset: null,
-                        sourceRevision: target.sourceRevision,
-                        anchorPageNumber: target.anchorPageNumber,
-                        forcePreviewScroll: target.forcePreviewScroll,
-                        focusSource: "preview",
-                    });
-                    return true;
-                }
+                setDocumentFocus({
+                    elementId: projectInputElementId,
+                    fieldId: indexedEditorFieldId,
+                    caretUtf16Offset: target.caretUtf16Offset,
+                    selectionEndUtf16Offset: null,
+                    sourceRevision: target.sourceRevision,
+                    anchorPageNumber: target.anchorPageNumber,
+                    forcePreviewScroll: target.forcePreviewScroll,
+                    focusSource: "preview",
+                });
+                return true;
             }
 
             const editorTarget = editorFocusIdsForBackendField(
@@ -237,5 +242,6 @@ export const useAppActionHandlers = ({
         insertElement,
         setDocumentFocus,
         setZoomPercent,
+        templateSpec,
     ]);
 };

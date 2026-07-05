@@ -60,21 +60,6 @@ interface EditorFieldRegistryValue {
 /** Latest pointerdown target for blur recovery (SVG preview has no relatedTarget). */
 const lastPointerDownTargetRef: { current: EventTarget | null } = { current: null };
 
-/**
- * Module-level view of the active registry's field lookup. The app-level action
- * handlers render above the provider and so can't read its context, but they
- * need to ask whether a given id is an independently registered editor field —
- * e.g. to tell a simple-list entry (`/affiliations/0`, its own input) from a
- * `content_blocks` paragraph (`/abstract/0`, one slice of a combined field),
- * which share the `/base/index` id shape and can't be told apart by value.
- */
-let activeRegistryLookup:
-    | ((fieldId: string) => RegisteredEditorField | undefined)
-    | null = null;
-
-export const isRegisteredEditorField = (fieldId: string): boolean =>
-    activeRegistryLookup?.(fieldId) !== undefined;
-
 export const EditorFieldRegistryProvider = ({
     children,
 }: {
@@ -155,17 +140,6 @@ export const EditorFieldRegistryProvider = ({
             unregisterField,
         ],
     );
-
-    // Publish this provider's lookup module-side for the app-level action
-    // handlers; `getField` is stable, so this runs once.
-    useEffect(() => {
-        activeRegistryLookup = getField;
-        return () => {
-            if (activeRegistryLookup === getField) {
-                activeRegistryLookup = null;
-            }
-        };
-    }, [getField]);
 
     useLayoutEffect(() => {
         const onPointerDown = (event: PointerEvent) => {

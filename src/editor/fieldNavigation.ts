@@ -205,6 +205,31 @@ export const collectContentFieldTargets = (
     return targets;
 };
 
+/**
+ * Whether an indexed backend field id (e.g. `/affiliations/0`) names an
+ * independent simple-list entry rather than a paragraph of a combined
+ * `content_blocks` input. Both share the `/base/index` id shape and are
+ * indistinguishable by value, so the answer comes from the input's declared
+ * type in the template spec — not from which inputs happen to be mounted in
+ * the DOM at the time of the call.
+ */
+export const isSimpleListEntryField = (
+    spec: TemplateSpec | null,
+    fieldId: string | null,
+): boolean => {
+    if (!fieldId) {
+        return false;
+    }
+    const match = fieldId.match(/^(\/[^/]+)\/\d+$/);
+    if (!match) {
+        return false;
+    }
+    const inputId = match[1].slice(1);
+    return (spec?.editor?.inputs ?? []).some(
+        (input) => input.id === inputId && input.type === "simple_list",
+    );
+};
+
 export const buildEditorFieldOrder = (
     spec: TemplateSpec | null,
     variantId: string | null,

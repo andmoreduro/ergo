@@ -894,6 +894,7 @@ const AppShellContent = () => {
         insertElement,
         closeProject: handleCloseProject,
         setZoomPercent,
+        templateSpec,
     });
 
     const isCommandEnabled = useCallback(
