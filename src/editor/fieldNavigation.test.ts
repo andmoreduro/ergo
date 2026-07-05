@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildEditorFieldOrder } from "./fieldNavigation";
+import {
+    buildEditorFieldOrder,
+    isSimpleListEntryField,
+} from "./fieldNavigation";
 import { createTestDocumentAST } from "../test/documentAstFixture";
 import {
     projectInputFieldId,
@@ -76,4 +79,32 @@ describe("buildEditorFieldOrder", () => {
         ]);
     });
 
+});
+
+describe("isSimpleListEntryField", () => {
+    const spec = {
+        editor: {
+            inputs: [
+                { id: "affiliations", type: "simple_list" },
+                { id: "abstract", type: "content_blocks" },
+            ],
+        },
+    } as unknown as Parameters<typeof isSimpleListEntryField>[0];
+
+    it("returns true for an indexed simple_list entry", () => {
+        expect(isSimpleListEntryField(spec, "/affiliations/0")).toBe(true);
+    });
+
+    it("returns false for an indexed content_blocks paragraph", () => {
+        expect(isSimpleListEntryField(spec, "/abstract/2")).toBe(false);
+    });
+
+    it("returns false when the base path is not a declared input", () => {
+        expect(isSimpleListEntryField(spec, "/unknown/0")).toBe(false);
+    });
+
+    it("returns false for non-indexed field ids", () => {
+        expect(isSimpleListEntryField(spec, "/affiliations")).toBe(false);
+        expect(isSimpleListEntryField(spec, null)).toBe(false);
+    });
 });
