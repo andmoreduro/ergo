@@ -7,7 +7,6 @@ import type { CommandRegistry } from "../commands/registry";
 import type { CommandContext } from "../commands/types";
 import { parseHeadingInsertLevel } from "../editor/headingInsert";
 import { toggleActiveElementSettings } from "../editor/elementSettingsBridge";
-import { previewSetZoomPercent } from "../preview/previewZoomBridge";
 import type { ElementType, InsertElementOptions } from "../commands/editorCommands";
 import { parseInputContentBlocks } from "../editor/contentBlocks";
 import { globalCaretInContentBlocks, parseIndexedInputFieldPath } from "../editor/contentBlocksCaret";
@@ -43,6 +42,8 @@ interface UseAppActionHandlersOptions {
         invocationPayload?: unknown,
     ) => void;
     closeProject: () => Promise<void>;
+    /** Apply a manual zoom percent (0–100), switching out of fit mode. */
+    setZoomPercent: (percent: number) => void;
     actionOverrides?: ActionHandlerMap;
 }
 
@@ -106,6 +107,7 @@ export const useAppActionHandlers = ({
     setDocumentFocus,
     insertElement,
     closeProject,
+    setZoomPercent,
     actionOverrides,
 }: UseAppActionHandlersOptions): ActionHandlerMap => {
     return useMemo<ActionHandlerMap>(() => {
@@ -137,7 +139,7 @@ export const useAppActionHandlers = ({
                 if (!payload || typeof payload.percent !== "number") {
                     return false;
                 }
-                previewSetZoomPercent(payload.percent);
+                setZoomPercent(payload.percent);
                 return true;
             },
         );
@@ -234,5 +236,6 @@ export const useAppActionHandlers = ({
         closeProject,
         insertElement,
         setDocumentFocus,
+        setZoomPercent,
     ]);
 };

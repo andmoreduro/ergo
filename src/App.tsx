@@ -76,9 +76,9 @@ import { helpCommands } from "./commands/helpCommands";
 import { bibliographyCommands } from "./commands/bibliographyCommands";
 import { findCommands } from "./commands/findCommands";
 import type { FindBarHandle } from "./components/organisms/FindBar/FindBar";
+import type { PreviewHandle } from "./components/layout/Preview/Preview";
 import { exportReferencesBib } from "./bibliography/exportReferencesBib";
 import { saveBibliographyDialog } from "./platform/bibliographyExport";
-import { previewZoomIn, previewZoomOut, previewFitWidth, previewFitHeight } from "./preview/previewZoomBridge";
 import { applyRichTextMarkToFocusedField } from "./editor/richTextMarks";
 import {
     applyBodyMark,
@@ -202,6 +202,7 @@ const AppShellContent = () => {
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [isFindBarOpen, setFindBarOpen] = useState(false);
     const findBarRef = useRef<FindBarHandle>(null);
+    const previewRef = useRef<PreviewHandle>(null);
     const [isOpenRecentDialogOpen, setOpenRecentDialogOpen] = useState(false);
     const [commandQuery, setCommandQuery] = useState("");
     const [systemFonts, setSystemFonts] = useState<string[]>([]);
@@ -266,20 +267,27 @@ const AppShellContent = () => {
 
     const zoomPreviewIn = useCallback(() => {
         setPreviewZoomMode("manual");
-        previewZoomIn();
+        previewRef.current?.prepareAnchor();
+        previewRef.current?.zoomIn();
     }, []);
 
     const zoomPreviewOut = useCallback(() => {
         setPreviewZoomMode("manual");
-        previewZoomOut();
+        previewRef.current?.prepareAnchor();
+        previewRef.current?.zoomOut();
     }, []);
 
     const fitPreviewWidth = useCallback(() => {
-        previewFitWidth();
+        previewRef.current?.fitWidth();
     }, []);
 
     const fitPreviewHeight = useCallback(() => {
-        previewFitHeight();
+        previewRef.current?.fitHeight();
+    }, []);
+
+    const setZoomPercent = useCallback((percent: number) => {
+        previewRef.current?.prepareAnchor();
+        previewRef.current?.setZoomPercent(percent);
     }, []);
 
     const insertInlineEquation = useCallback((syntax: EquationSyntax = "typst") => {
@@ -885,6 +893,7 @@ const AppShellContent = () => {
         setDocumentFocus,
         insertElement,
         closeProject: handleCloseProject,
+        setZoomPercent,
     });
 
     const isCommandEnabled = useCallback(
@@ -924,6 +933,7 @@ const AppShellContent = () => {
                             findBarOpen={isFindBarOpen}
                             onFindBarOpenChange={setFindBarOpen}
                             findBarRef={findBarRef}
+                            previewRef={previewRef}
                             zoteroTranslationServerEnabled={
                                 globalSettings.zotero_translation_server_enabled ??
                                 false

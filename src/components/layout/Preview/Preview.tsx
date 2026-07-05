@@ -1,6 +1,8 @@
 import {
+    forwardRef,
     useCallback,
     useEffect,
+    useImperativeHandle,
     useLayoutEffect,
     useMemo,
     useRef,
@@ -9,7 +11,10 @@ import {
     type RefObject,
     type SetStateAction,
 } from "react";
-import { usePreviewZoomInput } from "../../../hooks/usePreviewZoomInput";
+import {
+    usePreviewZoomInput,
+    type PreviewZoomHandle,
+} from "../../../hooks/usePreviewZoomInput";
 import { usePreviewForwardSync } from "../../../hooks/usePreviewForwardSync";
 import type { PreviewCaret } from "../../../hooks/usePreviewForwardSync";
 import {
@@ -41,6 +46,13 @@ import styles from "./Preview.module.css";
 
 export type PreviewCompilerState = ReturnType<typeof useCompiler>;
 
+/**
+ * Imperative handle exposed by Preview. App commands call these methods
+ * instead of routing through a module singleton — Preview owns the viewport
+ * math needed to capture the correct scroll anchor before each mutation.
+ */
+export type PreviewHandle = PreviewZoomHandle;
+
 export interface PreviewProps {
     compiler: PreviewCompilerState;
     zoom: number;
@@ -64,21 +76,25 @@ export interface PreviewProps {
     multiCaret: boolean;
 }
 
-export const Preview = ({
-    compiler,
-    zoom,
-    zoomMode,
-    onZoomChange,
-    onZoomModeChange,
-    scrollRef,
-    draftRenderFactor,
-    renderOverscanFactor,
-    rasterizationDebounceMs,
-    revealDebounceMs,
-    forwardSyncDebounceMs,
-    draftPromoteMs,
-    multiCaret,
-}: PreviewProps) => {
+export const Preview = forwardRef<PreviewHandle, PreviewProps>(
+    (
+        {
+            compiler,
+            zoom,
+            zoomMode,
+            onZoomChange,
+            onZoomModeChange,
+            scrollRef,
+            draftRenderFactor,
+            renderOverscanFactor,
+            rasterizationDebounceMs,
+            revealDebounceMs,
+            forwardSyncDebounceMs,
+            draftPromoteMs,
+            multiCaret,
+        },
+        ref,
+    ) => {
     const dispatchAction = useActionDispatcher();
     const {
         previewPages,
@@ -259,7 +275,7 @@ export const Preview = ({
         [manualEquivalentZoom, onZoomChange, onZoomModeChange],
     );
 
-    usePreviewZoomInput(
+    const previewZoomHandle = usePreviewZoomInput(
         previewScrollRef,
         horizontalScrollRef,
         previewColumnRef,
@@ -267,6 +283,8 @@ export const Preview = ({
         manualZoomFromInteraction,
         onZoomModeChange,
     );
+
+    useImperativeHandle(ref, () => previewZoomHandle, [previewZoomHandle]);
 
     useEffect(() => {
         const column = previewColumnRef.current;
@@ -407,7 +425,10 @@ export const Preview = ({
         </aside>
         </PreviewContext>
     );
-};
+    },
+);
+
+Preview.displayName = "Preview";
 
 /** Shared stable empty caret list so cue-free pages never re-render. */
 const NO_CARETS: PreviewCaret[] = [];
