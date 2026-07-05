@@ -2,6 +2,7 @@ import {
     useCallback,
     useEffect,
     useLayoutEffect,
+    useMemo,
     useRef,
     type Dispatch,
     type RefObject,
@@ -19,14 +20,6 @@ import {
     zoomFromPinchScale,
     zoomFromWheelDelta,
 } from "../preview/previewZoomInput";
-import {
-    previewZoomIn,
-    previewZoomOut,
-    previewFitWidth,
-    previewFitHeight,
-    previewSetZoomPercent,
-    registerPreviewZoomController,
-} from "../preview/previewZoomBridge";
 import { stepPreviewZoom, type PreviewZoomMode } from "../preview/previewZoom";
 
 type GestureLikeEvent = Event & { scale: number; preventDefault: () => void };
@@ -49,8 +42,24 @@ function resolveAnchorPoint(
 }
 
 /**
+ * Imperative zoom methods exposed to ancestors (App, view commands). Replaces
+ * the prior module-singleton bridge: Preview owns the viewport math, and these
+ * handlers capture the scroll anchor before each state mutation. App obtains
+ * this handle via a ref threaded through Workspace.
+ */
+export interface PreviewZoomHandle {
+    /** Capture the current viewport-center anchor before the next zoom change. */
+    prepareAnchor: () => void;
+    zoomIn: () => void;
+    zoomOut: () => void;
+    fitWidth: () => void;
+    fitHeight: () => void;
+    setZoomPercent: (percent: number) => void;
+}
+
+/**
  * Ctrl/meta + wheel and pinch gestures on the preview scroll viewport.
- * Programmatic zoom uses the same anchor model via `previewZoomBridge`.
+ * Programmatic zoom uses the same anchor model through the returned handle.
  */
 export function usePreviewZoomInput(
     scrollRef: RefObject<HTMLElement | null>,
@@ -59,7 +68,7 @@ export function usePreviewZoomInput(
     zoom: number,
     onZoomChange: Dispatch<SetStateAction<number>>,
     onZoomModeChange: Dispatch<SetStateAction<PreviewZoomMode>>,
-): { setZoomAnchor: () => void } {
+): PreviewZoomHandle {
     const zoomRef = useRef(zoom);
     zoomRef.current = zoom;
 
@@ -112,8 +121,8 @@ export function usePreviewZoomInput(
         );
     }, [horizontalScrollRef, scrollRef, zoom]);
 
-    useEffect(() => {
-        registerPreviewZoomController({
+    const controller = useMemo<PreviewZoomHandle>(
+        () => ({
             prepareAnchor: setZoomAnchor,
             zoomIn: () => {
                 onZoomChange((current) => stepPreviewZoom(current, 1));
@@ -131,9 +140,9 @@ export function usePreviewZoomInput(
                 onZoomModeChange("manual");
                 onZoomChange(percent / 100);
             },
-        });
-        return () => registerPreviewZoomController(null);
-    }, [onZoomChange, onZoomModeChange, setZoomAnchor]);
+        }),
+        [onZoomChange, onZoomModeChange, setZoomAnchor],
+    );
 
     useEffect(() => {
         const element = scrollRef.current;
@@ -294,13 +303,5 @@ export function usePreviewZoomInput(
         setZoomAnchor,
     ]);
 
-    return { setZoomAnchor };
+    return controller;
 }
-
-export {
-    previewZoomIn,
-    previewZoomOut,
-    previewFitWidth,
-    previewFitHeight,
-    previewSetZoomPercent,
-};

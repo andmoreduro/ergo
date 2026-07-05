@@ -9,7 +9,7 @@ import {
 import { Sidebar } from "../Sidebar/Sidebar";
 import { Editor } from "../Editor/Editor";
 import type { FindBarHandle } from "../../organisms/FindBar/FindBar";
-import { Preview } from "../Preview/Preview";
+import { Preview, type PreviewHandle } from "../Preview/Preview";
 import { EditorFieldRegistryProvider } from "../../../state/EditorFieldRegistry";
 import { TemplateSpecProvider } from "../../../state/TemplateSpecContext";
 import { useDocumentAst, useDocumentSync } from "../../../state/DocumentContext";
@@ -41,6 +41,7 @@ export interface WorkspaceProps {
     findBarOpen: boolean;
     onFindBarOpenChange: (open: boolean) => void;
     findBarRef?: React.Ref<FindBarHandle>;
+    previewRef?: React.Ref<PreviewHandle>;
 }
 
 export const Workspace = ({
@@ -59,6 +60,7 @@ export const Workspace = ({
     findBarOpen,
     onFindBarOpenChange,
     findBarRef,
+    previewRef,
 }: WorkspaceProps) => {
     const { state } = useDocumentAst();
     const { events, sessionId, ackDocumentEvents, eventsVersion, bootstrapFiles } =
@@ -211,6 +213,7 @@ export const Workspace = ({
                     <ColumnResizeHandle {...handle2} />
                     <div className={styles.column} style={previewStyle}>
                         <Preview
+                            ref={previewRef}
                             compiler={compiler}
                             zoom={previewZoom}
                             zoomMode={previewZoomMode}
