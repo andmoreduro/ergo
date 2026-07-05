@@ -1,10 +1,5 @@
 import type { Command } from "./types";
 import { m } from "../paraglide/messages.js";
-import {
-    findNextFromBar,
-    findPreviousFromBar,
-    openFindBar,
-} from "../editor/find/findBridge";
 
 export interface FindCommandDeps {
     openFindBar: () => void;
@@ -32,9 +27,3 @@ export const findCommands = (deps: FindCommandDeps): Command[] => [
         run: deps.findPrevious,
     },
 ];
-
-export const defaultFindCommandDeps = (): FindCommandDeps => ({
-    openFindBar,
-    findNext: findNextFromBar,
-    findPrevious: findPreviousFromBar,
-});

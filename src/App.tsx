@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Workspace } from "./components/layout/Workspace/Workspace";
 import { requireSetting } from "./settings/defaults";
 import { Menubar } from "./components/layout/Menubar/Menubar";
@@ -74,7 +74,8 @@ import { editCommands } from "./commands/editCommands";
 import { settingsCommands } from "./commands/settingsCommands";
 import { helpCommands } from "./commands/helpCommands";
 import { bibliographyCommands } from "./commands/bibliographyCommands";
-import { defaultFindCommandDeps, findCommands } from "./commands/findCommands";
+import { findCommands } from "./commands/findCommands";
+import type { FindBarHandle } from "./components/organisms/FindBar/FindBar";
 import { exportReferencesBib } from "./bibliography/exportReferencesBib";
 import { saveBibliographyDialog } from "./platform/bibliographyExport";
 import { previewZoomIn, previewZoomOut, previewFitWidth, previewFitHeight } from "./preview/previewZoomBridge";
@@ -200,6 +201,7 @@ const AppShellContent = () => {
     });
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [isFindBarOpen, setFindBarOpen] = useState(false);
+    const findBarRef = useRef<FindBarHandle>(null);
     const [isOpenRecentDialogOpen, setOpenRecentDialogOpen] = useState(false);
     const [commandQuery, setCommandQuery] = useState("");
     const [systemFonts, setSystemFonts] = useState<string[]>([]);
@@ -834,7 +836,11 @@ const AppShellContent = () => {
             }),
             ...helpCommands(),
             ...bibliographyCommands({ exportBibliography }),
-            ...findCommands(defaultFindCommandDeps()),
+            ...findCommands({
+                openFindBar: () => findBarRef.current?.open(),
+                findNext: () => findBarRef.current?.findNext(),
+                findPrevious: () => findBarRef.current?.findPrevious(),
+            }),
         ],
         [
             handleCloseProject,
@@ -917,6 +923,7 @@ const AppShellContent = () => {
                             onPreviewZoomModeChange={setPreviewZoomMode}
                             findBarOpen={isFindBarOpen}
                             onFindBarOpenChange={setFindBarOpen}
+                            findBarRef={findBarRef}
                             zoteroTranslationServerEnabled={
                                 globalSettings.zotero_translation_server_enabled ??
                                 false

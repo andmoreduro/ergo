@@ -1,7 +1,9 @@
 import {
+    forwardRef,
     memo,
     useCallback,
     useEffect,
+    useImperativeHandle,
     useRef,
     useState,
 } from "react";
@@ -26,7 +28,6 @@ import {
     findInDocument,
     replaceInDocumentField,
 } from "../../../editor/find/documentFind";
-import { registerFindBarController } from "../../../editor/find/findBridge";
 import {
     useDocumentActions,
     useDocumentAstSelector,
@@ -35,12 +36,20 @@ import {
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import styles from "./FindBar.module.css";
 
+export interface FindBarHandle {
+    open: () => void;
+    close: () => void;
+    findNext: () => void;
+    findPrevious: () => void;
+}
+
 export interface FindBarProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }
 
-export const FindBar = memo(({ open, onOpenChange }: FindBarProps) => {
+export const FindBar = memo(
+    forwardRef<FindBarHandle, FindBarProps>(({ open, onOpenChange }, ref) => {
     const ast = useDocumentAstSelector((state) => state);
     const focus = useDocumentFocusSelector((state) => state);
     const { setDocumentFocus } = useDocumentActions();
@@ -135,8 +144,9 @@ export const FindBar = memo(({ open, onOpenChange }: FindBarProps) => {
         });
     }, [onOpenChange]);
 
-    useEffect(() => {
-        registerFindBarController({
+    useImperativeHandle(
+        ref,
+        () => ({
             open: openBar,
             close,
             findNext: () => {
@@ -151,9 +161,9 @@ export const FindBar = memo(({ open, onOpenChange }: FindBarProps) => {
                 }
                 runFind(-1);
             },
-        });
-        return () => registerFindBarController(null);
-    }, [close, openBar, runFind]);
+        }),
+        [close, openBar, runFind],
+    );
 
     useEffect(() => {
         if (!open) {
@@ -319,6 +329,7 @@ export const FindBar = memo(({ open, onOpenChange }: FindBarProps) => {
             ) : null}
         </div>
     );
-});
+    }),
+);
 
 FindBar.displayName = "FindBar";

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Sidebar } from "../Sidebar/Sidebar";
 import { Editor } from "../Editor/Editor";
+import type { FindBarHandle } from "../../organisms/FindBar/FindBar";
 import { Preview } from "../Preview/Preview";
 import { EditorFieldRegistryProvider } from "../../../state/EditorFieldRegistry";
 import { TemplateSpecProvider } from "../../../state/TemplateSpecContext";
@@ -39,6 +40,7 @@ export interface WorkspaceProps {
     previewMultiCaret: boolean;
     findBarOpen: boolean;
     onFindBarOpenChange: (open: boolean) => void;
+    findBarRef?: React.Ref<FindBarHandle>;
 }
 
 export const Workspace = ({
@@ -56,6 +58,7 @@ export const Workspace = ({
     previewMultiCaret,
     findBarOpen,
     onFindBarOpenChange,
+    findBarRef,
 }: WorkspaceProps) => {
     const { state } = useDocumentAst();
     const { events, sessionId, ackDocumentEvents, eventsVersion, bootstrapFiles } =
@@ -199,6 +202,7 @@ export const Workspace = ({
                             }
                             findBarOpen={findBarOpen}
                             onFindBarOpenChange={onFindBarOpenChange}
+                            findBarRef={findBarRef}
                             previewRasterizationDebounceMs={
                                 previewRasterizationDebounceMs
                             }

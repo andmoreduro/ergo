@@ -39,7 +39,7 @@ import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
 import { Textarea } from "../../atoms/Textarea/Textarea";
 import { EditorToolbar } from "../../organisms/EditorToolbar/EditorToolbar";
-import { FindBar } from "../../organisms/FindBar/FindBar";
+import { FindBar, type FindBarHandle } from "../../organisms/FindBar/FindBar";
 import { m } from "../../../paraglide/messages.js";
 import entryStyles from "../../../styles/inputEntry.module.css";
 import styles from "./Editor.module.css";
@@ -121,6 +121,7 @@ export interface EditorProps {
     mainPreviewPaintedRevision: number | null;
     findBarOpen: boolean;
     onFindBarOpenChange: (open: boolean) => void;
+    findBarRef?: React.Ref<FindBarHandle>;
     previewRasterizationDebounceMs?: number;
 }
 
@@ -131,6 +132,7 @@ const EditorComponent = ({
     mainPreviewPaintedRevision,
     findBarOpen,
     onFindBarOpenChange,
+    findBarRef,
     previewRasterizationDebounceMs,
 }: EditorProps) => {
     // Narrow subscriptions: the editor shell must not re-render on body typing.
@@ -449,7 +451,11 @@ const EditorComponent = ({
                     tableCellEditing={tableCellEditing}
                     {...toolbarHandlers}
                 />
-                <FindBar open={findBarOpen} onOpenChange={onFindBarOpenChange} />
+                <FindBar
+                    ref={findBarRef}
+                    open={findBarOpen}
+                    onOpenChange={onFindBarOpenChange}
+                />
                 <InsertReferenceDialog
                     open={referenceDialogOpen}
                     resources={resources}
