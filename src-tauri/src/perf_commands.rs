@@ -136,7 +136,7 @@ pub fn get_perf_config() -> PerfHarnessConfig {
         _ => PerfTypingTarget::Body,
     };
 
-    PerfHarnessConfig {
+    let config = PerfHarnessConfig {
         enabled: std::env::var("ERGO_PERF_ENABLED").is_ok_and(|v| v == "1"),
         project_path: std::env::var("ERGO_PERF_PROJECT_PATH").ok(),
         report_path: std::env::var("ERGO_PERF_REPORT_PATH").ok(),
@@ -147,7 +147,9 @@ pub fn get_perf_config() -> PerfHarnessConfig {
             .ok()
             .and_then(|v| v.parse().ok()),
         typing_target,
-    }
+    };
+
+    config
 }
 
 #[tauri::command]

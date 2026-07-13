@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
+import type { PerfHarnessConfig } from "../bindings/PerfHarnessConfig";
 import type { PerfHarnessReport } from "../bindings/PerfHarnessReport";
 import type { PerfOneShotTiming } from "../bindings/PerfOneShotTiming";
+import type { PerfTypingTarget } from "../bindings/PerfTypingTarget";
 import type { PreviewTelemetry } from "./previewTelemetry";
 import { setPreviewTelemetryListener } from "./previewDiagnostics";
 import { TauriApi } from "../api/tauri";
@@ -71,198 +73,188 @@ const summarize = (values: number[]) => {
     };
 };
 
-/** Resolve after the browser has painted the next frame (double rAF). */
-const waitForNextPaint = (): Promise<void> =>
-    new Promise((resolve) => {
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => resolve());
-        });
-    });
-
 export const usePerfReplay = ({
-    hasActiveProject: _hasActiveProject,
+    hasActiveProject,
     openProject,
-    dispatch: _dispatch,
+    dispatch,
     ast,
     commitDocumentEvents,
     setPreviewZoom,
     setPreviewZoomManual,
 }: UsePerfReplayOptions): void => {
+    const configRef = useRef<PerfHarnessConfig | null>(null);
     const startedRef = useRef(false);
+    const samplesRef = useRef<PreviewTelemetry[]>([]);
+    const pendingIndexRef = useRef<number | null>(null);
+    const resolvePendingRef = useRef<(() => void) | null>(null);
+    const oneShotTimingsRef = useRef<PerfOneShotTiming[]>([]);
+    const projectLoadStartedRef = useRef<number | null>(null);
 
-    // Stable refs so the orchestration effect reads the latest values without
-    // re-running when they change (the orchestration runs once).
-    const openProjectRef = useRef(openProject);
-    openProjectRef.current = openProject;
-    const astRef = useRef(ast);
-    astRef.current = ast;
-    const commitDocumentEventsRef = useRef(commitDocumentEvents);
-    commitDocumentEventsRef.current = commitDocumentEvents;
-    const setPreviewZoomRef = useRef(setPreviewZoom);
-    setPreviewZoomRef.current = setPreviewZoom;
-    const setPreviewZoomManualRef = useRef(setPreviewZoomManual);
-    setPreviewZoomManualRef.current = setPreviewZoomManual;
+    const [bootstrapped, setBootstrapped] = useState(false);
 
+    // Step 1: read config, measure app-start, and open the target project.
     useEffect(() => {
         if (startedRef.current) {
             return;
         }
+        // Set the guard synchronously (before any await) so StrictMode's
+        // double-invoke doesn't start two orchestration coroutines.
         startedRef.current = true;
 
-        let cancelled = false;
-        const oneShotTimings: PerfOneShotTiming[] = [];
-        const samples: PreviewTelemetry[] = [];
-
-        /**
-         * Wait for the next telemetry sample. Used by both the project-load
-         * phase (one-shot: first preview paint) and the typing loop (per
-         * keystroke). Returns when `setPreviewTelemetryListener` fires.
-         */
-        const waitForTelemetry = (): Promise<void> =>
-            new Promise<void>((resolve) => {
-                setPreviewTelemetryListener(() => {
-                    resolve();
-                });
-            });
-
-        /**
-         * Wait for the next telemetry sample and capture it into `samples`.
-         */
-        const waitForTelemetryAndCapture = (): Promise<void> =>
-            new Promise<void>((resolve) => {
-                setPreviewTelemetryListener((telemetry) => {
-                    samples.push(telemetry);
-                    resolve();
-                });
-            });
-
-        const run = async (): Promise<void> => {
-            // ── Phase 1: Read config + measure app-start → first paint ────
+        void (async () => {
             const config = await TauriApi.getPerfConfig();
             if (!config.enabled || !config.projectPath) {
                 return;
             }
+            configRef.current = config;
 
-            // Measure app-start → first paint. APP_START_TIMESTAMP was
-            // captured at the top of main.tsx module eval. The welcome screen
-            // renders immediately on mount; double-rAF is the closest portable
-            // proxy for "the browser painted the first frame."
-            await waitForNextPaint();
-            if (cancelled) return;
+            // App-start timing: from the earliest module-eval timestamp to
+            // now. This runs after React's first render + the async IPC round
+            // trip, so it captures the full cold-start cost.
             const appStartElapsed = Date.now() - APP_START_TIMESTAMP;
-            oneShotTimings.push({
+            oneShotTimingsRef.current.push({
                 label: "appStart",
                 elapsedMs: appStartElapsed,
             });
             // eslint-disable-next-line no-console
             console.log(
-                `[perf] appStart: ${appStartElapsed}ms (module eval → first paint)`,
+                `[perf] appStart: ${appStartElapsed}ms (module eval → config read)`,
             );
 
-            // ── Phase 2: Open project + measure project-load → first paint ─
-            const loadStartedAt = Date.now();
+            // Project-load timing starts here.
+            projectLoadStartedRef.current = Date.now();
 
-            // Install a one-shot listener for the bootstrap compile's first
-            // telemetry sample — the authoritative "preview is visible" signal.
-            const firstPaintPromise = waitForTelemetry();
+            await openProject(config.projectPath);
+        })();
+    }, [openProject]);
 
-            await openProjectRef.current(config.projectPath);
-            if (cancelled) return;
+    // Step 2: once the project is active, apply the configured zoom and start
+    // the replay. A high zoom makes a page span several viewports, so the
+    // visible-band raster path (not full-page raster) is what gets measured.
+    useEffect(() => {
+        if (!hasActiveProject || !configRef.current || bootstrapped) {
+            return;
+        }
+        const { zoom } = configRef.current;
+        if (zoom != null && zoom > 0) {
+            setPreviewZoomManual();
+            setPreviewZoom(zoom);
+        }
 
-            await firstPaintPromise;
-            if (cancelled) return;
-
-            const projectLoadElapsed = Date.now() - loadStartedAt;
-            oneShotTimings.push({
+        // Record project-load timing: from openProject call to hasActiveProject
+        // becoming true. This captures archive open + AST load + first compile
+        // trigger (though not the full first paint, which Step 3 waits for).
+        if (projectLoadStartedRef.current !== null) {
+            const elapsed = Date.now() - projectLoadStartedRef.current;
+            oneShotTimingsRef.current.push({
                 label: "projectLoad",
-                elapsedMs: projectLoadElapsed,
+                elapsedMs: elapsed,
             });
             // eslint-disable-next-line no-console
             console.log(
-                `[perf] projectLoad: ${projectLoadElapsed}ms (openProject → first preview paint)`,
+                `[perf] projectLoad: ${elapsed}ms (openProject → hasActiveProject)`,
             );
+        }
 
-            // ── Phase 3: Apply zoom ────────────────────────────────────────
-            const { zoom } = config;
-            if (zoom != null && zoom > 0) {
-                setPreviewZoomManualRef.current();
-                setPreviewZoomRef.current(zoom);
+        setBootstrapped(true);
+    }, [hasActiveProject, bootstrapped, setPreviewZoom, setPreviewZoomManual]);
+
+    // Step 3: typing loop + telemetry collection.
+    useEffect(() => {
+        if (!bootstrapped || !configRef.current) {
+            return;
+        }
+
+        const config = configRef.current;
+        const target: PerfTypingTarget = config.typingTarget;
+
+        // Resolve the typing target from the AST.
+        let paragraph: {
+            paragraphId: string;
+            initialText: string;
+        } | null = null;
+        let titleInitial: string | null = null;
+
+        if (target === "formTitle") {
+            titleInitial = getTitleValue(ast);
+        } else {
+            paragraph = findFirstParagraph(ast);
+            if (!paragraph) {
+                // eslint-disable-next-line no-console
+                console.error("[perf] no paragraph found");
+                return;
             }
+        }
 
-            // Give the zoom a moment to settle before typing.
-            await sleep(100);
-            if (cancelled) return;
+        let cancelled = false;
 
-            // ── Phase 4: Typing loop ───────────────────────────────────────
-            const target = config.typingTarget;
-
-            // Resolve the typing target from the AST (snapshot at this point).
-            let paragraph: {
-                paragraphId: string;
-                initialText: string;
-            } | null = null;
-            let titleInitial: string | null = null;
-
-            if (target === "formTitle") {
-                titleInitial = getTitleValue(astRef.current);
-            } else {
-                paragraph = findFirstParagraph(astRef.current);
-                if (!paragraph) {
-                    // eslint-disable-next-line no-console
-                    console.error("[perf] no paragraph found");
-                    setPreviewTelemetryListener(null);
-                    return;
-                }
+        setPreviewTelemetryListener((telemetry) => {
+            if (pendingIndexRef.current !== null) {
+                samplesRef.current.push(telemetry);
+                pendingIndexRef.current = null;
+                resolvePendingRef.current?.();
+                resolvePendingRef.current = null;
             }
+        });
 
-            /** Build the forward/inverse DocumentEvent pair for one keystroke. */
-            const buildKeystrokeEvents = (
-                index: number,
-            ): { forward: DocumentEvent; inverse: DocumentEvent } | null => {
-                if (target === "formTitle" && titleInitial !== null) {
-                    const nextText = `${titleInitial}${"x".repeat(index + 1)}`;
-                    const prevText =
-                        index === 0
-                            ? titleInitial
-                            : `${titleInitial}${"x".repeat(index)}`;
-                    return {
-                        forward: {
-                            type: "updateInput",
-                            path: "/title",
-                            value: nextText,
-                        },
-                        inverse: {
-                            type: "updateInput",
-                            path: "/title",
-                            value: prevText,
-                        },
-                    };
-                }
+        const waitForTelemetry = async (): Promise<void> => {
+            if (pendingIndexRef.current === null) {
+                return;
+            }
+            return new Promise((resolve) => {
+                resolvePendingRef.current = resolve;
+            });
+        };
 
-                if (!paragraph) {
-                    return null;
-                }
-
-                const { paragraphId, initialText } = paragraph;
-                const nextText = `${initialText}${"x".repeat(index + 1)}`;
+        /** Build the forward/inverse DocumentEvent pair for one keystroke. */
+        const buildKeystrokeEvents = (
+            index: number,
+        ): { forward: DocumentEvent; inverse: DocumentEvent } | null => {
+            if (target === "formTitle" && titleInitial !== null) {
+                const nextText = `${titleInitial}${"x".repeat(index + 1)}`;
                 const prevText =
                     index === 0
-                        ? initialText
-                        : `${initialText}${"x".repeat(index)}`;
+                        ? titleInitial
+                        : `${titleInitial}${"x".repeat(index)}`;
                 return {
                     forward: {
-                        type: "updateParagraphText",
-                        element_id: paragraphId,
-                        text: nextText,
+                        type: "updateInput",
+                        path: "/title",
+                        value: nextText,
                     },
                     inverse: {
-                        type: "updateParagraphText",
-                        element_id: paragraphId,
-                        text: prevText,
+                        type: "updateInput",
+                        path: "/title",
+                        value: prevText,
                     },
                 };
-            };
+            }
 
+            if (!paragraph) {
+                return null;
+            }
+
+            const { paragraphId, initialText } = paragraph;
+            const nextText = `${initialText}${"x".repeat(index + 1)}`;
+            const prevText =
+                index === 0
+                    ? initialText
+                    : `${initialText}${"x".repeat(index)}`;
+            return {
+                forward: {
+                    type: "updateParagraphText",
+                    element_id: paragraphId,
+                    text: nextText,
+                },
+                inverse: {
+                    type: "updateParagraphText",
+                    element_id: paragraphId,
+                    text: prevText,
+                },
+            };
+        };
+
+        const run = async (): Promise<void> => {
             const total = config.keystrokeCount;
             const warmup = config.warmupKeystrokes;
 
@@ -272,28 +264,17 @@ export const usePerfReplay = ({
                     break;
                 }
 
-                // Capture mode: each keystroke pushes a sample into `samples`.
-                const capturePromise = waitForTelemetryAndCapture();
+                pendingIndexRef.current = i;
+                commitDocumentEvents([events.forward], [events.inverse]);
 
-                commitDocumentEventsRef.current(
-                    [events.forward],
-                    [events.inverse],
-                );
-
-                await capturePromise;
-                if (cancelled) return;
+                await waitForTelemetry();
 
                 if (i >= warmup && config.keystrokeIntervalMs > 0) {
                     await sleep(config.keystrokeIntervalMs);
                 }
             }
 
-            if (cancelled) return;
-
-            // ── Phase 5: Build report + exit ───────────────────────────────
-            setPreviewTelemetryListener(null);
-
-            const recorded = samples.slice(config.warmupKeystrokes);
+            const recorded = samplesRef.current.slice(config.warmupKeystrokes);
             const totalLatencies = recorded.map((s) => s.totalLatencyMs);
             const compileLatencies = recorded.map((s) => s.compileMs);
             const renderLatencies = recorded.map((s) => s.svgRenderMs);
@@ -337,13 +318,12 @@ export const usePerfReplay = ({
                     scheduleMeanMs: summarize(scheduleLatencies).mean,
                     firstKeystrokeMs,
                 },
-                oneShotTimings,
+                oneShotTimings: oneShotTimingsRef.current,
             };
 
-            const targetLabel = config.typingTarget;
             // eslint-disable-next-line no-console
             console.log(
-                `[perf] target=${targetLabel} · ${recorded.length} samples · ` +
+                `[perf] target=${target} · ${recorded.length} samples · ` +
                     `total mean/p50/p90 = ` +
                     `${totalSummary.mean.toFixed(1)}/${totalSummary.p50.toFixed(1)}/${totalSummary.p90.toFixed(1)} ms` +
                     (firstKeystrokeMs !== null
@@ -360,5 +340,5 @@ export const usePerfReplay = ({
             cancelled = true;
             setPreviewTelemetryListener(null);
         };
-    }, []);
+    }, [bootstrapped, ast, commitDocumentEvents, dispatch]);
 };
