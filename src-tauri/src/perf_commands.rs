@@ -3,6 +3,17 @@ use std::path::PathBuf;
 use ergo_core::core_errors::ErgoError;
 use tauri::AppHandle;
 
+/// Which editing surface the typing phase targets.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ts_rs::TS, PartialEq, Eq)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum PerfTypingTarget {
+    /// ProseMirror body editor — first paragraph of the content section.
+    Body,
+    /// Template form field (e.g. `/title` input) dispatched as `updateInput`.
+    FormTitle,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +28,8 @@ pub struct PerfHarnessConfig {
     /// raster-bound regime where visible-band rasterization matters most. `None`
     /// leaves the preview at its default zoom.
     pub zoom: Option<f32>,
+    /// Which editing surface to drive during the typing phase.
+    pub typing_target: PerfTypingTarget,
 }
 
 impl Default for PerfHarnessConfig {
@@ -29,6 +42,7 @@ impl Default for PerfHarnessConfig {
             warmup_keystrokes: 3,
             keystroke_interval_ms: 80,
             zoom: None,
+            typing_target: PerfTypingTarget::Body,
         }
     }
 }
@@ -53,6 +67,18 @@ pub struct PerfTelemetrySample {
     pub raster_ms: u32,
 }
 
+/// Wall-clock duration of a one-shot measurement (startup, project load, etc.).
+/// No per-keystroke breakdown — just the total and a label for context.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct PerfOneShotTiming {
+    /// Human-readable label, e.g. "appStart", "projectLoad".
+    pub label: String,
+    /// Total elapsed milliseconds.
+    pub elapsed_ms: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -66,6 +92,10 @@ pub struct PerfReportSummary {
     pub compile_p90_ms: f64,
     pub svg_render_mean_ms: f64,
     pub schedule_mean_ms: f64,
+    /// Mean of the first post-warmup keystroke across runs (when available).
+    /// First-keystroke latency is typically much higher than steady state
+    /// because of JIT warmup, font cache misses, and lazy module init.
+    pub first_keystroke_ms: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
@@ -75,6 +105,11 @@ pub struct PerfHarnessReport {
     pub config: PerfHarnessConfig,
     pub samples: Vec<PerfTelemetrySample>,
     pub summary: PerfReportSummary,
+    /// One-shot timings collected before the typing loop:
+    /// `appStart` (module eval → first paint) and `projectLoad` (openProject →
+    /// first preview paint). Empty when not measured.
+    #[serde(default)]
+    pub one_shot_timings: Vec<PerfOneShotTiming>,
 }
 
 fn env_usize(key: &str, default: usize) -> usize {
@@ -93,6 +128,14 @@ fn env_u32(key: &str, default: u32) -> u32 {
 
 #[tauri::command]
 pub fn get_perf_config() -> PerfHarnessConfig {
+    let typing_target = match std::env::var("ERGO_PERF_TYPING_TARGET")
+        .unwrap_or_default()
+        .as_str()
+    {
+        "form-title" => PerfTypingTarget::FormTitle,
+        _ => PerfTypingTarget::Body,
+    };
+
     PerfHarnessConfig {
         enabled: std::env::var("ERGO_PERF_ENABLED").is_ok_and(|v| v == "1"),
         project_path: std::env::var("ERGO_PERF_PROJECT_PATH").ok(),
@@ -103,6 +146,7 @@ pub fn get_perf_config() -> PerfHarnessConfig {
         zoom: std::env::var("ERGO_PERF_ZOOM")
             .ok()
             .and_then(|v| v.parse().ok()),
+        typing_target,
     }
 }
 
@@ -176,6 +220,7 @@ mod tests {
             "ERGO_PERF_WARMUP_KEYSTROKES",
             "ERGO_PERF_KEYSTROKE_INTERVAL_MS",
             "ERGO_PERF_ZOOM",
+            "ERGO_PERF_TYPING_TARGET",
         ] {
             std::env::remove_var(key);
         }
@@ -189,5 +234,6 @@ mod tests {
         assert_eq!(config.warmup_keystrokes, 3);
         assert_eq!(config.keystroke_interval_ms, 80);
         assert_eq!(config.zoom, None);
+        assert_eq!(config.typing_target, PerfTypingTarget::Body);
     }
 }
