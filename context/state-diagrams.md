@@ -38,6 +38,10 @@ The backend session mirrors events for archive I/O; it does not compile Typst on
 stateDiagram-v2
     direction TB
     [*] --> Idle
+    Idle --> Bootstrapping : open/new project
+    Bootstrapping --> PreWarm : first compile succeeds
+    PreWarm --> Retained : warmup compile (throwaway)
+    PreWarm --> Failed : warmup diagnostics
     Idle --> Compiling : sync_events
     Compiling --> Retained : success
     Compiling --> Failed : diagnostics
@@ -45,7 +49,7 @@ stateDiagram-v2
     Retained --> Compiling : newer events
 ```
 
-`PreviewSyncState` updates on successful main compile. Resource document may be cached (comemo) until `dirty_resource_ids` changes. While **Retained**, `PreviewSyncState` serves `jump_from_click` for the displayed revision. Forward preview sync scrolls to the changed page nearest the viewport anchor after compile.
+`PreviewSyncState` updates on successful main compile. Resource document may be cached (comemo) until `dirty_resource_ids` changes. The **PreWarm** state runs a throwaway second compile immediately after the bootstrap compile to populate the incremental-compile cache (comemo entries, font shaping, layout) so the user's first keystroke does not pay JIT and cache-miss costs. While **Retained**, `PreviewSyncState` serves `jump_from_click` for the displayed revision. Forward preview sync scrolls to the changed page nearest the viewport anchor after compile.
 
 ## 4. Preview Page Renderer Lifecycle
 
