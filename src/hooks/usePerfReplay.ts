@@ -3,10 +3,13 @@ import type { DocumentAST } from "../bindings/DocumentAST";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { PerfHarnessConfig } from "../bindings/PerfHarnessConfig";
 import type { PerfHarnessReport } from "../bindings/PerfHarnessReport";
+import type { PerfOneShotTiming } from "../bindings/PerfOneShotTiming";
+import type { PerfTypingTarget } from "../bindings/PerfTypingTarget";
 import type { PreviewTelemetry } from "./previewTelemetry";
 import { setPreviewTelemetryListener } from "./previewDiagnostics";
 import { TauriApi } from "../api/tauri";
 import { richTextPlainText } from "../state/documentEvents/helpers";
+import { APP_START_TIMESTAMP } from "../perf/appStartTimestamp";
 import type { ASTAction } from "../state/ast/actions";
 
 interface UsePerfReplayOptions {
@@ -46,6 +49,12 @@ const findFirstParagraph = (
     return null;
 };
 
+/** Read the current title value from inputs (handles both `/title` and `title`). */
+const getTitleValue = (ast: DocumentAST): string => {
+    const raw = ast.inputs["/title"] ?? ast.inputs["title"];
+    return typeof raw === "string" ? raw : "";
+};
+
 const quantile = (sorted: number[], q: number): number =>
     sorted.length === 0
         ? 0
@@ -64,8 +73,16 @@ const summarize = (values: number[]) => {
     };
 };
 
+/** Resolve after the browser has painted the next frame (double rAF). */
+const waitForNextPaint = (): Promise<void> =>
+    new Promise((resolve) => {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => resolve());
+        });
+    });
+
 export const usePerfReplay = ({
-    hasActiveProject,
+    hasActiveProject: _hasActiveProject,
     openProject,
     dispatch,
     ast,
@@ -78,30 +95,107 @@ export const usePerfReplay = ({
     const samplesRef = useRef<PreviewTelemetry[]>([]);
     const pendingIndexRef = useRef<number | null>(null);
     const resolvePendingRef = useRef<(() => void) | null>(null);
+    const oneShotTimingsRef = useRef<PerfOneShotTiming[]>([]);
 
+    // Flow state: each phase gates the next.
+    const [configLoaded, setConfigLoaded] = useState(false);
+    const [projectOpened, setProjectOpened] = useState(false);
     const [bootstrapped, setBootstrapped] = useState(false);
 
-    // Step 1: read config and open the target project.
+    // ── Phase 1: Read config + measure app-start → first paint ───────────
+    //
+    // APP_START_TIMESTAMP was captured at the top of main.tsx module eval.
+    // We wait for the next paint cycle (double rAF) to get "pixels on screen"
+    // for the welcome screen, then record the elapsed time and open the project.
     useEffect(() => {
         if (startedRef.current) {
             return;
         }
+        startedRef.current = true;
+
         void (async () => {
             const config = await TauriApi.getPerfConfig();
             if (!config.enabled || !config.projectPath) {
                 return;
             }
             configRef.current = config;
-            startedRef.current = true;
-            await openProject(config.projectPath);
-        })();
-    }, [openProject]);
 
-    // Step 2: once the project is active, apply the configured zoom and start
-    // the replay. A high zoom makes a page span several viewports, so the
-    // visible-band raster path (not full-page raster) is what gets measured.
+            // Measure app-start → first paint. The welcome screen renders
+            // immediately on mount; double-rAF is the closest portable proxy
+            // for "the browser painted the first frame."
+            await waitForNextPaint();
+            const appStartElapsed = Date.now() - APP_START_TIMESTAMP;
+            oneShotTimingsRef.current.push({
+                label: "appStart",
+                elapsedMs: appStartElapsed,
+            });
+            // eslint-disable-next-line no-console
+            console.log(
+                `[perf] appStart: ${appStartElapsed}ms (module eval → first paint)`,
+            );
+
+            setConfigLoaded(true);
+        })();
+    }, []);
+
+    // ── Phase 2: Open project + measure project-load → first preview paint ──
+    //
+    // The "project loaded" end-marker is the first preview paint, detected by
+    // listening for the first telemetry sample (which fires when
+    // markMainPreviewPainted runs after the bootstrap compile).
     useEffect(() => {
-        if (!hasActiveProject || !configRef.current || bootstrapped) {
+        if (!configLoaded || !configRef.current) {
+            return;
+        }
+
+        let cancelled = false;
+        const loadStartedAt = Date.now();
+
+        // One-shot listener: resolves on the first telemetry sample, which
+        // is emitted by markMainPreviewPainted after the bootstrap compile's
+        // first page renders. This is the authoritative "preview is visible"
+        // signal.
+        const firstPaintPromise = new Promise<void>((resolve) => {
+            setPreviewTelemetryListener(() => {
+                if (!cancelled) {
+                    resolve();
+                }
+            });
+        });
+
+        void (async () => {
+            const projectPath = configRef.current!.projectPath!;
+            await openProject(projectPath);
+
+            // Wait for the first preview paint telemetry.
+            await firstPaintPromise;
+
+            if (!cancelled) {
+                const elapsed = Date.now() - loadStartedAt;
+                oneShotTimingsRef.current.push({
+                    label: "projectLoad",
+                    elapsedMs: elapsed,
+                });
+                // eslint-disable-next-line no-console
+                console.log(
+                    `[perf] projectLoad: ${elapsed}ms (openProject → first preview paint)`,
+                );
+
+                // Clear the one-shot listener so the typing phase can install
+                // its own.
+                setPreviewTelemetryListener(null);
+                setProjectOpened(true);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [configLoaded, openProject]);
+
+    // ── Phase 3: Apply zoom before typing ────────────────────────────────
+    useEffect(() => {
+        if (!projectOpened || !configRef.current || bootstrapped) {
             return;
         }
         const { zoom } = configRef.current;
@@ -110,20 +204,35 @@ export const usePerfReplay = ({
             setPreviewZoom(zoom);
         }
         setBootstrapped(true);
-    }, [hasActiveProject, bootstrapped, setPreviewZoom, setPreviewZoomManual]);
+    }, [projectOpened, bootstrapped, setPreviewZoom, setPreviewZoomManual]);
 
-    // Step 3: typing loop + telemetry collection.
+    // ── Phase 4: Typing loop + telemetry collection ──────────────────────
+    //
+    // The typing target (body paragraph vs form title field) is selected by
+    // ERGO_PERF_TYPING_TARGET. Each keystroke dispatches a DocumentEvent and
+    // waits for the corresponding telemetry sample (compile → preview paint).
     useEffect(() => {
         if (!bootstrapped || !configRef.current) {
             return;
         }
 
         const config = configRef.current;
-        const paragraph = findFirstParagraph(ast);
-        if (!paragraph) {
-            // eslint-disable-next-line no-console
-            console.error("[perf] no paragraph found");
-            return;
+        const target: PerfTypingTarget = config.typingTarget;
+
+        // Resolve the typing target from the AST.
+        let paragraph: { paragraphId: string; initialText: string } | null =
+            null;
+        let titleInitial: string | null = null;
+
+        if (target === "formTitle") {
+            titleInitial = getTitleValue(ast);
+        } else {
+            paragraph = findFirstParagraph(ast);
+            if (!paragraph) {
+                // eslint-disable-next-line no-console
+                console.error("[perf] no paragraph found");
+                return;
+            }
         }
 
         let cancelled = false;
@@ -146,29 +255,66 @@ export const usePerfReplay = ({
             });
         };
 
-        const run = async (): Promise<void> => {
+        /** Build the forward/inverse DocumentEvent pair for one keystroke. */
+        const buildKeystrokeEvents = (
+            index: number,
+        ): { forward: DocumentEvent; inverse: DocumentEvent } | null => {
+            if (target === "formTitle" && titleInitial !== null) {
+                const nextText = `${titleInitial}${"x".repeat(index + 1)}`;
+                const prevText =
+                    index === 0
+                        ? titleInitial
+                        : `${titleInitial}${"x".repeat(index)}`;
+                return {
+                    forward: {
+                        type: "updateInput",
+                        path: "/title",
+                        value: nextText,
+                    },
+                    inverse: {
+                        type: "updateInput",
+                        path: "/title",
+                        value: prevText,
+                    },
+                };
+            }
+
+            if (!paragraph) {
+                return null;
+            }
+
             const { paragraphId, initialText } = paragraph;
+            const nextText = `${initialText}${"x".repeat(index + 1)}`;
+            const prevText =
+                index === 0
+                    ? initialText
+                    : `${initialText}${"x".repeat(index)}`;
+            return {
+                forward: {
+                    type: "updateParagraphText",
+                    element_id: paragraphId,
+                    text: nextText,
+                },
+                inverse: {
+                    type: "updateParagraphText",
+                    element_id: paragraphId,
+                    text: prevText,
+                },
+            };
+        };
+
+        const run = async (): Promise<void> => {
             const total = config.keystrokeCount;
             const warmup = config.warmupKeystrokes;
 
             for (let i = 0; i < total && !cancelled; i++) {
-                const nextText = `${initialText}${"x".repeat(i + 1)}`;
-                const previousText =
-                    i === 0 ? initialText : `${initialText}${"x".repeat(i)}`;
-
-                const forward: DocumentEvent = {
-                    type: "updateParagraphText",
-                    element_id: paragraphId,
-                    text: nextText,
-                };
-                const inverse: DocumentEvent = {
-                    type: "updateParagraphText",
-                    element_id: paragraphId,
-                    text: previousText,
-                };
+                const events = buildKeystrokeEvents(i);
+                if (!events) {
+                    break;
+                }
 
                 pendingIndexRef.current = i;
-                commitDocumentEvents([forward], [inverse]);
+                commitDocumentEvents([events.forward], [events.inverse]);
 
                 await waitForTelemetry();
 
@@ -185,6 +331,11 @@ export const usePerfReplay = ({
 
             const totalSummary = summarize(totalLatencies);
             const compileSummary = summarize(compileLatencies);
+
+            // First post-warmup keystroke (the one users feel as "first typing
+            // after the app settles"). Typically much higher than steady state.
+            const firstKeystrokeMs =
+                recorded.length > 0 ? recorded[0]!.totalLatencyMs : null;
 
             const report: PerfHarnessReport = {
                 config,
@@ -214,13 +365,20 @@ export const usePerfReplay = ({
                     compileP90Ms: compileSummary.p90,
                     svgRenderMeanMs: summarize(renderLatencies).mean,
                     scheduleMeanMs: summarize(scheduleLatencies).mean,
+                    firstKeystrokeMs,
                 },
+                oneShotTimings: oneShotTimingsRef.current,
             };
 
+            const targetLabel = config.typingTarget;
             // eslint-disable-next-line no-console
             console.log(
-                `[perf] ${recorded.length} samples · total mean/p50/p90 = ` +
-                    `${totalSummary.mean.toFixed(1)}/${totalSummary.p50.toFixed(1)}/${totalSummary.p90.toFixed(1)} ms`,
+                `[perf] target=${targetLabel} · ${recorded.length} samples · ` +
+                    `total mean/p50/p90 = ` +
+                    `${totalSummary.mean.toFixed(1)}/${totalSummary.p50.toFixed(1)}/${totalSummary.p90.toFixed(1)} ms` +
+                    (firstKeystrokeMs !== null
+                        ? ` · first=${firstKeystrokeMs}ms`
+                        : ""),
             );
 
             await TauriApi.writePerfReportAndExit(report);
