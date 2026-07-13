@@ -1,6 +1,7 @@
 use std::process::Command;
 use std::time::Duration;
 
+use ergo_core::core_errors::ErgoError;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -26,11 +27,15 @@ fn docker_command() -> Command {
     command
 }
 
-fn run_docker(args: &[&str]) -> Result<std::process::Output, String> {
+fn run_docker(args: &[&str]) -> Result<std::process::Output, ErgoError> {
     docker_command()
         .args(args)
         .output()
-        .map_err(|error| format!("Failed to run docker: {error}"))
+        .map_err(|error| {
+            ErgoError::Operation {
+                message: format!("Failed to run docker: {error}"),
+            }
+        })
 }
 
 pub fn docker_available() -> bool {
@@ -70,7 +75,7 @@ fn container_exists() -> bool {
             .any(|line| line.trim() == CONTAINER_NAME)
 }
 
-fn apply_restart_policy() -> Result<(), String> {
+fn apply_restart_policy() -> Result<(), ErgoError> {
     let output = run_docker(&[
         "update",
         "--restart",
@@ -83,14 +88,18 @@ fn apply_restart_policy() -> Result<(), String> {
     }
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    Err(format!(
-        "Failed to set restart policy on {CONTAINER_NAME}: {stderr}"
-    ))
+    Err(ErgoError::Operation {
+        message: format!(
+            "Failed to set restart policy on {CONTAINER_NAME}: {stderr}"
+        ),
+    })
 }
 
-pub fn ensure_running() -> Result<(), String> {
+pub fn ensure_running() -> Result<(), ErgoError> {
     if !docker_available() {
-        return Err("Docker is not available".to_string());
+        return Err(ErgoError::Operation {
+            message: "Docker is not available".to_string(),
+        });
     }
 
     if is_running() {
@@ -107,7 +116,9 @@ pub fn ensure_running() -> Result<(), String> {
             return Ok(());
         }
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Failed to start {CONTAINER_NAME}: {stderr}"));
+        return Err(ErgoError::Operation {
+            message: format!("Failed to start {CONTAINER_NAME}: {stderr}"),
+        });
     }
 
     let output = run_docker(&[
@@ -127,10 +138,12 @@ pub fn ensure_running() -> Result<(), String> {
     }
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    Err(format!("Failed to create {CONTAINER_NAME}: {stderr}"))
+    Err(ErgoError::Operation {
+        message: format!("Failed to create {CONTAINER_NAME}: {stderr}"),
+    })
 }
 
-pub fn stop_and_remove() -> Result<(), String> {
+pub fn stop_and_remove() -> Result<(), ErgoError> {
     if !docker_available() {
         return Ok(());
     }
@@ -145,10 +158,12 @@ pub fn stop_and_remove() -> Result<(), String> {
     }
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    Err(format!("Failed to remove {CONTAINER_NAME}: {stderr}"))
+    Err(ErgoError::Operation {
+        message: format!("Failed to remove {CONTAINER_NAME}: {stderr}"),
+    })
 }
 
-pub fn sync_enabled(enabled: bool) -> Result<(), String> {
+pub fn sync_enabled(enabled: bool) -> Result<(), ErgoError> {
     if enabled {
         ensure_running()
     } else {
@@ -177,11 +192,11 @@ pub fn lookup_endpoint_for_query(query: &str) -> &'static str {
 }
 
 #[tauri::command]
-pub fn lookup_bibliography_metadata(query: String) -> Result<Option<String>, String> {
+pub fn lookup_bibliography_metadata(query: String) -> Result<Option<String>, ErgoError> {
     lookup_bibliography_metadata_query(&query)
 }
 
-fn lookup_bibliography_metadata_query(query: &str) -> Result<Option<String>, String> {
+fn lookup_bibliography_metadata_query(query: &str) -> Result<Option<String>, ErgoError> {
     let query = query.trim();
     if query.is_empty() {
         return Ok(None);
@@ -194,7 +209,7 @@ fn lookup_bibliography_metadata_query(query: &str) -> Result<Option<String>, Str
     let client = reqwest::blocking::Client::builder()
         .timeout(LOOKUP_TIMEOUT)
         .build()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
 
     let endpoint = lookup_endpoint_for_query(query);
     let translate_response = client
@@ -202,7 +217,7 @@ fn lookup_bibliography_metadata_query(query: &str) -> Result<Option<String>, Str
         .header("Content-Type", "text/plain")
         .body(query.to_string())
         .send()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
 
     if translate_response.status().as_u16() == 300 {
         return Ok(None);
@@ -214,17 +229,20 @@ fn lookup_bibliography_metadata_query(query: &str) -> Result<Option<String>, Str
 
     let items_json = translate_response
         .text()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
 
-    let items: Vec<serde_json::Value> = serde_json::from_str(&items_json)
-        .map_err(|error| format!("Invalid translation-server response: {error}"))?;
+    let items: Vec<serde_json::Value> = serde_json::from_str(&items_json).map_err(|error| {
+        ErgoError::Operation {
+            message: format!("Invalid translation-server response: {error}"),
+        }
+    })?;
 
     if items.is_empty() {
         return Ok(None);
     }
 
     let export_payload = serde_json::to_string(&vec![items[0].clone()])
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
 
     let export_response = client
         .post(format!(
@@ -233,7 +251,7 @@ fn lookup_bibliography_metadata_query(query: &str) -> Result<Option<String>, Str
         .header("Content-Type", "application/json")
         .body(export_payload)
         .send()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
 
     if !export_response.status().is_success() {
         return Ok(None);
@@ -241,7 +259,7 @@ fn lookup_bibliography_metadata_query(query: &str) -> Result<Option<String>, Str
 
     let bibtex = export_response
         .text()
-        .map_err(|error| error.to_string())?
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?
         .trim()
         .to_string();
 

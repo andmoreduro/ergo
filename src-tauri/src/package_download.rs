@@ -12,6 +12,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use ergo_core::core_errors::ErgoError;
 use ergo_core::package_resolver::{
     collect_package_files, find_package_dir, package_roots, PackageFile, PackageRef,
 };
@@ -23,7 +24,7 @@ const REGISTRY_BASE: &str = "https://packages.typst.org";
 /// Ensure `root` and every `@preview` package it transitively imports are present
 /// in the local Typst cache (downloading any that are missing), then return all
 /// of their files ready to be mirrored into the preview VFS.
-pub fn collect_package_files_with_deps(root: &PackageRef) -> Result<Vec<ProjectFile>, String> {
+pub fn collect_package_files_with_deps(root: &PackageRef) -> Result<Vec<ProjectFile>, ErgoError> {
     let mut visited: HashSet<(String, String, String)> = HashSet::new();
     let mut queue: Vec<PackageRef> = vec![root.clone()];
     let mut out: Vec<ProjectFile> = Vec::new();
@@ -63,31 +64,37 @@ pub fn collect_package_files_with_deps(root: &PackageRef) -> Result<Vec<ProjectF
 
 /// Download `package` into the cache if it is not already there. Only `@preview`
 /// packages can be fetched; any other namespace must be pre-installed.
-pub fn ensure_package(package: &PackageRef) -> Result<(), String> {
+pub fn ensure_package(package: &PackageRef) -> Result<(), ErgoError> {
     if find_package_dir(package).is_some() {
         return Ok(());
     }
     if package.namespace != "preview" {
-        return Err(format!(
-            "Package @{}/{}:{} is not installed and only @preview packages can be downloaded automatically",
-            package.namespace, package.name, package.version
-        ));
+        return Err(ErgoError::Operation {
+            message: format!(
+                "Package @{}/{}:{} is not installed and only @preview packages can be downloaded automatically",
+                package.namespace, package.name, package.version
+            ),
+        });
     }
     download_and_extract(package)
 }
 
-fn cache_target_dir(package: &PackageRef) -> Result<PathBuf, String> {
+fn cache_target_dir(package: &PackageRef) -> Result<PathBuf, ErgoError> {
     let root = package_roots()
         .into_iter()
         .next()
-        .ok_or_else(|| "No Typst package cache directory is available".to_string())?;
+        .ok_or_else(|| {
+            ErgoError::Operation {
+                message: "No Typst package cache directory is available".to_string(),
+            }
+        })?;
     Ok(root
         .join(&package.namespace)
         .join(&package.name)
         .join(&package.version))
 }
 
-fn download_and_extract(package: &PackageRef) -> Result<(), String> {
+fn download_and_extract(package: &PackageRef) -> Result<(), ErgoError> {
     let url = format!(
         "{REGISTRY_BASE}/{}/{}-{}.tar.gz",
         package.namespace, package.name, package.version
@@ -97,14 +104,22 @@ fn download_and_extract(package: &PackageRef) -> Result<(), String> {
     install_tarball(&bytes, &target, &package.name, &package.version)
 }
 
-fn fetch_tarball(url: &str) -> Result<Vec<u8>, String> {
+fn fetch_tarball(url: &str) -> Result<Vec<u8>, ErgoError> {
     let response = reqwest::blocking::get(url)
         .and_then(|response| response.error_for_status())
-        .map_err(|error| format!("Failed to download {url}: {error}"))?;
+        .map_err(|error| {
+            ErgoError::Operation {
+                message: format!("Failed to download {url}: {error}"),
+            }
+        })?;
     response
         .bytes()
         .map(|bytes| bytes.to_vec())
-        .map_err(|error| format!("Failed to read {url}: {error}"))
+        .map_err(|error| {
+            ErgoError::Operation {
+                message: format!("Failed to read {url}: {error}"),
+            }
+        })
 }
 
 /// Typst registry tarballs hold the package files at the archive root
@@ -117,18 +132,23 @@ fn install_tarball(
     target: &std::path::Path,
     name: &str,
     version: &str,
-) -> Result<(), String> {
-    let parent = target
-        .parent()
-        .ok_or_else(|| "Invalid package cache path".to_string())?;
-    std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+) -> Result<(), ErgoError> {
+    let parent = target.parent().ok_or_else(|| {
+        ErgoError::Operation {
+            message: "Invalid package cache path".to_string(),
+        }
+    })?;
+    std::fs::create_dir_all(parent)
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
 
     let staging = parent.join(format!(".{version}-{}.tmp", uuid::Uuid::new_v4()));
     let decoder = flate2::read::GzDecoder::new(bytes);
     let mut archive = tar::Archive::new(decoder);
     if let Err(error) = archive.unpack(&staging) {
         let _ = std::fs::remove_dir_all(&staging);
-        return Err(format!("Failed to extract {name}: {error}"));
+        return Err(ErgoError::Operation {
+            message: format!("Failed to extract {name}: {error}"),
+        });
     }
 
     if target.exists() {
@@ -138,7 +158,9 @@ fn install_tarball(
     }
     std::fs::rename(&staging, target).map_err(|error| {
         let _ = std::fs::remove_dir_all(&staging);
-        format!("Failed to install {name}: {error}")
+        ErgoError::Operation {
+            message: format!("Failed to install {name}: {error}"),
+        }
     })?;
     Ok(())
 }

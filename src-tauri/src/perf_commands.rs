@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use ergo_core::core_errors::ErgoError;
 use tauri::AppHandle;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
@@ -109,7 +110,7 @@ pub fn get_perf_config() -> PerfHarnessConfig {
 pub fn write_perf_report_and_exit(
     app_handle: AppHandle,
     report: PerfHarnessReport,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     let report_path = report
         .config
         .report_path
@@ -120,14 +121,18 @@ pub fn write_perf_report_and_exit(
                 .ok()
                 .map(PathBuf::from)
         })
-        .ok_or("report_path not configured")?;
+        .ok_or(ErgoError::Operation {
+            message: "report_path not configured".to_string(),
+        })?;
 
     if let Some(parent) = report_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
     }
 
-    let json = serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?;
-    std::fs::write(&report_path, json).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&report)
+        .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
+    std::fs::write(&report_path, json).map_err(|e| ErgoError::Operation { message: e.to_string() })?;
 
     eprintln!("[ergo-perf] wrote report to {}", report_path.display());
     app_handle.exit(0);

@@ -1,5 +1,7 @@
 use tauri::{AppHandle, State};
 
+use ergo_core::core_errors::ErgoError;
+
 use crate::actions::{
     action_catalog, context_glossary, resolve_key_event_with_settings, validate_keymap,
     ActionContextSnapshot, ActionDescriptor, ActionResolution, ActionResolverState,
@@ -33,7 +35,7 @@ pub fn resolve_key_event(
     state: State<'_, ActionResolverState>,
     event: LogicalKeyEvent,
     context_snapshot: ActionContextSnapshot,
-) -> Result<ActionResolution, String> {
+) -> Result<ActionResolution, ErgoError> {
     let settings = {
         if let Some(cached) = state.cached_keymap() {
             cached

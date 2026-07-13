@@ -2,6 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, State};
 
+use ergo_core::core_errors::ErgoError;
+
 use crate::ast::{GlobalSettings, KeymapSettings, normalize_keymap_settings};
 use crate::template_spec::{load_bundled_template, resolve_template_variant, TemplateSpec};
 
@@ -15,11 +17,11 @@ fn app_config_file_path_from_config_dir(config_dir: &Path, file_name: &str) -> P
     config_dir.join(APP_CONFIG_DIR_NAME).join(file_name)
 }
 
-fn app_config_file_path(app: &AppHandle, file_name: &str) -> Result<PathBuf, String> {
+fn app_config_file_path(app: &AppHandle, file_name: &str) -> Result<PathBuf, ErgoError> {
     app.path()
         .config_dir()
         .map(|directory| app_config_file_path_from_config_dir(&directory, file_name))
-        .map_err(|error| error.to_string())
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })
 }
 
 fn resource_file_path(app: &AppHandle, file_name: &str) -> Option<PathBuf> {
@@ -29,7 +31,7 @@ fn resource_file_path(app: &AppHandle, file_name: &str) -> Option<PathBuf> {
         .map(|directory| directory.join(file_name))
 }
 
-fn global_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn global_settings_path(app: &AppHandle) -> Result<PathBuf, ErgoError> {
     app_config_file_path(app, GLOBAL_SETTINGS_FILE_NAME)
 }
 
@@ -37,7 +39,7 @@ fn default_global_settings_path(app: &AppHandle) -> Option<PathBuf> {
     resource_file_path(app, DEFAULT_GLOBAL_SETTINGS_RESOURCE)
 }
 
-fn keymap_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn keymap_settings_path(app: &AppHandle) -> Result<PathBuf, ErgoError> {
     app_config_file_path(app, KEYMAP_SETTINGS_FILE_NAME)
 }
 
@@ -45,10 +47,11 @@ fn default_keymap_settings_path(app: &AppHandle) -> Option<PathBuf> {
     resource_file_path(app, DEFAULT_KEYMAP_SETTINGS_RESOURCE)
 }
 
-fn read_global_settings_from_path(path: &Path) -> Result<GlobalSettings, String> {
-    let contents = fs::read_to_string(path).map_err(|error| error.to_string())?;
-    let mut settings: GlobalSettings =
-        serde_json::from_str(&contents).map_err(|error| error.to_string())?;
+fn read_global_settings_from_path(path: &Path) -> Result<GlobalSettings, ErgoError> {
+    let contents =
+        fs::read_to_string(path).map_err(|error| ErgoError::Operation { message: error.to_string() })?;
+    let mut settings: GlobalSettings = serde_json::from_str(&contents)
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
     settings.keymap_profile = GlobalSettings::default().keymap_profile;
     settings.keymap_overrides = Vec::new();
     Ok(settings)
@@ -57,7 +60,7 @@ fn read_global_settings_from_path(path: &Path) -> Result<GlobalSettings, String>
 fn load_global_settings_from_paths(
     path: &Path,
     default_path: Option<&Path>,
-) -> Result<GlobalSettings, String> {
+) -> Result<GlobalSettings, ErgoError> {
     if path.exists() {
         return read_global_settings_from_path(path);
     }
@@ -69,30 +72,35 @@ fn load_global_settings_from_paths(
     Ok(GlobalSettings::default())
 }
 
-fn save_global_settings_to_path(path: &Path, settings: &GlobalSettings) -> Result<(), String> {
+fn save_global_settings_to_path(path: &Path, settings: &GlobalSettings) -> Result<(), ErgoError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        fs::create_dir_all(parent)
+            .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
     }
 
-    let mut contents = serde_json::to_value(settings).map_err(|error| error.to_string())?;
+    let mut contents = serde_json::to_value(settings)
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
     if let Some(object) = contents.as_object_mut() {
         object.remove("keymap_profile");
         object.remove("keymap_overrides");
     }
 
-    let contents = serde_json::to_string_pretty(&contents).map_err(|error| error.to_string())?;
-    fs::write(path, contents).map_err(|error| error.to_string())
+    let contents = serde_json::to_string_pretty(&contents)
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
+    fs::write(path, contents).map_err(|error| ErgoError::Operation { message: error.to_string() })
 }
 
-fn read_keymap_settings_from_path(path: &Path) -> Result<KeymapSettings, String> {
-    let contents = fs::read_to_string(path).map_err(|error| error.to_string())?;
-    serde_json::from_str(&contents).map_err(|error| error.to_string())
+fn read_keymap_settings_from_path(path: &Path) -> Result<KeymapSettings, ErgoError> {
+    let contents =
+        fs::read_to_string(path).map_err(|error| ErgoError::Operation { message: error.to_string() })?;
+    serde_json::from_str(&contents)
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })
 }
 
 fn load_keymap_settings_from_paths(
     path: &Path,
     default_path: Option<&Path>,
-) -> Result<KeymapSettings, String> {
+) -> Result<KeymapSettings, ErgoError> {
     let default_settings = if let Some(default_path) = default_path.filter(|path| path.exists()) {
         read_keymap_settings_from_path(default_path)?
     } else {
@@ -116,23 +124,26 @@ fn load_keymap_settings_from_paths(
     Ok(normalize_keymap_settings(default_settings))
 }
 
-fn save_keymap_settings_to_path(path: &Path, settings: &KeymapSettings) -> Result<(), String> {
+fn save_keymap_settings_to_path(path: &Path, settings: &KeymapSettings) -> Result<(), ErgoError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        fs::create_dir_all(parent)
+            .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
     }
 
     let settings = normalize_keymap_settings(settings.clone());
-    let mut contents = serde_json::to_value(&settings).map_err(|error| error.to_string())?;
+    let mut contents = serde_json::to_value(&settings)
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
     if let Some(object) = contents.as_object_mut() {
         object.remove("keymap_bindings");
     }
 
-    let contents = serde_json::to_string_pretty(&contents).map_err(|error| error.to_string())?;
-    fs::write(path, contents).map_err(|error| error.to_string())
+    let contents = serde_json::to_string_pretty(&contents)
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
+    fs::write(path, contents).map_err(|error| ErgoError::Operation { message: error.to_string() })
 }
 
 #[tauri::command]
-pub fn load_global_settings(app: AppHandle) -> Result<GlobalSettings, String> {
+pub fn load_global_settings(app: AppHandle) -> Result<GlobalSettings, ErgoError> {
     load_global_settings_from_paths(
         &global_settings_path(&app)?,
         default_global_settings_path(&app).as_deref(),
@@ -140,7 +151,7 @@ pub fn load_global_settings(app: AppHandle) -> Result<GlobalSettings, String> {
 }
 
 #[tauri::command]
-pub fn save_global_settings(app: AppHandle, settings: GlobalSettings) -> Result<(), String> {
+pub fn save_global_settings(app: AppHandle, settings: GlobalSettings) -> Result<(), ErgoError> {
     let path = global_settings_path(&app)?;
     let previous = load_global_settings_from_paths(
         &path,
@@ -165,7 +176,7 @@ pub fn save_global_settings(app: AppHandle, settings: GlobalSettings) -> Result<
 }
 
 #[tauri::command]
-pub fn get_translation_server_status(app: AppHandle) -> Result<crate::translation_server::TranslationServerStatus, String> {
+pub fn get_translation_server_status(app: AppHandle) -> Result<crate::translation_server::TranslationServerStatus, ErgoError> {
     let settings = load_global_settings(app)?;
     Ok(crate::translation_server::status(
         settings.zotero_translation_server_enabled.unwrap_or(false),
@@ -186,7 +197,7 @@ pub fn ensure_translation_server_if_enabled(app: &AppHandle) {
 }
 
 #[tauri::command]
-pub fn load_keymap_settings(app: AppHandle) -> Result<KeymapSettings, String> {
+pub fn load_keymap_settings(app: AppHandle) -> Result<KeymapSettings, ErgoError> {
     load_keymap_settings_from_paths(
         &keymap_settings_path(&app)?,
         default_keymap_settings_path(&app).as_deref(),
@@ -194,7 +205,7 @@ pub fn load_keymap_settings(app: AppHandle) -> Result<KeymapSettings, String> {
 }
 
 #[tauri::command]
-pub fn save_keymap_settings(app: AppHandle, settings: KeymapSettings) -> Result<(), String> {
+pub fn save_keymap_settings(app: AppHandle, settings: KeymapSettings) -> Result<(), ErgoError> {
     if let Some(state) = app.try_state::<crate::actions::ActionResolverState>() {
         crate::actions::refresh_cached_keymap(&state, settings.clone());
     }
@@ -206,7 +217,7 @@ pub fn get_template_spec(
     state: State<'_, crate::app_state::TauriAppState>,
     template_id: String,
     variant_id: Option<String>,
-) -> Result<TemplateSpec, String> {
+) -> Result<TemplateSpec, ErgoError> {
     if ergo_core::bundled_templates::has_bundled_template_spec(&template_id) {
         let spec = load_bundled_template(&template_id)?;
         return Ok(resolve_template_variant(&spec, variant_id.as_deref()));
@@ -357,7 +368,7 @@ mod tests {
 
         let error = load_global_settings_from_paths(&path, None).unwrap_err();
 
-        assert!(error.contains("unknown field"));
+        assert!(error.to_string().contains("unknown field"));
 
         let _ = fs::remove_file(path);
     }
@@ -444,7 +455,7 @@ mod tests {
 
         let error = load_keymap_settings_from_paths(&path, None).unwrap_err();
 
-        assert!(error.contains("unknown field"));
+        assert!(error.to_string().contains("unknown field"));
 
         let _ = fs::remove_file(path);
     }

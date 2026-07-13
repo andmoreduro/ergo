@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use ergo_core::core_errors::ErgoError;
+
 use crate::action_types::ActionContextSnapshot;
 
 #[derive(Debug, Clone)]
@@ -119,7 +121,7 @@ enum Token {
     RightParen,
 }
 
-pub(crate) fn parse_context_expression(value: &str) -> Result<ContextExpression, String> {
+pub(crate) fn parse_context_expression(value: &str) -> Result<ContextExpression, ErgoError> {
     let tokens = tokenize_context_expression(value)?;
     let mut parser = ContextParser {
         tokens,
@@ -128,7 +130,9 @@ pub(crate) fn parse_context_expression(value: &str) -> Result<ContextExpression,
     let expression = parser.parse_or()?;
 
     if parser.position != parser.tokens.len() {
-        return Err("unexpected trailing tokens".to_string());
+        return Err(ErgoError::Operation {
+            message: "unexpected trailing tokens".to_string(),
+        });
     }
 
     Ok(expression)
@@ -175,7 +179,7 @@ fn positive_context_names(expression: &str) -> HashSet<String> {
     names
 }
 
-fn tokenize_context_expression(value: &str) -> Result<Vec<Token>, String> {
+fn tokenize_context_expression(value: &str) -> Result<Vec<Token>, ErgoError> {
     let chars: Vec<char> = value.chars().collect();
     let mut index = 0;
     let mut tokens = Vec::new();
@@ -214,7 +218,9 @@ fn tokenize_context_expression(value: &str) -> Result<Vec<Token>, String> {
                     index += 1;
                 }
                 if index >= chars.len() {
-                    return Err("unterminated string literal".to_string());
+                    return Err(ErgoError::Operation {
+                        message: "unterminated string literal".to_string(),
+                    });
                 }
                 tokens.push(Token::String(chars[start..index].iter().collect()));
                 index += 1;
@@ -228,15 +234,19 @@ fn tokenize_context_expression(value: &str) -> Result<Vec<Token>, String> {
                 tokens.push(Token::Identifier(chars[start..index].iter().collect()));
             }
             character => {
-                return Err(format!(
-                    "unexpected context expression character: {character}"
-                ))
+                return Err(ErgoError::Operation {
+                    message: format!(
+                        "unexpected context expression character: {character}"
+                    ),
+                })
             }
         }
     }
 
     if tokens.is_empty() {
-        return Err("context expression cannot be empty".to_string());
+        return Err(ErgoError::Operation {
+            message: "context expression cannot be empty".to_string(),
+        });
     }
 
     Ok(tokens)
@@ -256,7 +266,7 @@ struct ContextParser {
 }
 
 impl ContextParser {
-    fn parse_or(&mut self) -> Result<ContextExpression, String> {
+    fn parse_or(&mut self) -> Result<ContextExpression, ErgoError> {
         let mut expression = self.parse_and()?;
 
         while self.matches(&Token::Or) {
@@ -267,7 +277,7 @@ impl ContextParser {
         Ok(expression)
     }
 
-    fn parse_and(&mut self) -> Result<ContextExpression, String> {
+    fn parse_and(&mut self) -> Result<ContextExpression, ErgoError> {
         let mut expression = self.parse_not()?;
 
         while self.matches(&Token::And) {
@@ -278,7 +288,7 @@ impl ContextParser {
         Ok(expression)
     }
 
-    fn parse_not(&mut self) -> Result<ContextExpression, String> {
+    fn parse_not(&mut self) -> Result<ContextExpression, ErgoError> {
         if self.matches(&Token::Bang) {
             return Ok(ContextExpression::Not(Box::new(self.parse_not()?)));
         }
@@ -286,11 +296,13 @@ impl ContextParser {
         self.parse_primary()
     }
 
-    fn parse_primary(&mut self) -> Result<ContextExpression, String> {
+    fn parse_primary(&mut self) -> Result<ContextExpression, ErgoError> {
         if self.matches(&Token::LeftParen) {
             let expression = self.parse_or()?;
             if !self.matches(&Token::RightParen) {
-                return Err("expected ')'".to_string());
+                return Err(ErgoError::Operation {
+                    message: "expected ')'".to_string(),
+                });
             }
             return Ok(expression);
         }
@@ -300,14 +312,20 @@ impl ContextParser {
                 if self.matches(&Token::Equals) {
                     let value = match self.advance() {
                         Some(Token::String(value)) | Some(Token::Identifier(value)) => value,
-                        _ => return Err("expected value after '=='".to_string()),
+                        _ => {
+                            return Err(ErgoError::Operation {
+                                message: "expected value after '=='".to_string(),
+                            })
+                        }
                     };
                     Ok(ContextExpression::Equals(identifier, value))
                 } else {
                     Ok(ContextExpression::Context(identifier))
                 }
             }
-            _ => Err("expected context name".to_string()),
+            _ => Err(ErgoError::Operation {
+                message: "expected context name".to_string(),
+            }),
         }
     }
 

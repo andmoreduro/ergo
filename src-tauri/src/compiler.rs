@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::Write;
 
+use ergo_core::core_errors::ErgoError;
 use tauri::{State, WebviewWindow};
 
 use crate::app_state::TauriAppState;
@@ -13,7 +14,7 @@ use crate::font_loader::{list_system_font_family_names, load_font_bytes_for_fami
 use crate::font_requirements::{families_missing_from_bundled, required_font_families};
 
 #[tauri::command]
-pub fn load_fonts_for_families(families: Vec<String>) -> Result<Vec<Vec<u8>>, String> {
+pub fn load_fonts_for_families(families: Vec<String>) -> Result<Vec<Vec<u8>>, ErgoError> {
     let missing = families_missing_from_bundled(
         &families
             .into_iter()
@@ -29,7 +30,7 @@ pub fn list_system_font_families() -> Vec<String> {
 }
 
 #[tauri::command]
-pub fn load_fonts_for_document(ast: DocumentAST) -> Result<Vec<Vec<u8>>, String> {
+pub fn load_fonts_for_document(ast: DocumentAST) -> Result<Vec<Vec<u8>>, ErgoError> {
     let resolved = resolve_project_settings_fonts(&ast.metadata.project_settings);
     let mut resolved_ast = ast;
     resolved_ast.metadata.project_settings = resolved;
@@ -53,7 +54,7 @@ pub fn write_source(
     state: State<'_, TauriAppState>,
     path: String,
     text: String,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     state.vfs.write_source(&path, text);
     Ok(())
 }
@@ -65,21 +66,28 @@ pub fn patch_source(
     start: usize,
     end: usize,
     text: String,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     state.vfs.apply_patch(&path, start, end, &text)?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn write_bytes_to_path(path: String, bytes: Vec<u8>) -> Result<(), String> {
+pub fn write_bytes_to_path(path: String, bytes: Vec<u8>) -> Result<(), ErgoError> {
     if let Some(parent) = std::path::Path::new(&path).parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|error| format!("failed to create export directory: {error}"))?;
+            std::fs::create_dir_all(parent).map_err(|error| {
+                ErgoError::Operation {
+                    message: format!("failed to create export directory: {error}"),
+                }
+            })?;
         }
     }
 
-    std::fs::write(&path, &bytes).map_err(|error| format!("failed to write export file: {error}"))
+    std::fs::write(&path, &bytes).map_err(|error| {
+        ErgoError::Operation {
+            message: format!("failed to write export file: {error}"),
+        }
+    })
 }
 
 #[derive(serde::Deserialize)]
@@ -89,34 +97,49 @@ pub struct ZipExportEntry {
 }
 
 #[tauri::command]
-pub fn write_zip_export(path: String, entries: Vec<ZipExportEntry>) -> Result<(), String> {
+pub fn write_zip_export(path: String, entries: Vec<ZipExportEntry>) -> Result<(), ErgoError> {
     if let Some(parent) = std::path::Path::new(&path).parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|error| format!("failed to create export directory: {error}"))?;
+            std::fs::create_dir_all(parent).map_err(|error| {
+                ErgoError::Operation {
+                    message: format!("failed to create export directory: {error}"),
+                }
+            })?;
         }
     }
 
-    let file =
-        File::create(&path).map_err(|error| format!("failed to create zip file: {error}"))?;
+    let file = File::create(&path).map_err(|error| {
+        ErgoError::Operation {
+            message: format!("failed to create zip file: {error}"),
+        }
+    })?;
     let mut zip = zip::ZipWriter::new(file);
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
 
     for entry in entries {
-        zip.start_file(entry.name, options)
-            .map_err(|error| format!("failed to add zip entry: {error}"))?;
-        zip.write_all(&entry.bytes)
-            .map_err(|error| format!("failed to write zip entry: {error}"))?;
+        zip.start_file(entry.name, options).map_err(|error| {
+            ErgoError::Operation {
+                message: format!("failed to add zip entry: {error}"),
+            }
+        })?;
+        zip.write_all(&entry.bytes).map_err(|error| {
+            ErgoError::Operation {
+                message: format!("failed to write zip entry: {error}"),
+            }
+        })?;
     }
 
-    zip.finish()
-        .map_err(|error| format!("failed to finalize zip file: {error}"))?;
+    zip.finish().map_err(|error| {
+        ErgoError::Operation {
+            message: format!("failed to finalize zip file: {error}"),
+        }
+    })?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn open_devtools(window: WebviewWindow) -> Result<(), String> {
+pub fn open_devtools(window: WebviewWindow) -> Result<(), ErgoError> {
     #[cfg(debug_assertions)]
     {
         window.open_devtools();
@@ -126,6 +149,8 @@ pub fn open_devtools(window: WebviewWindow) -> Result<(), String> {
     #[cfg(not(debug_assertions))]
     {
         let _ = window;
-        Err("Inspect is only available in debug builds".to_string())
+        Err(ErgoError::Operation {
+            message: "Inspect is only available in debug builds".to_string(),
+        })
     }
 }

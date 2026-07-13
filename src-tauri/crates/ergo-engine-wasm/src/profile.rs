@@ -7,6 +7,7 @@ use ergo_core::ast::{
     DocumentAST, DocumentElement, DocumentSection, EquationSyntax, Heading, Paragraph, RichText,
 };
 use ergo_core::compilation_types::CompilationStatus;
+use ergo_core::core_errors::ErgoError;
 use ergo_core::document_session_types::DocumentEvent;
 use ergo_core::test_fixtures::basic_document_ast;
 use serde::Serialize;
@@ -117,7 +118,7 @@ pub struct WasmPreviewProfileReport {
 /// Simulates the WASM worker preview path: document sync → compile → page rendering.
 pub fn run_wasm_preview_profile(
     options: WasmPreviewProfileOptions,
-) -> Result<WasmPreviewProfileReport, String> {
+) -> Result<WasmPreviewProfileReport, ErgoError> {
     let iteration_count = options.iterations.max(1);
     let mut engine = ErgoPreviewEngine::new();
     // The bundled templates import their Typst library by path (e.g.
@@ -161,7 +162,7 @@ fn run_iteration(
     scenario: WasmPreviewScenario,
     iteration: usize,
     pixel_per_pt: f32,
-) -> Result<(WasmPreviewTiming, usize, usize), String> {
+) -> Result<(WasmPreviewTiming, usize, usize), ErgoError> {
     let started = Instant::now();
 
     let ast = match scenario {
@@ -220,7 +221,7 @@ fn measure_incremental_edit(
     started: Instant,
     event: DocumentEvent,
     pixel_per_pt: f32,
-) -> Result<(WasmPreviewTiming, usize, usize), String> {
+) -> Result<(WasmPreviewTiming, usize, usize), ErgoError> {
     let (_, sync_ms) = measure(|| engine.sync_events(vec![event]))?;
     let (result, compile_ms) = measure(|| Ok(engine.compile_preview()))?;
     let (rendered, render_ms) = measure(|| render_changed_pages(engine, &result, pixel_per_pt))?;
@@ -292,20 +293,22 @@ fn render_changed_pages(
     engine: &ErgoPreviewEngine,
     result: &ergo_core::compilation_types::CompilationResult,
     pixel_per_pt: f32,
-) -> Result<usize, String> {
+) -> Result<usize, ErgoError> {
     if result.status != CompilationStatus::Succeeded {
-        return Err(result
-            .diagnostics
-            .first()
-            .cloned()
-            .unwrap_or_else(|| "Preview compile failed".to_string()));
+        return Err(ErgoError::Operation {
+            message: result
+                .diagnostics
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "Preview compile failed".to_string()),
+        });
     }
 
     let images = engine.render_changed_pages(result, pixel_per_pt)?;
     Ok(images.len())
 }
 
-fn measure<T>(operation: impl FnOnce() -> Result<T, String>) -> Result<(T, f64), String> {
+fn measure<T>(operation: impl FnOnce() -> Result<T, ErgoError>) -> Result<(T, f64), ErgoError> {
     let started = Instant::now();
     let value = operation()?;
     Ok((value, duration_ms(started.elapsed())))

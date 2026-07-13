@@ -280,8 +280,10 @@ impl ErgoWasmCompiler {
         start: usize,
         end: usize,
         text: &str,
-    ) -> Result<(), String> {
-        self.engine.apply_patch(path, start, end, text)
+    ) -> Result<(), JsValue> {
+        self.engine
+            .apply_patch(path, start, end, text)
+            .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -291,7 +293,7 @@ impl ErgoWasmCompiler {
         let status = self
             .engine
             .sync_snapshot(ast)
-            .map_err(|error| JsValue::from_str(&error))?;
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
         status_to_js(status)
     }
 
@@ -302,7 +304,7 @@ impl ErgoWasmCompiler {
         let status = self
             .engine
             .apply_event(event)
-            .map_err(|error| JsValue::from_str(&error))?;
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
         status_to_js(status)
     }
 
@@ -313,7 +315,7 @@ impl ErgoWasmCompiler {
         let status = self
             .engine
             .sync_events(events)
-            .map_err(|error| JsValue::from_str(&error))?;
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
         status_to_js(status)
     }
 
@@ -343,7 +345,7 @@ impl ErgoWasmCompiler {
         let mut output = self
             .engine
             .bootstrap_preview(input.ast, input.files)
-            .map_err(|error| JsValue::from_str(&error))?;
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
         // Worker-only; see `status_to_js`.
         output.status.field_source_map = Vec::new();
         serde_wasm_bindgen::to_value(&output).map_err(|error| JsValue::from_str(&error.to_string()))
@@ -358,7 +360,7 @@ impl ErgoWasmCompiler {
         self.engine
             .render_page(page_index, pixel_per_pt)
             .map(WasmPageImage::from)
-            .map_err(|error| JsValue::from_str(&error))
+            .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -381,7 +383,7 @@ impl ErgoWasmCompiler {
                 y_max_pt,
             )
             .map(WasmPageRegion::from)
-            .map_err(|error| JsValue::from_str(&error))
+            .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -404,7 +406,7 @@ impl ErgoWasmCompiler {
                 y_max_pt,
             )
             .map(WasmPageRegion::from)
-            .map_err(|error| JsValue::from_str(&error))
+            .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -412,7 +414,7 @@ impl ErgoWasmCompiler {
         self.engine
             .render_svg_page(page_index)
             .map(WasmPageSvg::from)
-            .map_err(|error| JsValue::from_str(&error))
+            .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -424,7 +426,7 @@ impl ErgoWasmCompiler {
         self.engine
             .render_png_page(page_index, pixel_per_pt)
             .map(WasmPagePng::from)
-            .map_err(|error| JsValue::from_str(&error))
+            .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -440,7 +442,7 @@ impl ErgoWasmCompiler {
             .engine
             .render_resource_svg_page(page_number)
             .map(WasmPageSvg::from)
-            .map_err(|error| JsValue::from_str(&error));
+            .map_err(|error| JsValue::from_str(&error.to_string()));
         wasm_log(
             "info",
             &format!(
@@ -482,7 +484,7 @@ impl ErgoWasmCompiler {
     pub fn export_pdf(&mut self) -> Result<Vec<u8>, JsValue> {
         self.engine
             .export_pdf()
-            .map_err(|error| JsValue::from_str(&error))
+            .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen]
@@ -490,7 +492,7 @@ impl ErgoWasmCompiler {
         let pages = self
             .engine
             .export_all_png(pixel_per_pt)
-            .map_err(|error| JsValue::from_str(&error))?;
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
         let array = js_sys::Array::new();
         for bytes in pages {
             array.push(&js_sys::Uint8Array::from(bytes.as_slice()));
@@ -503,7 +505,7 @@ impl ErgoWasmCompiler {
         let pages = self
             .engine
             .export_all_svg()
-            .map_err(|error| JsValue::from_str(&error))?;
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
         let array = js_sys::Array::new();
         for svg in pages {
             array.push(&JsValue::from_str(&svg));

@@ -1,5 +1,6 @@
 //! Bundled Typst template packages (`typst_templates/`) and project embedding helpers.
 
+use crate::core_errors::ErgoError;
 use crate::template_spec::TemplateSpec;
 use crate::vfs::VirtualFileSystem;
 
@@ -131,7 +132,7 @@ pub fn sync_bundled_template_package(
     vfs: &VirtualFileSystem,
     template_id: &str,
     spec: &TemplateSpec,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     let mount = template_package_mount_prefix(spec)
         .or_else(|| bundled_mount_for_template_id(template_id).map(str::to_string));
     let Some(_mount) = mount else {
@@ -139,7 +140,9 @@ pub fn sync_bundled_template_package(
     };
 
     let files = embed::bundled_package_files(template_id).ok_or_else(|| {
-        format!("no bundled Typst package files for template `{template_id}`")
+        ErgoError::Operation {
+            message: format!("no bundled Typst package files for template `{template_id}`"),
+        }
     })?;
     for (path, bytes) in files {
         write_package_file(vfs, &path, &bytes);
@@ -153,7 +156,7 @@ pub fn sync_bundled_template_package(
     _vfs: &VirtualFileSystem,
     _template_id: &str,
     _spec: &TemplateSpec,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     Ok(())
 }
 
@@ -162,13 +165,14 @@ pub fn sync_bundled_template_package(
 pub fn sync_bundled_template_spec(
     vfs: &VirtualFileSystem,
     template_id: &str,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     if !has_bundled_template_spec(template_id) {
         return Ok(());
     }
     let spec = crate::template_spec::load_bundled_template(template_id)?;
-    let json = serde_json::to_string_pretty(&spec)
-        .map_err(|error| format!("failed to serialize template spec: {error}"))?;
+    let json = serde_json::to_string_pretty(&spec).map_err(|error| ErgoError::Operation {
+        message: format!("failed to serialize template spec: {error}"),
+    })?;
     vfs.write_source(TEMPLATE_SPEC_PATH, json);
     Ok(())
 }
@@ -177,7 +181,7 @@ pub fn sync_bundled_template_spec(
 pub fn sync_bundled_template_spec(
     _vfs: &VirtualFileSystem,
     _template_id: &str,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     Ok(())
 }
 
@@ -186,7 +190,7 @@ pub fn materialize_bundled_template_package_if_missing(
     vfs: &VirtualFileSystem,
     template_id: &str,
     spec: &TemplateSpec,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     sync_bundled_template_package(vfs, template_id, spec)
 }
 

@@ -4,6 +4,8 @@ use std::sync::OnceLock;
 
 use fontdb::{Database, Family, Query, Source};
 
+use crate::core_errors::ErgoError;
+
 fn system_font_database() -> &'static Database {
     static DATABASE: OnceLock<Database> = OnceLock::new();
     DATABASE.get_or_init(|| {
@@ -51,7 +53,7 @@ pub fn list_system_font_family_names() -> Vec<String> {
 ///
 /// Every distinct font file (regular, bold, italic, etc.) for each requested family
 /// is included so Typst can resolve `#strong` / `#emph` after `#set text(font: ...)`.
-pub fn load_font_bytes_for_families(families: &[String]) -> Result<Vec<Vec<u8>>, String> {
+pub fn load_font_bytes_for_families(families: &[String]) -> Result<Vec<Vec<u8>>, ErgoError> {
     if families.is_empty() {
         return Ok(Vec::new());
     }
@@ -131,16 +133,17 @@ fn source_key(source: &Source) -> String {
     }
 }
 
-fn read_font_source(source: &Source) -> Result<Vec<u8>, String> {
+fn read_font_source(source: &Source) -> Result<Vec<u8>, ErgoError> {
     match source {
         Source::File(path) | Source::SharedFile(path, _) => read_font_file(path),
         Source::Binary(bytes) => Ok(bytes.as_ref().as_ref().to_vec()),
     }
 }
 
-fn read_font_file(path: &Path) -> Result<Vec<u8>, String> {
-    std::fs::read(path)
-        .map_err(|error| format!("failed to read font file {}: {error}", path.display()))
+fn read_font_file(path: &Path) -> Result<Vec<u8>, ErgoError> {
+    std::fs::read(path).map_err(|error| ErgoError::Operation {
+        message: format!("failed to read font file {}: {error}", path.display()),
+    })
 }
 
 #[cfg(test)]

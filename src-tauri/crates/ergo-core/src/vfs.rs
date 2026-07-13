@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ts_rs::TS;
 use typst::syntax::Source;
 
+use crate::core_errors::ErgoError;
 use crate::path_utils::{file_id_for_virtual_path, normalize_virtual_path};
 
 pub struct VirtualFileSystem {
@@ -43,22 +44,26 @@ impl VirtualFileSystem {
         }
     }
 
-    pub fn read_source(&self, path: &str) -> Result<String, String> {
+    pub fn read_source(&self, path: &str) -> Result<String, ErgoError> {
         let path = normalize_virtual_path(path);
         self.memory_sources
             .read()
             .get(&path)
             .map(|file| file.source.text().to_string())
-            .ok_or_else(|| format!("File not found: {}", path))
+            .ok_or_else(|| ErgoError::VfsNotFound {
+                path: path.to_string(),
+            })
     }
 
-    pub fn read_typst_source(&self, path: &str) -> Result<Source, String> {
+    pub fn read_typst_source(&self, path: &str) -> Result<Source, ErgoError> {
         let path = normalize_virtual_path(path);
         self.memory_sources
             .read()
             .get(&path)
             .map(|file| file.source.clone())
-            .ok_or_else(|| format!("File not found: {}", path))
+            .ok_or_else(|| ErgoError::VfsNotFound {
+                path: path.to_string(),
+            })
     }
 
     pub fn snapshot_sources(&self) -> HashMap<String, Source> {
@@ -82,7 +87,7 @@ impl VirtualFileSystem {
             .unwrap_or(false)
     }
 
-    pub fn read_text_file(&self, path: &str) -> Result<VirtualTextFile, String> {
+    pub fn read_text_file(&self, path: &str) -> Result<VirtualTextFile, ErgoError> {
         let path = normalize_virtual_path(path);
         self.memory_sources
             .read()
@@ -93,16 +98,20 @@ impl VirtualFileSystem {
                 revision: file.revision,
                 last_modified: file.last_modified,
             })
-            .ok_or_else(|| format!("File not found: {}", path))
+            .ok_or_else(|| ErgoError::VfsNotFound {
+                path: path.to_string(),
+            })
     }
 
-    pub fn source_revision(&self, path: &str) -> Result<u64, String> {
+    pub fn source_revision(&self, path: &str) -> Result<u64, ErgoError> {
         let path = normalize_virtual_path(path);
         self.memory_sources
             .read()
             .get(&path)
             .map(|file| file.revision)
-            .ok_or_else(|| format!("File not found: {}", path))
+            .ok_or_else(|| ErgoError::VfsNotFound {
+                path: path.to_string(),
+            })
     }
 
     pub fn latest_revision(&self) -> u64 {
@@ -139,7 +148,7 @@ impl VirtualFileSystem {
         revision
     }
 
-    pub fn read_binary_file(&self, path: &str) -> Result<typst::foundations::Bytes, String> {
+    pub fn read_binary_file(&self, path: &str) -> Result<typst::foundations::Bytes, ErgoError> {
         let path = normalize_virtual_path(path);
         if let Some(file) = self.memory_sources.read().get(&path) {
             return Ok(typst::foundations::Bytes::new(
@@ -151,10 +160,12 @@ impl VirtualFileSystem {
             .read()
             .get(&path)
             .cloned()
-            .ok_or_else(|| format!("File not found: {}", path))
+            .ok_or_else(|| ErgoError::VfsNotFound {
+                path: path.to_string(),
+            })
     }
 
-    pub fn read_file(&self, path: &str) -> Result<Vec<u8>, String> {
+    pub fn read_file(&self, path: &str) -> Result<Vec<u8>, ErgoError> {
         let path = normalize_virtual_path(path);
         if let Some(file) = self.memory_sources.read().get(&path) {
             return Ok(file.source.text().as_bytes().to_vec());
@@ -164,7 +175,9 @@ impl VirtualFileSystem {
             .read()
             .get(&path)
             .map(|bytes| bytes.to_vec())
-            .ok_or_else(|| format!("File not found: {}", path))
+            .ok_or_else(|| ErgoError::VfsNotFound {
+                path: path.to_string(),
+            })
     }
 
     pub fn has_retained_source(&self, path: &str) -> bool {
@@ -195,7 +208,7 @@ impl VirtualFileSystem {
         start: usize,
         end: usize,
         text: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), ErgoError> {
         let path = normalize_virtual_path(path);
         let mut sources = self.memory_sources.write();
         if let Some(file) = sources.get_mut(&path) {
@@ -216,10 +229,12 @@ impl VirtualFileSystem {
                 file.last_modified = now_millis();
                 Ok(())
             } else {
-                Err("Invalid patch range".to_string())
+                Err(ErgoError::InvalidPatchRange)
             }
         } else {
-            Err("File not found".to_string())
+            Err(ErgoError::VfsNotFound {
+                path: path.to_string(),
+            })
         }
     }
 
@@ -351,6 +366,6 @@ mod tests {
         // Try to patch beyond the string length
         let result = vfs.apply_patch("main.typ", 0, 10, "No");
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Invalid patch range");
+        assert_eq!(result.unwrap_err().to_string(), "Invalid patch range");
     }
 }
