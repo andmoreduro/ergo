@@ -3,6 +3,7 @@ mod types;
 pub use types::*;
 
 use crate::ast::TemplateOverride;
+use crate::core_errors::ErgoError;
 
 static TEMPLATES_DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
 static CUSTOM_TEMPLATES_DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
@@ -112,36 +113,49 @@ fn plain_template_outline_defaults() -> Vec<TemplateOverride> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn load_template_from_zip(path: &std::path::Path) -> Result<TemplateSpec, String> {
-    let file = std::fs::File::open(path)
-        .map_err(|e| format!("failed to open template archive '{}': {}", path.display(), e))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("failed to parse template archive '{}': {}", path.display(), e))?;
+pub fn load_template_from_zip(path: &std::path::Path) -> Result<TemplateSpec, ErgoError> {
+    let file = std::fs::File::open(path).map_err(|e| ErgoError::Operation {
+        message: format!("failed to open template archive '{}': {}", path.display(), e),
+    })?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| ErgoError::Operation {
+        message: format!("failed to parse template archive '{}': {}", path.display(), e),
+    })?;
 
     // Find template.json
-    let mut template_json_file = archive
-        .by_name("template.json")
-        .map_err(|e| format!("template.json not found in archive '{}': {}", path.display(), e))?;
-    
+    let mut template_json_file = archive.by_name("template.json").map_err(|e| ErgoError::Operation {
+        message: format!("template.json not found in archive '{}': {}", path.display(), e),
+    })?;
+
     let mut template_json_str = String::new();
-    std::io::Read::read_to_string(&mut template_json_file, &mut template_json_str)
-        .map_err(|e| format!("failed to read template.json: {}", e))?;
+    std::io::Read::read_to_string(&mut template_json_file, &mut template_json_str).map_err(
+        |e| ErgoError::Operation {
+            message: format!("failed to read template.json: {}", e),
+        },
+    )?;
     drop(template_json_file);
 
-    let mut spec: TemplateSpec = serde_json::from_str(&template_json_str)
-        .map_err(|e| format!("failed to parse template.json in '{}': {}", path.display(), e))?;
+    let mut spec: TemplateSpec = serde_json::from_str(&template_json_str).map_err(|e| {
+        ErgoError::Operation {
+            message: format!("failed to parse template.json in '{}': {}", path.display(), e),
+        }
+    })?;
 
     // Read locales directory inside zip
     spec.messages = std::collections::HashMap::new();
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        let mut file = archive.by_index(i).map_err(|e| ErgoError::Operation {
+            message: e.to_string(),
+        })?;
         let name = file.name().to_string().replace('\\', "/");
         if name.starts_with("locales/") && name.ends_with(".json") {
             let path_buf = std::path::PathBuf::from(&name);
             if let Some(stem) = path_buf.file_stem().and_then(|s| s.to_str()) {
                 let mut locale_content = String::new();
-                std::io::Read::read_to_string(&mut file, &mut locale_content)
-                    .map_err(|e| format!("failed to read locale file '{}': {}", name, e))?;
+                std::io::Read::read_to_string(&mut file, &mut locale_content).map_err(|e| {
+                    ErgoError::Operation {
+                        message: format!("failed to read locale file '{}': {}", name, e),
+                    }
+                })?;
                 
                 if let Ok(translations) = serde_json::from_str::<std::collections::HashMap<String, String>>(&locale_content) {
                     spec.messages.insert(stem.to_string(), translations);
@@ -163,7 +177,7 @@ pub fn load_template_from_zip(path: &std::path::Path) -> Result<TemplateSpec, St
 pub fn load_template_spec_for_project(
     vfs: &crate::vfs::VirtualFileSystem,
     ast: &crate::ast::DocumentAST,
-) -> Result<TemplateSpec, String> {
+) -> Result<TemplateSpec, ErgoError> {
     use crate::bundled_templates::{
         has_bundled_template_spec, TEMPLATE_SPEC_PATH,
     };
@@ -181,13 +195,17 @@ pub fn load_template_spec_for_project(
 
     if let Ok(json) = vfs.read_source(TEMPLATE_SPEC_PATH) {
         let spec: TemplateSpec = serde_json::from_str(&json).map_err(|error| {
-            format!("failed to parse {TEMPLATE_SPEC_PATH}: {error}")
+            ErgoError::Operation {
+                message: format!("failed to parse {TEMPLATE_SPEC_PATH}: {error}"),
+            }
         })?;
         if spec.metadata.id != ast.metadata.template_id {
-            return Err(format!(
-                "embedded template spec id `{}` does not match project template_id `{}`",
-                spec.metadata.id, ast.metadata.template_id
-            ));
+            return Err(ErgoError::Operation {
+                message: format!(
+                    "embedded template spec id `{}` does not match project template_id `{}`",
+                    spec.metadata.id, ast.metadata.template_id
+                ),
+            });
         }
         return Ok(resolve_template_variant(&spec, variant));
     }
@@ -197,7 +215,7 @@ pub fn load_template_spec_for_project(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> {
+pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, ErgoError> {
     if template_id == "none" {
         return Ok(plain_document_template());
     }
@@ -239,11 +257,13 @@ pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> 
     }
 
     let templates_dir = templates_dir.ok_or_else(|| {
-        format!(
-            "could not locate templates directory (CARGO_MANIFEST_DIR: {}, current_dir: {})",
-            std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default(),
-            std::env::current_dir().unwrap_or_default().display()
-        )
+        ErgoError::Operation {
+            message: format!(
+                "could not locate templates directory (CARGO_MANIFEST_DIR: {}, current_dir: {})",
+                std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default(),
+                std::env::current_dir().unwrap_or_default().display()
+            ),
+        }
     })?;
 
     let path = templates_dir.join(format!("{template_id}.ergtemplate"));
@@ -256,7 +276,7 @@ pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> 
     load_bundled_template_from_resources(template_id)
 }
 
-fn load_bundled_template_from_resources(template_id: &str) -> Result<TemplateSpec, String> {
+fn load_bundled_template_from_resources(template_id: &str) -> Result<TemplateSpec, ErgoError> {
     let (template_json, es_json) = match template_id {
         "apa7" => {
             let t = include_str!("../../../../resources/templates/apa7/template.json");
@@ -269,12 +289,17 @@ fn load_bundled_template_from_resources(template_id: &str) -> Result<TemplateSpe
             (t, Some(es))
         }
         _ => {
-            return Err(format!("unknown bundled template: {template_id}"));
+            return Err(ErgoError::Operation {
+                message: format!("unknown bundled template: {template_id}"),
+            });
         }
     };
 
-    let mut spec: TemplateSpec = serde_json::from_str(template_json)
-        .map_err(|e| format!("failed to parse static template {template_id}: {e}"))?;
+    let mut spec: TemplateSpec = serde_json::from_str(template_json).map_err(|e| {
+        ErgoError::Operation {
+            message: format!("failed to parse static template {template_id}: {e}"),
+        }
+    })?;
 
     spec.messages = std::collections::HashMap::new();
     if let Some(es_content) = es_json {
@@ -290,7 +315,7 @@ fn load_bundled_template_from_resources(template_id: &str) -> Result<TemplateSpe
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, String> {
+pub fn load_bundled_template(template_id: &str) -> Result<TemplateSpec, ErgoError> {
     if template_id == "none" {
         return Ok(plain_document_template());
     }

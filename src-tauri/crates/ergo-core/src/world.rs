@@ -8,6 +8,7 @@ use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World};
 use typst_ide::IdeWorld;
 
+use crate::core_errors::ErgoError;
 use crate::package_resolver::{find_package_file, package_virtual_path_from_file_id};
 use crate::path_utils::{normalize_virtual_path, path_from_file_id};
 use crate::vfs::VirtualFileSystem;
@@ -26,12 +27,12 @@ impl WorldSourceSnapshot {
         }
     }
 
-    pub fn source_for_path(&self, path: &str) -> Result<Source, String> {
+    pub fn source_for_path(&self, path: &str) -> Result<Source, ErgoError> {
         let path = normalize_virtual_path(path);
         self.sources
             .get(&path)
             .cloned()
-            .ok_or_else(|| format!("File not found: {}", path))
+            .ok_or_else(|| ErgoError::VfsNotFound { path: path.clone() })
     }
 
     pub fn with_source(mut self, path: &str, text: String) -> Self {

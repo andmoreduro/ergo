@@ -5,14 +5,16 @@ use typst::diag::{Severity, SourceDiagnostic};
 use typst::layout::{Frame, FrameItem, Page, PagedDocument};
 
 use crate::compilation_types::PreviewPageFile;
-use crate::core_errors::CompileError;
+use crate::core_errors::ErgoError;
 use crate::vfs::VirtualFileSystem;
 use crate::world::ErgoWorld;
 
-pub fn compile_document(world: &ErgoWorld) -> Result<PagedDocument, CompileError> {
+pub fn compile_document(world: &ErgoWorld) -> Result<PagedDocument, ErgoError> {
     match typst::compile::<PagedDocument>(world).output {
         Ok(document) => Ok(document),
-        Err(errors) => Err(CompileError::Operation(format_source_diagnostics(&errors))),
+        Err(errors) => Err(ErgoError::Compile {
+            diagnostics: format_source_diagnostics(&errors),
+        }),
     }
 }
 

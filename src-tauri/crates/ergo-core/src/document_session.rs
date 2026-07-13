@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::core_errors::ErgoError;
 use crate::ast::{DocumentAST, DocumentElement, DocumentSection};
 use crate::document_session_events::apply_document_event;
 use crate::document_session_generation::{default_layout, generate_project_sources_incremental};
@@ -101,7 +102,7 @@ impl DocumentSession {
         };
     }
 
-    pub fn sync_snapshot(&self, ast: DocumentAST) -> Result<DocumentSessionStatus, String> {
+    pub fn sync_snapshot(&self, ast: DocumentAST) -> Result<DocumentSessionStatus, ErgoError> {
         let mut inner = self.inner.lock();
         let mut dirty_resource_ids = HashSet::new();
         if let Some(old_ast) = &inner.ast {
@@ -130,12 +131,11 @@ impl DocumentSession {
         self.sync_ast_locked(&mut inner, ast, dirty_resource_ids)
     }
 
-    pub fn apply_event(&self, event: DocumentEvent) -> Result<DocumentSessionStatus, String> {
+    pub fn apply_event(&self, event: DocumentEvent) -> Result<DocumentSessionStatus, ErgoError> {
         let mut inner = self.inner.lock();
-        let mut ast = inner
-            .ast
-            .take()
-            .ok_or_else(|| "Document session has not been initialized".to_string())?;
+        let mut ast = inner.ast.take().ok_or_else(|| ErgoError::Operation {
+            message: "Document session has not been initialized".to_string(),
+        })?;
         let vfs_removals = vfs_paths_for_generated_diagram_removal(&ast, &event);
         let dirty_resource_ids = dirty_resource_ids_for_event(&ast, &event);
         if let Err(e) = apply_document_event(&mut ast, event) {
@@ -151,15 +151,14 @@ impl DocumentSession {
     pub fn apply_events(
         &self,
         events: Vec<DocumentEvent>,
-    ) -> Result<DocumentSessionStatus, String> {
+    ) -> Result<DocumentSessionStatus, ErgoError> {
         if events.is_empty() {
             return Ok(self.status());
         }
         let mut inner = self.inner.lock();
-        let mut ast = inner
-            .ast
-            .take()
-            .ok_or_else(|| "Document session has not been initialized".to_string())?;
+        let mut ast = inner.ast.take().ok_or_else(|| ErgoError::Operation {
+            message: "Document session has not been initialized".to_string(),
+        })?;
         let mut dirty_resource_ids = HashSet::new();
         for event in events {
             let vfs_removals = vfs_paths_for_generated_diagram_removal(&ast, &event);
@@ -180,7 +179,7 @@ impl DocumentSession {
         inner: &mut DocumentSessionInner,
         ast: DocumentAST,
         dirty_resource_ids: HashSet<String>,
-    ) -> Result<DocumentSessionStatus, String> {
+    ) -> Result<DocumentSessionStatus, ErgoError> {
         let use_cached_spec = inner
             .cached_template_spec
             .as_ref()
@@ -351,8 +350,11 @@ fn write_json_source<T: Serialize>(
     vfs: &VirtualFileSystem,
     path: &str,
     value: &T,
-) -> Result<u64, String> {
-    let text = serde_json::to_string_pretty(value).map_err(|error| error.to_string())?;
+) -> Result<u64, ErgoError> {
+    let text = serde_json::to_string_pretty(value)
+        .map_err(|error| ErgoError::Operation {
+            message: error.to_string(),
+        })?;
     Ok(write_source_if_changed(vfs, path, &text))
 }
 

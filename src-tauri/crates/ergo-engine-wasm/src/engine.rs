@@ -4,6 +4,7 @@ use std::sync::Arc;
 use base64::Engine;
 use ergo_core::ast::DocumentAST;
 use ergo_core::compilation_types::{CompilationResult, CompilationStatus, PreviewPageFile};
+use ergo_core::core_errors::ErgoError;
 use ergo_core::compile_artifacts::fingerprint_page;
 use ergo_core::document_resources::ResourcePreviewStatus;
 use ergo_core::document_session::DocumentSession;
@@ -282,22 +283,22 @@ impl ErgoPreviewEngine {
         start: usize,
         end: usize,
         text: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), ErgoError> {
         self.vfs.apply_patch(path, start, end, text)
     }
 
-    pub fn sync_snapshot(&mut self, ast: DocumentAST) -> Result<DocumentSessionStatus, String> {
+    pub fn sync_snapshot(&mut self, ast: DocumentAST) -> Result<DocumentSessionStatus, ErgoError> {
         self.session.sync_snapshot(ast)
     }
 
-    pub fn apply_event(&mut self, event: DocumentEvent) -> Result<DocumentSessionStatus, String> {
+    pub fn apply_event(&mut self, event: DocumentEvent) -> Result<DocumentSessionStatus, ErgoError> {
         self.session.apply_event(event)
     }
 
     pub fn sync_events(
         &mut self,
         events: Vec<DocumentEvent>,
-    ) -> Result<DocumentSessionStatus, String> {
+    ) -> Result<DocumentSessionStatus, ErgoError> {
         apply_document_events(&self.session, events)
     }
 
@@ -414,7 +415,7 @@ impl ErgoPreviewEngine {
         &mut self,
         ast: DocumentAST,
         files: Vec<VfsFileEntry>,
-    ) -> Result<BootstrapPreviewOutput, String> {
+    ) -> Result<BootstrapPreviewOutput, ErgoError> {
         self.reset_for_new_project();
         self.write_vfs_files(files);
         let status = self.sync_snapshot(ast)?;
@@ -423,11 +424,11 @@ impl ErgoPreviewEngine {
         Ok(BootstrapPreviewOutput { status, result })
     }
 
-    pub fn render_page(&self, page_index: usize, pixel_per_pt: f32) -> Result<PageImage, String> {
+    pub fn render_page(&self, page_index: usize, pixel_per_pt: f32) -> Result<PageImage, ErgoError> {
         Self::render_document_page(self.document.as_deref(), page_index, pixel_per_pt)
     }
 
-    pub fn render_svg_page(&self, page_index: usize) -> Result<PageSvg, String> {
+    pub fn render_svg_page(&self, page_index: usize) -> Result<PageSvg, ErgoError> {
         Self::render_document_svg_page(self.document.as_deref(), page_index)
     }
 
@@ -435,7 +436,7 @@ impl ErgoPreviewEngine {
         &self,
         page_index: usize,
         pixel_per_pt: f32,
-    ) -> Result<PagePng, String> {
+    ) -> Result<PagePng, ErgoError> {
         Self::render_document_png_page(self.document.as_deref(), page_index, pixel_per_pt)
     }
 
@@ -448,7 +449,7 @@ impl ErgoPreviewEngine {
         x_max_pt: f64,
         y_min_pt: f64,
         y_max_pt: f64,
-    ) -> Result<PageRegionImage, String> {
+    ) -> Result<PageRegionImage, ErgoError> {
         Self::render_document_region(
             self.document.as_deref(),
             page_index,
@@ -471,17 +472,21 @@ impl ErgoPreviewEngine {
         x_max_pt: f64,
         y_min_pt: f64,
         y_max_pt: f64,
-    ) -> Result<PageRegionImage, String> {
+    ) -> Result<PageRegionImage, ErgoError> {
         self.ensure_resource_document_compiled()?;
         let doc = self
             .resource_document
             .as_deref()
-            .ok_or_else(|| "No compiled document available".to_string())?;
+            .ok_or_else(|| ErgoError::Operation {
+                message: "No compiled document available".to_string(),
+            })?;
         let page_index = page_number.saturating_sub(1);
         let page = doc
             .pages
             .get(page_index)
-            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
+            .ok_or_else(|| ErgoError::Operation {
+                message: format!("Page index out of bounds: {page_index}"),
+            })?;
         let page_width_pt = page.frame.size().x.to_pt();
         let pixel_per_pt = if page_width_pt > 0.0 {
             (target_width_px as f64 / page_width_pt) as f32
@@ -508,13 +513,17 @@ impl ErgoPreviewEngine {
         x_max_pt: f64,
         y_min_pt: f64,
         y_max_pt: f64,
-    ) -> Result<PageRegionImage, String> {
-        let doc = document.ok_or_else(|| "No compiled document available".to_string())?;
+    ) -> Result<PageRegionImage, ErgoError> {
+        let doc = document.ok_or_else(|| ErgoError::Operation {
+            message: "No compiled document available".to_string(),
+        })?;
 
         let page = doc
             .pages
             .get(page_index)
-            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
+            .ok_or_else(|| ErgoError::Operation {
+                message: format!("Page index out of bounds: {page_index}"),
+            })?;
 
         let size = page.frame.size();
         let page_width_pt = size.x.to_pt();
@@ -558,7 +567,7 @@ impl ErgoPreviewEngine {
     pub fn render_resource_svg_page(
         &mut self,
         page_number: usize,
-    ) -> Result<PageSvg, String> {
+    ) -> Result<PageSvg, ErgoError> {
         wasm_log_engine(
             "info",
             &format!(
@@ -583,7 +592,7 @@ impl ErgoPreviewEngine {
     /// Compile the resource preview document if it is missing. This guards
     /// against render races where the main preview has not yet triggered a
     /// resource compile (e.g. during sidebar resize before the first paint).
-    fn ensure_resource_document_compiled(&mut self) -> Result<(), String> {
+    fn ensure_resource_document_compiled(&mut self) -> Result<(), ErgoError> {
         let had_resource = self.resource_document.is_some();
         wasm_log_engine(
             "info",
@@ -595,8 +604,10 @@ impl ErgoPreviewEngine {
         let ast = self
             .session
             .ast()
-            .ok_or_else(|| "No AST available for resource preview compile".to_string())?;
-        let template = load_template_for_ast(&ast).map_err(|e| e.to_string())?;
+            .ok_or_else(|| ErgoError::Operation {
+                message: "No AST available for resource preview compile".to_string(),
+            })?;
+        let template = load_template_for_ast(&ast)?;
         let (resource_document, resources) = match compile_resource_previews(
             &self.resource_world,
             &self.vfs,
@@ -609,9 +620,9 @@ impl ErgoPreviewEngine {
                     "error",
                     &format!("compile_resource_previews error: {error}"),
                 );
-                return Err(format!(
-                    "Resource preview compile failed (on demand): {error}"
-                ));
+                return Err(ErgoError::Operation {
+                    message: format!("Resource preview compile failed (on demand): {error}"),
+                });
             }
         };
         wasm_log_engine(
@@ -647,20 +658,22 @@ impl ErgoPreviewEngine {
             })
             .next()
             .unwrap_or_else(|| "Resource preview compile produced no pages".to_string());
-        Err(format!(
-            "Resource preview compile failed (on demand): {diagnostic}"
-        ))
+        Err(ErgoError::Operation {
+            message: format!("Resource preview compile failed (on demand): {diagnostic}"),
+        })
     }
 
     pub fn render_changed_pages(
         &self,
         result: &CompilationResult,
         pixel_per_pt: f32,
-    ) -> Result<Vec<PageImage>, String> {
+    ) -> Result<Vec<PageImage>, ErgoError> {
         let pages = result
             .preview_pages
             .as_ref()
-            .ok_or_else(|| "Preview compile did not return page metadata".to_string())?;
+            .ok_or_else(|| ErgoError::Operation {
+                message: "Preview compile did not return page metadata".to_string(),
+            })?;
 
         pages
             .iter()
@@ -673,13 +686,17 @@ impl ErgoPreviewEngine {
         document: Option<&PagedDocument>,
         page_index: usize,
         pixel_per_pt: f32,
-    ) -> Result<PageImage, String> {
-        let doc = document.ok_or_else(|| "No compiled document available".to_string())?;
+    ) -> Result<PageImage, ErgoError> {
+        let doc = document.ok_or_else(|| ErgoError::Operation {
+            message: "No compiled document available".to_string(),
+        })?;
 
         let page = doc
             .pages
             .get(page_index)
-            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
+            .ok_or_else(|| ErgoError::Operation {
+                message: format!("Page index out of bounds: {page_index}"),
+            })?;
 
         let size = page.frame.size();
         let pixmap = typst_render::render(page, pixel_per_pt);
@@ -696,13 +713,17 @@ impl ErgoPreviewEngine {
     fn render_document_svg_page(
         document: Option<&PagedDocument>,
         page_index: usize,
-    ) -> Result<PageSvg, String> {
-        let doc = document.ok_or_else(|| "No compiled document available".to_string())?;
+    ) -> Result<PageSvg, ErgoError> {
+        let doc = document.ok_or_else(|| ErgoError::Operation {
+            message: "No compiled document available".to_string(),
+        })?;
 
         let page = doc
             .pages
             .get(page_index)
-            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
+            .ok_or_else(|| ErgoError::Operation {
+                message: format!("Page index out of bounds: {page_index}"),
+            })?;
 
         let size = page.frame.size();
         Ok(PageSvg {
@@ -716,19 +737,23 @@ impl ErgoPreviewEngine {
         document: Option<&PagedDocument>,
         page_index: usize,
         pixel_per_pt: f32,
-    ) -> Result<PagePng, String> {
-        let doc = document.ok_or_else(|| "No compiled document available".to_string())?;
+    ) -> Result<PagePng, ErgoError> {
+        let doc = document.ok_or_else(|| ErgoError::Operation {
+            message: "No compiled document available".to_string(),
+        })?;
 
         let page = doc
             .pages
             .get(page_index)
-            .ok_or_else(|| format!("Page index out of bounds: {page_index}"))?;
+            .ok_or_else(|| ErgoError::Operation {
+                message: format!("Page index out of bounds: {page_index}"),
+            })?;
 
         let size = page.frame.size();
         let pixmap = typst_render::render(page, pixel_per_pt);
         let png = pixmap
             .encode_png()
-            .map_err(|e| format!("PNG encode failed: {e:?}"))?;
+            .map_err(|e| ErgoError::Operation { message: format!("PNG encode failed: {e:?}") })?;
         let base64 = base64::engine::general_purpose::STANDARD.encode(&png);
         let data_url = format!("data:image/png;base64,{base64}");
 
@@ -760,7 +785,7 @@ impl ErgoPreviewEngine {
         self.sync_state.positions_for_focus(target, source_revision)
     }
 
-    pub fn export_pdf(&mut self) -> Result<Vec<u8>, String> {
+    pub fn export_pdf(&mut self) -> Result<Vec<u8>, ErgoError> {
         let result = self.compile_preview();
         if result.status != CompilationStatus::Succeeded {
             let message = result
@@ -768,19 +793,23 @@ impl ErgoPreviewEngine {
                 .first()
                 .cloned()
                 .unwrap_or_else(|| "Preview compile failed before export".to_string());
-            return Err(message);
+            return Err(ErgoError::Operation { message });
         }
 
         let doc = self
             .document
             .as_deref()
-            .ok_or_else(|| "No compiled document available".to_string())?;
+            .ok_or_else(|| ErgoError::Operation {
+                message: "No compiled document available".to_string(),
+            })?;
 
         typst_pdf::pdf(doc, &typst_pdf::PdfOptions::default())
-            .map_err(|error| format!("PDF export failed: {error:?}"))
+            .map_err(|error| ErgoError::Operation {
+                message: format!("PDF export failed: {error:?}"),
+            })
     }
 
-    fn compiled_document(&mut self) -> Result<&PagedDocument, String> {
+    fn compiled_document(&mut self) -> Result<&PagedDocument, ErgoError> {
         let result = self.compile_preview();
         if result.status != CompilationStatus::Succeeded {
             let message = result
@@ -788,15 +817,17 @@ impl ErgoPreviewEngine {
                 .first()
                 .cloned()
                 .unwrap_or_else(|| "Preview compile failed before export".to_string());
-            return Err(message);
+            return Err(ErgoError::Operation { message });
         }
 
         self.document
             .as_deref()
-            .ok_or_else(|| "No compiled document available".to_string())
+            .ok_or_else(|| ErgoError::Operation {
+                message: "No compiled document available".to_string(),
+            })
     }
 
-    pub fn export_all_png(&mut self, pixel_per_pt: f32) -> Result<Vec<Vec<u8>>, String> {
+    pub fn export_all_png(&mut self, pixel_per_pt: f32) -> Result<Vec<Vec<u8>>, ErgoError> {
         let document = self.compiled_document()?;
         use rayon::prelude::*;
         document
@@ -805,12 +836,14 @@ impl ErgoPreviewEngine {
             .map(|page| {
                 typst_render::render(page, pixel_per_pt)
                     .encode_png()
-                    .map_err(|error| format!("PNG export failed: {error:?}"))
+                    .map_err(|error| ErgoError::Operation {
+                        message: format!("PNG export failed: {error:?}"),
+                    })
             })
             .collect()
     }
 
-    pub fn export_all_svg(&mut self) -> Result<Vec<String>, String> {
+    pub fn export_all_svg(&mut self) -> Result<Vec<String>, ErgoError> {
         let document = self.compiled_document()?;
         Ok(ergo_core::compile_artifacts::render_svgs(document))
     }

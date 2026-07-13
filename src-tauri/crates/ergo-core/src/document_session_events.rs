@@ -2,12 +2,13 @@ use crate::ast::{
     AssetEntry, DocumentAST, DocumentElement, DocumentSection, EquationSyntax, Figure, Paragraph,
     ReferenceEntry, RichText, Table, TableCell,
 };
+use crate::core_errors::ErgoError;
 use crate::document_session_types::DocumentEvent;
 
 pub(crate) fn apply_document_event(
     ast: &mut DocumentAST,
     event: DocumentEvent,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     match event {
         DocumentEvent::SetProjectTitle { title } => {
             ast.metadata.title = title;
@@ -70,7 +71,10 @@ pub(crate) fn apply_document_event(
                     paragraph.content = rich_text_from_string(text);
                     Ok(())
                 }
-                _ => Err(format!("Element {element_id} is not a paragraph")),
+                _ => Err(ErgoError::ElementType {
+                    element_id,
+                    expected: "paragraph",
+                }),
             }
         }
         DocumentEvent::UpdateParagraphContent {
@@ -83,7 +87,10 @@ pub(crate) fn apply_document_event(
                     paragraph.content = content;
                     Ok(())
                 }
-                _ => Err(format!("Element {element_id} is not a paragraph")),
+                _ => Err(ErgoError::ElementType {
+                    element_id,
+                    expected: "paragraph",
+                }),
             }
         }
         DocumentEvent::UpdateHeading {
@@ -102,7 +109,10 @@ pub(crate) fn apply_document_event(
                     }
                     Ok(())
                 }
-                _ => Err(format!("Element {element_id} is not a heading")),
+                _ => Err(ErgoError::ElementType {
+                    element_id,
+                    expected: "heading",
+                }),
             }
         }
         DocumentEvent::UpdateHeadingContent {
@@ -119,7 +129,10 @@ pub(crate) fn apply_document_event(
                     }
                     Ok(())
                 }
-                _ => Err(format!("Element {element_id} is not a heading")),
+                _ => Err(ErgoError::ElementType {
+                    element_id,
+                    expected: "heading",
+                }),
             }
         }
         DocumentEvent::UpdateEquation {
@@ -142,7 +155,10 @@ pub(crate) fn apply_document_event(
                     }
                     Ok(())
                 }
-                _ => Err(format!("Element {element_id} is not an equation")),
+                _ => Err(ErgoError::ElementType {
+                    element_id,
+                    expected: "equation",
+                }),
             }
         }
         DocumentEvent::UpdateTableCell {
@@ -155,8 +171,10 @@ pub(crate) fn apply_document_event(
                 .cells
                 .get_mut(row_index)
                 .and_then(|row| row.get_mut(col_index))
-                .ok_or_else(|| {
-                    format!("Table cell {row_index},{col_index} was not found in {table_id}")
+                .ok_or_else(|| ErgoError::Operation {
+                    message: format!(
+                        "Table cell {row_index},{col_index} was not found in {table_id}"
+                    ),
                 })?;
             cell.elements = elements;
             Ok(())
@@ -200,7 +218,9 @@ pub(crate) fn apply_document_event(
             let column_size = table
                 .column_sizes
                 .get_mut(col_index)
-                .ok_or_else(|| format!("Table column {col_index} was not found in {table_id}"))?;
+                .ok_or_else(|| ErgoError::Operation {
+                    message: format!("Table column {col_index} was not found in {table_id}"),
+                })?;
             *column_size = size;
             Ok(())
         }
@@ -228,7 +248,10 @@ pub(crate) fn apply_document_event(
                     }
                     Ok(())
                 }
-                _ => Err(format!("Element {element_id} is not a figure")),
+                _ => Err(ErgoError::ElementType {
+                    element_id,
+                    expected: "figure",
+                }),
             }
         }
         DocumentEvent::UpdateDiagram {
@@ -255,7 +278,10 @@ pub(crate) fn apply_document_event(
                     }
                     Ok(())
                 }
-                _ => Err(format!("Element {element_id} is not a diagram")),
+                _ => Err(ErgoError::ElementType {
+                    element_id,
+                    expected: "diagram",
+                }),
             }
         }
         DocumentEvent::UpdateCustomElementField {
@@ -273,7 +299,10 @@ pub(crate) fn apply_document_event(
                     }
                     Ok(())
                 }
-                _ => Err(format!("Element {} is not a custom element", element_id)),
+                _ => Err(ErgoError::ElementType {
+                    element_id,
+                    expected: "custom element",
+                }),
             }
         }
         DocumentEvent::UpdateElementExtraField {
@@ -307,9 +336,10 @@ pub(crate) fn apply_document_event(
                     }
                     Ok(())
                 }
-                _ => Err(format!(
-                    "Element {element_id} is not a table, figure, or diagram"
-                )),
+                _ => Err(ErgoError::ElementType {
+                    element_id,
+                    expected: "table, figure, or diagram",
+                }),
             }
         }
         DocumentEvent::InsertReference { index, reference }
@@ -331,9 +361,11 @@ fn set_value_at_path(
     inputs: &mut std::collections::HashMap<String, serde_json::Value>,
     path: &str,
     value: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     if !path.starts_with('/') {
-        return Err(format!("Invalid path format: {}", path));
+        return Err(ErgoError::InvalidPath {
+            path: path.to_string(),
+        });
     }
 
     let mut map = serde_json::Map::new();
@@ -347,7 +379,7 @@ fn set_value_at_path(
     } else {
         let parts: Vec<&str> = path.split('/').skip(1).collect();
         if parts.is_empty() {
-            return Err("Path cannot be empty".to_string());
+            return Err(ErgoError::EmptyPath);
         }
 
         let mut curr = &mut root;
@@ -363,23 +395,26 @@ fn set_value_at_path(
                             } else if idx == arr.len() {
                                 arr.push(value.clone());
                             } else {
-                                return Err(format!(
-                                    "Index {} out of bounds for array at path",
-                                    idx
-                                ));
+                                return Err(ErgoError::Operation {
+                                    message: format!(
+                                        "Index {} out of bounds for array at path",
+                                        idx
+                                    ),
+                                });
                             }
                         } else {
-                            return Err(format!("Invalid array index '{}'", part_str));
+                            return Err(ErgoError::InvalidArrayIndex {
+                                index: part_str,
+                            });
                         }
                     }
                     serde_json::Value::Object(obj) => {
                         obj.insert(part_str, value.clone());
                     }
                     _ => {
-                        return Err(format!(
-                            "Cannot set value on non-container at path {}",
-                            path
-                        ));
+                        return Err(ErgoError::NotContainer {
+                            path: path.to_string(),
+                        });
                     }
                 }
             } else {
@@ -402,7 +437,9 @@ fn set_value_at_path(
                             }
                             curr = &mut arr[idx];
                         } else {
-                            return Err(format!("Invalid array index '{}'", part_str));
+                            return Err(ErgoError::InvalidArrayIndex {
+                                index: part_str,
+                            });
                         }
                     }
                     serde_json::Value::Object(obj) => {
@@ -415,7 +452,9 @@ fn set_value_at_path(
                         });
                     }
                     _ => {
-                        return Err(format!("Cannot traverse non-container at path {}", path));
+                        return Err(ErgoError::NotContainer {
+                            path: path.to_string(),
+                        });
                     }
                 }
             }
@@ -435,9 +474,11 @@ fn insert_input_array_item(
     path: &str,
     index: usize,
     value: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     if !path.starts_with('/') {
-        return Err(format!("Invalid path format: {}", path));
+        return Err(ErgoError::InvalidPath {
+            path: path.to_string(),
+        });
     }
     let mut map = serde_json::Map::new();
     for (k, v) in inputs.drain() {
@@ -453,10 +494,14 @@ fn insert_input_array_item(
                 arr.push(value);
             }
         } else {
-            return Err(format!("Target at path {} is not an array", path));
+            return Err(ErgoError::NotArray {
+                path: path.to_string(),
+            });
         }
     } else {
-        return Err(format!("Path {} was not found", path));
+        return Err(ErgoError::PathNotFound {
+            path: path.to_string(),
+        });
     }
 
     if let serde_json::Value::Object(map) = root {
@@ -471,9 +516,11 @@ fn remove_input_array_item(
     inputs: &mut std::collections::HashMap<String, serde_json::Value>,
     path: &str,
     index: usize,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     if !path.starts_with('/') {
-        return Err(format!("Invalid path format: {}", path));
+        return Err(ErgoError::InvalidPath {
+            path: path.to_string(),
+        });
     }
     let mut map = serde_json::Map::new();
     for (k, v) in inputs.drain() {
@@ -486,16 +533,19 @@ fn remove_input_array_item(
             if index < arr.len() {
                 arr.remove(index);
             } else {
-                return Err(format!(
-                    "Index {} out of bounds for array at {}",
-                    index, path
-                ));
+                return Err(ErgoError::Operation {
+                    message: format!("Index {} out of bounds for array at {}", index, path),
+                });
             }
         } else {
-            return Err(format!("Target at path {} is not an array", path));
+            return Err(ErgoError::NotArray {
+                path: path.to_string(),
+            });
         }
     } else {
-        return Err(format!("Path {} was not found", path));
+        return Err(ErgoError::PathNotFound {
+            path: path.to_string(),
+        });
     }
 
     if let serde_json::Value::Object(map) = root {
@@ -511,20 +561,22 @@ fn remove_input_array_item(
 fn content_section_mut<'a>(
     ast: &'a mut DocumentAST,
     section_id: &str,
-) -> Result<&'a mut crate::ast::ContentSection, String> {
+) -> Result<&'a mut crate::ast::ContentSection, ErgoError> {
     ast.sections
         .iter_mut()
         .find_map(|section| match section {
             DocumentSection::Content(content) if content.id == section_id => Some(content),
             _ => None,
         })
-        .ok_or_else(|| format!("Content section {section_id} was not found"))
+        .ok_or_else(|| ErgoError::Operation {
+            message: format!("Content section {section_id} was not found"),
+        })
 }
 
 fn element_mut<'a>(
     ast: &'a mut DocumentAST,
     element_id: &str,
-) -> Result<&'a mut DocumentElement, String> {
+) -> Result<&'a mut DocumentElement, ErgoError> {
     ast.sections
         .iter_mut()
         .find_map(|section| match section {
@@ -533,13 +585,18 @@ fn element_mut<'a>(
                 .iter_mut()
                 .find(|element| element.id() == element_id),
         })
-        .ok_or_else(|| format!("Element {element_id} was not found"))
+        .ok_or_else(|| ErgoError::Operation {
+            message: format!("Element {element_id} was not found"),
+        })
 }
 
-fn table_mut<'a>(ast: &'a mut DocumentAST, table_id: &str) -> Result<&'a mut Table, String> {
+fn table_mut<'a>(ast: &'a mut DocumentAST, table_id: &str) -> Result<&'a mut Table, ErgoError> {
     match element_mut(ast, table_id)? {
         DocumentElement::Table(table) => Ok(table),
-        _ => Err(format!("Element {table_id} is not a table")),
+        _ => Err(ErgoError::ElementType {
+            element_id: table_id.to_string(),
+            expected: "table",
+        }),
     }
 }
 
@@ -549,18 +606,18 @@ fn insert_element_at(
     index: usize,
     element: DocumentElement,
     operation: &str,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     let section = content_section_mut(ast, section_id)?;
     if index > section.elements.len() {
-        return Err(format!(
-            "Cannot {operation} at index {index} in section {section_id}"
-        ));
+        return Err(ErgoError::Operation {
+            message: format!("Cannot {operation} at index {index} in section {section_id}"),
+        });
     }
     section.elements.insert(index, element);
     Ok(())
 }
 
-fn remove_element(ast: &mut DocumentAST, element_id: &str) -> Result<(), String> {
+fn remove_element(ast: &mut DocumentAST, element_id: &str) -> Result<(), ErgoError> {
     let generated_asset_id = crate::generated_assets::generated_diagram_asset_path_for_element(
         ast,
         element_id,
@@ -589,7 +646,9 @@ fn remove_element(ast: &mut DocumentAST, element_id: &str) -> Result<(), String>
             }
         }
     }
-    Err(format!("Element {element_id} was not found"))
+    Err(ErgoError::Operation {
+        message: format!("Element {element_id} was not found"),
+    })
 }
 
 fn insert_table_row(
@@ -597,33 +656,45 @@ fn insert_table_row(
     table_id: &str,
     row_index: usize,
     cells: Vec<TableCell>,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     let table = table_mut(ast, table_id)?;
     let expected_cols = usize::try_from(table.cols).unwrap_or(0);
     if cells.len() != expected_cols {
-        return Err(format!(
-            "Cannot restore table row with {} cells into {table_id}; expected {expected_cols}",
-            cells.len()
-        ));
+        return Err(ErgoError::Operation {
+            message: format!(
+                "Cannot restore table row with {} cells into {table_id}; expected {expected_cols}",
+                cells.len()
+            ),
+        });
     }
     if row_index > table.cells.len() {
-        return Err(format!("Cannot restore table row at index {row_index}"));
+        return Err(ErgoError::Operation {
+            message: format!("Cannot restore table row at index {row_index}"),
+        });
     }
     table.cells.insert(row_index, cells);
-    table.rows = i32::try_from(table.cells.len()).map_err(|error| error.to_string())?;
+    table.rows = i32::try_from(table.cells.len()).map_err(|error| ErgoError::Operation {
+        message: error.to_string(),
+    })?;
     Ok(())
 }
 
-fn remove_table_row(ast: &mut DocumentAST, table_id: &str, row_index: usize) -> Result<(), String> {
+fn remove_table_row(ast: &mut DocumentAST, table_id: &str, row_index: usize) -> Result<(), ErgoError> {
     let table = table_mut(ast, table_id)?;
     if table.cells.len() <= 1 {
-        return Err(format!("Cannot remove the last row from {table_id}"));
+        return Err(ErgoError::Operation {
+            message: format!("Cannot remove the last row from {table_id}"),
+        });
     }
     if row_index >= table.cells.len() {
-        return Err(format!("Table row {row_index} was not found in {table_id}"));
+        return Err(ErgoError::Operation {
+            message: format!("Table row {row_index} was not found in {table_id}"),
+        });
     }
     table.cells.remove(row_index);
-    table.rows = i32::try_from(table.cells.len()).map_err(|error| error.to_string())?;
+    table.rows = i32::try_from(table.cells.len()).map_err(|error| ErgoError::Operation {
+        message: error.to_string(),
+    })?;
     Ok(())
 }
 
@@ -633,26 +704,34 @@ fn insert_table_column(
     col_index: usize,
     cells: Vec<TableCell>,
     size: String,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     let table = table_mut(ast, table_id)?;
     let expected_rows = usize::try_from(table.rows).unwrap_or(0);
     if cells.len() != expected_rows {
-        return Err(format!(
-            "Cannot restore table column with {} cells into {table_id}; expected {expected_rows}",
-            cells.len()
-        ));
+        return Err(ErgoError::Operation {
+            message: format!(
+                "Cannot restore table column with {} cells into {table_id}; expected {expected_rows}",
+                cells.len()
+            ),
+        });
     }
     if col_index > table.column_sizes.len() {
-        return Err(format!("Cannot restore table column at index {col_index}"));
+        return Err(ErgoError::Operation {
+            message: format!("Cannot restore table column at index {col_index}"),
+        });
     }
     for (row, cell) in table.cells.iter_mut().zip(cells) {
         if col_index > row.len() {
-            return Err(format!("Cannot restore table column at index {col_index}"));
+            return Err(ErgoError::Operation {
+                message: format!("Cannot restore table column at index {col_index}"),
+            });
         }
         row.insert(col_index, cell);
     }
     table.column_sizes.insert(col_index, size);
-    table.cols = i32::try_from(table.column_sizes.len()).map_err(|error| error.to_string())?;
+    table.cols = i32::try_from(table.column_sizes.len()).map_err(|error| ErgoError::Operation {
+        message: error.to_string(),
+    })?;
     Ok(())
 }
 
@@ -660,26 +739,30 @@ fn remove_table_column(
     ast: &mut DocumentAST,
     table_id: &str,
     col_index: usize,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     let table = table_mut(ast, table_id)?;
     if table.column_sizes.len() <= 1 {
-        return Err(format!("Cannot remove the last column from {table_id}"));
+        return Err(ErgoError::Operation {
+            message: format!("Cannot remove the last column from {table_id}"),
+        });
     }
     if col_index >= table.column_sizes.len() {
-        return Err(format!(
-            "Table column {col_index} was not found in {table_id}"
-        ));
+        return Err(ErgoError::Operation {
+            message: format!("Table column {col_index} was not found in {table_id}"),
+        });
     }
     for row in &mut table.cells {
         if col_index >= row.len() {
-            return Err(format!(
-                "Table column {col_index} was not found in {table_id}"
-            ));
+            return Err(ErgoError::Operation {
+                message: format!("Table column {col_index} was not found in {table_id}"),
+            });
         }
         row.remove(col_index);
     }
     table.column_sizes.remove(col_index);
-    table.cols = i32::try_from(table.column_sizes.len()).map_err(|error| error.to_string())?;
+    table.cols = i32::try_from(table.column_sizes.len()).map_err(|error| ErgoError::Operation {
+        message: error.to_string(),
+    })?;
     Ok(())
 }
 
@@ -701,63 +784,75 @@ fn insert_reference(
     ast: &mut DocumentAST,
     index: usize,
     reference: ReferenceEntry,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     if index > ast.references.len() {
-        return Err(format!("Cannot insert reference at index {index}"));
+        return Err(ErgoError::Operation {
+            message: format!("Cannot insert reference at index {index}"),
+        });
     }
 
     ast.references.insert(index, reference);
     Ok(())
 }
 
-fn update_reference(ast: &mut DocumentAST, reference: ReferenceEntry) -> Result<(), String> {
+fn update_reference(ast: &mut DocumentAST, reference: ReferenceEntry) -> Result<(), ErgoError> {
     let existing = ast
         .references
         .iter_mut()
         .find(|entry| entry.id == reference.id)
-        .ok_or_else(|| format!("Reference {} was not found", reference.id))?;
+        .ok_or_else(|| ErgoError::Operation {
+            message: format!("Reference {} was not found", reference.id),
+        })?;
 
     *existing = reference;
     Ok(())
 }
 
-fn remove_reference(ast: &mut DocumentAST, reference_id: &str) -> Result<(), String> {
+fn remove_reference(ast: &mut DocumentAST, reference_id: &str) -> Result<(), ErgoError> {
     let index = ast
         .references
         .iter()
         .position(|entry| entry.id == reference_id)
-        .ok_or_else(|| format!("Reference {reference_id} was not found"))?;
+        .ok_or_else(|| ErgoError::Operation {
+            message: format!("Reference {reference_id} was not found"),
+        })?;
 
     ast.references.remove(index);
     Ok(())
 }
 
-fn insert_asset(ast: &mut DocumentAST, index: usize, asset: AssetEntry) -> Result<(), String> {
+fn insert_asset(ast: &mut DocumentAST, index: usize, asset: AssetEntry) -> Result<(), ErgoError> {
     if index > ast.assets.len() {
-        return Err(format!("Cannot insert asset at index {index}"));
+        return Err(ErgoError::Operation {
+            message: format!("Cannot insert asset at index {index}"),
+        });
     }
 
     ast.assets.insert(index, asset);
     Ok(())
 }
 
-fn update_asset(ast: &mut DocumentAST, asset: AssetEntry) -> Result<(), String> {
+fn update_asset(ast: &mut DocumentAST, asset: AssetEntry) -> Result<(), ErgoError> {
     let existing = ast
         .assets
         .iter_mut()
         .find(|entry| entry.id == asset.id)
-        .ok_or_else(|| format!("Asset {} was not found", asset.id))?;
+        .ok_or_else(|| ErgoError::Operation {
+            message: format!("Asset {} was not found", asset.id),
+        })?;
 
     *existing = asset;
     Ok(())
 }
 
-fn remove_asset(ast: &mut DocumentAST, asset_id: &str) -> Result<(), String> {
+fn remove_asset(ast: &mut DocumentAST, asset_id: &str) -> Result<(), ErgoError> {
     let index = ast
         .assets
         .iter()
         .position(|entry| entry.id == asset_id)
-        .ok_or_else(|| format!("Asset {asset_id} was not found"))?;
+        .ok_or_else(|| ErgoError::Operation {
+            message: format!("Asset {asset_id} was not found"),
+        })?;
 
     ast.assets.remove(index);
     Ok(())

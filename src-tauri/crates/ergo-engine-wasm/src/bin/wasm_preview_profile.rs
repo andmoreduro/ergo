@@ -1,15 +1,18 @@
+use ergo_core::core_errors::ErgoError;
 use ergo_engine_wasm::{run_wasm_preview_profile, WasmPreviewProfileOptions, WasmPreviewScenario};
 use std::env;
 use std::str::FromStr;
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), ErgoError> {
     let (options, json) = parse_args(env::args().skip(1).collect())?;
     let report = run_wasm_preview_profile(options)?;
 
     if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+            serde_json::to_string_pretty(&report).map_err(|e| ErgoError::Operation {
+                message: e.to_string()
+            })?
         );
         return Ok(());
     }
@@ -18,7 +21,7 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
-fn parse_args(args: Vec<String>) -> Result<(WasmPreviewProfileOptions, bool), String> {
+fn parse_args(args: Vec<String>) -> Result<(WasmPreviewProfileOptions, bool), ErgoError> {
     let mut options = WasmPreviewProfileOptions::default();
     let mut json = false;
     let mut index = 0;
@@ -29,33 +32,45 @@ fn parse_args(args: Vec<String>) -> Result<(WasmPreviewProfileOptions, bool), St
                 index += 1;
                 let value = args
                     .get(index)
-                    .ok_or_else(|| "--scenario requires a value".to_string())?;
-                options.scenario = WasmPreviewScenario::from_str(value)?;
+                    .ok_or_else(|| ErgoError::Operation {
+                        message: "--scenario requires a value".to_string(),
+                    })?;
+                options.scenario = WasmPreviewScenario::from_str(value).map_err(|error| {
+                    ErgoError::Operation { message: error }
+                })?;
             }
             "--iterations" => {
                 index += 1;
                 let value = args
                     .get(index)
-                    .ok_or_else(|| "--iterations requires a value".to_string())?;
-                options.iterations = value
-                    .parse()
-                    .map_err(|error| format!("Invalid iterations '{value}': {error}"))?;
+                    .ok_or_else(|| ErgoError::Operation {
+                        message: "--iterations requires a value".to_string(),
+                    })?;
+                options.iterations = value.parse().map_err(|error| ErgoError::Operation {
+                    message: format!("Invalid iterations '{value}': {error}"),
+                })?;
             }
             "--pixel-per-pt" => {
                 index += 1;
                 let value = args
                     .get(index)
-                    .ok_or_else(|| "--pixel-per-pt requires a value".to_string())?;
-                options.pixel_per_pt = value
-                    .parse()
-                    .map_err(|error| format!("Invalid pixel-per-pt '{value}': {error}"))?;
+                    .ok_or_else(|| ErgoError::Operation {
+                        message: "--pixel-per-pt requires a value".to_string(),
+                    })?;
+                options.pixel_per_pt = value.parse().map_err(|error| ErgoError::Operation {
+                    message: format!("Invalid pixel-per-pt '{value}': {error}"),
+                })?;
             }
             "--json" => json = true,
             "--help" | "-h" => {
                 print_help();
                 std::process::exit(0);
             }
-            flag => return Err(format!("Unknown argument '{flag}'")),
+            flag => {
+                return Err(ErgoError::Operation {
+                    message: format!("Unknown argument '{flag}'"),
+                })
+            }
         }
         index += 1;
     }

@@ -1,5 +1,7 @@
 use tauri::State;
 
+use ergo_core::core_errors::ErgoError;
+
 use crate::app_state::TauriAppState;
 use crate::ast::{AssetEntry, DocumentAST};
 use crate::document_session::{DocumentEvent, DocumentSessionStatus};
@@ -10,7 +12,7 @@ use crate::path_utils::normalize_virtual_path;
 pub fn sync_document_snapshot(
     state: State<'_, TauriAppState>,
     ast: DocumentAST,
-) -> Result<DocumentSessionStatus, String> {
+) -> Result<DocumentSessionStatus, ErgoError> {
     Ok(state.document_session.sync_snapshot(ast)?)
 }
 
@@ -18,7 +20,7 @@ pub fn sync_document_snapshot(
 pub fn sync_document_event(
     state: State<'_, TauriAppState>,
     event: DocumentEvent,
-) -> Result<DocumentSessionStatus, String> {
+) -> Result<DocumentSessionStatus, ErgoError> {
     Ok(state.document_session.apply_event(event)?)
 }
 
@@ -26,14 +28,14 @@ pub fn sync_document_event(
 pub fn sync_document_events(
     state: State<'_, TauriAppState>,
     events: Vec<DocumentEvent>,
-) -> Result<DocumentSessionStatus, String> {
+) -> Result<DocumentSessionStatus, ErgoError> {
     Ok(state.document_session.apply_events(events)?)
 }
 
 #[tauri::command]
 pub fn get_document_session_status(
     state: State<'_, TauriAppState>,
-) -> Result<DocumentSessionStatus, String> {
+) -> Result<DocumentSessionStatus, ErgoError> {
     Ok(state.document_session.status())
 }
 
@@ -51,7 +53,7 @@ pub struct ImportResourceResult {
 }
 
 #[tauri::command]
-pub fn read_vfs_file(state: State<'_, TauriAppState>, path: String) -> Result<Vec<u8>, String> {
+pub fn read_vfs_file(state: State<'_, TauriAppState>, path: String) -> Result<Vec<u8>, ErgoError> {
     state.vfs.read_file(&path)
 }
 
@@ -60,10 +62,13 @@ pub fn write_generated_asset(
     state: State<'_, TauriAppState>,
     path: String,
     bytes: Vec<u8>,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     let path = normalize_virtual_path(&path);
     if !is_generated_diagram_asset_path(&path) {
-        return Err("Generated assets can only be written under assets/diagrams/*.svg".to_string());
+        return Err(ErgoError::Operation {
+            message: "Generated assets can only be written under assets/diagrams/*.svg"
+                .to_string(),
+        });
     }
     state.vfs.write_file(&path, bytes);
     Ok(())
@@ -73,7 +78,7 @@ pub fn write_generated_asset(
 pub fn import_resource_file(
     state: State<'_, TauriAppState>,
     source_path: String,
-) -> Result<ImportResourceResult, String> {
+) -> Result<ImportResourceResult, ErgoError> {
     let asset = import_resource_file_into_vfs(&state.vfs, source_path)?;
     let bytes = state.vfs.read_file(&asset.path)?;
     Ok(ImportResourceResult { asset, bytes })
@@ -84,7 +89,7 @@ pub fn import_resource_bytes(
     state: State<'_, TauriAppState>,
     file_name: String,
     bytes: Vec<u8>,
-) -> Result<ImportResourceResult, String> {
+) -> Result<ImportResourceResult, ErgoError> {
     let asset = import_resource_bytes_into_vfs(&state.vfs, &file_name, bytes)?;
     let stored = state.vfs.read_file(&asset.path)?;
     Ok(ImportResourceResult {
@@ -97,13 +102,18 @@ pub fn import_resource_bytes(
 pub(crate) fn import_resource_file_into_vfs(
     vfs: &crate::vfs::VirtualFileSystem,
     source_path: String,
-) -> Result<AssetEntry, String> {
-    let bytes = std::fs::read(&source_path).map_err(|error| error.to_string())?;
+) -> Result<AssetEntry, ErgoError> {
+    let bytes =
+        std::fs::read(&source_path).map_err(|error| ErgoError::Operation { message: error.to_string() })?;
     let source = std::path::Path::new(&source_path);
     let file_name = source
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| "Imported resource must have a file name".to_string())?;
+        .ok_or_else(|| {
+            ErgoError::Operation {
+                message: "Imported resource must have a file name".to_string(),
+            }
+        })?;
     import_resource_bytes_into_vfs(vfs, file_name, bytes)
 }
 
@@ -111,7 +121,7 @@ pub(crate) fn import_resource_bytes_into_vfs(
     vfs: &crate::vfs::VirtualFileSystem,
     file_name: &str,
     bytes: Vec<u8>,
-) -> Result<AssetEntry, String> {
+) -> Result<AssetEntry, ErgoError> {
     let path = unique_asset_path(vfs, file_name);
     vfs.write_file(&path, bytes);
 

@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 use typst::syntax::FileId;
 
+use crate::core_errors::ErgoError;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageRef {
     pub namespace: String,
@@ -17,11 +19,11 @@ pub struct PackageFile {
 }
 
 impl PackageRef {
-    pub fn from_import(import: &str, version: &str) -> Result<Self, String> {
+    pub fn from_import(import: &str, version: &str) -> Result<Self, ErgoError> {
         let package = import.strip_prefix('@').unwrap_or(import);
-        let (namespace, name) = package
-            .split_once('/')
-            .ok_or_else(|| format!("package import must be namespaced: {import}"))?;
+        let (namespace, name) = package.split_once('/').ok_or_else(|| ErgoError::Operation {
+            message: format!("package import must be namespaced: {import}"),
+        })?;
         Ok(Self {
             namespace: namespace.to_string(),
             name: name.to_string(),
@@ -152,12 +154,14 @@ pub fn find_package_dir(package: &PackageRef) -> Option<PathBuf> {
         .find(|path| path.exists())
 }
 
-pub fn collect_package_files(package: &PackageRef) -> Result<Vec<PackageFile>, String> {
+pub fn collect_package_files(package: &PackageRef) -> Result<Vec<PackageFile>, ErgoError> {
     let base_dir = find_package_dir(package).ok_or_else(|| {
-        format!(
-            "Template package directory not found for: {} (version {})",
-            package.name, package.version
-        )
+        ErgoError::Operation {
+            message: format!(
+                "Template package directory not found for: {} (version {})",
+                package.name, package.version
+            ),
+        }
     })?;
     let mut files = Vec::new();
     read_dir_recursive(package, &base_dir, &base_dir, &mut files)?;
@@ -169,13 +173,19 @@ fn read_dir_recursive(
     base: &Path,
     current: &Path,
     files: &mut Vec<PackageFile>,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     if !current.is_dir() {
         return Ok(());
     }
 
-    for entry in std::fs::read_dir(current).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
+    for entry in
+        std::fs::read_dir(current).map_err(|error| ErgoError::Operation {
+            message: error.to_string(),
+        })?
+    {
+        let entry = entry.map_err(|error| ErgoError::Operation {
+            message: error.to_string(),
+        })?;
         let path = entry.path();
         if path.is_dir() {
             read_dir_recursive(package, base, &path, files)?;
@@ -185,10 +195,14 @@ fn read_dir_recursive(
             continue;
         }
 
-        let relative = path.strip_prefix(base).map_err(|error| error.to_string())?;
+        let relative = path.strip_prefix(base).map_err(|error| ErgoError::Operation {
+            message: error.to_string(),
+        })?;
         files.push(PackageFile {
             path: package_vfs_path(package, relative),
-            bytes: std::fs::read(&path).map_err(|error| error.to_string())?,
+            bytes: std::fs::read(&path).map_err(|error| ErgoError::Operation {
+                message: error.to_string(),
+            })?,
         });
     }
 

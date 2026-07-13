@@ -668,7 +668,7 @@ fn impossible_restore_element_does_not_mutate_document() {
         })
         .unwrap_err();
 
-    assert!(error.contains("restore element"));
+    assert!(error.to_string().contains("restore element"));
     assert!(vfs
         .read_source("elements/heading-1.typ")
         .unwrap()

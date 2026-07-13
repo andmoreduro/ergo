@@ -2,19 +2,28 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 
+use ergo_core::core_errors::ErgoError;
 use tauri::{AppHandle, Manager};
 
-fn log_dir(app: &AppHandle) -> Result<PathBuf, String> {
+fn log_dir(app: &AppHandle) -> Result<PathBuf, ErgoError> {
     let dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("app_data_dir failed: {e}"))?
+        .map_err(|e| {
+            ErgoError::Operation {
+                message: format!("app_data_dir failed: {e}"),
+            }
+        })?
         .join("logs");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("create logs dir failed: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| {
+        ErgoError::Operation {
+            message: format!("create logs dir failed: {e}"),
+        }
+    })?;
     Ok(dir)
 }
 
-fn log_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn log_path(app: &AppHandle) -> Result<PathBuf, ErgoError> {
     let date = chrono::Local::now().format("%Y-%m-%d");
     Ok(log_dir(app)?.join(format!("ergo-{date}.log")))
 }
@@ -31,22 +40,29 @@ pub async fn log_to_file(
     level: String,
     message: String,
     source: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), ErgoError> {
     let path = log_path(&app)?;
     let line = format_log_line(&level, source.as_deref(), &message);
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(&path)
-        .map_err(|e| format!("open log file failed: {e}"))?;
-    file.write_all(line.as_bytes())
-        .map_err(|e| format!("write log file failed: {e}"))?;
+        .map_err(|e| {
+            ErgoError::Operation {
+                message: format!("open log file failed: {e}"),
+            }
+        })?;
+    file.write_all(line.as_bytes()).map_err(|e| {
+        ErgoError::Operation {
+            message: format!("write log file failed: {e}"),
+        }
+    })?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_log_path(app: AppHandle) -> Result<String, String> {
+pub async fn get_log_path(app: AppHandle) -> Result<String, ErgoError> {
     log_path(&app)
         .map(|p| p.to_string_lossy().to_string())
-        .map_err(|e| e.to_string())
+        .map_err(|e| ErgoError::Operation { message: e.to_string() })
 }

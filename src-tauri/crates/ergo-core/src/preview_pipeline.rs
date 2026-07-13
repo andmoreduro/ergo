@@ -3,7 +3,7 @@ use typst::layout::PagedDocument;
 use crate::ast::DocumentAST;
 use crate::compilation_types::PreviewPageFile;
 use crate::compile_artifacts::compile_document;
-use crate::core_errors::CompileError;
+use crate::core_errors::ErgoError;
 use crate::document_outline::extract_outline;
 use crate::document_resources::DocumentResources;
 use crate::document_session::DocumentSession;
@@ -41,7 +41,7 @@ pub fn compile_resource_previews(
     vfs: &VirtualFileSystem,
     ast: &DocumentAST,
     template: &TemplateSpec,
-) -> Result<(Option<PagedDocument>, DocumentResources), CompileError> {
+) -> Result<(Option<PagedDocument>, DocumentResources), ErgoError> {
     let lib_source = crate::document_resources::resource_preview_lib_source(ast, template);
     resource_watch::write_resource_files(vfs, ast, template, &lib_source);
 
@@ -62,8 +62,8 @@ pub fn compile_resource_previews(
     }
 }
 
-pub fn load_template_for_ast(ast: &DocumentAST) -> Result<TemplateSpec, CompileError> {
-    let spec = load_bundled_template(&ast.metadata.template_id).map_err(CompileError::Operation)?;
+pub fn load_template_for_ast(ast: &DocumentAST) -> Result<TemplateSpec, ErgoError> {
+    let spec = load_bundled_template(&ast.metadata.template_id)?;
     Ok(crate::template_spec::resolve_template_variant(
         &spec,
         ast.metadata
@@ -78,7 +78,7 @@ pub fn compile_preview_success(
     resource_world: &ErgoWorld,
     session: &DocumentSession,
     cached_resource_document: Option<&PagedDocument>,
-) -> Result<PreviewCompileSuccess, CompileError> {
+) -> Result<PreviewCompileSuccess, ErgoError> {
     let document = compile_document(preview_world)?;
     let outline = extract_outline(&document);
     let status = session.status();
@@ -117,6 +117,6 @@ pub fn compile_preview_success(
 pub fn apply_document_events(
     session: &DocumentSession,
     events: Vec<DocumentEvent>,
-) -> Result<crate::document_session_types::DocumentSessionStatus, String> {
+) -> Result<crate::document_session_types::DocumentSessionStatus, ErgoError> {
     session.apply_events(events)
 }

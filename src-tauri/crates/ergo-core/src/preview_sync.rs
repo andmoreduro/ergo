@@ -201,7 +201,7 @@ impl PreviewSyncState {
             Err(message) => {
                 return PreviewElementPositionsResult::Unavailable {
                     source_revision: Some(preview.source_revision),
-                    reason: message,
+                    reason: message.to_string(),
                 };
             }
         };
@@ -307,7 +307,7 @@ impl PreviewSyncState {
             Err(message) => {
                 return PreviewElementPositionsResult::Unavailable {
                     source_revision: Some(preview.source_revision),
-                    reason: message,
+                    reason: message.to_string(),
                 };
             }
         };

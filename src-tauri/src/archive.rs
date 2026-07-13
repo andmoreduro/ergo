@@ -7,21 +7,26 @@ use ergo_core::bundled_templates::{
     bundled_package_files_for_template, embedded_template_mounts_for_vfs,
     is_path_under_template_mount,
 };
+use ergo_core::core_errors::ErgoError;
 use ergo_core::template_spec::load_bundled_template;
 
 use crate::app_state::TauriAppState;
 use crate::ast::DocumentAST;
 
 #[tauri::command]
-pub fn save_project(state: State<'_, TauriAppState>, path: String) -> Result<(), String> {
+pub fn save_project(state: State<'_, TauriAppState>, path: String) -> Result<(), ErgoError> {
     save_project_to_path(&state, &path)
 }
 
-pub fn save_project_to_path(state: &TauriAppState, path: impl AsRef<Path>) -> Result<(), String> {
+pub fn save_project_to_path(state: &TauriAppState, path: impl AsRef<Path>) -> Result<(), ErgoError> {
     state
         .vfs
         .read_source(".ergproj/document_state.json")
-        .map_err(|_| "No active document session to save".to_string())?;
+        .map_err(|_| {
+            ErgoError::Operation {
+                message: "No active document session to save".to_string(),
+            }
+        })?;
 
     let template_mounts = embedded_template_mounts_for_vfs(&state.vfs);
     let mut files = state
@@ -52,8 +57,11 @@ pub fn save_project_to_path(state: &TauriAppState, path: impl AsRef<Path>) -> Re
         let _ = std::fs::File::open(parent).and_then(|dir| dir.sync_all());
     }
 
-    std::fs::rename(&temp_path, target)
-        .map_err(|e| format!("Failed to finalize save (rename): {e}"))?;
+    std::fs::rename(&temp_path, target).map_err(|e| {
+        ErgoError::Operation {
+            message: format!("Failed to finalize save (rename): {e}"),
+        }
+    })?;
 
     Ok(())
 }
@@ -73,8 +81,9 @@ fn temp_path_for(path: &Path) -> PathBuf {
     tmp
 }
 
-fn write_archive(temp_path: &Path, files: &[(String, Vec<u8>)]) -> Result<File, String> {
-    let file = File::create(temp_path).map_err(|e| e.to_string())?;
+fn write_archive(temp_path: &Path, files: &[(String, Vec<u8>)]) -> Result<File, ErgoError> {
+    let file =
+        File::create(temp_path).map_err(|e| ErgoError::Operation { message: e.to_string() })?;
     let mut zip = zip::ZipWriter::new(file);
 
     let options = zip::write::SimpleFileOptions::default()
@@ -82,11 +91,13 @@ fn write_archive(temp_path: &Path, files: &[(String, Vec<u8>)]) -> Result<File, 
         .unix_permissions(0o755);
 
     for (name, content) in files {
-        zip.start_file(name, options).map_err(|e| e.to_string())?;
-        zip.write_all(content).map_err(|e| e.to_string())?;
+        zip.start_file(name, options)
+            .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
+        zip.write_all(content)
+            .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
     }
 
-    zip.finish().map_err(|e| e.to_string())
+    zip.finish().map_err(|e| ErgoError::Operation { message: e.to_string() })
 }
 
 #[derive(serde::Serialize, ts_rs::TS)]
@@ -109,7 +120,7 @@ pub struct OpenProjectResult {
 pub fn open_project(
     state: State<'_, TauriAppState>,
     path: String,
-) -> Result<OpenProjectResult, String> {
+) -> Result<OpenProjectResult, ErgoError> {
     let ast = open_project_from_path(&state, path)?;
     let files = project_files_for_worker_bootstrap(&state.vfs);
     Ok(OpenProjectResult { ast, files })
@@ -118,18 +129,22 @@ pub fn open_project(
 pub fn open_project_from_path(
     state: &TauriAppState,
     path: impl AsRef<Path>,
-) -> Result<DocumentAST, String> {
-    let file = File::open(path).map_err(|e| e.to_string())?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+) -> Result<DocumentAST, ErgoError> {
+    let file = File::open(path).map_err(|e| ErgoError::Operation { message: e.to_string() })?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| ErgoError::Operation { message: e.to_string() })?;
 
     state.vfs.clear();
 
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        let mut file = archive
+            .by_index(i)
+            .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
         let name = file.name().to_string();
         if file.is_file() {
             let mut content = Vec::new();
-            file.read_to_end(&mut content).map_err(|e| e.to_string())?;
+            file.read_to_end(&mut content)
+                .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
             let is_text =
                 name.ends_with(".typ") || name.ends_with(".json") || name.ends_with(".bib");
             if is_text {
@@ -148,8 +163,9 @@ pub fn open_project_from_path(
     let json_ast = state
         .vfs
         .read_source(".ergproj/document_state.json")
-        .map_err(|_| ".ergproj/document_state.json is required".to_string())?;
-    let ast: DocumentAST = serde_json::from_str(&json_ast).map_err(|e| e.to_string())?;
+        .map_err(|_| ErgoError::DocumentStateRequired)?;
+    let ast: DocumentAST = serde_json::from_str(&json_ast)
+        .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
     let _status = state.document_session.sync_snapshot(ast.clone())?;
 
     Ok(ast)
@@ -200,7 +216,7 @@ fn mirror_project_files_to_vfs(state: &TauriAppState, files: &[ProjectFile]) {
 pub fn load_template_package_files(
     state: State<'_, TauriAppState>,
     template_id: String,
-) -> Result<Vec<ProjectFile>, String> {
+) -> Result<Vec<ProjectFile>, ErgoError> {
     use ergo_core::package_resolver::PackageRef;
 
     if let Some(files) = bundled_package_files_for_template(&template_id) {
@@ -224,7 +240,7 @@ pub fn load_package_files(
     state: State<'_, TauriAppState>,
     name: String,
     version: String,
-) -> Result<Vec<ProjectFile>, String> {
+) -> Result<Vec<ProjectFile>, ErgoError> {
     use ergo_core::package_resolver::PackageRef;
 
     let package = PackageRef::from_import(&name, &version)?;
@@ -530,8 +546,8 @@ mod tests {
         let error = open_project_from_path(&state, &path).unwrap_err();
         fs::remove_file(&path).ok();
 
-        assert!(error.contains(".ergproj/document_state.json"));
-        assert_eq!(error, ".ergproj/document_state.json is required");
+        assert!(error.to_string().contains(".ergproj/document_state.json"));
+        assert_eq!(error.to_string(), ".ergproj/document_state.json is required");
     }
 
     #[test]
