@@ -421,17 +421,6 @@ impl ErgoPreviewEngine {
         let status = self.sync_snapshot(ast)?;
         // Inline the first page so the initial open paints in a single trip.
         let result = self.compile_preview_with_svg(&[0]);
-
-        // Pre-warm: a throwaway second compile moves first-incremental JIT +
-        // comemo cache population out of the user's first keystroke and into
-        // the (already-accepted) bootstrap latency. The first compile warms
-        // the cold full-compile path; this second one warms the incremental
-        // code paths (comemo entries for the current world revision, font
-        // shaping cache, layout) that the first keystroke will exercise.
-        // Entries are age 1 after this; the next eviction (first keystroke)
-        // bumps them to age 2, well under COMEMO_MAX_AGE (10), so they survive.
-        let _warmup = self.run_compile_preview();
-
         Ok(BootstrapPreviewOutput { status, result })
     }
 
