@@ -277,9 +277,10 @@ export function useDocumentCompilerSync({
                 latencyStartRef.current = lastEvent.timestamp;
 
                 // Keep compile metadata-only on the typing hot path. Visible changed
-                // pages paint via `renderSvgPage` in PreviewPageSvg; inlining SVG
-                // during compile (after forward scroll expands visible indices) was
-                // adding raster work to every keystroke.
+                // pages paint via `renderRegion` in PreviewPageCanvas (canvas
+                // blits of worker-produced region bitmaps); inlining rendered
+                // pages during compile (after forward scroll expands visible
+                // indices) was adding raster work to every keystroke.
                 //
                 // Font loading is keyed + coalesced (no-op once the font set is
                 // loaded for this session), but must precede compile so a mid-

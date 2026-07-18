@@ -4,7 +4,12 @@ export interface PreviewTelemetry {
     workerSyncMs: number;
     /** Worker compile trip (Typst layout + page metadata). */
     compileMs: number;
-    /** Compile result → first visible page's SVG written into the DOM. */
+    /**
+     * Compile result → first visible page's canvas blit completes. Despite the
+     * legacy name, the preview renders to a `<canvas>` via `drawImage` of a
+     * worker-produced `ImageBitmap`, not SVG. This spans schedule + the worker
+     * region round-trip + the canvas write.
+     */
     svgRenderMs: number;
     /**
      * Of svgRenderMs: the wait from the compile result arriving to the page's
@@ -29,17 +34,18 @@ export interface PreviewTelemetry {
     /** Of commit: browser paint after React commit (commit − reactCommit). */
     paintMs: number;
     /**
-     * Of svgRenderMs: the `renderSvgPage` worker round-trip (Typst → SVG). Zero
-     * when the page reused cached SVG without a worker trip.
+     * Of svgRenderMs: the `renderRegion` worker round-trip (Typst layout →
+     * region bitmap). Zero when the page reused a cached bitmap without a
+     * worker trip.
      */
     workerRenderMs: number;
-    /** Of svgRenderMs: the `innerHTML =` parse of that SVG string. */
+    /** Of svgRenderMs: the `drawImage` blit of the returned ImageBitmap. */
     domWriteMs: number;
-    /** SVG in the DOM → the browser actually paints that frame (double-rAF). */
+    /** Canvas blit → the browser actually composites that frame (double-rAF). */
     rasterMs: number;
 }
 
-/** Sub-timings a page reports when it finishes writing its SVG to the DOM. */
+/** Sub-timings a page reports when it finishes blitting its canvas region. */
 export interface PagePaintInfo {
     /** When the page's render effect began running (after React scheduled it). */
     effectStartAt: number;
@@ -49,7 +55,7 @@ export interface PagePaintInfo {
      */
     previewRenderAt?: number | null;
     /**
-     * Probe: when React finished committing this revision (after DOM mutation,
+     * Probe: when React finished committing this revision (after canvas mutation,
      * before paint). Splits `commit` into React render+commit vs browser paint.
      */
     reactCommittedAt?: number | null;
@@ -57,9 +63,10 @@ export interface PagePaintInfo {
     workerRenderMs: number;
     domWriteMs: number;
     /**
-     * Whether this page actually re-rendered its SVG for this revision (vs an
-     * unchanged page painting instantly). Telemetry is finalized from the first
-     * page that did, so "render" reflects the edited page, not a no-op neighbor.
+     * Whether this page actually re-rendered its canvas region for this revision
+     * (vs an unchanged page painting instantly). Telemetry is finalized from the
+     * first page that did, so "render" reflects the edited page, not a no-op
+     * neighbor.
      */
     renderedThisRevision: boolean;
 }
