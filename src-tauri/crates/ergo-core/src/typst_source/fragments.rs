@@ -179,7 +179,7 @@ fn generate_element_typst(
                 ) {
                     literal.push_str(&format!(", attribution: {attribution}"));
                 }
-                literal.push('[');
+                literal.push_str(")[");
                 builder.push_literal(&literal);
                 builder.push_builder(quote_builder);
                 builder.push_literal(&format!("] <{label}>\n\n"));
@@ -616,7 +616,7 @@ fn push_table_cell_elements(
                     ) {
                         literal.push_str(&format!(", attribution: {attribution}"));
                     }
-                    literal.push('[');
+                    literal.push_str(")[");
                     builder.push_literal(&literal);
                     builder.push_builder(quote_builder);
                     builder.push_literal("]");
