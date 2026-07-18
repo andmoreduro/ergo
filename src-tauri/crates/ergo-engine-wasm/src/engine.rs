@@ -863,6 +863,7 @@ impl ErgoPreviewEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::profile::load_bundled_template_packages;
     use ergo_core::test_fixtures::basic_document_ast;
 
     #[test]
@@ -871,6 +872,7 @@ mod tests {
         ast.metadata.project_settings.paper_size = Some("a5".to_string());
 
         let mut engine = ErgoPreviewEngine::new();
+        load_bundled_template_packages(&engine);
         engine
             .sync_snapshot(ast)
             .expect("snapshot sync should succeed");
@@ -909,6 +911,7 @@ mod tests {
         ast.metadata.project_settings.paper_size = Some("a5".to_string());
 
         let mut engine = ErgoPreviewEngine::new();
+        load_bundled_template_packages(&engine);
         engine
             .sync_snapshot(ast)
             .expect("snapshot sync should succeed");
@@ -937,6 +940,7 @@ mod tests {
         let ast = basic_document_ast("Inline page", "");
 
         let mut engine = ErgoPreviewEngine::new();
+        load_bundled_template_packages(&engine);
         engine
             .sync_snapshot(ast)
             .expect("snapshot sync should succeed");
@@ -970,6 +974,7 @@ mod tests {
         let ast = basic_document_ast("No inline", "");
 
         let mut engine = ErgoPreviewEngine::new();
+        load_bundled_template_packages(&engine);
         engine
             .sync_snapshot(ast)
             .expect("snapshot sync should succeed");
@@ -1000,6 +1005,7 @@ mod tests {
         let ast = basic_document_ast("Stable page", "");
 
         let mut engine = ErgoPreviewEngine::new();
+        load_bundled_template_packages(&engine);
         engine
             .sync_snapshot(ast)
             .expect("snapshot sync should succeed");
