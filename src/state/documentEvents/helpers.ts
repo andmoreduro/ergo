@@ -3,6 +3,7 @@ import type { DocumentAST } from "../../bindings/DocumentAST";
 import { isGeneratedDiagramAsset } from "../../editor/diagram/diagramAsset";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { ReferenceEntry } from "../../bindings/ReferenceEntry";
+import type { RichText } from "../../bindings/RichText";
 import type { Table } from "../../bindings/Table";
 import type { TableCell } from "../../bindings/TableCell";
 import { createRichText } from "../ast/defaults";
@@ -75,6 +76,18 @@ export const insertAt = <T,>(values: T[], index: number, value: T): T[] => [
 ];
 
 export const cloneValue = <T,>(value: T): T => structuredClone(value);
+
+/**
+ * Shallow-per-item copy of a `RichText[]`, the shape carried by paragraph and
+ * heading content events on the typing hot path. `RichText` is a flat object
+ * (only primitive fields: strings, booleans, nulls), so a one-level copy is
+ * semantically equivalent to `structuredClone` for this shape but avoids the
+ * recursive structured-clone walk — measurable on every keystroke. Use only
+ * for `RichText[]`; for nested shapes (DocumentElement, TableCell, ReferenceEntry)
+ * keep `cloneValue`.
+ */
+export const cloneRichTextArray = (items: readonly RichText[]): RichText[] =>
+    items.map((item) => ({ ...item }));
 
 export const setValueAtPath = <T = unknown>(
     obj: unknown,
