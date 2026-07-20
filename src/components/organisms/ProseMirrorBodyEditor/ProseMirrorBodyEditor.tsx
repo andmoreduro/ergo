@@ -14,6 +14,7 @@ import { EditorView } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
 import "prosemirror-gapcursor/style/gapcursor.css";
 import "prosemirror-tables/style/tables.css";
+import { markInputReceived } from "../../../perf/inputTimestamp";
 import "../../../editor/prosemirror/nodeViews/blockObjectNodeViews.global.css";
 import "../../../editor/prosemirror/nodeViews/tableBlockNodeView.global.css";
 import type { ContentSection } from "../../../bindings/ContentSection";
@@ -371,6 +372,11 @@ const ProseMirrorBodyEditorImpl = ({
         }
 
         const handleTransaction = (tr: Transaction) => {
+            // Stamp the earliest moment a transaction arrives, before any input
+            // pipeline work runs. Paired with `lastEvent.timestamp` (queued-event
+            // time) by the telemetry finalizer to compute `inputToCommitMs` —
+            // the prefix the overlay's `latency` clock otherwise misses.
+            markInputReceived();
             const view = viewRef.current;
             if (!view) {
                 return;

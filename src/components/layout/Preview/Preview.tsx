@@ -419,6 +419,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(
                             raster: compiler.previewTelemetry.rasterMs,
                         })}
                         {` · react=${compiler.previewTelemetry.reactCommitMs}ms paint=${compiler.previewTelemetry.paintMs}ms`}
+                        {` · input→commit=${compiler.previewTelemetry.inputToCommitMs}ms`}
                     </div>
                 )}
             </div>

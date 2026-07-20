@@ -1,5 +1,12 @@
 export interface PreviewTelemetry {
     totalLatencyMs: number;
+    /**
+     * Earliest input → AST event queued for the worker. The prefix the other
+     * fields miss: contenteditable input → ProseMirror transaction → astBridge
+     * → sectionDiff → DocumentContext reducer. Zero for non-typing commits
+     * (programmatic edits, undo/redo) where no input timestamp was captured.
+     */
+    inputToCommitMs: number;
     queuedToSyncMs: number;
     workerSyncMs: number;
     /** Worker compile trip (Typst layout + page metadata). */
@@ -78,6 +85,13 @@ export interface PendingPreviewTelemetry {
     queuedToSyncMs: number;
     workerSyncMs: number;
     compileMs: number;
+    /**
+     * Most recent input timestamp captured at ProseMirror `handleTransaction`
+     * entry (via the `perf/inputTimestamp` bridge), or `null` for non-typing
+     * commits. The finalizer computes `inputToCommitMs` from this minus
+     * `startedAt` (the queued-event timestamp).
+     */
+    inputAt: number | null;
 }
 
 export const nowMs = (): number => Date.now();
