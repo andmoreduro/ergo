@@ -11,6 +11,7 @@ import {
 } from "../../../state/ast/listItem";
 import { richTextPlainLength } from "../../../richText/richText";
 import type { RichText } from "../../../bindings/RichText";
+import { deepEqual } from "../../deepEqual";
 
 const richTextFieldLength = (content: readonly RichText[]): number =>
     content.reduce((total, span) => {
@@ -86,7 +87,7 @@ export const tableCellFieldLength = (cell: TableCell): number =>
 export const tableCellElementsEqual = (
     a: readonly DocumentElement[],
     b: readonly DocumentElement[],
-): boolean => JSON.stringify(a) === JSON.stringify(b);
+): boolean => deepEqual(a, b);
 
 export const normalizeTableCellElements = (
     elements: readonly DocumentElement[],
