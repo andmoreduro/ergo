@@ -30,6 +30,7 @@ import {
     nowMs,
     type PendingPreviewTelemetry,
 } from "./previewTelemetry";
+import { getInputTimestamp } from "../perf/inputTimestamp";
 
 type SourceRevision = number;
 type PackageDependency = { name: string; version: string };
@@ -241,6 +242,7 @@ export function useDocumentCompilerSync({
                                 bootstrapStarted,
                                 bootstrapFinished,
                             ),
+                            inputAt: null,
                         });
                     }
                     applyPreviewResult(status, result, currentSessionId);
@@ -296,6 +298,10 @@ export function useDocumentCompilerSync({
                     queuedToSyncMs: elapsedMs(lastEvent.timestamp, syncStarted),
                     workerSyncMs: elapsedMs(syncStarted, syncFinished),
                     compileMs: compileOutput.compileMs,
+                    // Capture at the moment this batch's events were queued for
+                    // the worker: the most recent input timestamp (if any)
+                    // precedes `lastEvent.timestamp` by the input-pipeline cost.
+                    inputAt: getInputTimestamp(),
                 });
                 applyPreviewResult(status, compileOutput.result, currentSessionId);
 

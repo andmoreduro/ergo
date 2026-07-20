@@ -147,6 +147,14 @@ export function useCompiler(
             const reactCommittedAt = paintInfo?.reactCommittedAt ?? null;
             const telemetry: PreviewTelemetry = {
                 totalLatencyMs: elapsedMs(pendingTelemetry.startedAt, paintedAt),
+                inputToCommitMs:
+                    pendingTelemetry.inputAt !== null &&
+                    pendingTelemetry.inputAt <= pendingTelemetry.startedAt
+                        ? elapsedMs(
+                              pendingTelemetry.inputAt,
+                              pendingTelemetry.startedAt,
+                          )
+                        : 0,
                 queuedToSyncMs: pendingTelemetry.queuedToSyncMs,
                 workerSyncMs: pendingTelemetry.workerSyncMs,
                 compileMs: pendingTelemetry.compileMs,
