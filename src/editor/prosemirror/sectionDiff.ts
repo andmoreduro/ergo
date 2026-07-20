@@ -2,6 +2,7 @@ import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { DocumentEvent } from "../../bindings/DocumentEvent";
 import type { RichText } from "../../bindings/RichText";
 import { richTextSignificantlyEqual } from "../../state/ast/commitPolicy";
+import { deepEqual } from "../deepEqual";
 import { diffTableElement } from "./tableDiff";
 
 /**
@@ -25,9 +26,6 @@ export interface SectionEventDelta {
     forward: DocumentEvent[];
     inverse: DocumentEvent[];
 }
-
-const deepEqual = (a: unknown, b: unknown): boolean =>
-    JSON.stringify(a) === JSON.stringify(b);
 
 const restore = (
     sectionId: string,

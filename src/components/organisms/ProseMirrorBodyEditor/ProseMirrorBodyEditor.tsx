@@ -81,47 +81,7 @@ import { applyTableCellFocus } from "../../../editor/prosemirror/table/tableFocu
 import { locateTableCell } from "../../../editor/prosemirror/table/tableCellResolve";
 import { ProseMirrorSurface } from "../../atoms/ProseMirrorSurface/ProseMirrorSurface";
 import bodyPaperStyles from "../../atoms/ProseMirrorSurface/ProseMirrorSurface.module.css";
-
-/**
- * Structural deep-equality that short-circuits at the first difference and
- * allocates nothing. Used on the typing hot path to compare the editor doc
- * against the AST section every keystroke, so `JSON.stringify`-ing the whole
- * document twice per keystroke (the previous approach) is far too costly on
- * larger documents. `undefined` values are treated as absent to match the
- * JSON-serialization semantics this replaces.
- */
-const deepEqual = (a: unknown, b: unknown): boolean => {
-    if (a === b) {
-        return true;
-    }
-    if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) {
-        return false;
-    }
-    if (Array.isArray(a) || Array.isArray(b)) {
-        if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
-            return false;
-        }
-        for (let i = 0; i < a.length; i += 1) {
-            if (!deepEqual(a[i], b[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
-    const aObj = a as Record<string, unknown>;
-    const bObj = b as Record<string, unknown>;
-    const aKeys = Object.keys(aObj).filter((key) => aObj[key] !== undefined);
-    const bKeys = Object.keys(bObj).filter((key) => bObj[key] !== undefined);
-    if (aKeys.length !== bKeys.length) {
-        return false;
-    }
-    for (const key of aKeys) {
-        if (!deepEqual(aObj[key], bObj[key])) {
-            return false;
-        }
-    }
-    return true;
-};
+import { deepEqual } from "../../../editor/deepEqual";
 
 /**
  * Reconcile an externally-changed section into the live doc with a single
