@@ -8,10 +8,17 @@ use tauri::AppHandle;
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum PerfTypingTarget {
-    /// ProseMirror body editor — first paragraph of the content section.
+    /// ProseMirror body editor — append characters to the first paragraph.
     Body,
     /// Template form field (e.g. `/title` input) dispatched as `updateInput`.
     FormTitle,
+    /// Body editor — append N characters then delete them one at a time.
+    /// Exercises the paragraph-shrink edit path, not just append.
+    BodyDelete,
+    /// Body editor — cycle single-character edits across three distinct
+    /// paragraphs. Exercises per-element dirty tracking and multi-location
+    /// layout, which a single-paragraph append never touches.
+    BodyMultiEdit,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
@@ -133,6 +140,8 @@ pub fn get_perf_config() -> PerfHarnessConfig {
         .as_str()
     {
         "form-title" => PerfTypingTarget::FormTitle,
+        "body-delete" => PerfTypingTarget::BodyDelete,
+        "body-multi-edit" => PerfTypingTarget::BodyMultiEdit,
         _ => PerfTypingTarget::Body,
     };
 

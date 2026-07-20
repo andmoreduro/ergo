@@ -49,6 +49,32 @@ const findFirstParagraph = (
     return null;
 };
 
+/** Collect up to `count` body paragraphs, in document order. */
+const findFirstParagraphs = (
+    ast: DocumentAST,
+    count: number,
+): { paragraphId: string; initialText: string }[] => {
+    const found: { paragraphId: string; initialText: string }[] = [];
+    for (const section of ast.sections) {
+        if (section.type !== "Content") {
+            continue;
+        }
+        for (const element of section.elements) {
+            if (element.type !== "Paragraph") {
+                continue;
+            }
+            found.push({
+                paragraphId: element.id,
+                initialText: richTextPlainText(element.content),
+            });
+            if (found.length >= count) {
+                return found;
+            }
+        }
+    }
+    return found;
+};
+
 /** Read the current title value from inputs (handles both `/title` and `title`). */
 const getTitleValue = (ast: DocumentAST): string => {
     const raw = ast.inputs["/title"] ?? ast.inputs["title"];
@@ -128,24 +154,25 @@ export const usePerfReplay = ({
         })();
     }, [openProject]);
 
-    // Step 2: once the project is active, apply the configured zoom and start
-    // the replay. A high zoom makes a page span several viewports, so the
-    // visible-band raster path (not full-page raster) is what gets measured.
+    // Step 2: once the project is active, apply the configured zoom, then wait
+    // for the FIRST preview paint before typing. A high zoom makes a page span
+    // several viewports, so the visible-band raster path (not full-page raster)
+    // is what gets measured. Waiting for first paint is essential: the harness
+    // previously typed the moment `hasActiveProject` flipped (AST loaded), which
+    // is BEFORE bootstrap compile finishes — so it was measuring typing into a
+    // worker still grinding through bootstrap, producing fake "constant latency".
+    // The first telemetry sample arrives only after the first compile + canvas
+    // paint, so it is the honest "document is ready" signal a user perceives.
     useEffect(() => {
         if (!hasActiveProject || !configRef.current || bootstrapped) {
             return;
         }
-        const { zoom } = configRef.current;
-        if (zoom != null && zoom > 0) {
-            setPreviewZoomManual();
-            setPreviewZoom(zoom);
-        }
+        const projectLoadStarted = projectLoadStartedRef.current;
 
-        // Record project-load timing: from openProject call to hasActiveProject
-        // becoming true. This captures archive open + AST load + first compile
-        // trigger (though not the full first paint, which Step 3 waits for).
-        if (projectLoadStartedRef.current !== null) {
-            const elapsed = Date.now() - projectLoadStartedRef.current;
+        // Record project-load timing (open → AST loaded) immediately. This
+        // captures archive open + AST load, distinct from first-paint below.
+        if (projectLoadStarted !== null) {
+            const elapsed = Date.now() - projectLoadStarted;
             oneShotTimingsRef.current.push({
                 label: "projectLoad",
                 elapsedMs: elapsed,
@@ -156,7 +183,59 @@ export const usePerfReplay = ({
             );
         }
 
-        setBootstrapped(true);
+        const { zoom } = configRef.current;
+        if (zoom != null && zoom > 0) {
+            setPreviewZoomManual();
+            setPreviewZoom(zoom);
+        }
+
+        // Install a one-shot listener for the bootstrap telemetry sample
+        // (first paint). When it arrives, record firstPaintMs (open → first
+        // paint) and flip bootstrapped so Step 3 starts the typing loop. This
+        // listener is overwritten by Step 3's typing-sample listener.
+        let cancelled = false;
+        let firstPaintListenerFired = false;
+        const firstPaintTimeout = setTimeout(() => {
+            if (cancelled || firstPaintListenerFired) {
+                return;
+            }
+            // eslint-disable-next-line no-console
+            console.error(
+                "[perf] first paint did not arrive within 60s; starting typing anyway",
+            );
+            oneShotTimingsRef.current.push({
+                label: "firstPaint",
+                elapsedMs:
+                    projectLoadStarted !== null
+                        ? Date.now() - projectLoadStarted
+                        : 0,
+            });
+            setBootstrapped(true);
+        }, 60000);
+        setPreviewTelemetryListener(() => {
+            if (cancelled || firstPaintListenerFired) {
+                return;
+            }
+            firstPaintListenerFired = true;
+            clearTimeout(firstPaintTimeout);
+            if (projectLoadStarted !== null) {
+                const elapsed = Date.now() - projectLoadStarted;
+                oneShotTimingsRef.current.push({
+                    label: "firstPaint",
+                    elapsedMs: elapsed,
+                });
+                // eslint-disable-next-line no-console
+                console.log(
+                    `[perf] firstPaint: ${elapsed}ms (openProject → first preview paint)`,
+                );
+            }
+            setBootstrapped(true);
+        });
+
+        return () => {
+            cancelled = true;
+            clearTimeout(firstPaintTimeout);
+        };
     }, [hasActiveProject, bootstrapped, setPreviewZoom, setPreviewZoomManual]);
 
     // Step 3: typing loop + telemetry collection.
@@ -168,15 +247,42 @@ export const usePerfReplay = ({
         const config = configRef.current;
         const target: PerfTypingTarget = config.typingTarget;
 
-        // Resolve the typing target from the AST.
+        // Resolve the typing target from the AST. Each mode carries its own
+        // mutable state so `buildKeystrokeEvents` can compute the next forward/
+        // inverse pair without re-walking the AST.
+        let titleInitial: string | null = null;
         let paragraph: {
             paragraphId: string;
             initialText: string;
         } | null = null;
-        let titleInitial: string | null = null;
+        // bodyDelete: append phase, then delete phase. Tracks chars added.
+        let deleteParagraph: {
+            paragraphId: string;
+            initialText: string;
+        } | null = null;
+        let appendedSoFar = 0;
+        // bodyMultiEdit: cycle across up to 3 paragraphs, one char each.
+        let multiParagraphs: {
+            paragraphId: string;
+            initialText: string;
+        }[] = [];
 
         if (target === "formTitle") {
             titleInitial = getTitleValue(ast);
+        } else if (target === "bodyMultiEdit") {
+            multiParagraphs = findFirstParagraphs(ast, 3);
+            if (multiParagraphs.length === 0) {
+                // eslint-disable-next-line no-console
+                console.error("[perf] no paragraphs found for multi-edit");
+                return;
+            }
+        } else if (target === "bodyDelete") {
+            deleteParagraph = findFirstParagraph(ast);
+            if (!deleteParagraph) {
+                // eslint-disable-next-line no-console
+                console.error("[perf] no paragraph found for delete");
+                return;
+            }
         } else {
             paragraph = findFirstParagraph(ast);
             if (!paragraph) {
@@ -206,9 +312,14 @@ export const usePerfReplay = ({
             });
         };
 
-        /** Build the forward/inverse DocumentEvent pair for one keystroke. */
+        /**
+         * Build the forward/inverse DocumentEvent pair for one keystroke.
+         * `total` is the keystroke count from config, needed to split the
+         * bodyDelete scenario into append/delete phases.
+         */
         const buildKeystrokeEvents = (
             index: number,
+            total: number,
         ): { forward: DocumentEvent; inverse: DocumentEvent } | null => {
             if (target === "formTitle" && titleInitial !== null) {
                 const nextText = `${titleInitial}${"x".repeat(index + 1)}`;
@@ -226,6 +337,79 @@ export const usePerfReplay = ({
                         type: "updateInput",
                         path: "/title",
                         value: prevText,
+                    },
+                };
+            }
+
+            if (target === "bodyMultiEdit" && multiParagraphs.length > 0) {
+                // Cycle across the paragraphs: keystroke i edits paragraph
+                // i % count, appending one char to that paragraph's running
+                // text. The first edit of each paragraph is index/count, so
+                // the char count for paragraph p is floor(i/count) + 1.
+                const count = multiParagraphs.length;
+                const p = index % count;
+                const rounds = Math.floor(index / count);
+                const para = multiParagraphs[p]!;
+                const nextText = `${para.initialText}${"x".repeat(rounds + 1)}`;
+                const prevText =
+                    rounds === 0
+                        ? para.initialText
+                        : `${para.initialText}${"x".repeat(rounds)}`;
+                return {
+                    forward: {
+                        type: "updateParagraphText",
+                        element_id: para.paragraphId,
+                        text: nextText,
+                    },
+                    inverse: {
+                        type: "updateParagraphText",
+                        element_id: para.paragraphId,
+                        text: prevText,
+                    },
+                };
+            }
+
+            if (target === "bodyDelete" && deleteParagraph) {
+                // First half appends one 'x' per keystroke; second half
+                // removes one at a time back to the initial text. Each delete
+                // is the inverse of the symmetric append from the first half.
+                const half = Math.floor(total / 2);
+                const { paragraphId, initialText } = deleteParagraph;
+                if (index < half) {
+                    // Append phase.
+                    appendedSoFar = index + 1;
+                    const nextText = `${initialText}${"x".repeat(appendedSoFar)}`;
+                    const prevText = `${initialText}${"x".repeat(index)}`;
+                    return {
+                        forward: {
+                            type: "updateParagraphText",
+                            element_id: paragraphId,
+                            text: nextText,
+                        },
+                        inverse: {
+                            type: "updateParagraphText",
+                            element_id: paragraphId,
+                            text: prevText,
+                        },
+                    };
+                }
+                // Delete phase: remove one char per keystroke.
+                const remaining = appendedSoFar - (index - half);
+                if (remaining < 0) {
+                    return null;
+                }
+                const nextText = `${initialText}${"x".repeat(remaining)}`;
+                const prevText = `${initialText}${"x".repeat(remaining + 1)}`;
+                return {
+                    forward: {
+                        type: "updateParagraphText",
+                        element_id: paragraphId,
+                        text: nextText,
+                    },
+                    inverse: {
+                        type: "updateParagraphText",
+                        element_id: paragraphId,
+                        text: prevText,
                     },
                 };
             }
@@ -259,7 +443,7 @@ export const usePerfReplay = ({
             const warmup = config.warmupKeystrokes;
 
             for (let i = 0; i < total && !cancelled; i++) {
-                const events = buildKeystrokeEvents(i);
+                const events = buildKeystrokeEvents(i, total);
                 if (!events) {
                     break;
                 }

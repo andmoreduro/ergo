@@ -3,4 +3,4 @@
 /**
  * Which editing surface the typing phase targets.
  */
-export type PerfTypingTarget = "body" | "formTitle";
+export type PerfTypingTarget = "body" | "formTitle" | "bodyDelete" | "bodyMultiEdit";
