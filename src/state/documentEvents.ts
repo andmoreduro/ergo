@@ -5,6 +5,7 @@ import {
     assertNever,
     assetById,
     assetLocation,
+    cloneRichTextArray,
     cloneValue,
     columnSize,
     elementById,
@@ -238,7 +239,7 @@ export const applyDocumentEventToAst = (
         case "updateParagraphContent":
             return mapContentElements(ast, event.element_id, (element) =>
                 element.type === "Paragraph"
-                    ? { ...element, content: cloneValue(event.content) }
+                    ? { ...element, content: cloneRichTextArray(event.content) }
                     : element,
             );
 
@@ -262,7 +263,7 @@ export const applyDocumentEventToAst = (
                     ? {
                           ...element,
                           level: event.level ?? element.level,
-                          content: cloneValue(event.content),
+                          content: cloneRichTextArray(event.content),
                       }
                     : element,
             );
