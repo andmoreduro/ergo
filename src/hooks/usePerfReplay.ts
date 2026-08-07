@@ -10,6 +10,7 @@ import { setPreviewTelemetryListener } from "./previewDiagnostics";
 import { TauriApi } from "../api/tauri";
 import { richTextPlainText } from "../state/documentEvents/helpers";
 import { APP_START_TIMESTAMP } from "../perf/appStartTimestamp";
+import { getBootstrapPhases } from "../perf/bootstrapPhases";
 import { getActiveBodyView } from "../editor/prosemirror/activeView";
 import { TextSelection } from "prosemirror-state";
 import type { ASTAction } from "../state/ast/actions";
@@ -575,8 +576,10 @@ export const usePerfReplay = ({
                     firstKeystrokeMs,
                 },
                 oneShotTimings: oneShotTimingsRef.current,
+                bootstrapPhases: getBootstrapPhases(),
             };
 
+            const phases = getBootstrapPhases();
             // eslint-disable-next-line no-console
             console.log(
                 `[perf] target=${target} · ${recorded.length} samples · ` +
@@ -586,6 +589,14 @@ export const usePerfReplay = ({
                     (firstKeystrokeMs !== null
                         ? ` · first=${firstKeystrokeMs}ms`
                         : ""),
+            );
+            // eslint-disable-next-line no-console
+            console.log(
+                `[perf] bootstrap phases: ` +
+                    `templatePkg=${phases.templatePackageLoadMs ?? "?"}ms ` +
+                    `depPkg=${phases.dependencyPackageLoadMs ?? "?"}ms ` +
+                    `astTransform=${phases.astTransformMs ?? "?"}ms ` +
+                    `workerBootstrap=${phases.workerBootstrapMs ?? "?"}ms`,
             );
 
             await TauriApi.writePerfReportAndExit(report);

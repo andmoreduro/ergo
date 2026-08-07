@@ -31,6 +31,10 @@ import {
     type PendingPreviewTelemetry,
 } from "./previewTelemetry";
 import { getInputTimestamp } from "../perf/inputTimestamp";
+import {
+    resetBootstrapPhases,
+    setBootstrapPhase,
+} from "../perf/bootstrapPhases";
 
 type SourceRevision = number;
 type PackageDependency = { name: string; version: string };
@@ -213,6 +217,7 @@ export function useDocumentCompilerSync({
 
                 if (bootstrappedSessionIdRef.current !== currentSessionId) {
                     loadedDependencyPackagesRef.current = new Set();
+                    resetBootstrapPhases();
                     const vfsFiles = [
                         ...projectFilesToVfsEntries(
                             desiredBootstrapFilesRef.current ?? [],
@@ -222,15 +227,25 @@ export function useDocumentCompilerSync({
                     try {
                         const templateId = currentAst.metadata.template_id;
                         if (templateId) {
+                            const tplStart = nowMs();
                             const templatePackageFiles =
                                 await TauriApi.loadTemplatePackageFiles(templateId);
+                            setBootstrapPhase(
+                                "templatePackageLoadMs",
+                                elapsedMs(tplStart, nowMs()),
+                            );
                             vfsFiles.push(
                                 ...projectFilesToVfsEntries(templatePackageFiles),
                             );
                         }
+                        const mitexStart = nowMs();
                         const mitexFiles = await TauriApi.loadPackageFiles(
                             MITEX_PACKAGE.name,
                             MITEX_PACKAGE.version,
+                        );
+                        setBootstrapPhase(
+                            "dependencyPackageLoadMs",
+                            elapsedMs(mitexStart, nowMs()),
                         );
                         vfsFiles.push(...projectFilesToVfsEntries(mitexFiles));
                         loadedDependencyPackagesRef.current.add(
@@ -240,7 +255,12 @@ export function useDocumentCompilerSync({
                         console.error("Failed to load template package files:", loadError);
                     }
 
+                    const astTransformStart = nowMs();
                     const compileAst = await documentAstForCompile(currentAst);
+                    setBootstrapPhase(
+                        "astTransformMs",
+                        elapsedMs(astTransformStart, nowMs()),
+                    );
 
                     const bootstrapStarted = nowMs();
                     const { status, result } = await CompilerClient.bootstrap({
@@ -248,6 +268,10 @@ export function useDocumentCompilerSync({
                         files: vfsFiles,
                     });
                     const bootstrapFinished = nowMs();
+                    setBootstrapPhase(
+                        "workerBootstrapMs",
+                        elapsedMs(bootstrapStarted, bootstrapFinished),
+                    );
 
                     if (
                         !isMountedRef.current ||

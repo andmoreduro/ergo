@@ -131,6 +131,30 @@ pub struct PerfHarnessReport {
     /// first preview paint). Empty when not measured.
     #[serde(default)]
     pub one_shot_timings: Vec<PerfOneShotTiming>,
+    /// Bootstrap-phase breakdown (open → first paint), when captured:
+    /// template-package IPC, dependency-package IPC, AST transform, worker
+    /// bootstrap compile. Empty when not measured.
+    #[serde(default)]
+    pub bootstrap_phases: BootstrapPhaseTimings,
+}
+
+/// Per-phase breakdown of the open → first-paint bootstrap.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct BootstrapPhaseTimings {
+    /// IPC round-trip for loading template package files (e.g. versatile-apa).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template_package_load_ms: Option<f64>,
+    /// IPC round-trip for loading dependency package files (e.g. mitex).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_package_load_ms: Option<f64>,
+    /// `documentAstForCompile` AST transform duration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ast_transform_ms: Option<f64>,
+    /// Worker round-trip for `CompilerClient.bootstrap` (VFS write + sync + compile).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker_bootstrap_ms: Option<f64>,
 }
 
 fn env_usize(key: &str, default: usize) -> usize {
