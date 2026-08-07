@@ -111,6 +111,13 @@ export function useDocumentCompilerSync({
     const loadedDependencyPackagesRef = useRef(new Set<string>());
     const backendMirrorDirtyRef = useRef(false);
     const isMountedRef = useRef(false);
+    // Fingerprints of the last outline/resources applied, so a per-keystroke
+    // compile that didn't alter headings or the resource catalog can skip the
+    // setState that would otherwise bust every memoized Sidebar consumer. Body
+    // typing changes the source map and the edited page, but not the outline
+    // entries or the resource group list.
+    const lastOutlineFingerprintRef = useRef<string>("");
+    const lastResourcesGroupCountRef = useRef<number>(-1);
 
     const isNewerPreviewResult = (result: CompilationResult): boolean =>
         previewRevisionRef.current === null ||
@@ -133,9 +140,29 @@ export function useDocumentCompilerSync({
             previewRevisionRef.current = result.source_revision;
             updateResourcePreviewRevisions(status);
             setSourceMap(status.sourceMap);
-            setOutline(result.outline);
+            // Gate outline/resources on a cheap fingerprint: body typing
+            // changes the source map and the edited page, but the heading list
+            // and resource catalog are stable. Skipping the setState when the
+            // fingerprint is unchanged avoids busting every memoized Sidebar
+            // consumer (SidebarOutline.buildTargetedOutlineEntries,
+            // SidebarResources) on every keystroke.
+            const outline = result.outline;
+            const entries = outline?.entries ?? [];
+            const lastEntry = entries[entries.length - 1];
+            const outlineFingerprint =
+                entries.length > 0 && lastEntry
+                    ? `${entries.length}:${lastEntry.text}:${lastEntry.page}`
+                    : `${entries.length}:`;
+            if (outlineFingerprint !== lastOutlineFingerprintRef.current) {
+                lastOutlineFingerprintRef.current = outlineFingerprint;
+                setOutline(outline);
+            }
             if (result.resources) {
-                setResources(result.resources);
+                const groupCount = result.resources.groups.length;
+                if (groupCount !== lastResourcesGroupCountRef.current) {
+                    lastResourcesGroupCountRef.current = groupCount;
+                    setResources(result.resources);
+                }
             }
             setPreviewPages(result.preview_pages || []);
             setPreviewRevision(result.source_revision);
@@ -380,6 +407,8 @@ export function useDocumentCompilerSync({
             previewRevisionRef.current = null;
             setOutline(null);
             setResources(null);
+            lastOutlineFingerprintRef.current = "";
+            lastResourcesGroupCountRef.current = -1;
             latencyStartRef.current = null;
             resetPreviewRuntimeState();
             return;
@@ -405,6 +434,8 @@ export function useDocumentCompilerSync({
                 latestRevisionRef.current = null;
                 setOutline(null);
                 setResources(null);
+                lastOutlineFingerprintRef.current = "";
+                lastResourcesGroupCountRef.current = -1;
                 latencyStartRef.current = null;
                 resetPreviewRuntimeState();
             }
