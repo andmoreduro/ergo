@@ -10,6 +10,8 @@ import { setPreviewTelemetryListener } from "./previewDiagnostics";
 import { TauriApi } from "../api/tauri";
 import { richTextPlainText } from "../state/documentEvents/helpers";
 import { APP_START_TIMESTAMP } from "../perf/appStartTimestamp";
+import { getActiveBodyView } from "../editor/prosemirror/activeView";
+import { TextSelection } from "prosemirror-state";
 import type { ASTAction } from "../state/ast/actions";
 
 interface UsePerfReplayOptions {
@@ -438,23 +440,90 @@ export const usePerfReplay = ({
             };
         };
 
-        const run = async (): Promise<void> => {
-            const total = config.keystrokeCount;
-            const warmup = config.warmupKeystrokes;
+        /**
+         * Drive REAL ProseMirror transactions through the live body editor
+         * (`view.dispatch(tr.insertText(...))`). Unlike the other targets, this
+         * exercises the full input pipeline — contenteditable → transaction →
+         * astBridge → sectionDiff → reducer — so `inputToCommitMs` reflects
+         * true perceived latency instead of 0. The body editor view must be
+         * mounted (it is, once the project is open and the editor pane shows).
+         */
+        const runProseMirror = async (
+            total: number,
+            warmup: number,
+            isCancelled: () => boolean,
+        ): Promise<void> => {
+            // Wait for the body editor view to mount (it registers via
+            // setActiveBodyView on focus/mount). Poll briefly.
+            let view = getActiveBodyView();
+            for (let w = 0; !view && w < 50 && !isCancelled(); w++) {
+                await sleep(100);
+                view = getActiveBodyView();
+            }
+            if (!view) {
+                // eslint-disable-next-line no-console
+                console.error("[perf] body editor view never mounted");
+                return;
+            }
 
-            for (let i = 0; i < total && !cancelled; i++) {
-                const events = buildKeystrokeEvents(i, total);
-                if (!events) {
+            // Focus + place the cursor inside the first text block. The body
+            // doc's first child is the first paragraph; position 1 lands just
+            // past its opening token. Each subsequent insertText appends at
+            // the cursor, flowing through handleTransaction (which stamps
+            // markInputReceived) — the real input→commit path.
+            view.focus();
+            view.dispatch(
+                view.state.tr.setSelection(
+                    TextSelection.near(view.state.doc.resolve(1)),
+                ),
+            );
+
+            for (let i = 0; i < total && !isCancelled(); i++) {
+                const current = getActiveBodyView();
+                if (!current) {
                     break;
                 }
-
                 pendingIndexRef.current = i;
-                commitDocumentEvents([events.forward], [events.inverse]);
+                // Real input through the live editor. The second half of the
+                // run deletes one char per keystroke (backspace-equivalent),
+                // exercising the shrink path too.
+                if (i >= total / 2) {
+                    const s = current.state;
+                    const at = s.selection.head;
+                    current.dispatch(s.tr.delete(at - 1, at));
+                } else {
+                    current.dispatch(current.state.tr.insertText("x"));
+                }
 
                 await waitForTelemetry();
 
                 if (i >= warmup && config.keystrokeIntervalMs > 0) {
                     await sleep(config.keystrokeIntervalMs);
+                }
+            }
+        };
+
+        const run = async (): Promise<void> => {
+            const total = config.keystrokeCount;
+            const warmup = config.warmupKeystrokes;
+
+            if (target === "bodyProseMirror") {
+                await runProseMirror(total, warmup, () => cancelled);
+            } else {
+                for (let i = 0; i < total && !cancelled; i++) {
+                    const events = buildKeystrokeEvents(i, total);
+                    if (!events) {
+                        break;
+                    }
+
+                    pendingIndexRef.current = i;
+                    commitDocumentEvents([events.forward], [events.inverse]);
+
+                    await waitForTelemetry();
+
+                    if (i >= warmup && config.keystrokeIntervalMs > 0) {
+                        await sleep(config.keystrokeIntervalMs);
+                    }
                 }
             }
 
