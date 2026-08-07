@@ -36,4 +36,5 @@ fn export_typescript_bindings() {
     ergo_lib::perf_commands::PerfHarnessReport::export_all(&config).unwrap();
     ergo_lib::perf_commands::PerfOneShotTiming::export_all(&config).unwrap();
     ergo_lib::perf_commands::PerfTypingTarget::export_all(&config).unwrap();
+    ergo_lib::perf_commands::BootstrapPhaseTimings::export_all(&config).unwrap();
 }
