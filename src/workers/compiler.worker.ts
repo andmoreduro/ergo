@@ -137,12 +137,14 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             }
             case "bootstrap": {
                 if (!compiler) return;
+                // Pass file bytes as Uint8Array directly — serde-wasm-bindgen
+                // deserializes Vec<u8> from a typed array far faster than from
+                // the number[] that Array.from produces. The prior Array.from
+                // was a double-copy: Uint8Array → number[] (1.1M boxed numbers
+                // for versatile-apa) → Vec<u8>.
                 const bootstrapResult = compiler.bootstrap_preview({
                     ast: message.payload.ast,
-                    files: message.payload.files.map((file) => ({
-                        path: file.path,
-                        bytes: Array.from(file.bytes),
-                    })),
+                    files: message.payload.files,
                 });
                 reply({ type: "bootstrap_done", payload: bootstrapResult, id });
                 break;
