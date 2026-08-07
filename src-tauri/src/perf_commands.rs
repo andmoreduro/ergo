@@ -67,6 +67,9 @@ impl Default for PerfHarnessConfig {
 #[serde(rename_all = "camelCase")]
 pub struct PerfTelemetrySample {
     pub keystroke_index: usize,
+    /// Earliest input (ProseMirror transaction) → AST event queued. Zero for
+    /// non-ProseMirror targets that bypass the input pipeline.
+    pub input_to_commit_ms: u32,
     pub total_latency_ms: u32,
     pub queued_to_sync_ms: u32,
     pub worker_sync_ms: u32,
@@ -99,6 +102,9 @@ pub struct PerfOneShotTiming {
 #[serde(rename_all = "camelCase")]
 pub struct PerfReportSummary {
     pub sample_count: usize,
+    /// Mean input→commit (the synchronous input-pipeline prefix). Zero for
+    /// targets that bypass ProseMirror.
+    pub input_to_commit_mean_ms: f64,
     pub total_latency_mean_ms: f64,
     pub total_latency_p50_ms: f64,
     pub total_latency_p90_ms: f64,

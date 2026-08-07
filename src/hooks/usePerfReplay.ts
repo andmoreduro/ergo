@@ -528,6 +528,7 @@ export const usePerfReplay = ({
             }
 
             const recorded = samplesRef.current.slice(config.warmupKeystrokes);
+            const inputLatencies = recorded.map((s) => s.inputToCommitMs);
             const totalLatencies = recorded.map((s) => s.totalLatencyMs);
             const compileLatencies = recorded.map((s) => s.compileMs);
             const renderLatencies = recorded.map((s) => s.svgRenderMs);
@@ -537,7 +538,7 @@ export const usePerfReplay = ({
             const compileSummary = summarize(compileLatencies);
 
             // First post-warmup keystroke — typically much higher than steady
-            // state due to JIT warmup, font cache misses, lazy init.
+            // state due to JIT warmup, font cache misses, lazy module init.
             const firstKeystrokeMs =
                 recorded.length > 0 ? recorded[0]!.totalLatencyMs : null;
 
@@ -545,6 +546,7 @@ export const usePerfReplay = ({
                 config,
                 samples: recorded.map((s, idx) => ({
                     keystrokeIndex: idx + warmup,
+                    inputToCommitMs: s.inputToCommitMs,
                     totalLatencyMs: s.totalLatencyMs,
                     queuedToSyncMs: s.queuedToSyncMs,
                     workerSyncMs: s.workerSyncMs,
@@ -561,6 +563,7 @@ export const usePerfReplay = ({
                 })),
                 summary: {
                     sampleCount: recorded.length,
+                    inputToCommitMeanMs: summarize(inputLatencies).mean,
                     totalLatencyMeanMs: totalSummary.mean,
                     totalLatencyP50Ms: totalSummary.p50,
                     totalLatencyP90Ms: totalSummary.p90,
@@ -577,6 +580,7 @@ export const usePerfReplay = ({
             // eslint-disable-next-line no-console
             console.log(
                 `[perf] target=${target} · ${recorded.length} samples · ` +
+                    `input→commit mean ${summarize(inputLatencies).mean.toFixed(1)} ms · ` +
                     `total mean/p50/p90 = ` +
                     `${totalSummary.mean.toFixed(1)}/${totalSummary.p50.toFixed(1)}/${totalSummary.p90.toFixed(1)} ms` +
                     (firstKeystrokeMs !== null
