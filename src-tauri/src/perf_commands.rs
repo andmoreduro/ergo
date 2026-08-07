@@ -8,7 +8,8 @@ use tauri::AppHandle;
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum PerfTypingTarget {
-    /// ProseMirror body editor — append characters to the first paragraph.
+    /// ProseMirror body editor — append characters to the first paragraph, via
+    /// direct `updateParagraphText` events (bypasses the input pipeline).
     Body,
     /// Template form field (e.g. `/title` input) dispatched as `updateInput`.
     FormTitle,
@@ -19,6 +20,13 @@ pub enum PerfTypingTarget {
     /// paragraphs. Exercises per-element dirty tracking and multi-location
     /// layout, which a single-paragraph append never touches.
     BodyMultiEdit,
+    /// Body editor — drive REAL ProseMirror transactions
+    /// (`view.dispatch(tr.insertText(...))`) through the live editor. This
+    /// exercises the full input pipeline (contenteditable → transaction →
+    /// astBridge → sectionDiff → reducer) that the other targets bypass, so
+    /// the `inputToCommitMs` telemetry reflects true perceived latency. The
+    /// body editor must be focused/mounted before this target can type.
+    BodyProseMirror,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
@@ -142,6 +150,7 @@ pub fn get_perf_config() -> PerfHarnessConfig {
         "form-title" => PerfTypingTarget::FormTitle,
         "body-delete" => PerfTypingTarget::BodyDelete,
         "body-multi-edit" => PerfTypingTarget::BodyMultiEdit,
+        "body-prosemirror" => PerfTypingTarget::BodyProseMirror,
         _ => PerfTypingTarget::Body,
     };
 

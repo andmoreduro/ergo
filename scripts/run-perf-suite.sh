@@ -76,6 +76,7 @@ print(f\"  compile mean: {s['compileMeanMs']:.1f} ms\")
 # Scenarios 1 & 2: medium project (tesis.ergproj)
 if [[ -f "$MEDIUM_PROJECT" ]]; then
     run_scenario "medium-body" "$MEDIUM_PROJECT" "body"
+    run_scenario "medium-body-prosemirror" "$MEDIUM_PROJECT" "body-prosemirror"
     run_scenario "medium-body-delete" "$MEDIUM_PROJECT" "body-delete"
     run_scenario "medium-body-multi-edit" "$MEDIUM_PROJECT" "body-multi-edit"
     run_scenario "medium-form" "$MEDIUM_PROJECT" "form-title"
