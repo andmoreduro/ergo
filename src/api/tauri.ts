@@ -4,6 +4,7 @@ import type { DocumentAST } from "../bindings/DocumentAST";
 import type { GlobalSettings } from "../bindings/GlobalSettings";
 import type { KeymapSettings } from "../bindings/KeymapSettings";
 import type { ActionContextSnapshot } from "../bindings/ActionContextSnapshot";
+import type { AssetEntry } from "../bindings/AssetEntry";
 import type { ImportResourceResult } from "../bindings/ImportResourceResult";
 import type { OpenProjectResult } from "../bindings/OpenProjectResult";
 import type { ActionDescriptor } from "../bindings/ActionDescriptor";
@@ -14,13 +15,20 @@ import type { LogicalKeyEvent } from "../bindings/LogicalKeyEvent";
 import type { ProjectFile } from "../bindings/ProjectFile";
 import type { ProjectFontAvailability } from "../bindings/ProjectFontAvailability";
 import type { ProjectSettings } from "../bindings/ProjectSettings";
+import type { ReferenceEntry } from "../bindings/ReferenceEntry";
 import type { DocumentEvent } from "../bindings/DocumentEvent";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import type { TranslationServerStatus } from "../bindings/TranslationServerStatus";
+import type { BibliographyLookupOutcome } from "../bindings/BibliographyLookupOutcome";
+import type { GlobalSettingsSaveReport } from "../bindings/GlobalSettingsSaveReport";
 import type { PerfHarnessConfig } from "../bindings/PerfHarnessConfig";
 import type { PerfHarnessReport } from "../bindings/PerfHarnessReport";
+import type { TemplateSpec } from "../bindings/TemplateSpec";
 
 export type { DocumentOutline } from "../bindings/DocumentOutline";
+
+/** `ImportResourceResult` with the IPC `number[]` payload decoded into bytes. */
+export type ImportedResource = { asset: AssetEntry; bytes: Uint8Array };
 
 export const TauriApi = {
     async openDevTools(): Promise<void> {
@@ -42,6 +50,12 @@ export const TauriApi = {
                 bytes: Array.from(entry.bytes),
             })),
         });
+    },
+
+    async generateReferencesBib(
+        references: ReferenceEntry[],
+    ): Promise<string> {
+        return invoke("generate_references_bib", { references });
     },
 
     async loadFontsForDocument(ast: DocumentAST): Promise<Uint8Array[]> {
@@ -84,7 +98,7 @@ export const TauriApi = {
     async importResourceBytes(
         fileName: string,
         bytes: Uint8Array,
-    ): Promise<ImportResourceResult> {
+    ): Promise<ImportedResource> {
         const result = await invoke<ImportResourceResult>("import_resource_bytes", {
             fileName,
             bytes: Array.from(bytes),
@@ -119,7 +133,9 @@ export const TauriApi = {
         return invoke("load_global_settings");
     },
 
-    async saveGlobalSettings(settings: GlobalSettings): Promise<void> {
+    async saveGlobalSettings(
+        settings: GlobalSettings,
+    ): Promise<GlobalSettingsSaveReport> {
         return invoke("save_global_settings", { settings });
     },
 
@@ -127,8 +143,25 @@ export const TauriApi = {
         return invoke("get_translation_server_status");
     },
 
-    async lookupBibliographyMetadata(query: string): Promise<string | null> {
+    async lookupBibliographyMetadata(
+        query: string,
+    ): Promise<BibliographyLookupOutcome> {
         return invoke("lookup_bibliography_metadata", { query });
+    },
+
+    /** Resolves an `ambiguous` lookup by sending the chosen candidate back to the server. */
+    async selectBibliographyLookupCandidate(
+        url: string,
+        session: string,
+        key: string,
+        title: string,
+    ): Promise<BibliographyLookupOutcome> {
+        return invoke("select_bibliography_lookup_candidate", {
+            url,
+            session,
+            key,
+            title,
+        });
     },
 
     async loadKeymapSettings(): Promise<KeymapSettings> {

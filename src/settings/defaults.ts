@@ -21,6 +21,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     autosave_on_project_close: true,
     default_equation_syntax: "typst",
     zotero_translation_server_enabled: false,
+    zotero_translation_server_url: null,
     preview_draft_render_factor: 1.0,
     preview_render_overscan_factor: 0.0,
     preview_rasterization_debounce_ms: 200,

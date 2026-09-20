@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TauriApi } from "../api/tauri";
 import type { GlobalSettings } from "../bindings/GlobalSettings";
 import type { KeymapSettings } from "../bindings/KeymapSettings";
+import { showToast } from "../editor/notifyBridge";
+import { m } from "../paraglide/messages.js";
 import { getLocale, locales, setLocale } from "../paraglide/runtime.js";
 import type { Locale } from "../paraglide/runtime.js";
 import {
@@ -30,6 +32,9 @@ export const useSettingsLifecycle = () => {
     const [settingsLoaded, setSettingsLoaded] = useState(false);
     const initialGlobalSettingsRef = useRef(true);
     const initialKeymapSettingsRef = useRef(true);
+    // Last translation-server failure already shown, so a save that fails the
+    // same way again (every settings write retries the container) stays quiet.
+    const shownTranslationServerErrorRef = useRef<string | null>(null);
     const [keymapConflicts, setKeymapConflicts] = useState<unknown[]>([]);
 
     useEffect(() => {
@@ -98,7 +103,25 @@ export const useSettingsLifecycle = () => {
             return;
         }
 
-        void TauriApi.saveGlobalSettings(globalSettings).catch(() => undefined);
+        void TauriApi.saveGlobalSettings(globalSettings)
+            .then((report) => {
+                const error = report.translation_server_error;
+                if (!error) {
+                    shownTranslationServerErrorRef.current = null;
+                    return;
+                }
+                if (error === shownTranslationServerErrorRef.current) {
+                    return;
+                }
+                shownTranslationServerErrorRef.current = error;
+                showToast(
+                    m.settings_zotero_translation_server_start_failed_toast({
+                        message: error,
+                    }),
+                    "error",
+                );
+            })
+            .catch(() => undefined);
     }, [globalSettings, settingsLoaded]);
 
     useEffect(() => {

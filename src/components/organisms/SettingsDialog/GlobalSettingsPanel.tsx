@@ -16,33 +16,52 @@ import { toOptionalNumber } from "./settingsDialogUtils";
 
 const TRANSLATION_SERVER_STATUS_POLL_MS = 3000;
 
-const translationServerStatusLabel = (status: TranslationServerStatus | null) => {
+const translationServerStatusLabel = (
+    status: TranslationServerStatus | null,
+    customServer: boolean,
+) => {
     if (!status) {
         return null;
+    }
+
+    if (customServer) {
+        return status.ready
+            ? m.settings_zotero_translation_server_status_ready()
+            : m.settings_zotero_translation_server_status_unreachable();
     }
 
     if (!status.docker_available) {
         return m.settings_zotero_translation_server_docker_unavailable();
     }
 
-    if (status.running) {
-        return m.settings_zotero_translation_server_status_running();
+    if (status.ready) {
+        return m.settings_zotero_translation_server_status_ready();
+    }
+
+    if (status.starting) {
+        return m.settings_zotero_translation_server_status_starting();
     }
 
     return m.settings_zotero_translation_server_status_stopped();
 };
 
-const translationServerStatusClassName = (status: TranslationServerStatus | null) => {
+const translationServerStatusClassName = (
+    status: TranslationServerStatus | null,
+    customServer: boolean,
+) => {
     if (!status) {
         return styles.settingStatus;
     }
 
-    if (!status.docker_available) {
-        return `${styles.settingStatus} ${styles.settingStatusWarning}`;
+    if (status.ready) {
+        return `${styles.settingStatus} ${styles.settingStatusRunning}`;
     }
 
-    if (status.running) {
-        return `${styles.settingStatus} ${styles.settingStatusRunning}`;
+    const misconfigured = customServer
+        ? status.enabled
+        : !status.docker_available;
+    if (misconfigured) {
+        return `${styles.settingStatus} ${styles.settingStatusWarning}`;
     }
 
     return `${styles.settingStatus} ${styles.settingStatusStopped}`;
@@ -81,10 +100,16 @@ export const GlobalSettingsPanel = ({
     }, [
         refreshTranslationServerStatus,
         settings.zotero_translation_server_enabled,
+        settings.zotero_translation_server_url,
     ]);
 
     const zoteroEnabled = settings.zotero_translation_server_enabled ?? false;
-    const statusLabel = translationServerStatusLabel(translationServerStatus);
+    const zoteroServerUrl = settings.zotero_translation_server_url ?? "";
+    const zoteroCustomServer = zoteroServerUrl.trim().length > 0;
+    const statusLabel = translationServerStatusLabel(
+        translationServerStatus,
+        zoteroCustomServer,
+    );
 
     return (
     <div className={styles.settingsList}>
@@ -260,8 +285,32 @@ export const GlobalSettingsPanel = ({
                 <p className={styles.settingHint}>
                     {m.settings_zotero_translation_server_docker_required()}
                 </p>
+                <FormField label={m.settings_zotero_translation_server_url()}>
+                    <TextInput
+                        aria-label={m.settings_zotero_translation_server_url()}
+                        fullWidth
+                        inputMode="url"
+                        placeholder="http://localhost:1969"
+                        value={zoteroServerUrl}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                zotero_translation_server_url:
+                                    event.target.value.trim() || null,
+                            })
+                        }
+                    />
+                </FormField>
+                <p className={styles.settingHint}>
+                    {m.settings_zotero_translation_server_url_hint()}
+                </p>
                 {statusLabel ? (
-                    <p className={translationServerStatusClassName(translationServerStatus)}>
+                    <p
+                        className={translationServerStatusClassName(
+                            translationServerStatus,
+                            zoteroCustomServer,
+                        )}
+                    >
                         {statusLabel}
                     </p>
                 ) : null}

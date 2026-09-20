@@ -68,6 +68,10 @@ pub struct GlobalSettings {
     /// Runs the Zotero translation server in a fixed-name Docker container on localhost.
     #[serde(default)]
     pub zotero_translation_server_enabled: Option<bool>,
+    /// Base URL of a translation server the user runs themselves. When set, lookups
+    /// target it and Érgo manages no Docker container.
+    #[serde(default)]
+    pub zotero_translation_server_url: Option<String>,
     /// Scale factor applied to preview page rasterization while the user is typing.
     /// Full resolution (1.0) is used after an idle window.
     #[serde(default)]
@@ -122,6 +126,7 @@ impl Default for GlobalSettings {
             autosave_on_project_close: Some(true),
             default_equation_syntax: Some(EquationSyntax::Typst),
             zotero_translation_server_enabled: Some(false),
+            zotero_translation_server_url: None,
             preview_draft_render_factor: Some(1.0),
             preview_render_overscan_factor: Some(0.0),
             preview_rasterization_debounce_ms: Some(200),

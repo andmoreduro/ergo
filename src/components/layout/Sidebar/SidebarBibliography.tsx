@@ -4,6 +4,8 @@ import { Delete24Regular } from "@fluentui/react-icons";
 
 import { BibliographyPanelContext } from "../../../actions/contexts/BibliographyPanelContext";
 import { TauriApi } from "../../../api/tauri";
+import type { BibliographyLookupOutcome } from "../../../bindings/BibliographyLookupOutcome";
+import type { LookupCandidate } from "../../../bindings/LookupCandidate";
 import type { ReferenceEntry } from "../../../bindings/ReferenceEntry";
 import {
     compareBibliographyEntries,
@@ -11,6 +13,7 @@ import {
     formValueFromLookupBiblatex,
     formValueFromReference,
     formatReferenceCitation,
+    mergeLookupIntoForm,
     referenceAuthorFieldImportance,
     referenceFieldLabel,
     referenceFieldsForEntryType,
@@ -22,7 +25,7 @@ import {
     type ReferenceFieldKey,
     type ReferenceFormValue,
 } from "../../../bibliography/biblatex";
-import { useDocument } from "../../../state/DocumentContext";
+import { useDocumentActions } from "../../../state/DocumentContext";
 import { createId } from "../../../state/ast/defaults";
 import { Button } from "../../atoms/Button/Button";
 import { IconButton } from "../../atoms/IconButton/IconButton";
@@ -35,16 +38,67 @@ import { getLocale } from "../../../paraglide/runtime.js";
 import { SidebarResourceDialog } from "./SidebarResourceDialog";
 import styles from "./Sidebar.module.css";
 
-type CreatePhase = "lookup" | "manual";
+type DraftPhase = "lookup" | "manual";
+
+type LookupChoice = {
+    candidates: LookupCandidate[];
+    session: string;
+    url: string;
+};
+
+type LookupState = {
+    query: string;
+    loading: boolean;
+    error: string | null;
+    /** Pending multi-result choice from an `ambiguous` outcome. */
+    choice: LookupChoice | null;
+};
 
 type ReferenceDraft = {
     id: string;
     mode: "create" | "edit";
     form: ReferenceFormValue;
-    createPhase?: CreatePhase;
-    lookupQuery?: string;
-    lookupError?: string | null;
-    lookupLoading?: boolean;
+    /** `lookup` is the identifier-first step of a new entry; `manual` is the form. */
+    phase: DraftPhase;
+    lookup: LookupState;
+};
+
+const idleLookup = (): LookupState => ({
+    query: "",
+    loading: false,
+    error: null,
+    choice: null,
+});
+
+type LookupFailure = Exclude<
+    BibliographyLookupOutcome,
+    { kind: "found" } | { kind: "ambiguous" }
+>;
+
+const lookupFailureMessage = (outcome: LookupFailure): string => {
+    switch (outcome.kind) {
+        case "disabled":
+            return m.bibliography_lookup_disabled();
+        case "server_unavailable":
+            return m.bibliography_lookup_server_unavailable();
+        case "not_an_identifier":
+            return m.bibliography_lookup_not_an_identifier();
+        case "not_found":
+            return m.bibliography_lookup_not_found();
+        case "failed":
+            return m.bibliography_lookup_failed({ message: outcome.message });
+    }
+};
+
+/** Text of an IPC rejection (`ErgoError` objects carry `message`). */
+const errorMessage = (error: unknown): string => {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    if (typeof error === "object" && error !== null && "message" in error) {
+        return String((error as { message: unknown }).message);
+    }
+    return String(error);
 };
 
 export const SidebarBibliographyPanel = memo(
@@ -55,7 +109,7 @@ export const SidebarBibliographyPanel = memo(
         references: ReferenceEntry[];
         zoteroTranslationServerEnabled?: boolean;
     }) => {
-        const { dispatch } = useDocument();
+        const { dispatch } = useDocumentActions();
         const [draft, setDraft] = useState<ReferenceDraft | null>(null);
         const [validationError, setValidationError] = useState<string | null>(
             null,
@@ -116,10 +170,8 @@ export const SidebarBibliographyPanel = memo(
                 id: createId(),
                 mode: "create",
                 form: emptyReferenceFormValue(),
-                createPhase: zoteroTranslationServerEnabled ? "lookup" : "manual",
-                lookupQuery: "",
-                lookupError: null,
-                lookupLoading: false,
+                phase: zoteroTranslationServerEnabled ? "lookup" : "manual",
+                lookup: idleLookup(),
             });
         };
 
@@ -129,84 +181,134 @@ export const SidebarBibliographyPanel = memo(
                 id: reference.id,
                 mode: "edit",
                 form: formValueFromReference(reference),
-                createPhase: "manual",
+                phase: "manual",
+                lookup: idleLookup(),
             });
+        };
+
+        const updateLookup = (patch: Partial<LookupState>) => {
+            setDraft((current) =>
+                current
+                    ? { ...current, lookup: { ...current.lookup, ...patch } }
+                    : current,
+            );
         };
 
         const openManualForm = () => {
             setDraft((current) =>
-                current?.mode === "create"
+                current
                     ? {
                           ...current,
-                          createPhase: "manual",
-                          lookupError: null,
-                          lookupLoading: false,
+                          phase: "manual",
+                          lookup: {
+                              ...current.lookup,
+                              loading: false,
+                              error: null,
+                              choice: null,
+                          },
                       }
                     : current,
             );
             setValidationError(null);
         };
 
-        const runLookup = async () => {
-            if (!draft || draft.mode !== "create" || draft.createPhase !== "lookup") {
+        const applyLookupOutcome = (outcome: BibliographyLookupOutcome) => {
+            if (outcome.kind === "ambiguous") {
+                updateLookup({
+                    loading: false,
+                    error: null,
+                    choice: {
+                        candidates: outcome.candidates,
+                        session: outcome.session,
+                        url: outcome.url,
+                    },
+                });
                 return;
             }
 
-            const query = draft.lookupQuery?.trim() ?? "";
-            if (!query) {
+            if (outcome.kind !== "found") {
+                updateLookup({
+                    loading: false,
+                    error: lookupFailureMessage(outcome),
+                    choice: null,
+                });
                 return;
             }
 
+            const lookupForm = formValueFromLookupBiblatex(outcome.biblatex);
+            if (!lookupForm) {
+                updateLookup({
+                    loading: false,
+                    error: m.bibliography_lookup_unreadable(),
+                    choice: null,
+                });
+                return;
+            }
+
+            // The identifier-first step replaces the empty draft; inside the form
+            // (create or edit) the result merges over what the user already has
+            // and the reference id is kept.
             setDraft((current) =>
                 current
                     ? {
                           ...current,
-                          lookupLoading: true,
-                          lookupError: null,
+                          form:
+                              current.phase === "lookup"
+                                  ? lookupForm
+                                  : mergeLookupIntoForm(current.form, lookupForm),
+                          phase: "manual",
+                          lookup: {
+                              ...current.lookup,
+                              loading: false,
+                              error: null,
+                              choice: null,
+                          },
                       }
                     : current,
             );
+            setValidationError(null);
+        };
 
+        const runLookupRequest = async (
+            request: () => Promise<BibliographyLookupOutcome>,
+        ) => {
+            updateLookup({ loading: true, error: null, choice: null });
             try {
-                const biblatex = await TauriApi.lookupBibliographyMetadata(query);
-                const form = biblatex ? formValueFromLookupBiblatex(biblatex) : null;
-
-                if (!form) {
-                    setDraft((current) =>
-                        current
-                            ? {
-                                  ...current,
-                                  lookupLoading: false,
-                                  lookupError: m.bibliography_lookup_not_found(),
-                              }
-                            : current,
-                    );
-                    return;
-                }
-
-                setDraft((current) =>
-                    current
-                        ? {
-                              ...current,
-                              form,
-                              createPhase: "manual",
-                              lookupLoading: false,
-                              lookupError: null,
-                          }
-                        : current,
-                );
-                setValidationError(null);
-            } catch {
-                setDraft((current) =>
-                    current
-                        ? {
-                              ...current,
-                              lookupLoading: false,
-                              lookupError: m.bibliography_lookup_not_found(),
-                          }
-                        : current,
-                );
+                applyLookupOutcome(await request());
+            } catch (error) {
+                updateLookup({
+                    loading: false,
+                    error: m.bibliography_lookup_failed({
+                        message: errorMessage(error),
+                    }),
+                });
             }
+        };
+
+        const runLookup = () => {
+            if (!draft || draft.lookup.loading) {
+                return;
+            }
+            const query = draft.lookup.query.trim();
+            if (!query) {
+                return;
+            }
+            void runLookupRequest(() => TauriApi.lookupBibliographyMetadata(query));
+        };
+
+        const chooseCandidate = (candidate: LookupCandidate) => {
+            const choice = draft?.lookup.choice;
+            if (!draft || !choice || draft.lookup.loading) {
+                return;
+            }
+            void runLookupRequest(() =>
+                TauriApi.selectBibliographyLookupCandidate(
+                    choice.url,
+                    choice.session,
+                    candidate.key,
+                    candidate.title,
+                ),
+            );
         };
 
         const saveDraft = () => {
@@ -264,8 +366,67 @@ export const SidebarBibliographyPanel = memo(
         const isLookupPhase =
             zoteroTranslationServerEnabled &&
             draft?.mode === "create" &&
-            draft.createPhase === "lookup";
-        const lookupQuery = draft?.lookupQuery ?? "";
+            draft.phase === "lookup";
+        const lookup = draft?.lookup ?? idleLookup();
+        const lookupLabel = lookup.loading
+            ? m.bibliography_lookup_loading()
+            : m.bibliography_lookup();
+        const canRunLookup = !lookup.loading && lookup.query.trim().length > 0;
+
+        const lookupQueryInput = draft ? (
+            <TextInput
+                fullWidth
+                aria-label={m.bibliography_lookup()}
+                placeholder={m.bibliography_lookup_placeholder()}
+                disabled={lookup.loading}
+                value={lookup.query}
+                onChange={(event) => {
+                    updateLookup({ query: event.target.value, error: null });
+                }}
+                onKeyDown={
+                    isLookupPhase
+                        ? undefined
+                        : (event) => {
+                              // Inside the manual form Enter would submit (save);
+                              // route it to the lookup instead.
+                              if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  runLookup();
+                              }
+                          }
+                }
+            />
+        ) : null;
+
+        const lookupFeedback = draft ? (
+            <>
+                {lookup.error ? (
+                    <p className={styles.referenceError} role="alert">
+                        {lookup.error}
+                    </p>
+                ) : null}
+                {lookup.choice ? (
+                    <>
+                        <p className={styles.referenceHint}>
+                            {m.bibliography_lookup_choose()}
+                        </p>
+                        <div className={styles.navList}>
+                            {lookup.choice.candidates.map((candidate) => (
+                                <NavItemButton
+                                    variant="sidebar"
+                                    key={candidate.key}
+                                    disabled={lookup.loading}
+                                    title={candidate.title}
+                                    onClick={() => chooseCandidate(candidate)}
+                                >
+                                    <span>{candidate.title}</span>
+                                </NavItemButton>
+                            ))}
+                        </div>
+                    </>
+                ) : null}
+            </>
+        ) : null;
 
         return (
             <BibliographyPanelContext>
@@ -310,16 +471,13 @@ export const SidebarBibliographyPanel = memo(
                         confirmAction={
                             isLookupPhase
                                 ? {
-                                      label: m.bibliography_lookup(),
-                                      disabled:
-                                          draft.lookupLoading ||
-                                          lookupQuery.trim().length === 0,
-                                      onClick: () => {
-                                          void runLookup();
-                                      },
+                                      label: lookupLabel,
+                                      disabled: !canRunLookup,
+                                      onClick: runLookup,
                                   }
                                 : {
                                       label: m.bibliography_save(),
+                                      disabled: lookup.loading,
                                       onClick: saveDraft,
                                   }
                         }
@@ -338,45 +496,40 @@ export const SidebarBibliographyPanel = memo(
                     >
                         {isLookupPhase ? (
                             <>
-                                <TextInput
-                                    fullWidth
-                                    aria-label={m.bibliography_lookup()}
-                                    placeholder={m.bibliography_lookup_placeholder()}
-                                    disabled={draft.lookupLoading}
-                                    value={lookupQuery}
-                                    onChange={(event) => {
-                                        const nextQuery = event.target.value;
-                                        setDraft((current) =>
-                                            current
-                                                ? {
-                                                      ...current,
-                                                      lookupQuery: nextQuery,
-                                                      lookupError: null,
-                                                  }
-                                                : current,
-                                        );
-                                    }}
-                                />
+                                {lookupQueryInput}
                                 <div className={styles.referenceActions}>
                                     <Button
                                         fullWidth
                                         size="small"
                                         type="button"
                                         variant="secondary"
-                                        disabled={draft.lookupLoading}
+                                        disabled={lookup.loading}
                                         onClick={openManualForm}
                                     >
                                         {m.bibliography_cite_manually()}
                                     </Button>
                                 </div>
-                                {draft.lookupError ? (
-                                    <p className={styles.referenceError} role="alert">
-                                        {draft.lookupError}
-                                    </p>
-                                ) : null}
+                                {lookupFeedback}
                             </>
                         ) : (
                             <>
+                                {zoteroTranslationServerEnabled ? (
+                                    <>
+                                        <div className={styles.referenceLookupRow}>
+                                            {lookupQueryInput}
+                                            <Button
+                                                size="small"
+                                                type="button"
+                                                variant="secondary"
+                                                disabled={!canRunLookup}
+                                                onClick={runLookup}
+                                            >
+                                                {lookupLabel}
+                                            </Button>
+                                        </div>
+                                        {lookupFeedback}
+                                    </>
+                                ) : null}
                                 <Combobox
                                     fullWidth
                                     label={m.references_type()}

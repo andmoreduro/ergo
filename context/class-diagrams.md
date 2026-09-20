@@ -25,7 +25,36 @@ classDiagram
         +String? locale
         +Int? autosave_interval_ms
         +Boolean? autosave_enabled
+        +Boolean? zotero_translation_server_enabled
+        +String? zotero_translation_server_url
     }
+    class GlobalSettingsSaveReport {
+        +String? translation_server_error
+    }
+    class TranslationServerStatus {
+        +Boolean docker_available
+        +Boolean running
+        +Boolean ready
+        +Boolean starting
+        +Boolean enabled
+    }
+    class BibliographyLookupOutcome {
+        <<enumeration>>
+        found(biblatex)
+        disabled
+        server_unavailable
+        not_an_identifier
+        not_found
+        ambiguous(candidates, session, url)
+        failed(message)
+    }
+    class LookupCandidate {
+        +String key
+        +String title
+    }
+    GlobalSettings ..> GlobalSettingsSaveReport : save result
+    GlobalSettings ..> TranslationServerStatus : derived status
+    BibliographyLookupOutcome "1" o-- "0..*" LookupCandidate
     class ProjectSettings {
         +String? paper_size
         +String? language
@@ -245,4 +274,5 @@ classDiagram
 - `PreviewPageFile.path` is a logical page id (`page-N`) for preview rendering, not a VFS SVG artifact.
 - `PreviewSyncState` is runtime-only WASM state tied to the last successful non-stale compile.
 - `SourceMapEntry` byte ranges are half-open: `byte_start` inclusive, `byte_end` exclusive.
-- Module ownership and dependency direction: `package-diagrams.md`. Preview and sync flows: `sequence-diagrams.md` §1 and §7.
+- `BibliographyLookupOutcome` is a `kind`-tagged union; `found.biblatex` holds one BibLaTeX entry from the translation server's `/export?format=biblatex`, and `ambiguous` carries the server's selection `session` and `url` so a `LookupCandidate.key` can be sent back. `GlobalSettingsSaveReport` is the `save_global_settings` result: the file write is authoritative and a container failure is data, not an error. `TranslationServerStatus.ready` comes from an HTTP probe; `starting` means the managed container runs but does not answer yet.
+- Module ownership and dependency direction: `package-diagrams.md`. Preview and sync flows: `sequence-diagrams.md` §1 and §7; bibliography lookup: §8.

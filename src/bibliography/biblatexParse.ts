@@ -79,17 +79,82 @@ const readBracedValue = (
     return null;
 };
 
+const BARE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_:.-]*/;
+
+/** Unquoted macro names and numbers (`month = jan`, `year = 2020`). */
+const readBareValue = (
+    text: string,
+    start: number,
+): { value: string; next: number } | null => {
+    const match = text.slice(start).match(BARE_VALUE_PATTERN);
+    if (!match) {
+        return null;
+    }
+    return { value: match[0], next: start + match[0].length };
+};
+
+const readSingleValue = (
+    text: string,
+    start: number,
+): { value: string; next: number } | null => {
+    const ch = text[start];
+    if (ch === '"') {
+        return readQuotedValue(text, start);
+    }
+    if (ch === "{") {
+        return readBracedValue(text, start);
+    }
+    return readBareValue(text, start);
+};
+
+/** Reads one value, joining `#`-concatenated parts (`{a} # "b"`). */
 const readFieldValue = (
     text: string,
     start: number,
 ): { value: string; next: number } | null => {
-    const cursor = skipWhitespace(text, start);
-    if (cursor >= text.length) {
+    const first = readSingleValue(text, skipWhitespace(text, start));
+    if (!first) {
         return null;
     }
-    return text[cursor] === '"'
-        ? readQuotedValue(text, cursor)
-        : readBracedValue(text, cursor);
+
+    let value = first.value;
+    let cursor = first.next;
+    for (;;) {
+        const separator = skipWhitespace(text, cursor);
+        if (text[separator] !== "#") {
+            break;
+        }
+        const part = readSingleValue(text, skipWhitespace(text, separator + 1));
+        if (!part) {
+            return null;
+        }
+        value += part.value;
+        cursor = part.next;
+    }
+
+    return { value, next: cursor };
+};
+
+/** Index just past the next comma outside braces, or the end of the text. */
+const skipToNextTopLevelComma = (text: string, start: number): number => {
+    let depth = 0;
+    let cursor = start;
+    while (cursor < text.length) {
+        const ch = text[cursor] ?? "";
+        if (ch === "\\") {
+            cursor += 2;
+            continue;
+        }
+        if (ch === "{") {
+            depth += 1;
+        } else if (ch === "}") {
+            depth = Math.max(0, depth - 1);
+        } else if (ch === "," && depth === 0) {
+            return cursor + 1;
+        }
+        cursor += 1;
+    }
+    return text.length;
 };
 
 export const parseBiblatexEntry = (biblatex: string): ParsedBiblatexEntry | null => {
@@ -113,22 +178,26 @@ export const parseBiblatexEntry = (biblatex: string): ParsedBiblatexEntry | null
 
         const nameMatch = body.slice(cursor).match(/^([a-zA-Z][a-zA-Z0-9_-]*)\s*=\s*/);
         if (!nameMatch) {
-            break;
+            // Unreadable field: resume at the next one instead of dropping the rest.
+            cursor = skipToNextTopLevelComma(body, cursor);
+            continue;
         }
 
         const fieldName = nameMatch[1].toLowerCase();
-        cursor += nameMatch[0].length;
-        const value = readFieldValue(body, cursor);
+        const valueStart = cursor + nameMatch[0].length;
+        const value = readFieldValue(body, valueStart);
         if (!value) {
-            break;
+            cursor = skipToNextTopLevelComma(body, valueStart);
+            continue;
         }
 
         fields.set(fieldName, value.value);
-        cursor = value.next;
-
-        cursor = skipWhitespace(body, cursor);
+        cursor = skipWhitespace(body, value.next);
         if (body[cursor] === ",") {
             cursor += 1;
+        } else if (cursor < body.length) {
+            // Trailing garbage after a value: resume at the next field.
+            cursor = skipToNextTopLevelComma(body, cursor);
         }
     }
 

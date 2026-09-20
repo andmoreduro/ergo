@@ -9,22 +9,28 @@ Deployment topology, `.ergproj` layout, config files, and storage boundaries.
 ```mermaid
 flowchart TB
     Registry[Typst Universe]
+    ExternalServer[Zotero translation server<br/>custom URL]
     subgraph UserMachine [User machine]
         WebView[WebView + WASM worker]
         ErgoInstall[Érgo install]
         UserDocs[(.ergproj)]
         AppConfig[(App config)]
         TypstCache[(Typst package cache)]
+        DockerContainer[Docker container<br/>ergo-zotero-translation-server<br/>127.0.0.1:1969]
     end
     ErgoInstall --> WebView
     ErgoInstall --> UserDocs
     ErgoInstall --> AppConfig
     ErgoInstall --> TypstCache
+    ErgoInstall -. docker CLI + HTTP .-> DockerContainer
+    ErgoInstall -. HTTP .-> ExternalServer
     TypstCache -. package sources .-> Registry
     TypstCache -. package sources .-> UserDocs
 ```
 
 Install artifacts (React bundle, Tauri backend, WASM module, bundled default JSON) ship inside **Érgo install**. Runtime containers and IPC boundaries are in `component-diagram.md`.
+
+Bibliography metadata lookup talks HTTP to a Zotero translation server. With `zotero_translation_server_enabled` and no `zotero_translation_server_url`, the Tauri backend runs the `zotero/translation-server` image in a Docker container named `ergo-zotero-translation-server` bound to `127.0.0.1:1969` with restart policy `unless-stopped`; disabling the setting removes the container. With `zotero_translation_server_url` set, Érgo targets that server and manages no container, so Docker is not required.
 
 ## `.ergproj` Archive Layout
 
@@ -99,4 +105,5 @@ Per-project overrides: `.ergproj/project_settings.json`.
 - VFS paths use `/` separators on all platforms.
 - Saves pack durable project state from the backend session VFS after worker sync and backend mirror sync drain.
 - Autosave defaults are controlled in global `settings.json` (`autosave_interval_ms`, blur/close toggles).
+- Bibliography lookup is controlled in global `settings.json` (`zotero_translation_server_enabled`, optional `zotero_translation_server_url`); the container lives in the user's Docker engine, outside app config.
 - Keymap schema: `active_profile_id`, `profiles[]` (`id`, `name`, `overrides`), plus bundled `keymap_bindings` (`action_id`, `context` expression, `sequence` of logical keys with modifiers). Legacy `keymap_overrides` migrates into a `custom` profile on load.
