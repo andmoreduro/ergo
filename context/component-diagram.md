@@ -21,6 +21,7 @@ flowchart TB
         UI[UI]
         Actions[Action Runtime]
         DocState[Document State]
+        SettingsProvider[Settings Provider]
         TauriClient[Tauri Client]
     end
     subgraph WasmWorker ["WASM Compiler Worker"]
@@ -43,6 +44,8 @@ flowchart TB
     Frontend -. rendered in .-> WebView
     DocState == sync + compile ==> WorkerBridge
     WorkerBridge --> PreviewEngine
+    SettingsProvider --> TauriClient
+    UI --> SettingsProvider
     TauriClient == IPC ==> Handlers
     Handlers --> ActionCatalog
     Handlers --> Session
@@ -61,6 +64,7 @@ flowchart TB
 - **DocumentSession (mirror)** on the backend applies the same typed events as WASM so `save_project` packs a consistent VFS. It does not compile on the IPC sync path.
 - **Tauri API Client** imports IPC DTOs only from generated `src/bindings/`.
 - **Action Runtime** dispatches stable action IDs for commands and shortcuts; Rust owns catalog, keymap schema, sequence resolution, and context matching.
+- **Settings Provider** is the single frontend access point for configuration: it loads global and keymap settings through the Tauri client at startup, persists every change, applies theme and locale, and exposes typed hooks (global settings merged with the shipped defaults, keymap profile with conflicts, preview tuning, identity-stable mutators). Project settings are document state and flow through Document State. Persisted UI layout (workspace column widths) is part of global settings.
 - **Document State + History** (`DocumentContext`) stores local AST, queued events, undo entries `{ forwardEvents, inverseEvents }`, and focus state. `dispatch` and body `commitDocumentEvents` both commit through `COMMIT_EVENTS` and `applyDocumentEvents`; WASM compile is the hot path; the Tauri backend VFS mirror runs on bootstrap and before save, not per keystroke.
 - **Archive Manager** packs the backend VFS on save; open mounts files and bootstraps from `.ergproj/document_state.json`.
 - **VirtualFileSystem** retains Typst `Source` for text paths and bytes for assets; paths use `/` separators.

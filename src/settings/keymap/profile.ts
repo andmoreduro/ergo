@@ -1,11 +1,8 @@
-import type { KeymapSettings } from "../bindings/KeymapSettings";
-import type { KeyStroke } from "../bindings/KeyStroke";
-import {
-    DEFAULT_KEYMAP,
-    detectKeymapConflicts,
-    type KeymapConflict,
-} from "../commands/keymap";
-import type { ActionId, CommandScope, KeyBinding, KeymapProfile } from "../commands/types";
+import type { KeymapSettings } from "../../bindings/KeymapSettings";
+import type { KeyStroke } from "../../bindings/KeyStroke";
+import { DEFAULT_KEYMAP } from "./defaults";
+import { detectKeymapConflicts, type KeymapConflict } from "./conflicts";
+import type { ActionId, CommandScope, KeyBinding, KeymapProfile } from "../../commands/types";
 
 export const isCommandScope = (value: string): value is CommandScope =>
     value === "global" || value === "project" || value === "editor";

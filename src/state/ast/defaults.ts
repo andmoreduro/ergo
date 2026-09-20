@@ -1,12 +1,10 @@
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentAST } from "../../bindings/DocumentAST";
 import type { TemplateSpec } from "../../bindings/TemplateSpec";
-import type { GlobalSettings } from "../../bindings/GlobalSettings";
-import { DEFAULT_GLOBAL_SETTINGS } from "../../settings/defaults";
 import {
     defaultTemplateVariantId,
     projectSettingsFromTemplate,
-} from "../../settings/projectSettingsFromTemplate";
+} from "../../settings/project/defaults";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
 import { createListItem } from "./listItem";
@@ -165,10 +163,6 @@ export const DEFAULT_PROJECT_TEMPLATE_ID = "apa7";
 export const UMB_APA_TEMPLATE_ID = "umb-apa";
 export const NO_TEMPLATE_ID = "none";
 
-// A new document's local overrides start as a copy of the global defaults, so
-// derive them from the single default object instead of re-listing every field.
-const createLocalOverrides = (): GlobalSettings => ({ ...DEFAULT_GLOBAL_SETTINGS });
-
 export const createDocumentAST = (
     templateId: string = DEFAULT_PROJECT_TEMPLATE_ID,
     templateSpec?: TemplateSpec | null,
@@ -191,7 +185,6 @@ export const createDocumentAST = (
                 running_head: null,
                 keywords: [],
                 project_settings: projectSettings,
-                local_overrides: createLocalOverrides(),
             },
             dependencies: { packages: [] },
             references: [],
@@ -260,7 +253,6 @@ export const createDefaultDocumentAST = (
         running_head: null,
         keywords: [],
         project_settings: projectSettingsFromTemplate(templateSpec),
-        local_overrides: createLocalOverrides(),
     },
     dependencies: {
         packages: [

@@ -7,6 +7,10 @@ import {
     type PointerEventHandler,
 } from "react";
 import {
+    useGlobalSettings,
+    useSettingsActions,
+} from "../../../settings/SettingsProvider";
+import {
     applyHandleDrag,
     clampWorkspaceColumns,
     previewWidthFromColumns,
@@ -18,13 +22,21 @@ import {
 
 export const useWorkspaceColumns = () => {
     const rootRef = useRef<HTMLDivElement>(null);
+    // The saved layout seeds the first measurement and is written back when a
+    // drag ends, so column widths persist across sessions (global settings).
+    const savedColumns = useGlobalSettings().workspace_columns;
+    const { setWorkspaceColumns } = useSettingsActions();
     const [containerWidth, setContainerWidth] = useState(0);
     const [columns, setColumns] = useState<WorkspaceColumnWidths | null>(null);
     const [activeHandle, setActiveHandle] = useState<0 | 1 | null>(null);
     const [hoveredHandle, setHoveredHandle] = useState<0 | 1 | null>(null);
     const dragHandleRef = useRef<0 | 1 | null>(null);
-    const hasCustomLayoutRef = useRef(false);
+    const hasCustomLayoutRef = useRef(savedColumns !== null);
     const lastContainerWidthRef = useRef(0);
+    const columnsRef = useRef<WorkspaceColumnWidths | null>(null);
+    columnsRef.current = columns;
+    const savedColumnsRef = useRef(savedColumns);
+    savedColumnsRef.current = savedColumns;
 
     useLayoutEffect(() => {
         const root = rootRef.current;
@@ -37,10 +49,16 @@ export const useWorkspaceColumns = () => {
             setContainerWidth(width);
             setColumns((current) => {
                 if (!current) {
-                    return rebalanceWorkspaceColumns(width, {
-                        sidebar: 250,
-                        editor: 400,
-                    });
+                    const saved = savedColumnsRef.current;
+                    return saved
+                        ? clampWorkspaceColumns(width, {
+                              sidebar: saved.sidebar,
+                              editor: saved.editor,
+                          })
+                        : rebalanceWorkspaceColumns(width, {
+                              sidebar: 250,
+                              editor: 400,
+                          });
                 }
 
                 if (activeHandle !== null) {
@@ -123,6 +141,13 @@ export const useWorkspaceColumns = () => {
         const onPointerUp = () => {
             dragHandleRef.current = null;
             setActiveHandle(null);
+            const current = columnsRef.current;
+            if (current) {
+                setWorkspaceColumns({
+                    sidebar: current.sidebar,
+                    editor: current.editor,
+                });
+            }
         };
 
         window.addEventListener("pointermove", onPointerMove);
@@ -133,7 +158,7 @@ export const useWorkspaceColumns = () => {
             window.removeEventListener("pointerup", onPointerUp);
             window.removeEventListener("pointercancel", onPointerUp);
         };
-    }, [activeHandle]);
+    }, [activeHandle, setWorkspaceColumns]);
 
     const createHandlePointerDown = useCallback(
         (handleIndex: 0 | 1): PointerEventHandler<HTMLDivElement> =>

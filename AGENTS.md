@@ -140,6 +140,11 @@ Available scenarios are `small-document`, `typing-title`, `large-document`, and 
 5. WASM worker compiles the main document and resource previews; backend mirrors AST for archive I/O only
 6. Backend `DocumentSession` mirrors AST via IPC for archive I/O and resource previews
 
+### Configuration
+- Three kinds: global settings (`~/.config/Ergo/settings.json`), keymap settings (`keymap.json`), and project settings (inside the `.ergproj`, mirrored in `DocumentAST.metadata.project_settings`). Rust types live in `ergo-core/src/settings.rs`; the app shell's `src-tauri/src/settings.rs` loads and saves them.
+- `src-tauri/defaults/default_settings.json` is the single source of truth for global defaults: Rust embeds it (`GlobalSettings::default()`), and `src/settings/global/defaults.test.ts` asserts the frontend boot fallback matches it. Add a setting in the Rust struct + the JSON + `DEFAULT_GLOBAL_SETTINGS`, then regenerate bindings.
+- Components read settings only through `src/settings/SettingsProvider.tsx` hooks; never thread settings values through props from `App`, and never read `DEFAULT_GLOBAL_SETTINGS` directly for a live value.
+
 ### Ownership split
 - **React owns**: UI, action context tree, local `DocumentAST` with undo/redo, settings UI
 - **Rust owns**: action catalog, keymap schema/validation, key sequence resolution, canonical Typst source generation, backend VFS mirror, archive I/O
@@ -151,7 +156,7 @@ Available scenarios are `small-document`, `typing-title`, `large-document`, and 
 - Logical keys from `KeyboardEvent.key`, not physical positions
 - Multi-stroke sequences supported (e.g. `Ctrl+O Ctrl+O` opens, `Ctrl+O Ctrl+R` opens recent)
 - No frontend fallback shortcut resolver
-- The default keymap lives in `src-tauri/defaults/default_keymap.json` (Rust-owned, validated). The frontend `DEFAULT_KEYMAP` (`src/commands/keymap.ts`) is only the pre-IPC boot fallback and must stay binding-for-binding identical to the JSON — `src/commands/keymap.test.ts` guards the alignment
+- The default keymap lives in `src-tauri/defaults/default_keymap.json` (Rust-owned, validated). The frontend `DEFAULT_KEYMAP` (`src/settings/keymap/defaults.ts`) is only the pre-IPC boot fallback and must stay binding-for-binding identical to the JSON — `src/settings/keymap/defaults.test.ts` guards the alignment
 - Body undo/redo (`edit::Undo`, `edit::Redo`) resolve through the action runtime; the capture listener suppresses native contenteditable history in the ProseMirror body surface
 - ProseMirror-owned synchronous shortcuts (body navigation arrows, Tab, Shift+arrow block selection) stay in `bodyKeyboardPlugin.ts` and are not user-bindable
 - Table cell merge/split (`editor::MergeTableCells`, `editor::SplitTableCell`) and Alt+arrow cell navigation resolve through the action runtime; `tableCellBoundary` swallows plain/Ctrl arrows at the grid rim but defers Alt+arrow to `editor::MoveTableCell*`
@@ -173,9 +178,9 @@ src/
   state/                — DocumentContext (useReducer + undo/redo)
     ast/                — AST actions, reducer, defaults
   components/           — Atomic design: atoms, molecules, organisms, screens, layout (native controls only in atoms)
-  commands/             — Command registry, keymap, types
+  commands/             — Command registry + command types (keymap lives in settings/)
   actions/runtime.tsx   — Action dispatch framework + context tree
-  settings/             — Global settings, keymap defaults + merge
+  settings/             — Configuration layer: SettingsProvider (single access point: useGlobalSettings/useKeymap/useSettingsActions/usePreviewSettings), settingsStore (load/persist), global/ (defaults + merge), keymap/ (boot defaults, profiles, catalog, conflicts), project/ (template-derived defaults, overrides, fonts), debug.ts
   hooks/useTemplateSpec.ts — Template spec from Rust via get_template_spec
   project/paths.ts      — .ergproj path helpers
   hooks/                — compile bridge, SVG loader, autosave, project/settings lifecycle hooks

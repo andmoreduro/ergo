@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 use ts_rs::TS;
 
+// Configuration types live in `crate::settings`; they stay reachable from here
+// because the document model (`ProjectMetadata`) and the keymap primitives
+// below reference them.
+pub use crate::settings::{
+    normalize_keymap_settings, GlobalSettings, KeyBindingPreference, KeymapProfileRecord,
+    KeymapSettings, ProjectSettings, TemplateOverride, CUSTOM_KEYMAP_PROFILE_ID,
+    DEFAULT_KEYMAP_PROFILE_ID,
+};
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct DocumentAST {
@@ -27,158 +36,10 @@ pub struct ProjectMetadata {
     pub title: String,
     #[serde(default)]
     pub project_settings: ProjectSettings,
-    pub local_overrides: GlobalSettings,
     #[serde(default)]
     pub running_head: Option<String>,
     #[serde(default)]
     pub keywords: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-#[ts(export)]
-pub struct GlobalSettings {
-    pub default_font: Option<String>,
-    pub default_font_size: Option<f32>,
-    #[serde(default)]
-    pub theme_mode: Option<String>,
-    #[serde(default)]
-    pub locale: Option<String>,
-    #[serde(default)]
-    pub recent_projects: Vec<String>,
-    #[serde(default)]
-    pub keymap_profile: Option<String>,
-    #[serde(default)]
-    pub keymap_overrides: Vec<KeyBindingPreference>,
-    #[serde(default)]
-    pub history_limit: Option<usize>,
-    #[serde(default)]
-    pub autosave_enabled: Option<bool>,
-    #[serde(default)]
-    pub autosave_interval_ms: Option<usize>,
-    #[serde(default)]
-    pub autosave_on_window_blur: Option<bool>,
-    #[serde(default)]
-    pub autosave_on_app_close: Option<bool>,
-    #[serde(default)]
-    pub autosave_on_project_close: Option<bool>,
-    /// Syntax applied to newly inserted equations.
-    #[serde(default)]
-    pub default_equation_syntax: Option<EquationSyntax>,
-    /// Runs the Zotero translation server in a fixed-name Docker container on localhost.
-    #[serde(default)]
-    pub zotero_translation_server_enabled: Option<bool>,
-    /// Base URL of a translation server the user runs themselves. When set, lookups
-    /// target it and Érgo manages no Docker container.
-    #[serde(default)]
-    pub zotero_translation_server_url: Option<String>,
-    /// Scale factor applied to preview page rasterization while the user is typing.
-    /// Full resolution (1.0) is used after an idle window.
-    #[serde(default)]
-    pub preview_draft_render_factor: Option<f32>,
-    /// Fraction of the viewport rasterized beyond the visible edges of each preview
-    /// page (advanced). `0.0` rasterizes exactly what is on screen; a positive value
-    /// pre-renders a margin so scrolling reveals content with less delay.
-    #[serde(default)]
-    pub preview_render_overscan_factor: Option<f32>,
-    /// Milliseconds to wait before re-rasterizing preview canvases after zoom,
-    /// scroll sharpening, or sidebar resize. A short debounce keeps gestures
-    /// smooth; zero re-rasterizes on every notification.
-    #[serde(default)]
-    pub preview_rasterization_debounce_ms: Option<usize>,
-    /// Milliseconds to wait before re-rasterizing when scrolling or zooming out
-    /// reveals area the current bitmap no longer covers. Zero repaints
-    /// immediately; a positive value reduces work during fast scroll.
-    #[serde(default)]
-    pub preview_reveal_debounce_ms: Option<usize>,
-    /// Milliseconds to wait before resolving the editor caret's position in the
-    /// preview (forward sync). Zero resolves on every caret move; a positive
-    /// value coalesces bursts while typing.
-    #[serde(default)]
-    pub preview_forward_sync_debounce_ms: Option<usize>,
-    /// Milliseconds a draft (reduced-resolution) preview render waits while idle
-    /// before being promoted to full resolution. Only applies when the draft
-    /// render factor is below 1.
-    #[serde(default)]
-    pub preview_draft_promote_ms: Option<usize>,
-    /// Draw a forward-sync caret cue at every visible place the focused source
-    /// renders (advanced), not just the one nearest the viewport — useful for
-    /// content repeated across pages such as a title in the running head.
-    #[serde(default)]
-    pub preview_multi_caret: Option<bool>,
-}
-
-impl Default for GlobalSettings {
-    fn default() -> Self {
-        Self {
-            default_font: None,
-            default_font_size: None,
-            theme_mode: Some("system".to_string()),
-            locale: Some("en".to_string()),
-            recent_projects: Vec::new(),
-            keymap_profile: Some("Default".to_string()),
-            keymap_overrides: Vec::new(),
-            history_limit: Some(100),
-            autosave_enabled: Some(true),
-            autosave_interval_ms: Some(30_000),
-            autosave_on_window_blur: Some(true),
-            autosave_on_app_close: Some(true),
-            autosave_on_project_close: Some(true),
-            default_equation_syntax: Some(EquationSyntax::Typst),
-            zotero_translation_server_enabled: Some(false),
-            zotero_translation_server_url: None,
-            preview_draft_render_factor: Some(1.0),
-            preview_render_overscan_factor: Some(0.0),
-            preview_rasterization_debounce_ms: Some(200),
-            preview_reveal_debounce_ms: Some(0),
-            preview_forward_sync_debounce_ms: Some(0),
-            preview_draft_promote_ms: Some(180),
-            preview_multi_caret: Some(true),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct ProjectSettings {
-    #[serde(default)]
-    pub paper_size: Option<String>,
-    #[serde(default)]
-    pub language: Option<String>,
-    #[serde(default)]
-    pub text_font: Option<String>,
-    #[serde(default)]
-    pub math_font: Option<String>,
-    #[serde(default)]
-    pub raw_font: Option<String>,
-    #[serde(default)]
-    pub font_size: Option<f32>,
-    #[serde(default)]
-    pub table_stroke_width: Option<f32>,
-    #[serde(default)]
-    pub template_overrides: Vec<TemplateOverride>,
-}
-
-impl Default for ProjectSettings {
-    fn default() -> Self {
-        Self {
-            paper_size: Some("us-letter".to_string()),
-            language: Some("en".to_string()),
-            text_font: Some("Libertinus Serif".to_string()),
-            math_font: Some("Libertinus Math".to_string()),
-            raw_font: Some("DejaVu Sans Mono".to_string()),
-            font_size: Some(11.0),
-            table_stroke_width: Some(0.5),
-            template_overrides: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct TemplateOverride {
-    pub key: String,
-    pub value: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -510,18 +371,6 @@ pub struct KeyStroke {
     pub modifiers: Vec<KeyModifier>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-#[ts(export)]
-pub struct KeyBindingPreference {
-    pub action_id: ActionId,
-    pub context: String,
-    pub sequence: Vec<KeyStroke>,
-    #[serde(default)]
-    #[ts(type = "unknown | null")]
-    pub payload: Option<serde_json::Value>,
-}
-
 pub fn normalize_key_name(key: &str) -> String {
     let trimmed = key.trim();
     match trimmed {
@@ -584,96 +433,6 @@ fn push_modifier(modifiers: &mut Vec<KeyModifier>, modifier: KeyModifier) {
     if !modifiers.contains(&modifier) {
         modifiers.push(modifier);
     }
-}
-
-pub const DEFAULT_KEYMAP_PROFILE_ID: &str = "default";
-pub const CUSTOM_KEYMAP_PROFILE_ID: &str = "custom";
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-#[ts(export)]
-pub struct KeymapProfileRecord {
-    pub id: String,
-    pub name: String,
-    #[serde(default)]
-    pub overrides: Vec<KeyBindingPreference>,
-}
-
-fn default_active_profile_id() -> String {
-    DEFAULT_KEYMAP_PROFILE_ID.to_string()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-#[ts(export)]
-pub struct KeymapSettings {
-    #[serde(default)]
-    pub keymap_profile: Option<String>,
-    #[serde(default)]
-    pub keymap_bindings: Vec<KeyBindingPreference>,
-    #[serde(default)]
-    pub keymap_overrides: Vec<KeyBindingPreference>,
-    #[serde(default = "default_active_profile_id")]
-    pub active_profile_id: String,
-    #[serde(default)]
-    pub profiles: Vec<KeymapProfileRecord>,
-}
-
-impl Default for KeymapSettings {
-    fn default() -> Self {
-        Self {
-            keymap_profile: Some("Default".to_string()),
-            keymap_bindings: Vec::new(),
-            keymap_overrides: Vec::new(),
-            active_profile_id: DEFAULT_KEYMAP_PROFILE_ID.to_string(),
-            profiles: Vec::new(),
-        }
-    }
-}
-
-pub fn normalize_keymap_settings(mut settings: KeymapSettings) -> KeymapSettings {
-    if settings.profiles.is_empty() {
-        let legacy_overrides = settings.keymap_overrides.clone();
-        let legacy_name = settings.keymap_profile.clone();
-
-        settings.profiles = vec![KeymapProfileRecord {
-            id: DEFAULT_KEYMAP_PROFILE_ID.to_string(),
-            name: "Default".to_string(),
-            overrides: vec![],
-        }];
-
-        if !legacy_overrides.is_empty() {
-            settings.profiles.push(KeymapProfileRecord {
-                id: CUSTOM_KEYMAP_PROFILE_ID.to_string(),
-                name: legacy_name
-                    .filter(|name| name != "Default")
-                    .unwrap_or_else(|| "Custom".to_string()),
-                overrides: legacy_overrides,
-            });
-            settings.active_profile_id = CUSTOM_KEYMAP_PROFILE_ID.to_string();
-        } else {
-            settings.active_profile_id = DEFAULT_KEYMAP_PROFILE_ID.to_string();
-        }
-    }
-
-    if !settings
-        .profiles
-        .iter()
-        .any(|profile| profile.id == settings.active_profile_id)
-    {
-        settings.active_profile_id = DEFAULT_KEYMAP_PROFILE_ID.to_string();
-    }
-
-    if let Some(profile) = settings
-        .profiles
-        .iter()
-        .find(|profile| profile.id == settings.active_profile_id)
-    {
-        settings.keymap_profile = Some(profile.name.clone());
-        settings.keymap_overrides = profile.overrides.clone();
-    }
-
-    settings
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

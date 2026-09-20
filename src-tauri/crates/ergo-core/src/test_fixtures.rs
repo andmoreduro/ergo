@@ -41,7 +41,7 @@ pub fn basic_template_spec() -> TemplateSpec {
 
 use crate::ast::{
     ContentSection, DependencyManifest, DocumentAST, DocumentElement, DocumentSection, ListItem,
-    Package, EquationSyntax, GlobalSettings, Heading, Paragraph, ProjectMetadata, ProjectSettings,
+    Package, EquationSyntax, Heading, Paragraph, ProjectMetadata, ProjectSettings,
     RichText, TableCell,
 };
 
@@ -101,7 +101,6 @@ pub fn basic_document_ast(title: &str, abstract_text: &str) -> DocumentAST {
             template_variant_id: Some("student".to_string()),
             title: title.to_string(),
             project_settings: ProjectSettings::default(),
-            local_overrides: GlobalSettings::default(),
             running_head: None,
             keywords: vec![],
         },
@@ -145,7 +144,6 @@ pub fn default_apa7_project_ast() -> DocumentAST {
             template_variant_id: Some("student".to_string()),
             title: "Untitled Document".to_string(),
             project_settings: ProjectSettings::default(),
-            local_overrides: GlobalSettings::default(),
             running_head: None,
             keywords: vec![],
         },
@@ -205,7 +203,6 @@ pub fn default_umb_apa_project_ast() -> DocumentAST {
             template_variant_id: None,
             title: "UMB APA Title".to_string(),
             project_settings: ProjectSettings::default(),
-            local_overrides: GlobalSettings::default(),
             running_head: None,
             keywords: vec![],
         },

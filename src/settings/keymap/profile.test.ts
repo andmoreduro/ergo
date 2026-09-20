@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { KeymapSettings } from "../bindings/KeymapSettings";
-import { createKeymapProfile } from "./keymap";
+import type { KeymapSettings } from "../../bindings/KeymapSettings";
+import { createKeymapProfile } from "./profile";
 
 describe("createKeymapProfile", () => {
     it("builds keymaps from the separate keymap settings model", () => {

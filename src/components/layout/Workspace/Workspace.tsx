@@ -21,7 +21,11 @@ import { useWorkspaceColumns } from "./useWorkspaceColumns";
 import type { PreviewZoomMode } from "../../../preview/previewZoom";
 import { Toast } from "../../molecules/Toast/Toast";
 import { m } from "../../../paraglide/messages.js";
-import { notifyUnavailableProjectFonts } from "../../../settings/projectFontNotifications";
+import { notifyUnavailableProjectFonts } from "../../../settings/project/fontAvailability";
+import {
+    useGlobalSettings,
+    usePreviewSettings,
+} from "../../../settings/SettingsProvider";
 import { registerToastHandler } from "../../../editor/notifyBridge";
 import styles from "./Workspace.module.css";
 
@@ -30,14 +34,6 @@ export interface WorkspaceProps {
     previewZoomMode: PreviewZoomMode;
     onPreviewZoomChange: Dispatch<SetStateAction<number>>;
     onPreviewZoomModeChange: Dispatch<SetStateAction<PreviewZoomMode>>;
-    zoteroTranslationServerEnabled?: boolean;
-    previewDraftRenderFactor: number;
-    previewRenderOverscanFactor: number;
-    previewRasterizationDebounceMs: number;
-    previewRevealDebounceMs: number;
-    previewForwardSyncDebounceMs: number;
-    previewDraftPromoteMs: number;
-    previewMultiCaret: boolean;
     findBarOpen: boolean;
     onFindBarOpenChange: (open: boolean) => void;
     findBarRef?: React.Ref<FindBarHandle>;
@@ -49,14 +45,6 @@ export const Workspace = ({
     previewZoomMode,
     onPreviewZoomChange,
     onPreviewZoomModeChange,
-    zoteroTranslationServerEnabled = false,
-    previewDraftRenderFactor,
-    previewRenderOverscanFactor,
-    previewRasterizationDebounceMs,
-    previewRevealDebounceMs,
-    previewForwardSyncDebounceMs,
-    previewDraftPromoteMs,
-    previewMultiCaret,
     findBarOpen,
     onFindBarOpenChange,
     findBarRef,
@@ -65,6 +53,9 @@ export const Workspace = ({
     const { state } = useDocumentAst();
     const { events, sessionId, ackDocumentEvents, eventsVersion, bootstrapFiles } =
         useDocumentSync();
+    const preview = usePreviewSettings();
+    const zoteroTranslationServerEnabled =
+        useGlobalSettings().zotero_translation_server_enabled ?? false;
     const compiler = useCompiler(
         state,
         events,
@@ -185,7 +176,7 @@ export const Workspace = ({
                                 zoteroTranslationServerEnabled
                             }
                             previewRasterizationDebounceMs={
-                                previewRasterizationDebounceMs
+                                preview.rasterizationDebounceMs
                             }
                         />
                     </div>
@@ -204,7 +195,7 @@ export const Workspace = ({
                             onFindBarOpenChange={onFindBarOpenChange}
                             findBarRef={findBarRef}
                             previewRasterizationDebounceMs={
-                                previewRasterizationDebounceMs
+                                preview.rasterizationDebounceMs
                             }
                         />
                     </div>
@@ -218,13 +209,13 @@ export const Workspace = ({
                             onZoomChange={onPreviewZoomChange}
                             onZoomModeChange={onPreviewZoomModeChange}
                             scrollRef={previewScrollRef}
-                            draftRenderFactor={previewDraftRenderFactor}
-                            renderOverscanFactor={previewRenderOverscanFactor}
-                            rasterizationDebounceMs={previewRasterizationDebounceMs}
-                            revealDebounceMs={previewRevealDebounceMs}
-                            forwardSyncDebounceMs={previewForwardSyncDebounceMs}
-                            draftPromoteMs={previewDraftPromoteMs}
-                            multiCaret={previewMultiCaret}
+                            draftRenderFactor={preview.draftRenderFactor}
+                            renderOverscanFactor={preview.renderOverscanFactor}
+                            rasterizationDebounceMs={preview.rasterizationDebounceMs}
+                            revealDebounceMs={preview.revealDebounceMs}
+                            forwardSyncDebounceMs={preview.forwardSyncDebounceMs}
+                            draftPromoteMs={preview.draftPromoteMs}
+                            multiCaret={preview.multiCaret}
                         />
                     </div>
                     {toastMessage ? <Toast message={toastMessage} /> : null}

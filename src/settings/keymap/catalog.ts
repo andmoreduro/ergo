@@ -1,8 +1,8 @@
-import type { ActionDescriptor } from "../bindings/ActionDescriptor";
-import type { KeyStroke } from "../bindings/KeyStroke";
-import type { ActionId } from "../commands/types";
-import type { KeymapProfile } from "../commands/types";
-import { formatKeySequence } from "./keymap";
+import type { ActionDescriptor } from "../../bindings/ActionDescriptor";
+import type { KeyStroke } from "../../bindings/KeyStroke";
+import type { ActionId } from "../../commands/types";
+import type { KeymapProfile } from "../../commands/types";
+import { formatKeySequence } from "./profile";
 
 export interface KeymapSettingRow {
     actionId: ActionId;

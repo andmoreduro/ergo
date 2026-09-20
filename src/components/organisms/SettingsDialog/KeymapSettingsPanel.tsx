@@ -6,22 +6,21 @@ import {
     resolveKeymapCategoryLabel,
 } from "../../../actions/actionMessages";
 import type { ActionDescriptor } from "../../../bindings/ActionDescriptor";
-import type { KeymapSettings } from "../../../bindings/KeymapSettings";
 import type { KeyStroke } from "../../../bindings/KeyStroke";
-import type { KeymapProfile } from "../../../commands/types";
 import { m } from "../../../paraglide/messages.js";
+import { useKeymap, useSettingsActions } from "../../../settings/SettingsProvider";
 import {
     buildKeymapSettingRows,
     groupKeymapRowsByCategory,
     rowBindingKey,
     rowHasConflict,
-} from "../../../settings/keymapCatalog";
-import { formatKeySequence } from "../../../settings/keymap";
+} from "../../../settings/keymap/catalog";
+import { formatKeySequence } from "../../../settings/keymap/profile";
 import {
     normalizeKeymapSettings,
     renameActiveKeymapProfile,
     setActiveKeymapProfile,
-} from "../../../settings/keymapProfiles";
+} from "../../../settings/keymap/profiles";
 import { Button } from "../../atoms/Button/Button";
 import { Combobox } from "../../atoms/Combobox/Combobox";
 import { IconButton } from "../../atoms/IconButton/IconButton";
@@ -36,20 +35,14 @@ import {
 } from "./settingsDialogUtils";
 
 export interface KeymapSettingsPanelProps {
-    settings: KeymapSettings;
-    keymap: KeymapProfile;
-    conflicts: unknown[];
     hasActiveProject?: boolean;
-    onChange: (settings: KeymapSettings) => void;
 }
 
 export const KeymapSettingsPanel = ({
-    settings,
-    keymap,
-    conflicts,
     hasActiveProject = true,
-    onChange,
 }: KeymapSettingsPanelProps) => {
+    const { settings, keymap, conflicts } = useKeymap();
+    const { updateKeymapSettings: onChange } = useSettingsActions();
     const [recordingBindingKey, setRecordingBindingKey] = useState<string | null>(
         null,
     );

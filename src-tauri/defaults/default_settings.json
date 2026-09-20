@@ -10,6 +10,15 @@
   "autosave_on_window_blur": true,
   "autosave_on_app_close": true,
   "autosave_on_project_close": true,
+  "default_equation_syntax": "typst",
   "zotero_translation_server_enabled": false,
-  "zotero_translation_server_url": null
+  "zotero_translation_server_url": null,
+  "preview_draft_render_factor": 1.0,
+  "preview_render_overscan_factor": 0.0,
+  "preview_rasterization_debounce_ms": 200,
+  "preview_reveal_debounce_ms": 0,
+  "preview_forward_sync_debounce_ms": 0,
+  "preview_draft_promote_ms": 180,
+  "preview_multi_caret": true,
+  "workspace_columns": null
 }

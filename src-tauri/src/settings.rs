@@ -7,7 +7,7 @@ use ts_rs::TS;
 
 use ergo_core::core_errors::ErgoError;
 
-use crate::ast::{GlobalSettings, KeymapSettings, normalize_keymap_settings};
+use ergo_core::settings::{normalize_keymap_settings, GlobalSettings, KeymapSettings};
 use crate::template_spec::{load_bundled_template, resolve_template_variant, TemplateSpec};
 use crate::translation_server::{self, TranslationServerConfig, TranslationServerStatus};
 
@@ -26,8 +26,12 @@ pub struct GlobalSettingsSaveReport {
 
 const GLOBAL_SETTINGS_FILE_NAME: &str = "settings.json";
 const KEYMAP_SETTINGS_FILE_NAME: &str = "keymap.json";
-const DEFAULT_GLOBAL_SETTINGS_RESOURCE: &str = "defaults/default_settings.json";
+/// Bundled keymap bindings. Global-settings defaults are embedded in
+/// `ergo_core::settings` instead of read from the resource directory.
 const DEFAULT_KEYMAP_SETTINGS_RESOURCE: &str = "defaults/default_keymap.json";
+/// Keys older versions wrote into `settings.json` before the keymap moved to its
+/// own file; dropped on read so the strict schema still accepts those files.
+const LEGACY_GLOBAL_SETTINGS_KEYS: &[&str] = &["keymap_profile", "keymap_overrides"];
 const APP_CONFIG_DIR_NAME: &str = "Ergo";
 
 fn app_config_file_path_from_config_dir(config_dir: &Path, file_name: &str) -> PathBuf {
@@ -52,10 +56,6 @@ fn global_settings_path(app: &AppHandle) -> Result<PathBuf, ErgoError> {
     app_config_file_path(app, GLOBAL_SETTINGS_FILE_NAME)
 }
 
-fn default_global_settings_path(app: &AppHandle) -> Option<PathBuf> {
-    resource_file_path(app, DEFAULT_GLOBAL_SETTINGS_RESOURCE)
-}
-
 fn keymap_settings_path(app: &AppHandle) -> Result<PathBuf, ErgoError> {
     app_config_file_path(app, KEYMAP_SETTINGS_FILE_NAME)
 }
@@ -67,23 +67,23 @@ fn default_keymap_settings_path(app: &AppHandle) -> Option<PathBuf> {
 fn read_global_settings_from_path(path: &Path) -> Result<GlobalSettings, ErgoError> {
     let contents =
         fs::read_to_string(path).map_err(|error| ErgoError::Operation { message: error.to_string() })?;
-    let mut settings: GlobalSettings = serde_json::from_str(&contents)
+    let mut value: serde_json::Value = serde_json::from_str(&contents)
         .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
-    settings.keymap_profile = GlobalSettings::default().keymap_profile;
-    settings.keymap_overrides = Vec::new();
-    Ok(settings)
+    if let Some(object) = value.as_object_mut() {
+        for key in LEGACY_GLOBAL_SETTINGS_KEYS {
+            object.remove(*key);
+        }
+    }
+    let settings: GlobalSettings = serde_json::from_value(value)
+        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
+    Ok(settings.with_defaults())
 }
 
-fn load_global_settings_from_paths(
-    path: &Path,
-    default_path: Option<&Path>,
-) -> Result<GlobalSettings, ErgoError> {
+/// The user's settings file filled with the shipped defaults, or the defaults
+/// alone when no file exists yet.
+fn load_global_settings_from_path(path: &Path) -> Result<GlobalSettings, ErgoError> {
     if path.exists() {
         return read_global_settings_from_path(path);
-    }
-
-    if let Some(default_path) = default_path.filter(|path| path.exists()) {
-        return read_global_settings_from_path(default_path);
     }
 
     Ok(GlobalSettings::default())
@@ -95,14 +95,7 @@ fn save_global_settings_to_path(path: &Path, settings: &GlobalSettings) -> Resul
             .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
     }
 
-    let mut contents = serde_json::to_value(settings)
-        .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
-    if let Some(object) = contents.as_object_mut() {
-        object.remove("keymap_profile");
-        object.remove("keymap_overrides");
-    }
-
-    let contents = serde_json::to_string_pretty(&contents)
+    let contents = serde_json::to_string_pretty(settings)
         .map_err(|error| ErgoError::Operation { message: error.to_string() })?;
     fs::write(path, contents).map_err(|error| ErgoError::Operation { message: error.to_string() })
 }
@@ -161,10 +154,7 @@ fn save_keymap_settings_to_path(path: &Path, settings: &KeymapSettings) -> Resul
 
 #[tauri::command]
 pub fn load_global_settings(app: AppHandle) -> Result<GlobalSettings, ErgoError> {
-    load_global_settings_from_paths(
-        &global_settings_path(&app)?,
-        default_global_settings_path(&app).as_deref(),
-    )
+    load_global_settings_from_path(&global_settings_path(&app)?)
 }
 
 fn save_global_settings_blocking(
@@ -174,11 +164,7 @@ fn save_global_settings_blocking(
     let _guard = GLOBAL_SETTINGS_SAVE_LOCK.lock();
 
     let path = global_settings_path(app)?;
-    let previous = load_global_settings_from_paths(
-        &path,
-        default_global_settings_path(app).as_deref(),
-    )
-    .unwrap_or_default();
+    let previous = load_global_settings_from_path(&path).unwrap_or_default();
 
     save_global_settings_to_path(&path, &settings)?;
 
@@ -281,7 +267,8 @@ pub fn get_template_spec(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{parse_key_sequence, ActionId, KeyBindingPreference, DEFAULT_KEYMAP_PROFILE_ID};
+    use crate::ast::{parse_key_sequence, ActionId};
+    use ergo_core::settings::{KeyBindingPreference, DEFAULT_KEYMAP_PROFILE_ID};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_settings_path() -> PathBuf {
@@ -302,16 +289,6 @@ mod tests {
         std::env::temp_dir()
             .join(format!("ergo-keymap-test-{unique}"))
             .join(KEYMAP_SETTINGS_FILE_NAME)
-    }
-
-    fn temp_default_settings_path() -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        std::env::temp_dir()
-            .join(format!("ergo-default-settings-test-{unique}"))
-            .join(DEFAULT_GLOBAL_SETTINGS_RESOURCE)
     }
 
     fn temp_default_keymap_path() -> PathBuf {
@@ -343,7 +320,7 @@ mod tests {
     fn returns_defaults_when_settings_file_is_missing() {
         let path = temp_settings_path();
 
-        let settings = load_global_settings_from_paths(&path, None).unwrap();
+        let settings = load_global_settings_from_path(&path).unwrap();
 
         assert_eq!(settings.theme_mode.as_deref(), Some("system"));
         assert_eq!(settings.history_limit, Some(100));
@@ -355,44 +332,33 @@ mod tests {
     }
 
     #[test]
-    fn loads_bundled_global_defaults_when_user_settings_are_missing() {
+    fn fills_a_partial_user_file_with_shipped_defaults_and_drops_legacy_keys() {
         let path = temp_settings_path();
-        let default_path = temp_default_settings_path();
-        if let Some(parent) = default_path.parent() {
+        if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(
-            &default_path,
+            &path,
             r#"{
   "theme_mode": "dark",
-  "locale": "es",
   "recent_projects": ["paper.ergproj"],
   "history_limit": 42,
-  "autosave_enabled": false,
-  "autosave_interval_ms": 45000,
-  "autosave_on_window_blur": false,
-  "autosave_on_app_close": true,
-  "autosave_on_project_close": false,
-  "keymap_profile": "ShouldNotLeak"
+  "keymap_profile": "ShouldNotFailParsing",
+  "keymap_overrides": []
 }"#,
         )
         .unwrap();
 
-        let settings = load_global_settings_from_paths(&path, Some(&default_path)).unwrap();
+        let settings = load_global_settings_from_path(&path).unwrap();
 
         assert_eq!(settings.theme_mode.as_deref(), Some("dark"));
-        assert_eq!(settings.locale.as_deref(), Some("es"));
         assert_eq!(settings.recent_projects, vec!["paper.ergproj"]);
         assert_eq!(settings.history_limit, Some(42));
-        assert_eq!(settings.autosave_enabled, Some(false));
-        assert_eq!(settings.autosave_interval_ms, Some(45_000));
-        assert_eq!(settings.autosave_on_window_blur, Some(false));
-        assert_eq!(settings.autosave_on_app_close, Some(true));
-        assert_eq!(settings.autosave_on_project_close, Some(false));
-        assert_eq!(settings.keymap_profile.as_deref(), Some("Default"));
-        assert!(settings.keymap_overrides.is_empty());
+        assert_eq!(settings.locale.as_deref(), Some("en"));
+        assert_eq!(settings.autosave_enabled, Some(true));
+        assert_eq!(settings.autosave_interval_ms, Some(30_000));
 
-        let _ = fs::remove_file(default_path);
+        let _ = fs::remove_file(path);
     }
 
     #[test]
@@ -410,7 +376,7 @@ mod tests {
         )
         .unwrap();
 
-        let error = load_global_settings_from_paths(&path, None).unwrap_err();
+        let error = load_global_settings_from_path(&path).unwrap_err();
 
         assert!(error.to_string().contains("unknown field"));
 
@@ -418,24 +384,31 @@ mod tests {
     }
 
     #[test]
-    fn persists_global_settings() {
+    fn saved_settings_round_trip_through_the_file() {
         let path = temp_settings_path();
         let settings = GlobalSettings {
             theme_mode: Some("dark".to_string()),
             recent_projects: vec!["paper.ergproj".to_string()],
-            keymap_profile: Some("Custom".to_string()),
-            ..Default::default()
+            workspace_columns: Some(ergo_core::settings::WorkspaceColumnWidths {
+                sidebar: 260.0,
+                editor: 480.0,
+            }),
+            ..GlobalSettings::default()
         };
 
         save_global_settings_to_path(&path, &settings).unwrap();
-        let contents = fs::read_to_string(&path).unwrap();
-        let loaded = load_global_settings_from_paths(&path, None).unwrap();
+        let loaded = load_global_settings_from_path(&path).unwrap();
 
-        assert!(!contents.contains("keymap_profile"));
-        assert!(!contents.contains("keymap_overrides"));
         assert_eq!(loaded.theme_mode.as_deref(), Some("dark"));
         assert_eq!(loaded.recent_projects, vec!["paper.ergproj"]);
-        assert_eq!(loaded.keymap_profile.as_deref(), Some("Default"));
+        assert_eq!(
+            loaded.workspace_columns,
+            Some(ergo_core::settings::WorkspaceColumnWidths {
+                sidebar: 260.0,
+                editor: 480.0,
+            })
+        );
+        assert_eq!(loaded.history_limit, GlobalSettings::default().history_limit);
 
         let _ = fs::remove_file(path);
     }

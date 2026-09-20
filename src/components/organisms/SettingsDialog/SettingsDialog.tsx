@@ -1,10 +1,6 @@
-import type { GlobalSettings } from "../../../bindings/GlobalSettings";
-import type { KeymapSettings } from "../../../bindings/KeymapSettings";
-import type { ProjectSettings } from "../../../bindings/ProjectSettings";
 import type { TemplateOverride } from "../../../bindings/TemplateOverride";
 import type { TemplateOptionSpec } from "../../../bindings/TemplateOptionSpec";
 import type { TemplateVariantSpec } from "../../../bindings/TemplateVariantSpec";
-import type { KeymapProfile } from "../../../commands/types";
 import { m } from "../../../paraglide/messages.js";
 import { Dialog } from "../../molecules/Dialog/Dialog";
 import { DialogContext } from "../../../actions/contexts/DialogContext";
@@ -14,17 +10,14 @@ import { KeymapSettingsPanel } from "./KeymapSettingsPanel";
 
 export type SettingsPanel = "global" | "project" | "keymap";
 
+/**
+ * Settings dialog shell. Global and keymap settings come from the
+ * `SettingsProvider`; project settings from the document; only the template
+ * context (spec-driven options, variants, fonts) is threaded in from the app.
+ */
 export interface SettingsDialogProps {
     panel: SettingsPanel;
-    globalSettings: GlobalSettings;
-    projectSettings: ProjectSettings;
-    keymapSettings: KeymapSettings;
-    keymap: KeymapProfile;
-    conflicts: unknown[];
     hasActiveProject?: boolean;
-    onGlobalSettingsChange: (settings: GlobalSettings) => void;
-    onKeymapSettingsChange: (settings: KeymapSettings) => void;
-    onProjectSettingsChange: (settings: ProjectSettings) => void;
     templateDefaultOverrides?: TemplateOverride[];
     templateOptions?: TemplateOptionSpec[];
     templateVariants?: TemplateVariantSpec[];
@@ -37,15 +30,7 @@ export interface SettingsDialogProps {
 
 export const SettingsDialog = ({
     panel,
-    globalSettings,
-    projectSettings,
-    keymapSettings,
-    keymap,
-    conflicts,
     hasActiveProject = false,
-    onGlobalSettingsChange,
-    onKeymapSettingsChange,
-    onProjectSettingsChange,
     templateDefaultOverrides,
     templateOptions,
     templateVariants,
@@ -73,17 +58,10 @@ export const SettingsDialog = ({
                 onClick: onClose,
             }}
         >
-            {panel === "global" && (
-                <GlobalSettingsPanel
-                    settings={globalSettings}
-                    onChange={onGlobalSettingsChange}
-                />
-            )}
+            {panel === "global" && <GlobalSettingsPanel />}
 
             {panel === "project" && (
                 <ProjectSettingsPanel
-                    settings={projectSettings}
-                    onChange={onProjectSettingsChange}
                     templateDefaultOverrides={templateDefaultOverrides}
                     templateOptions={templateOptions}
                     templateVariants={templateVariants}
@@ -95,13 +73,7 @@ export const SettingsDialog = ({
             )}
 
             {panel === "keymap" && (
-                <KeymapSettingsPanel
-                    settings={keymapSettings}
-                    keymap={keymap}
-                    conflicts={conflicts}
-                    hasActiveProject={hasActiveProject}
-                    onChange={onKeymapSettingsChange}
-                />
+                <KeymapSettingsPanel hasActiveProject={hasActiveProject} />
             )}
         </Dialog>
         </DialogContext>

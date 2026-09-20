@@ -5,7 +5,7 @@ use ergo_core::core_errors::ErgoError;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::ast::GlobalSettings;
+use ergo_core::settings::GlobalSettings;
 
 /// Fixed Docker container name so Érgo can identify its translation-server instance.
 pub const CONTAINER_NAME: &str = "ergo-zotero-translation-server";

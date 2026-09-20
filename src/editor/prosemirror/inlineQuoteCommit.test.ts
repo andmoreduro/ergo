@@ -78,7 +78,6 @@ describe("inline quote PM commits", () => {
                     running_head: null,
                     keywords: [],
                     project_settings: {},
-                    local_overrides: {},
                 },
                 dependencies: { packages: [] },
                 references: [],

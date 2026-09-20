@@ -5,7 +5,7 @@ import { TwoLineListPickerItem } from "../../molecules/TwoLineListPickerItem/Two
 import { useContextMenuTrigger } from "../../organisms/ContextMenu/ContextMenuProvider";
 import { twoLineLabelsForProjectPath } from "../../../project/paths";
 import type { KeymapProfile } from "../../../commands/types";
-import { lookupActionShortcut } from "../../../settings/keymap";
+import { lookupActionShortcut } from "../../../settings/keymap/profile";
 import { m } from "../../../paraglide/messages.js";
 import styles from "./WelcomeScreen.module.css";
 export interface WelcomeScreenProps {

@@ -1,5 +1,5 @@
-import type { ProjectSettings } from "../bindings/ProjectSettings";
-import type { TemplateOptionSpec } from "../bindings/TemplateOptionSpec";
+import type { ProjectSettings } from "../../bindings/ProjectSettings";
+import type { TemplateOptionSpec } from "../../bindings/TemplateOptionSpec";
 
 /** Minimum choice count before project-settings options use a searchable combobox. */
 export const TEMPLATE_OPTION_COMBOBOX_THRESHOLD = 7;

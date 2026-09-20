@@ -6,7 +6,7 @@ import {
     type MutableRefObject,
     type RefObject,
 } from "react";
-import { logPreviewSyncError } from "../config/previewSync";
+import { logPreviewSyncError } from "../preview/previewSyncLog";
 import { previewPointFromPageMouseEvent } from "../preview/previewPageMetrics";
 import {
     anchorPageFromVisibility,

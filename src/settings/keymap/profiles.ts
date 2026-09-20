@@ -1,8 +1,8 @@
 export const DEFAULT_KEYMAP_PROFILE_ID = "default";
 export const CUSTOM_KEYMAP_PROFILE_ID = "custom";
 
-import type { KeymapProfileRecord } from "../bindings/KeymapProfileRecord";
-import type { KeymapSettings } from "../bindings/KeymapSettings";
+import type { KeymapProfileRecord } from "../../bindings/KeymapProfileRecord";
+import type { KeymapSettings } from "../../bindings/KeymapSettings";
 
 export const normalizeKeymapSettings = (
     settings: KeymapSettings,

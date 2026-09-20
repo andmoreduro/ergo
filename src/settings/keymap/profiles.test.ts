@@ -4,7 +4,7 @@ import {
     DEFAULT_KEYMAP_PROFILE_ID,
     ensureCustomProfileForEdit,
     normalizeKeymapSettings,
-} from "./keymapProfiles";
+} from "./profiles";
 
 describe("normalizeKeymapSettings", () => {
     it("migrates legacy overrides into a custom profile", () => {

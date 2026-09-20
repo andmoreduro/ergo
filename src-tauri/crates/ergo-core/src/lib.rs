@@ -24,6 +24,7 @@ pub mod preview_sync_types;
 pub mod quote_policy;
 mod required_input_fallback;
 pub mod resource_watch;
+pub mod settings;
 pub mod template_spec;
 pub mod test_fixtures;
 mod typst_source;

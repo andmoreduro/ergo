@@ -72,7 +72,7 @@ import {
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { contentSectionFromAst } from "../../../editor/prosemirror/sectionReconcileGuard";
 import { elementIdOf } from "../../../state/documentEvents/helpers";
-import { DEFAULT_GLOBAL_SETTINGS } from "../../../settings/defaults";
+import { useDefaultEquationSyntax } from "../../../settings/SettingsProvider";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
 import { enterBlockEditById } from "../../../editor/prosemirror/bodyTableCommands";
 import { getActiveInlineEquationFocus } from "../../../editor/prosemirror/inlineEquationFocus";
@@ -166,6 +166,7 @@ const ProseMirrorBodyEditorImpl = ({
     const { spec: templateSpec } = useTemplateSpecContext();
     const templateSpecRef = useRef(templateSpec);
     templateSpecRef.current = templateSpec;
+    const defaultEquationSyntax = useDefaultEquationSyntax();
     // React only to EXTERNAL focus requests (preview click, sidebar nav). The
     // native focus this editor pushes on every keystroke is filtered out here so
     // it never re-renders the editor.
@@ -218,14 +219,12 @@ const ProseMirrorBodyEditorImpl = ({
                 dispatchRef.current(action),
             setDocumentFocus: (focus: Parameters<typeof setFocusRef.current>[0]) =>
                 setFocusRef.current(focus),
-            defaultEquationSyntax:
-                DEFAULT_GLOBAL_SETTINGS.default_equation_syntax ?? "typst",
+            defaultEquationSyntax,
             quotePolicy: templateSpecRef.current?.editor.quote_policy ?? null,
         }),
-        // Intentionally empty: the object reads live values through refs, so a
-        // stable identity keeps the handler map memoized for the component's
-        // lifetime without capturing stale state.
-        [],
+        // Everything else is read live through refs, so the handler map only
+        // re-memoizes when the user changes the default equation syntax.
+        [defaultEquationSyntax],
     );
 
     const bodyHandlers = useMemo(

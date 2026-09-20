@@ -14,7 +14,7 @@ import type { DocumentResources } from "../bindings/DocumentResources";
 import type { PreviewPageFile } from "../bindings/PreviewPageFile";
 import { useDocumentCompilerSync } from "./useDocumentCompilerSync";
 import { notifyPreviewTelemetry } from "./previewDiagnostics";
-import { isDebugMenuEnabled } from "../config/debug";
+import { isDebugMenuEnabled } from "../settings/debug";
 import {
     elapsedMs,
     nowMs,

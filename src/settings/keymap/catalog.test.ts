@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ActionDescriptor } from "../bindings/ActionDescriptor";
-import { buildKeymapSettingRows } from "./keymapCatalog";
+import type { ActionDescriptor } from "../../bindings/ActionDescriptor";
+import { buildKeymapSettingRows } from "./catalog";
 
 describe("buildKeymapSettingRows", () => {
     it("includes bindable catalog actions without default bindings", () => {

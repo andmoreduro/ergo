@@ -1,5 +1,5 @@
-import type { ProjectSettings } from "../bindings/ProjectSettings";
-import type { TemplateOverride } from "../bindings/TemplateOverride";
+import type { ProjectSettings } from "../../bindings/ProjectSettings";
+import type { TemplateOverride } from "../../bindings/TemplateOverride";
 
 export const OUTLINE_TITLE_OVERRIDE_KEYS = {
     contents: "outline.contents_title",

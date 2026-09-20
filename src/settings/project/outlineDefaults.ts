@@ -1,4 +1,4 @@
-import type { ProjectSettings } from "../bindings/ProjectSettings";
+import type { ProjectSettings } from "../../bindings/ProjectSettings";
 import { normalizeDocumentLanguage } from "./documentLanguage";
 import {
     getTemplateOverride,

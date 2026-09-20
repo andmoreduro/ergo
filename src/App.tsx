@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+} from "react";
 import { Workspace } from "./components/layout/Workspace/Workspace";
-import { requireSetting } from "./settings/defaults";
 import { Menubar } from "./components/layout/Menubar/Menubar";
 import { WelcomeScreen } from "./components/screens/WelcomeScreen/WelcomeScreen";
 import { ErrorBoundary } from "./components/screens/ErrorBoundary/ErrorBoundary";
@@ -108,7 +114,14 @@ import { useCommandPalette } from "./hooks/useCommandPalette";
 import { useAppActionHandlers } from "./hooks/useAppActionHandlers";
 import { useAutosave } from "./hooks/useAutosave";
 import { useScrollRegionReveal } from "./hooks/useScrollRegionReveal";
-import { useSettingsLifecycle } from "./hooks/useSettingsLifecycle";
+import {
+    SettingsProvider,
+    useGlobalSettings,
+    useKeymap,
+    useSettingsActions,
+    useThemeMode,
+    useUiLocale,
+} from "./settings/SettingsProvider";
 import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
 import { usePerfReplay } from "./hooks/usePerfReplay";
 import {
@@ -135,26 +148,15 @@ const AppShellContent = () => {
     const focusStore = useDocumentFocusStore();
     const getState = useCallback(() => astStore.getSnapshot(), [astStore]);
     const templateId = useDocumentAstSelector((s) => s.metadata.template_id);
-    const projectSettings = useDocumentAstSelector(
-        (s) => s.metadata.project_settings,
-    );
     const templateVariantId = useDocumentAstSelector(
         (s) => s.metadata.template_variant_id,
     );
     const focusedElementId = useDocumentFocusSelector((f) => f.elementId);
-    const {
-        locale,
-        globalSettings,
-        keymapSettings,
-        themeMode,
-        keymap,
-        keymapConflicts,
-        updateGlobalSettings,
-        updateKeymapSettings,
-        setThemeMode,
-        rememberProject,
-        forgetProject,
-    } = useSettingsLifecycle();
+    const globalSettings = useGlobalSettings();
+    const themeMode = useThemeMode();
+    const locale = useUiLocale();
+    const { keymap } = useKeymap();
+    const { setThemeMode, rememberProject, forgetProject } = useSettingsActions();
     const {
         hasActiveProject,
         currentProjectPath,
@@ -934,37 +936,6 @@ const AppShellContent = () => {
                             onFindBarOpenChange={setFindBarOpen}
                             findBarRef={findBarRef}
                             previewRef={previewRef}
-                            zoteroTranslationServerEnabled={
-                                globalSettings.zotero_translation_server_enabled ??
-                                false
-                            }
-                            previewDraftRenderFactor={requireSetting(
-                                globalSettings.preview_draft_render_factor,
-                                "preview_draft_render_factor",
-                            )}
-                            previewRenderOverscanFactor={requireSetting(
-                                globalSettings.preview_render_overscan_factor,
-                                "preview_render_overscan_factor",
-                            )}
-                            previewRasterizationDebounceMs={requireSetting(
-                                globalSettings.preview_rasterization_debounce_ms,
-                                "preview_rasterization_debounce_ms",
-                            )}
-                            previewRevealDebounceMs={requireSetting(
-                                globalSettings.preview_reveal_debounce_ms,
-                                "preview_reveal_debounce_ms",
-                            )}
-                            previewForwardSyncDebounceMs={requireSetting(
-                                globalSettings.preview_forward_sync_debounce_ms,
-                                "preview_forward_sync_debounce_ms",
-                            )}
-                            previewDraftPromoteMs={requireSetting(
-                                globalSettings.preview_draft_promote_ms,
-                                "preview_draft_promote_ms",
-                            )}
-                            previewMultiCaret={
-                                globalSettings.preview_multi_caret ?? true
-                            }
                         />
                     </ActionContextProvider>
                 ) : (
@@ -1003,20 +974,7 @@ const AppShellContent = () => {
                     >
                         <SettingsDialog
                             panel={settingsPanel}
-                            globalSettings={globalSettings}
-                            projectSettings={projectSettings}
-                            keymap={keymap}
-                            conflicts={keymapConflicts}
                             hasActiveProject={hasActiveProject}
-                            keymapSettings={keymapSettings}
-                            onGlobalSettingsChange={updateGlobalSettings}
-                            onKeymapSettingsChange={updateKeymapSettings}
-                            onProjectSettingsChange={(settings) =>
-                                dispatch({
-                                    type: "UPDATE_PROJECT_SETTINGS",
-                                    payload: { settings },
-                                })
-                            }
                             templateDefaultOverrides={templateDefaultOverrides}
                             templateOptions={templateSpec?.editor.options ?? []}
                             templateVariants={templateVariants}
@@ -1068,6 +1026,12 @@ const AppShell = () => (
     </ActionRuntimeProvider>
 );
 
+/** Document state sits under settings so the undo depth follows `history_limit`. */
+const ConfiguredDocumentProvider = ({ children }: { children: ReactNode }) => {
+    const historyLimit = useGlobalSettings().history_limit ?? undefined;
+    return <DocumentProvider historyLimit={historyLimit}>{children}</DocumentProvider>;
+};
+
 function App() {
     useScrollRegionReveal();
 
@@ -1076,9 +1040,11 @@ function App() {
     }, []);
 
     return (
-        <DocumentProvider>
-            <AppShell />
-        </DocumentProvider>
+        <SettingsProvider>
+            <ConfiguredDocumentProvider>
+                <AppShell />
+            </ConfiguredDocumentProvider>
+        </SettingsProvider>
     );
 }
 

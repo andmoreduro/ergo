@@ -1,7 +1,7 @@
 use super::*;
 use crate::ast::{
     AssetEntry, ContentSection, CustomElement, DependencyManifest, DocumentElement,
-    DocumentSection, Enumeration, Equation, EquationSyntax, GlobalSettings, List, ProjectMetadata,
+    DocumentSection, Enumeration, Equation, EquationSyntax, List, ProjectMetadata,
     ProjectSettings, Quote, ReferenceEntry, RichText,
 };
 use crate::ast::{Diagram, Figure, Paragraph, Table, TableCell};
@@ -140,7 +140,6 @@ fn ast_with_custom_field(key: &str, value: serde_json::Value) -> DocumentAST {
             running_head: None,
             keywords: vec![],
             project_settings: ProjectSettings::default(),
-            local_overrides: GlobalSettings::default(),
         },
         dependencies: DependencyManifest { packages: vec![] },
         references: vec![],
@@ -459,7 +458,6 @@ fn ast_with_table_and_figure() -> DocumentAST {
             running_head: None,
             keywords: vec![],
             project_settings: ProjectSettings::default(),
-            local_overrides: GlobalSettings::default(),
         },
         dependencies: DependencyManifest { packages: vec![] },
         references: vec![],
@@ -560,7 +558,6 @@ fn diagram_here_emits_placement_on_wrapped_figure() {
             running_head: None,
             keywords: vec![],
             project_settings: ProjectSettings::default(),
-            local_overrides: GlobalSettings::default(),
         },
         dependencies: DependencyManifest { packages: vec![] },
         references: vec![],

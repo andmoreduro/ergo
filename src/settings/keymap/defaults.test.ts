@@ -2,35 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
-import { DEFAULT_KEYMAP, detectKeymapConflicts } from "./keymap";
-import type { KeyBinding } from "./types";
-
-describe("keymap", () => {
-    it("detects keymap conflicts within the same scope", () => {
-        const bindings: KeyBinding[] = [
-            { commandId: "workspace::NewProject", keys: "Ctrl+N", scope: "global" },
-            { commandId: "workspace::OpenProject", keys: "Ctrl+N", scope: "global" },
-            { commandId: "workspace::SaveProject", keys: "Ctrl+N", scope: "project" },
-        ];
-
-        expect(detectKeymapConflicts(bindings)).toEqual([
-            {
-                keys: "Ctrl+N",
-                scope: "global",
-                commandIds: ["workspace::NewProject", "workspace::OpenProject"],
-            },
-        ]);
-    });
-
-    it("ignores unbound shortcuts when detecting conflicts", () => {
-        const bindings: KeyBinding[] = [
-            { commandId: "workspace::NewProject", keys: "", scope: "global" },
-            { commandId: "workspace::OpenProject", keys: "", scope: "global" },
-        ];
-
-        expect(detectKeymapConflicts(bindings)).toEqual([]);
-    });
-});
+import { DEFAULT_KEYMAP } from "./defaults";
+import type { KeyBinding } from "../../commands/types";
 
 describe("DEFAULT_KEYMAP alignment with the Rust default keymap", () => {
     // The Rust default (src-tauri/defaults/default_keymap.json) is the shipped
@@ -45,7 +18,7 @@ describe("DEFAULT_KEYMAP alignment with the Rust default keymap", () => {
 
     const jsonBindings: JsonBinding[] = JSON.parse(
         readFileSync(
-            resolve(__dirname, "../../src-tauri/defaults/default_keymap.json"),
+            resolve(__dirname, "../../../src-tauri/defaults/default_keymap.json"),
             "utf8",
         ),
     ).keymap_bindings;

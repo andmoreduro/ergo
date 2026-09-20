@@ -16,7 +16,7 @@ import { TauriApi } from "../api/tauri";
 import {
     documentAstForCompile,
     documentEventsForCompile,
-} from "../settings/documentAstForCompile";
+} from "./documentAstForCompile";
 import { CompilerClient, loadDocumentFontsLazy } from "../workers/compilerClient";
 import { projectFilesToVfsEntries } from "../workers/compilerProtocol";
 import type { QueuedDocumentEvent } from "../state/DocumentContext";

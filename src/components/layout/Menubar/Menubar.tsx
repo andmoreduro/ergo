@@ -8,7 +8,7 @@ import { WindowControlButton } from "../../atoms/WindowControlButton/WindowContr
 import { DropdownMenu } from "../../molecules/DropdownMenu/DropdownMenu";
 import { m } from "../../../paraglide/messages.js";
 import type { ActionId, KeymapProfile } from "../../../commands/types";
-import { lookupActionShortcut } from "../../../settings/keymap";
+import { lookupActionShortcut } from "../../../settings/keymap/profile";
 import styles from "./Menubar.module.css";
 
 export type InsertElementType =

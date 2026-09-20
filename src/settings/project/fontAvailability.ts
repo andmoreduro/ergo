@@ -1,9 +1,9 @@
-import type { FontAvailability } from "../bindings/FontAvailability";
-import type { ProjectFontAvailability } from "../bindings/ProjectFontAvailability";
-import type { ProjectSettings } from "../bindings/ProjectSettings";
-import { TauriApi } from "../api/tauri";
-import { m } from "../paraglide/messages.js";
-import { showToast } from "../editor/notifyBridge";
+import type { FontAvailability } from "../../bindings/FontAvailability";
+import type { ProjectFontAvailability } from "../../bindings/ProjectFontAvailability";
+import type { ProjectSettings } from "../../bindings/ProjectSettings";
+import { TauriApi } from "../../api/tauri";
+import { m } from "../../paraglide/messages.js";
+import { showToast } from "../../editor/notifyBridge";
 
 const unavailableFonts = (
     availability: ProjectFontAvailability,

@@ -3,25 +3,29 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TauriApi } from "../api/tauri";
 import type { GlobalSettings } from "../bindings/GlobalSettings";
 import type { KeymapSettings } from "../bindings/KeymapSettings";
+import type { WorkspaceColumnWidths } from "../bindings/WorkspaceColumnWidths";
 import { showToast } from "../editor/notifyBridge";
 import { m } from "../paraglide/messages.js";
 import { getLocale, locales, setLocale } from "../paraglide/runtime.js";
 import type { Locale } from "../paraglide/runtime.js";
 import {
     DEFAULT_GLOBAL_SETTINGS,
-    DEFAULT_KEYMAP_SETTINGS,
     mergeGlobalSettings,
-    mergeKeymapSettings,
     mergeRecentProjectLists,
     normalizeThemeMode,
     type ThemeMode,
-} from "../settings/defaults";
-import { createKeymapProfile } from "../settings/keymap";
+} from "./global/defaults";
+import { DEFAULT_KEYMAP_SETTINGS, mergeKeymapSettings } from "./keymap/defaults";
+import { createKeymapProfile } from "./keymap/profile";
 
 const isLocale = (value: string | null): value is Locale =>
     locales.includes(value as Locale);
 
-export const useSettingsLifecycle = () => {
+/**
+ * Loads, persists and exposes the user's global and keymap settings. Internal
+ * to `SettingsProvider`; components read settings through the hooks it exports.
+ */
+export const useSettingsStore = () => {
     const [locale, setActiveLocale] = useState<Locale>(getLocale());
     const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(
         DEFAULT_GLOBAL_SETTINGS,
@@ -194,6 +198,15 @@ export const useSettingsLifecycle = () => {
         });
     }, []);
 
+    const setWorkspaceColumns = useCallback((columns: WorkspaceColumnWidths) => {
+        setGlobalSettings((current) =>
+            current.workspace_columns?.sidebar === columns.sidebar &&
+            current.workspace_columns?.editor === columns.editor
+                ? current
+                : mergeGlobalSettings({ ...current, workspace_columns: columns }),
+        );
+    }, []);
+
     const forgetProject = useCallback((path: string) => {
         setGlobalSettings((current) =>
             mergeGlobalSettings({
@@ -220,8 +233,9 @@ export const useSettingsLifecycle = () => {
         updateGlobalSettings,
         updateKeymapSettings,
         setThemeMode,
-        handleLocaleChange,
+        setLocale: handleLocaleChange,
         rememberProject,
         forgetProject,
+        setWorkspaceColumns,
     };
 };

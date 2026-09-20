@@ -1,4 +1,4 @@
-import { isDebugMenuEnabled } from "../config/debug";
+import { isDebugMenuEnabled } from "../settings/debug";
 import type { PreviewTelemetry } from "./previewTelemetry";
 
 let telemetryListener: ((telemetry: PreviewTelemetry) => void) | null = null;
