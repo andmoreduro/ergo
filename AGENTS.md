@@ -82,7 +82,7 @@ The context files describe the intended current design. They are not a changelog
 | `pnpm tauri dev` | Full Tauri desktop app (runs `pnpm dev` internally) |
 | `pnpm react-devtools` | Standalone React DevTools — start before `pnpm tauri dev`, then reload the app window |
 | `cargo run --release -p ergo-engine-wasm --bin wasm_preview_profile -- --scenario typing-title --iterations 200` | Profile the WASM preview pipeline (sync → compile → canvas render) without Tauri/WebView |
-| `cargo nextest run` | Run Rust tests via nextest (skips per-type `export_bindings_*` smoke tests; from `src-tauri/`) |
+| `cargo nextest run` | Run Rust tests via nextest (skips the `export_bindings` ts-rs export test, which writes `src/bindings/`; from `src-tauri/`) |
 | `cargo test -p ergo export_typescript_bindings` | Regenerate `src/bindings/` after IPC type changes |
 
 ### Fast iteration
@@ -151,6 +151,7 @@ Available scenarios are `small-document`, `typing-title`, `large-document`, and 
 - Logical keys from `KeyboardEvent.key`, not physical positions
 - Multi-stroke sequences supported (e.g. `Ctrl+O Ctrl+O` opens, `Ctrl+O Ctrl+R` opens recent)
 - No frontend fallback shortcut resolver
+- The default keymap lives in `src-tauri/defaults/default_keymap.json` (Rust-owned, validated). The frontend `DEFAULT_KEYMAP` (`src/commands/keymap.ts`) is only the pre-IPC boot fallback and must stay binding-for-binding identical to the JSON — `src/commands/keymap.test.ts` guards the alignment
 - Body undo/redo (`edit::Undo`, `edit::Redo`) resolve through the action runtime; the capture listener suppresses native contenteditable history in the ProseMirror body surface
 - ProseMirror-owned synchronous shortcuts (body navigation arrows, Tab, Shift+arrow block selection) stay in `bodyKeyboardPlugin.ts` and are not user-bindable
 - Table cell merge/split (`editor::MergeTableCells`, `editor::SplitTableCell`) and Alt+arrow cell navigation resolve through the action runtime; `tableCellBoundary` swallows plain/Ctrl arrows at the grid rim but defers Alt+arrow to `editor::MoveTableCell*`

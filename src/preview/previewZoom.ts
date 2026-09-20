@@ -1,3 +1,5 @@
+import { CSS_PX_PER_PT } from "./previewPageMetrics";
+
 export const PREVIEW_ZOOM_MIN = 0.5;
 export const PREVIEW_ZOOM_MAX = 3;
 export const PREVIEW_ZOOM_STEP = 0.1;
@@ -26,8 +28,6 @@ export type PreviewPageSize = {
     widthPt: number;
     heightPt: number;
 };
-
-const CSS_PX_PER_PT = 96 / 72;
 
 function finitePositive(value: number, fallback: number): number {
     return Number.isFinite(value) && value > 0 ? value : fallback;

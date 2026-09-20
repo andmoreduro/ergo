@@ -234,23 +234,42 @@ impl<'a> RequiredInputFallbacks<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::template_spec::load_bundled_template;
+
+    /// Minimal spec carrying one required `authors` array whose label is the
+    /// fixture-visible string, so assertions echo fixture fields rather than
+    /// the bundled apa7 instance.
+    fn fixture_template() -> TemplateSpec {
+        let mut spec = crate::test_fixtures::basic_template_spec();
+        spec.editor.inputs = vec![InputSchema {
+            id: Some("authors".to_string()),
+            input_type: InputType::Array,
+            label: Some("Fixture Authors".to_string()),
+            description: None,
+            default: None,
+            importance: Importance::Required,
+            variants: Some(vec!["student".to_string()]),
+            properties: None,
+            items: None,
+            target: None,
+        }];
+        spec
+    }
 
     #[test]
     fn empty_required_authors_receive_field_label() {
-        let template = load_bundled_template("apa7").expect("template");
+        let template = fixture_template();
         let fallbacks = RequiredInputFallbacks::new(&template, Some("student"));
         let prepared = fallbacks.prepare_input_value("authors", &serde_json::json!([]));
 
         assert_eq!(
             prepared,
-            serde_json::json!([{ "name": "Authors", "affiliations": [] }])
+            serde_json::json!([{ "name": "Fixture Authors", "affiliations": [] }])
         );
     }
 
     #[test]
     fn empty_author_name_uses_authors_field_label() {
-        let template = load_bundled_template("apa7").expect("template");
+        let template = fixture_template();
         let fallbacks = RequiredInputFallbacks::new(&template, Some("student"));
         let prepared = fallbacks.prepare_input_value(
             "authors",
@@ -259,15 +278,24 @@ mod tests {
 
         assert_eq!(
             prepared,
-            serde_json::json!([{ "name": "Authors", "affiliations": [] }])
+            serde_json::json!([{ "name": "Fixture Authors", "affiliations": [] }])
         );
     }
 
     #[test]
     fn optional_inputs_are_not_modified() {
-        let template = load_bundled_template("apa7").expect("template");
+        let template = fixture_template();
         let fallbacks = RequiredInputFallbacks::new(&template, Some("student"));
         let prepared = fallbacks.prepare_input_value("keywords", &serde_json::json!([]));
+
+        assert_eq!(prepared, serde_json::json!([]));
+    }
+
+    #[test]
+    fn variant_scoped_inputs_skip_fallback_outside_their_variant() {
+        let template = fixture_template();
+        let fallbacks = RequiredInputFallbacks::new(&template, Some("professional"));
+        let prepared = fallbacks.prepare_input_value("authors", &serde_json::json!([]));
 
         assert_eq!(prepared, serde_json::json!([]));
     }

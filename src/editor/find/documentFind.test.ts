@@ -152,4 +152,85 @@ describe("nextDocumentFindMatchIndex", () => {
         );
         expect(index).toBe(1);
     });
+
+    it("steps back within the anchor field before earlier fields", () => {
+        const order = [
+            {
+                elementId: projectInputElementId,
+                fieldId: "project-input-/title",
+            },
+            { elementId: "p-1", fieldId: "p-1:text" },
+        ];
+        const matches = [
+            {
+                elementId: projectInputElementId,
+                fieldId: "project-input-/title",
+                start: 0,
+                end: 5,
+            },
+            {
+                elementId: "p-1",
+                fieldId: "p-1:text",
+                start: 5,
+                end: 13,
+            },
+        ];
+        // Backward from offset 5 in the title field: the body match is in a
+        // later field, so the earlier title match (start 0) wins.
+        expect(
+            nextDocumentFindMatchIndex(
+                matches,
+                order,
+                {
+                    elementId: projectInputElementId,
+                    fieldId: "project-input-/title",
+                    offset: 5,
+                },
+                -1,
+            ),
+        ).toBe(0);
+    });
+
+    it("wraps to the first match when forward passes the last one", () => {
+        const order = [
+            {
+                elementId: projectInputElementId,
+                fieldId: "project-input-/title",
+            },
+            { elementId: "p-1", fieldId: "p-1:text" },
+        ];
+        const matches = [
+            {
+                elementId: projectInputElementId,
+                fieldId: "project-input-/title",
+                start: 0,
+                end: 5,
+            },
+            {
+                elementId: "p-1",
+                fieldId: "p-1:text",
+                start: 5,
+                end: 13,
+            },
+        ];
+        expect(
+            nextDocumentFindMatchIndex(
+                matches,
+                order,
+                { elementId: "p-1", fieldId: "p-1:text", offset: 9 },
+                1,
+            ),
+        ).toBe(0);
+    });
+
+    it("returns -1 without matches", () => {
+        expect(
+            nextDocumentFindMatchIndex(
+                [],
+                [],
+                { elementId: null, fieldId: null, offset: 0 },
+                1,
+            ),
+        ).toBe(-1);
+    });
 });

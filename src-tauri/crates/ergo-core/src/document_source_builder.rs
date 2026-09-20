@@ -188,6 +188,21 @@ fn should_escape_typst_text_character(character: char, at_line_start: bool) -> b
     at_line_start && matches!(character, '=' | '-' | '+' | '/' | ':')
 }
 
+/// Escape text placed verbatim into Typst markup (e.g. inside `[...]` content
+/// blocks), applying the same character rule as escaped document fields.
+pub(crate) fn escape_typst_markup(value: &str) -> String {
+    let mut escaped = String::new();
+    let mut at_line_start = true;
+    for character in value.chars() {
+        if should_escape_typst_text_character(character, at_line_start) {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+        at_line_start = character == '\n';
+    }
+    escaped
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,6 +220,13 @@ mod tests {
         assert!(should_escape_typst_text_character('=', true));
         assert!(should_escape_typst_text_character('-', true));
         assert!(should_escape_typst_text_character('+', true));
+    }
+
+    #[test]
+    fn escape_typst_markup_escapes_active_characters_and_line_starts() {
+        assert_eq!(escape_typst_markup("a #b @c"), "a \\#b \\@c");
+        assert_eq!(escape_typst_markup("= heading"), "\\= heading");
+        assert_eq!(escape_typst_markup("x = y\n- item"), "x = y\n\\- item");
     }
 
     #[test]

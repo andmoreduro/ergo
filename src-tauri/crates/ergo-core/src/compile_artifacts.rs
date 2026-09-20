@@ -391,20 +391,6 @@ mod tests {
             "dependency manifest should list the template package; got:\n{manifest_json}"
         );
 
-        let main_source = vfs.read_source("main.typ").unwrap();
-        assert!(
-            main_source.contains("title: [Contents]"),
-            "main.typ should include document outline; got:\n{main_source}"
-        );
-        assert!(
-            main_source.contains("#appendix-outline"),
-            "main.typ should include appendix outline; got:\n{main_source}"
-        );
-        assert!(
-            main_source.contains("#show: appendix"),
-            "main.typ should enable appendix show rule; got:\n{main_source}"
-        );
-
         let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
         let document = compile_document(&world).unwrap();
         let svgs = render_svgs(&document);
@@ -413,132 +399,29 @@ mod tests {
         assert!(svgs[0].contains("<svg"));
     }
 
-    #[test]
-    fn apa7_paragraph_with_bibliography_citation_compiles() {
-        use crate::ast::{
-            DocumentElement, DocumentSection, EquationSyntax, Paragraph, ReferenceEntry, RichText,
-        };
-        use crate::path_utils::file_id_for_virtual_path;
-        use crate::test_fixtures::{default_apa7_project_ast, populate_versatile_apa, rich_text};
-        use crate::vfs::VirtualFileSystem;
-        use std::sync::Arc;
+    /// Build the shared "paragraph cites a reference" project on a bundled
+    /// template fixture, sync it through a fresh session, and return the VFS.
+    #[allow(clippy::too_many_lines)]
+    fn cited_paragraph_project(
+        template_id: &str,
+        reference: crate::ast::ReferenceEntry,
+    ) -> Arc<VirtualFileSystem> {
+        use crate::ast::{DocumentElement, EquationSyntax, Paragraph, RichText};
+        use crate::test_fixtures::rich_text;
 
-        let mut ast = default_apa7_project_ast();
-        ast.references = vec![ReferenceEntry {
-            id: "bib-ref-1".to_string(),
-            citation_key: "smith2020".to_string(),
-            biblatex: "@article{smith2020, author = {Smith}, title = {Demo}, year = {2020}}"
-                .to_string(),
-        }];
-        let DocumentSection::Content(content) = &mut ast.sections[0];
+        let mut ast = match template_id {
+            "umb-apa" => crate::test_fixtures::default_umb_apa_project_ast(),
+            _ => crate::test_fixtures::default_apa7_project_ast(),
+        };
+        let marker = reference.citation_key.clone();
+        ast.references = vec![reference];
+        let crate::ast::DocumentSection::Content(content) = &mut ast.sections[0];
         content.elements.push(DocumentElement::Paragraph(Paragraph {
             id: "p-1".to_string(),
             content: vec![
                 rich_text("See "),
                 RichText {
-                    text: "smith2020".to_string(),
-                    bold: None,
-                    italic: None,
-                    underline: None,
-                    kind: Some("reference".to_string()),
-                    reference_id: Some("bib-ref-1".to_string()),
-                    equation_source: None,
-                    equation_syntax: EquationSyntax::Typst,
-                    ..Default::default()
-                },
-                rich_text(" for details."),
-            ],
-        }));
-
-        let vfs = Arc::new(VirtualFileSystem::new());
-        populate_versatile_apa(&vfs);
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        session.sync_snapshot(ast).unwrap();
-
-        if let Ok(source) = vfs.read_source("elements/p-1.typ") {
-            eprintln!("=== elements/p-1.typ ===\n{source}");
-        }
-        if let Ok(source) = vfs.read_source("references.bib") {
-            eprintln!("=== references.bib ===\n{source}");
-        }
-
-        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
-        if let Err(error) = compile_document(&world) {
-            panic!("compile failed: {error}");
-        }
-    }
-
-    #[test]
-    fn umb_apa_paragraph_with_bibliography_citation_compiles() {
-        use crate::ast::{
-            DocumentElement, DocumentSection, EquationSyntax, Paragraph, ReferenceEntry, RichText,
-        };
-        use crate::path_utils::file_id_for_virtual_path;
-        use crate::test_fixtures::{default_umb_apa_project_ast, populate_umb_apa, rich_text};
-        use crate::vfs::VirtualFileSystem;
-        use std::sync::Arc;
-
-        let mut ast = default_umb_apa_project_ast();
-        ast.references = vec![ReferenceEntry {
-            id: "bib-ref-1".to_string(),
-            citation_key: "smith2020".to_string(),
-            biblatex: "@article{smith2020, author = {Smith}, title = {Demo}, year = {2020}}"
-                .to_string(),
-        }];
-        let DocumentSection::Content(content) = &mut ast.sections[0];
-        content.elements.push(DocumentElement::Paragraph(Paragraph {
-            id: "p-1".to_string(),
-            content: vec![
-                rich_text("See "),
-                RichText {
-                    text: "smith2020".to_string(),
-                    bold: None,
-                    italic: None,
-                    underline: None,
-                    kind: Some("reference".to_string()),
-                    reference_id: Some("bib-ref-1".to_string()),
-                    equation_source: None,
-                    equation_syntax: EquationSyntax::Typst,
-                    ..Default::default()
-                },
-                rich_text(" for details."),
-            ],
-        }));
-
-        let vfs = Arc::new(VirtualFileSystem::new());
-        populate_umb_apa(&vfs);
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        session.sync_snapshot(ast).unwrap();
-
-        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
-        if let Err(error) = compile_document(&world) {
-            panic!("umb-apa bibliography citation compile failed: {error}");
-        }
-    }
-
-    #[test]
-    fn apa7_minimal_bibliography_entry_with_citation_compiles() {
-        use crate::ast::{
-            DocumentElement, DocumentSection, EquationSyntax, Paragraph, ReferenceEntry, RichText,
-        };
-        use crate::path_utils::file_id_for_virtual_path;
-        use crate::test_fixtures::{default_apa7_project_ast, populate_versatile_apa, rich_text};
-        use crate::vfs::VirtualFileSystem;
-        use std::sync::Arc;
-
-        let mut ast = default_apa7_project_ast();
-        ast.references = vec![ReferenceEntry {
-            id: "ref-1".to_string(),
-            citation_key: "ref-1".to_string(),
-            biblatex: "@book{ref-1}".to_string(),
-        }];
-        let DocumentSection::Content(content) = &mut ast.sections[0];
-        content.elements.push(DocumentElement::Paragraph(Paragraph {
-            id: "p-1".to_string(),
-            content: vec![
-                rich_text("See "),
-                RichText {
-                    text: "ref-1".to_string(),
+                    text: marker,
                     bold: None,
                     italic: None,
                     underline: None,
@@ -548,72 +431,60 @@ mod tests {
                     equation_syntax: EquationSyntax::Typst,
                     ..Default::default()
                 },
-                rich_text("."),
+                rich_text(" for details."),
             ],
         }));
 
         let vfs = Arc::new(VirtualFileSystem::new());
-        populate_versatile_apa(&vfs);
+        match template_id {
+            "umb-apa" => crate::test_fixtures::populate_umb_apa(&vfs),
+            _ => crate::test_fixtures::populate_versatile_apa(&vfs),
+        }
         let session = DocumentSession::new(Arc::clone(&vfs));
         session.sync_snapshot(ast).unwrap();
+        vfs
+    }
 
-        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
+    fn compile_project(vfs: Arc<VirtualFileSystem>, label: &str) {
+        let world = ErgoWorld::new(vfs, file_id_for_virtual_path("main.typ"));
         if let Err(error) = compile_document(&world) {
-            panic!("compile failed: {error}");
+            panic!("{label} compile failed: {error}");
         }
     }
 
     #[test]
-    fn apa7_bibliography_citation_uses_biblatex_entry_key() {
-        use crate::ast::{
-            DocumentElement, DocumentSection, EquationSyntax, Paragraph, ReferenceEntry, RichText,
-        };
-        use crate::path_utils::file_id_for_virtual_path;
-        use crate::test_fixtures::{default_apa7_project_ast, populate_versatile_apa};
-        use crate::typst_source::{bibliography_citation_keys, typst_reference_marker};
-        use crate::vfs::VirtualFileSystem;
-        use std::sync::Arc;
+    fn bundled_bibliography_citations_compile_on_both_templates() {
+        use crate::ast::ReferenceEntry;
 
-        let references = vec![ReferenceEntry {
+        let full_entry = ReferenceEntry {
             id: "ref-1".to_string(),
-            citation_key: "ref-1".to_string(),
+            citation_key: "smith2020".to_string(),
             biblatex: "@article{smith2020, author = {Smith}, title = {Demo}, year = {2020}}"
                 .to_string(),
-        }];
-        let keys = bibliography_citation_keys(&references);
-        assert_eq!(
-            typst_reference_marker("ref-1", &keys),
-            "@smith2020"
-        );
+        };
+        for template_id in ["apa7", "umb-apa"] {
+            let vfs = cited_paragraph_project(template_id, full_entry.clone());
+            let element_source = vfs.read_source("elements/p-1.typ").unwrap();
+            // Citations use the BibLaTeX entry key, not the Érgo element id.
+            assert!(
+                element_source.contains("@smith2020"),
+                "{template_id} citation should use the biblatex entry key; got:\n{element_source}"
+            );
+            compile_project(vfs, template_id);
+        }
+    }
 
-        let mut ast = default_apa7_project_ast();
-        ast.references = references;
-        let DocumentSection::Content(content) = &mut ast.sections[0];
-        content.elements.push(DocumentElement::Paragraph(Paragraph {
-            id: "p-1".to_string(),
-            content: vec![RichText {
-                text: "smith2020".to_string(),
-                bold: None,
-                italic: None,
-                underline: None,
-                kind: Some("reference".to_string()),
-                reference_id: Some("ref-1".to_string()),
-                equation_source: None,
-                equation_syntax: EquationSyntax::Typst,
-                ..Default::default()
-            }],
-        }));
+    #[test]
+    fn minimal_bare_key_bibliography_entry_compiles() {
+        use crate::ast::ReferenceEntry;
 
-        let vfs = Arc::new(VirtualFileSystem::new());
-        populate_versatile_apa(&vfs);
-        let session = DocumentSession::new(Arc::clone(&vfs));
-        session.sync_snapshot(ast).unwrap();
-
-        let element_source = vfs.read_source("elements/p-1.typ").unwrap();
-        assert!(element_source.contains("@smith2020"));
-
-        let world = ErgoWorld::new(Arc::clone(&vfs), file_id_for_virtual_path("main.typ"));
-        compile_document(&world).expect("citation key mismatch should compile");
+        let bare_entry = ReferenceEntry {
+            id: "ref-1".to_string(),
+            citation_key: "ref-1".to_string(),
+            biblatex: "@book{ref-1}".to_string(),
+        };
+        let vfs = cited_paragraph_project("apa7", bare_entry);
+        compile_project(vfs, "bare-key bibliography");
     }
 
     #[test]

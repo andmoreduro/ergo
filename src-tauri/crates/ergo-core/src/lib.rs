@@ -29,3 +29,10 @@ pub mod test_fixtures;
 mod typst_source;
 pub mod vfs;
 pub mod world;
+
+/// Canonical BibLaTeX export for the app's bibliography export command. The
+/// same normalization the compiled in-VFS `references.bib` receives, so an
+/// exported file parses wherever the in-app compile does.
+pub fn generate_references_bib(references: &[ast::ReferenceEntry]) -> String {
+    typst_source::generate_references_bib(references)
+}

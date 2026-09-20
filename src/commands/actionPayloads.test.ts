@@ -1,45 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
-import type { ActionInvocation } from "../bindings/ActionInvocation";
-import { typedHandler } from "../actions/runtime";
-import type { PayloadOf } from "./actionPayloads";
+import { describe, expect, it } from "vitest";
+import { numericPayloadField } from "./actionPayloads";
 
-// Compile-time assertions: if the payload map drifts, tsc fails here.
-// ` satisfies` checks the value matches the declared type without emitting
-// runtime code that would break in the test environment.
-void ({
-    rowIndex: 0,
-}) satisfies PayloadOf<"editor::RemoveTableRow">;
-void ({
-    percent: 100,
-}) satisfies PayloadOf<"view::SetZoomPercent">;
-// Unmapped actions resolve to `unknown`.
-void (null) satisfies PayloadOf<"editor::InsertParagraph">;
-
-describe("typedHandler", () => {
-    it("passes the narrowed payload to the handler", () => {
-        const handler = vi.fn(() => true);
-        const wrapped = typedHandler("view::SetZoomPercent", handler);
-        const invocation: ActionInvocation = {
-            id: "view::SetZoomPercent",
-            payload: { percent: 150 },
-        };
-
-        const result = wrapped(invocation);
-
-        expect(result).toBe(true);
-        expect(handler).toHaveBeenCalledWith({ percent: 150 }, invocation);
+describe("numericPayloadField", () => {
+    it("reads a numeric field from a payload object", () => {
+        expect(numericPayloadField({ rowIndex: 2 }, "rowIndex")).toBe(2);
+        expect(numericPayloadField({ index: 0 }, "index")).toBe(0);
     });
 
-    it("passes null payloads through", () => {
-        const handler = vi.fn(() => false);
-        const wrapped = typedHandler("editor::InsertParagraph", handler);
-        const invocation: ActionInvocation = {
-            id: "editor::InsertParagraph",
-            payload: null,
-        };
-
-        wrapped(invocation);
-
-        expect(handler).toHaveBeenCalledWith(null, invocation);
+    it("returns null for absent, mistyped, or non-object payloads", () => {
+        expect(numericPayloadField({}, "rowIndex")).toBeNull();
+        expect(numericPayloadField({ rowIndex: "2" }, "rowIndex")).toBeNull();
+        expect(numericPayloadField({ rowIndex: null }, "rowIndex")).toBeNull();
+        expect(numericPayloadField(null, "rowIndex")).toBeNull();
+        expect(numericPayloadField("rowIndex", "rowIndex")).toBeNull();
+        expect(numericPayloadField(undefined, "rowIndex")).toBeNull();
     });
 });

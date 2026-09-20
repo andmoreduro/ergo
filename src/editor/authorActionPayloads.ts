@@ -1,4 +1,5 @@
 import type { ActionInvocation } from "../bindings/ActionInvocation";
+import { numericPayloadField } from "../commands/actionPayloads";
 
 /**
  * Read `{ index: number }` from an `editor::RemoveAuthor` payload, or null if
@@ -8,14 +9,4 @@ import type { ActionInvocation } from "../bindings/ActionInvocation";
  */
 export const parseRemoveAuthorPayload = (
     payload: ActionInvocation["payload"],
-): number | null => {
-    if (
-        typeof payload === "object" &&
-        payload !== null &&
-        "index" in payload &&
-        typeof payload.index === "number"
-    ) {
-        return payload.index;
-    }
-    return null;
-};
+): number | null => numericPayloadField(payload, "index");

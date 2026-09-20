@@ -64,6 +64,38 @@ describe("moveTableCellSelection", () => {
         expect(moveTableCellSelection(view, "right")).toBe(true);
         expect(tableCellCoordsFromChildState(view.state)?.col).toBe(1);
 
+        expect(moveTableCellSelection(view, "left")).toBe(true);
+        expect(tableCellCoordsFromChildState(view.state)?.col).toBe(0);
+
+        view.destroy();
+        mount.remove();
+    });
+
+    it("declines to move past the grid rim", () => {
+        const doc = tableToSubDoc(tableSchema, twoCellRowTable);
+        let state = EditorState.create({
+            doc,
+            selection: TextSelection.create(doc, 4),
+        });
+
+        const mount = document.createElement("div");
+        document.body.appendChild(mount);
+        const view = new EditorView(mount, {
+            state,
+            dispatchTransaction(tr) {
+                state = state.apply(tr);
+                view.updateState(state);
+            },
+        });
+
+        expect(moveTableCellSelection(view, "left")).toBe(false);
+        expect(tableCellCoordsFromChildState(view.state)?.col).toBe(0);
+
+        expect(moveTableCellSelection(view, "right")).toBe(true);
+        const beforeRim = view.state.selection.from;
+        expect(moveTableCellSelection(view, "right")).toBe(false);
+        expect(view.state.selection.from).toBe(beforeRim);
+
         view.destroy();
         mount.remove();
     });

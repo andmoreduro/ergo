@@ -40,3 +40,22 @@ export interface ActionPayloadMap {
 /** Resolve the payload type for an action id, or `unknown` if unmapped. */
 export type PayloadOf<Id extends ActionId> =
     Id extends keyof ActionPayloadMap ? ActionPayloadMap[Id] : unknown;
+
+/**
+ * Read a required numeric field from an `unknown` action payload, or null when
+ * the payload is not an object, the field is absent, or not a number. The
+ * named parsers (tableActionPayloads.ts, authorActionPayloads.ts) delegate
+ * here so the runtime guard exists once.
+ */
+export const numericPayloadField = (
+    payload: unknown,
+    key: string,
+): number | null => {
+    if (typeof payload === "object" && payload !== null && key in payload) {
+        const value = (payload as Record<string, unknown>)[key];
+        if (typeof value === "number") {
+            return value;
+        }
+    }
+    return null;
+};

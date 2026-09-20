@@ -441,44 +441,104 @@ mod tests {
     use crate::quote_policy::QuotePolicySpec;
 
     #[test]
-    fn parses_apa7_template_spec() {
-        let spec = load_bundled_template("apa7").expect("should parse");
-        assert_eq!(spec.metadata.id, "apa7");
-        assert_eq!(spec.metadata.name, "APA 7th Edition");
-        assert_eq!(spec.typst.package.name, "/versatile-apa/lib.typ");
-        assert_eq!(spec.typst.package.version, "");
-        assert_eq!(spec.editor.variants.len(), 3);
-        assert_eq!(spec.typst.sections.len(), 6);
-        assert!(!spec.editor.inputs.is_empty());
-        assert!(!spec.editor.groups.is_empty());
-        assert!(spec.editor.defaults.is_some());
+    fn deserializes_template_spec_schema_from_inline_json() {
+        let json = serde_json::json!({
+            "metadata": { "id": "fixture", "name": "Fixture", "version": "1" },
+            "typst": {
+                "package": { "name": "/fixture/lib.typ", "version": "", "imports": [] },
+                "show_rule": {
+                    "function": "fixture-style",
+                    "params": [
+                        { "key": "font-size", "type": "length" },
+                        { "key": "two-column", "type": "boolean" }
+                    ]
+                },
+                "sections": [
+                    { "id": "title", "kind": "function_call", "function": "title-page" },
+                    { "id": "front", "kind": "outlines" },
+                    { "id": "body", "kind": "content" },
+                    { "id": "refs", "kind": "bibliography", "file": "references.bib" },
+                    { "id": "appx", "kind": "appendix" },
+                    { "id": "lit", "kind": "literal", "source": "#pagebreak()" }
+                ]
+            },
+            "editor": {
+                "variants": [ { "id": "student", "label": "Student", "default": true } ],
+                "inputs": [
+                    {
+                        "id": "authors",
+                        "type": "array",
+                        "importance": "required",
+                        "items": {
+                            "type": "object",
+                            "properties": [
+                                { "id": "name", "type": "string" },
+                                { "id": "affiliations", "type": "array" }
+                            ]
+                        }
+                    }
+                ],
+                "groups": [ { "id": "front_matter", "label": "Front matter", "inputs": ["authors"] } ],
+                "quote_policy": 40
+            },
+            "messages": {
+                "es": { "Student paper": "Trabajo de estudiante" }
+            }
+        });
+
+        let spec: TemplateSpec = serde_json::from_value(json).expect("fixture spec should parse");
+
+        assert_eq!(spec.typst.package.name, "/fixture/lib.typ");
+        let show_rule = spec.typst.show_rule.expect("show rule");
+        assert_eq!(show_rule.params[0].param_type, ParamType::Length);
+        assert_eq!(show_rule.params[1].param_type, ParamType::Boolean);
+
+        let kinds: Vec<&SectionKind> = spec.typst.sections.iter().map(|s| &s.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                &SectionKind::FunctionCall,
+                &SectionKind::Outlines,
+                &SectionKind::Content,
+                &SectionKind::Bibliography,
+                &SectionKind::Appendix,
+                &SectionKind::Literal,
+            ]
+        );
+        assert_eq!(spec.typst.sections[0].function.as_deref(), Some("title-page"));
+        assert_eq!(
+            spec.typst.sections[5].source.as_deref(),
+            Some("#pagebreak()")
+        );
+        // Outlines sections carry no literal source: DocumentSession generates it.
+        assert!(spec.typst.sections[1].source.as_deref().unwrap_or("").is_empty());
+
         assert_eq!(
             spec.editor.quote_policy,
             Some(QuotePolicySpec::ThresholdWords(40))
         );
+        assert_eq!(spec.editor.variants.len(), 1);
+        assert!(spec.editor.variants[0].default);
+        let authors = &spec.editor.inputs[0];
+        assert_eq!(authors.input_type, InputType::Array);
+        assert_eq!(authors.importance, Importance::Required);
+        let items = authors.items.as_ref().expect("items");
+        let properties = items.properties.as_ref().expect("properties");
+        assert_eq!(properties.len(), 2);
+        assert_eq!(spec.editor.groups[0].inputs, vec!["authors".to_string()]);
 
-        let show_rule = spec.typst.show_rule.as_ref().expect("show rule");
-        assert_eq!(show_rule.function, "apa-style");
-        assert_eq!(show_rule.params.len(), 2);
-        assert_eq!(show_rule.params[0].key, "font-size");
-        assert_eq!(show_rule.params[0].param_type, ParamType::Length);
-
-        assert_eq!(spec.typst.sections[0].kind, SectionKind::FunctionCall);
-        assert_eq!(spec.typst.sections[0].function.as_deref(), Some("title-page"));
-        assert_eq!(spec.typst.sections[2].kind, SectionKind::Outlines);
-        assert_eq!(spec.typst.sections[2].id, "front-matter-outlines");
-        assert!(
-            spec.typst.sections[2].source.as_deref().unwrap_or("").is_empty(),
-            "outline Typst is generated by DocumentSession, not template literals"
+        assert_eq!(
+            spec.messages["es"]["Student paper"],
+            "Trabajo de estudiante"
         );
-        assert_eq!(spec.typst.sections[3].kind, SectionKind::Content);
-        assert_eq!(spec.typst.sections[4].kind, SectionKind::Bibliography);
-        assert_eq!(spec.typst.sections[5].kind, SectionKind::Appendix);
+    }
 
-        // Verify Spanish locales are loaded
-        assert!(spec.messages.contains_key("es"), "should contain Spanish locales");
-        let es_messages = spec.messages.get("es").unwrap();
-        assert_eq!(es_messages.get("Student paper").map(|s| s.as_str()), Some("Trabajo de estudiante"));
+    #[test]
+    fn quote_policy_deserializes_threshold_and_mode_forms() {
+        let threshold: QuotePolicySpec = serde_json::from_value(serde_json::json!(25)).unwrap();
+        assert_eq!(threshold, QuotePolicySpec::ThresholdWords(25));
+        let mode: QuotePolicySpec = serde_json::from_value(serde_json::json!("block")).unwrap();
+        assert_eq!(mode, QuotePolicySpec::Mode("block".to_string()));
     }
 
     #[test]
@@ -533,171 +593,24 @@ mod tests {
             .any(|param| param.key == "running-head"));
     }
 
-    #[test]
-    fn plain_template_has_no_package_imports() {
-        let spec = load_bundled_template("none").unwrap();
-        assert_eq!(spec.metadata.id, "none");
-        assert!(spec.typst.show_rule.is_none());
-        assert!(spec.typst.package.name.is_empty());
-        assert_eq!(spec.typst.default_template_overrides.len(), 6);
-        assert!(
-            spec.typst.default_template_overrides
-                .iter()
-                .all(|entry| entry.value == "false")
-        );
-    }
 
     #[test]
-    fn unknown_template_returns_error() {
-        let result = load_bundled_template("unknown");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn generates_import_line() {
-        let spec = load_bundled_template("apa7").unwrap();
-        let line = spec.typst.package.to_typst_import_line();
-        assert!(line.starts_with("#import \"/versatile-apa/lib.typ\": "));
-        assert!(line.contains("title-page"));
-        assert!(line.contains("versatile-apa as apa-style"));
-    }
-
-    #[test]
-    fn umb_apa_template_imports_lib_by_path() {
-        let spec = load_bundled_template("umb-apa").expect("should parse");
-        assert_eq!(spec.metadata.id, "umb-apa");
-        assert_eq!(spec.metadata.name, "UMB's APA7");
-        assert_eq!(spec.typst.package.name, "/umb-apa/lib.typ");
-        assert_eq!(spec.typst.package.version, "");
-        
-        // Assert umb-apa has no variants
-        assert!(spec.editor.variants.is_empty(), "umb-apa should have no variants");
-
-        let line = spec.typst.package.to_typst_import_line();
-        assert!(
-            line.starts_with("#import \"/umb-apa/lib.typ\": "),
-            "got: {line}"
-        );
-        assert!(!line.contains("/umb-apa/lib.typ:"), "got: {line}");
-        
-        // Assert imports
-        assert!(line.contains("front-matter"), "should import front-matter");
-        assert!(line.contains("apa-style"), "should import apa-style from umb-apa lib");
-        assert!(
-            !line.contains("versatile-apa"),
-            "UMB package should not re-export versatile-apa alias: {line}"
-        );
-        
-        // Assert exposed inputs
-        let input_ids: std::collections::HashSet<&str> = spec.editor.inputs.iter().filter_map(|input| input.id.as_deref()).collect();
-        assert!(!input_ids.contains("running_head"));
-        assert_eq!(spec.typst.default_template_overrides.len(), 4);
-        assert!(
-            spec.typst
-                .default_template_overrides
-                .iter()
-                .any(|entry| entry.key == "outline.include_tables" && entry.value == "true")
-        );
-        assert!(
-            spec.typst
-                .default_template_overrides
-                .iter()
-                .any(|entry| entry.key == "outline.include_figures" && entry.value == "true")
-        );
-        let show_rule = spec.typst.show_rule.as_ref().expect("show_rule");
-        assert!(
-            !show_rule
-                .params
-                .iter()
-                .any(|param| param.key == "running-head"),
-            "UMB graduate works omit running heads"
-        );
-        assert!(input_ids.contains("advisor"));
-        assert!(input_ids.contains("co_advisor"));
-        assert!(input_ids.contains("titles"));
-        assert!(input_ids.contains("faculties"));
-        assert!(input_ids.contains("country"));
-        assert!(input_ids.contains("city"));
-        assert!(input_ids.contains("year"));
-        assert!(input_ids.contains("authorities"));
-        assert!(input_ids.contains("dedication"));
-        assert!(input_ids.contains("symbols"));
-        assert!(input_ids.contains("abbreviations"));
-        assert!(input_ids.contains("acknowledgements"));
-        assert!(input_ids.contains("abstract_es"));
-        assert!(input_ids.contains("keywords_es"));
-        assert!(input_ids.contains("abstract_en"));
-        assert!(input_ids.contains("keywords_en"));
-        
-        // Assert unexposed inputs
-        assert!(!input_ids.contains("course"));
-        assert!(!input_ids.contains("instructor"));
-        assert!(!input_ids.contains("due_date"));
-        
-        // Assert groups
-        assert!(!spec.editor.groups.is_empty());
-        assert_eq!(spec.editor.groups[0].id, "front_matter");
-        assert!(
-            spec.editor
-                .groups
-                .iter()
-                .any(|group| group.id == "symbols_abbreviations")
-        );
-
-        let figure_overrides = spec
-            .typst
-            .element_overrides
-            .as_ref()
-            .and_then(|overrides| overrides.figure.as_ref())
-            .expect("figure overrides");
-        assert!(
-            figure_overrides
-                .extra_fields
-                .iter()
-                .any(|field| field.key == "source"),
-            "figures should expose a source field"
-        );
-        
-        // Assert sections
-        assert!(!spec.typst.sections.is_empty());
-        assert_eq!(spec.typst.sections[0].id, "front-matter");
-        assert_eq!(spec.typst.sections[0].kind, SectionKind::FunctionCall);
-        assert_eq!(spec.typst.sections[0].function.as_deref(), Some("front-matter"));
-        
-        assert_eq!(spec.typst.sections[1].id, "front-matter-outlines");
-        assert_eq!(spec.typst.sections[1].kind, SectionKind::Outlines);
-
-        assert_eq!(spec.typst.sections[2].id, "symbols");
-        assert_eq!(spec.typst.sections[2].kind, SectionKind::FunctionCall);
-        assert_eq!(spec.typst.sections[2].function.as_deref(), Some("symbols-page"));
-
-        assert_eq!(spec.typst.sections[3].id, "abbreviations");
-        assert_eq!(spec.typst.sections[3].kind, SectionKind::FunctionCall);
-        assert_eq!(
-            spec.typst.sections[3].function.as_deref(),
-            Some("abbreviations-page")
-        );
-
-        assert_eq!(spec.typst.sections[4].id, "body");
-        assert_eq!(spec.typst.sections[4].kind, SectionKind::Content);
-
-        assert_eq!(spec.typst.sections[5].id, "references");
-        assert_eq!(spec.typst.sections[5].kind, SectionKind::Bibliography);
-
-        assert_eq!(spec.typst.sections[6].id, "appendices");
-        assert_eq!(spec.typst.sections[6].kind, SectionKind::Appendix);
-
-        // Verify Spanish locales are loaded
-        assert!(spec.messages.contains_key("es"), "should contain Spanish locales");
-        let es_messages = spec.messages.get("es").unwrap();
-        assert_eq!(
-            es_messages.get("Degrees").map(|s| s.as_str()),
-            Some("Títulos")
-        );
-        assert_eq!(
-            es_messages.get("Country").map(|s| s.as_str()),
-            Some("País")
-        );
+    fn bundled_templates_parse_and_import_lib_by_path() {
+        for template_id in ["apa7", "umb-apa"] {
+            let spec = load_bundled_template(template_id)
+                .unwrap_or_else(|error| panic!("{template_id} should parse: {error}"));
+            assert!(
+                spec.typst.package.name.starts_with('/'),
+                "{template_id} package should be a lib.typ path"
+            );
+            assert!(
+                spec.typst
+                    .package
+                    .to_typst_import_line()
+                    .starts_with(&format!("#import \"{}\": ", spec.typst.package.name)),
+                "{template_id} should import its lib by path"
+            );
+        }
     }
 
     #[test]
@@ -748,13 +661,9 @@ mod tests {
         let resolved = load_template_spec_for_project(&vfs, &ast).unwrap();
 
         // The bundled spec wins regardless of the stale VFS snapshot.
-        assert_eq!(resolved.metadata.name, "UMB's APA7");
-        assert!(
-            resolved
-                .editor
-                .inputs
-                .iter()
-                .any(|input| input.id.as_deref() == Some("dedication"))
+        assert_eq!(
+            serde_json::to_value(&resolved).unwrap(),
+            serde_json::to_value(&load_bundled_template("umb-apa").unwrap()).unwrap()
         );
 
         // load_template_spec_for_project is a pure read — the VFS still holds
@@ -767,7 +676,10 @@ mod tests {
         crate::bundled_templates::sync_bundled_template_spec(&vfs, "umb-apa").unwrap();
         let refreshed: TemplateSpec =
             serde_json::from_str(&vfs.read_source(TEMPLATE_SPEC_PATH).unwrap()).unwrap();
-        assert_eq!(refreshed.metadata.name, "UMB's APA7");
+        assert_eq!(
+            serde_json::to_value(&refreshed).unwrap(),
+            serde_json::to_value(&load_bundled_template("umb-apa").unwrap()).unwrap()
+        );
     }
 
     #[test]

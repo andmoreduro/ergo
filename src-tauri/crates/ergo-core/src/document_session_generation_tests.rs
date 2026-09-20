@@ -113,6 +113,20 @@ fn custom_element_template(field: ParamSpec) -> TemplateSpec {
     }
 }
 
+
+/// Template with a single `body` content param — the common case in this file.
+fn content_template() -> TemplateSpec {
+    custom_element_template(ParamSpec {
+        key: "body".to_string(),
+        param_type: ParamType::Content,
+        source: None,
+        label: None,
+        default: None,
+        required: false,
+        variants: None,
+    })
+}
+
 fn ast_with_custom_field(key: &str, value: serde_json::Value) -> DocumentAST {
     let mut fields = HashMap::new();
     fields.insert(key.to_string(), value);
@@ -146,15 +160,7 @@ fn ast_with_custom_field(key: &str, value: serde_json::Value) -> DocumentAST {
 
 #[test]
 fn native_quote_list_diagram_and_latex_equations_emit_typst() {
-    let template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let template = content_template();
     let mut ast = ast_with_custom_field("body", json!("Paper body"));
     ast.assets = vec![AssetEntry {
         id: "diagram-1".to_string(),
@@ -214,15 +220,7 @@ fn native_quote_list_diagram_and_latex_equations_emit_typst() {
 
 #[test]
 fn nested_list_items_emit_nested_typst() {
-    let template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let template = content_template();
     let mut parent = list_item("one");
     parent.children = vec![list_item("nested")];
     let mut ast = ast_with_custom_field("body", json!("Paper body"));
@@ -256,15 +254,7 @@ fn nested_list_items_emit_nested_typst() {
 
 #[test]
 fn nested_enumeration_emits_depth_indent_and_numbering() {
-    let template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let template = content_template();
     let mut parent = list_item("one");
     parent.children = vec![list_item("nested")];
     let mut ast = ast_with_custom_field("body", json!("Paper body"));
@@ -292,15 +282,7 @@ fn nested_enumeration_emits_depth_indent_and_numbering() {
 
 #[test]
 fn adjacent_list_items_emit_commas_between_brackets() {
-    let template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let template = content_template();
     let mut ast = ast_with_custom_field("body", json!("Paper body"));
     ast.sections = vec![DocumentSection::Content(ContentSection {
         id: "body".to_string(),
@@ -371,15 +353,7 @@ fn none_template_injects_outlines_and_wraps_floats_in_figure() {
 
 #[test]
 fn project_paper_size_is_emitted_before_document_body() {
-    let template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let template = content_template();
     let mut ast = ast_with_custom_field("body", json!("Paper body"));
     ast.metadata.project_settings.paper_size = Some("a4".to_string());
 
@@ -403,15 +377,7 @@ fn project_paper_size_is_emitted_before_document_body() {
 
 #[test]
 fn custom_elements_emit_once() {
-    let template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let template = content_template();
     let ast = ast_with_custom_field("body", json!("Only once"));
 
     let generated =
@@ -443,15 +409,7 @@ fn custom_length_fields_do_not_emit_raw_typst() {
 }
 
 fn template_with_figure_wrapper(wrapper: &str) -> TemplateSpec {
-    let mut template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let mut template = content_template();
     template.typst.element_overrides = Some(ElementOverrides {
         figure: Some(ElementOverrideSpec {
             function: None,
@@ -547,15 +505,7 @@ fn ast_with_table_and_figure() -> DocumentAST {
 
 #[test]
 fn tables_and_figures_default_to_standard_figure_wrapper() {
-    let template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let template = content_template();
     let ast = ast_with_table_and_figure();
     let generated =
         generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
@@ -597,15 +547,14 @@ fn default_here_placement_emits_typst_none() {
 }
 
 #[test]
-fn umb_apa_diagram_here_emits_placement_on_apa_figure() {
+fn diagram_here_emits_placement_on_wrapped_figure() {
     use crate::ast::Diagram;
-    use crate::template_spec::load_bundled_template;
 
-    let template = load_bundled_template("umb-apa").expect("umb-apa template");
+    let template = template_with_apa_wrapper_fields();
     let ast = DocumentAST {
         version: "1.0".to_string(),
         metadata: ProjectMetadata {
-            template_id: "umb-apa".to_string(),
+            template_id: "test-template".to_string(),
             template_variant_id: None,
             title: "Diagram placement".to_string(),
             running_head: None,
@@ -641,25 +590,17 @@ fn umb_apa_diagram_here_emits_placement_on_apa_figure() {
     let diagram_source = &generated.fragments["diagram-1"].source;
     assert!(
         diagram_source.contains("#apa-figure("),
-        "diagram must use apa-figure:\n{diagram_source}"
+        "diagram must use the template figure wrapper:\n{diagram_source}"
     );
     assert!(
         diagram_source.contains("placement: none"),
-        "here must emit placement: none on apa-figure:\n{diagram_source}"
+        "here must emit placement: none on the wrapper:\n{diagram_source}"
     );
 }
 
 #[test]
 fn table_cell_spans_emit_table_cell_delimiters() {
-    let template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let template = content_template();
     let mut ast = ast_with_table_and_figure();
     if let DocumentSection::Content(section) = &mut ast.sections[0] {
         if let DocumentElement::Table(table) = &mut section.elements[0] {
@@ -748,15 +689,7 @@ fn table_cell_multiline_elements_emit_paragraph_break() {
 
 #[test]
 fn table_width_wraps_table_in_sized_block() {
-    let template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let template = content_template();
     let mut ast = ast_with_table_and_figure();
     if let DocumentSection::Content(section) = &mut ast.sections[0] {
         if let DocumentElement::Table(table) = &mut section.elements[0] {
@@ -778,15 +711,7 @@ fn table_width_wraps_table_in_sized_block() {
 
 #[test]
 fn table_width_auto_does_not_wrap() {
-    let template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let template = content_template();
     let mut ast = ast_with_table_and_figure();
     if let DocumentSection::Content(section) = &mut ast.sections[0] {
         if let DocumentElement::Table(table) = &mut section.elements[0] {
@@ -871,15 +796,7 @@ fn figure_image_path_is_relative_to_element_file_location() {
         "main.typ must include the element file; got:\n{main_source}"
     );
 
-    let standard_template = custom_element_template(ParamSpec {
-        key: "body".to_string(),
-        param_type: ParamType::Content,
-        source: None,
-        label: None,
-        default: None,
-        required: false,
-        variants: None,
-    });
+    let standard_template = content_template();
     let mut standard_ast = ast_with_table_and_figure();
     standard_ast.assets.push(AssetEntry {
         id: "asset-2".to_string(),
@@ -1006,7 +923,7 @@ fn apa7_main_typ_includes_front_matter_outlines_and_appendix_rule() {
 }
 
 #[test]
-fn outline_generation_respects_include_flags() {
+fn outline_generation_respects_project_overrides() {
     use crate::ast::TemplateOverride;
     use crate::template_spec::load_bundled_template;
 
@@ -1016,10 +933,18 @@ fn outline_generation_respects_include_flags() {
         is_optional: false,
         elements: vec![],
     })];
-    ast.metadata.project_settings.template_overrides = vec![TemplateOverride {
-        key: "outline.include_figures".to_string(),
-        value: "false".to_string(),
-    }];
+    // One disabled outline flag and one custom title flowing from project
+    // settings into main.typ outline generation.
+    ast.metadata.project_settings.template_overrides = vec![
+        TemplateOverride {
+            key: "outline.include_figures".to_string(),
+            value: "false".to_string(),
+        },
+        TemplateOverride {
+            key: "outline.tables_title".to_string(),
+            value: "Tablas del documento".to_string(),
+        },
+    ];
 
     let template = load_bundled_template("apa7").expect("apa7 template");
     let generated =
@@ -1027,28 +952,6 @@ fn outline_generation_respects_include_flags() {
 
     assert!(generated.main_source.contains("title: [Contents]"));
     assert!(!generated.main_source.contains("kind: image"));
-}
-
-#[test]
-fn apa7_outline_titles_use_project_template_overrides() {
-    use crate::ast::TemplateOverride;
-    use crate::template_spec::load_bundled_template;
-
-    let mut ast = ast_with_table_and_figure();
-    ast.sections = vec![DocumentSection::Content(ContentSection {
-        id: "body".to_string(),
-        is_optional: false,
-        elements: vec![],
-    })];
-    ast.metadata.project_settings.template_overrides = vec![TemplateOverride {
-        key: "outline.tables_title".to_string(),
-        value: "Tablas del documento".to_string(),
-    }];
-
-    let template = load_bundled_template("apa7").expect("apa7 template");
-    let generated =
-        generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
-
     assert!(
         generated
             .main_source
@@ -1061,103 +964,38 @@ fn apa7_outline_titles_use_project_template_overrides() {
 #[test]
 fn umb_apa_source_generation_matches_spec() {
     use crate::template_spec::load_bundled_template;
-    
-    let template = load_bundled_template("umb-apa").expect("umb-apa template");
-    
-    let mut inputs = HashMap::new();
-    inputs.insert("title".to_string(), json!("UMB APA Title"));
-    inputs.insert("authors".to_string(), json!([
-        {
-            "name": "Author 1",
-            "affiliations": ["a"],
-            "titles": ["a"]
-        }
-    ]));
-    inputs.insert("affiliations".to_string(), json!(["Affiliation Name 1"]));
-    inputs.insert("titles".to_string(), json!(["Ingeniero de Sistemas"]));
-    inputs.insert("faculties".to_string(), json!(["Facultad de Ingeniería"]));
-    inputs.insert("advisor".to_string(), json!({
-        "name": "Advisor Name",
-        "title": "Advisor Title"
-    }));
-    inputs.insert("co_advisor".to_string(), json!({
-        "name": "Co-advisor Name",
-        "title": "Co-advisor Title"
-    }));
-    inputs.insert("city".to_string(), json!("Bogotá"));
-    inputs.insert("country".to_string(), json!("Colombia"));
-    inputs.insert("year".to_string(), json!("2026"));
-    inputs.insert("authorities".to_string(), json!([
-        {
-            "name": "Authority 1",
-            "role": "Role 1"
-        },
-        {
-            "name": "Authority 2",
-            "role": "Role 2"
-        }
-    ]));
-    inputs.insert("acknowledgements".to_string(), json!("Agradezco a todos."));
-    inputs.insert("abstract_es".to_string(), json!("Resumen en espanol."));
-    inputs.insert("keywords_es".to_string(), json!(["clave1", "clave2"]));
-    inputs.insert("abstract_en".to_string(), json!("Abstract in English."));
-    inputs.insert("keywords_en".to_string(), json!(["key1", "key2"]));
 
-    let ast = DocumentAST {
-        version: "1.0".to_string(),
-        metadata: ProjectMetadata {
-            template_id: "umb-apa".to_string(),
-            template_variant_id: None,
-            title: "UMB APA Title".to_string(),
-            running_head: None,
-            keywords: vec![],
-            project_settings: ProjectSettings {
-                language: Some("es".to_string()),
-                ..ProjectSettings::default()
-            },
-            local_overrides: GlobalSettings::default(),
-        },
-        dependencies: DependencyManifest { packages: vec![] },
-        references: vec![ReferenceEntry {
-            id: "ref-1".to_string(),
-            citation_key: "ref-1".to_string(),
-            biblatex: "@book{ref-1}".to_string(),
-        }],
-        assets: vec![],
-        inputs,
-        sections: vec![
-            DocumentSection::Content(ContentSection {
-                id: "body".to_string(),
-                is_optional: false,
-                elements: vec![
-                    DocumentElement::Paragraph(Paragraph {
-                        id: "p-1".to_string(),
-                        content: vec![RichText {
-                            text: "Paragraph text".to_string(),
-                            bold: None,
-                            italic: None,
-                            underline: None,
-                            kind: None,
-                            reference_id: None,
-                            equation_source: None,
-                            equation_syntax: EquationSyntax::Typst,
-                            ..Default::default()
-                        }],
-                    })
-                ],
-            })
-        ],
+    let template = load_bundled_template("umb-apa").expect("umb-apa template");
+
+    // Fixture: fresh umb-apa project (full front-matter inputs + one body
+    // paragraph). Test deltas: Spanish document language, a bibliography
+    // entry, and a second authority so array emission is observable.
+    let mut ast = crate::test_fixtures::default_umb_apa_project_ast();
+    ast.metadata.project_settings = ProjectSettings {
+        language: Some("es".to_string()),
+        ..ProjectSettings::default()
     };
+    ast.references = vec![ReferenceEntry {
+        id: "ref-1".to_string(),
+        citation_key: "ref-1".to_string(),
+        biblatex: "@book{ref-1}".to_string(),
+    }];
+    ast.inputs.insert(
+        "authorities".to_string(),
+        json!([
+            { "name": "Authority 1", "role": "Role 1" },
+            { "name": "Authority 2", "role": "Role 2" }
+        ]),
+    );
 
     let generated =
         generate_project_sources_incremental(&ast, &template, &HashMap::new(), &HashMap::new());
 
     let main = &generated.main_source;
 
-    // Generated UMB main.typ contains one front-matter call.
+    // Generated UMB main.typ contains one front-matter call, not title-page
+    // or abstract-page.
     assert!(main.contains("#front-matter("), "main.typ should call front-matter function:\n{main}");
-    
-    // Generated UMB main.typ does not call title-page or abstract-page.
     assert!(!main.contains("title-page"), "main.typ should not call title-page:\n{main}");
     assert!(!main.contains("abstract-page"), "main.typ should not call abstract-page:\n{main}");
 
@@ -1188,11 +1026,9 @@ fn umb_apa_source_generation_matches_spec() {
     assert!(main.contains("name: [Authority 2]"), "should contain authority 2 name:\n{main}");
     assert!(main.contains("role: [Role 2]"), "should contain authority 2 role:\n{main}");
 
-    // abstract_es maps to abstract-es, and abstract_en maps to abstract-en.
+    // snake_case inputs map to kebab-case show-rule params.
     assert!(main.contains("abstract-es: [Resumen en espanol.]"), "should map abstract-es:\n{main}");
     assert!(main.contains("abstract-en: [Abstract in English.]"), "should map abstract-en:\n{main}");
-
-    // keywords_es maps to keywords-es, and keywords_en maps to keywords-en.
     assert!(main.contains("keywords-es: (\"clave1\", \"clave2\")"), "should map keywords-es:\n{main}");
     assert!(main.contains("keywords-en: (\"key1\", \"key2\")"), "should map keywords-en:\n{main}");
 

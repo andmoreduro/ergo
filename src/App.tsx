@@ -77,7 +77,6 @@ import { bibliographyCommands } from "./commands/bibliographyCommands";
 import { findCommands } from "./commands/findCommands";
 import type { FindBarHandle } from "./components/organisms/FindBar/FindBar";
 import type { PreviewHandle } from "./components/layout/Preview/Preview";
-import { exportReferencesBib } from "./bibliography/exportReferencesBib";
 import { saveBibliographyDialog } from "./platform/bibliographyExport";
 import { applyRichTextMarkToFocusedField } from "./editor/richTextMarks";
 import {
@@ -771,7 +770,7 @@ const AppShellContent = () => {
     const exportBibliography = useCallback(async () => {
         try {
             const references = getState().references;
-            const content = exportReferencesBib(references);
+            const content = await TauriApi.generateReferencesBib(references);
             if (!content) {
                 window.alert(m.bibliography_export_empty());
                 return;

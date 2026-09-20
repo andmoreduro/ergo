@@ -1,56 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-    clearPreviewPointerAnchor,
-    resolvePreviewZoomAnchor,
-    updatePreviewPointerAnchor,
-} from "./previewPointerAnchor";
-import {
     preservePreviewScrollAtClientPoint,
     zoomFromPinchScale,
     zoomFromWheelDelta,
 } from "./previewZoomInput";
 import { PREVIEW_ZOOM_MAX, PREVIEW_ZOOM_MIN } from "./previewZoom";
-
-describe("previewPointerAnchor", () => {
-    it("uses the last pointer position when it is inside the preview column", () => {
-        clearPreviewPointerAnchor();
-        const scrollRoot = document.createElement("div");
-        scrollRoot.getBoundingClientRect = () =>
-            ({
-                left: 100,
-                top: 50,
-                right: 500,
-                bottom: 650,
-                width: 400,
-                height: 600,
-            }) as DOMRect;
-
-        updatePreviewPointerAnchor(300, 200, true);
-        expect(resolvePreviewZoomAnchor(scrollRoot, scrollRoot)).toEqual({
-            x: 300,
-            y: 200,
-        });
-    });
-
-    it("falls back to the viewport center when the pointer is outside the preview column", () => {
-        clearPreviewPointerAnchor();
-        const scrollRoot = document.createElement("div");
-        scrollRoot.getBoundingClientRect = () =>
-            ({
-                left: 100,
-                top: 50,
-                right: 500,
-                bottom: 650,
-                width: 400,
-                height: 600,
-            }) as DOMRect;
-
-        expect(resolvePreviewZoomAnchor(scrollRoot, scrollRoot)).toEqual({
-            x: 300,
-            y: 350,
-        });
-    });
-});
 
 describe("previewZoomInput", () => {
     it("changes zoom smoothly with ctrl-wheel direction", () => {

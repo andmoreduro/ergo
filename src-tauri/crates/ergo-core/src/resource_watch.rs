@@ -3,6 +3,8 @@ use crate::document_resources::{
     resource_preview_paper_size, wrap_resource_preview_body, DocumentResources, ResourceEntry,
     ResourceGroup, ResourceKind, ResourcePreview, ResourcePreviewStatus,
 };
+use crate::document_source_builder::escape_typst_markup;
+use crate::typst_source::escape_typst_string;
 use crate::template_spec::TemplateSpec;
 use crate::typst_source::path_id_for_id;
 use crate::typst_source::resource_preview_typst_for_element;
@@ -290,7 +292,7 @@ fn collect_element_seeds(
             collect_element_seeds(&figure.content, seeds, assets, template, references);
         }
         DocumentElement::Custom(custom) => {
-            let body = format!("[{}]", escape_typst(&custom.element_type));
+            let body = format!("[{}]", escape_typst_markup(&custom.element_type));
             seeds.push(ResourceSeed {
                 id: custom.id.clone(),
                 kind: ResourceKind::Custom,
@@ -336,7 +338,7 @@ fn legacy_table_preview_body(table: &crate::ast::Table) -> String {
                 })
                 .collect::<Vec<_>>()
                 .join("\n\n");
-            body.push_str(&escape_typst(&cell_text));
+            body.push_str(&escape_typst_markup(&cell_text));
             body.push(']');
         }
     }
@@ -348,17 +350,6 @@ fn legacy_figure_preview_body(asset_ref: Option<&AssetEntry>) -> String {
     asset_ref
         .map(|a| format!("#image(\"{}\", width: 100%)", escape_typst_string(&a.path)))
         .unwrap_or_else(|| "[Figure]".to_string())
-}
-
-fn escape_typst(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('[', "\\[")
-        .replace(']', "\\]")
-}
-
-fn escape_typst_string(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn reference_token(id: &str) -> String {
