@@ -25,7 +25,7 @@ import {
     useDocumentReconcile,
 } from "../../../state/DocumentContext";
 import {
-    changedTopLevelRange,
+    changedBlockWindow,
     docToElements,
     nodeToElement,
     sectionToDoc,
@@ -33,6 +33,7 @@ import {
 import {
     diffChangedBlocks,
     diffSectionElements,
+    diffSectionWindow,
     rangeSignificantlyEqual,
     sectionSignificantlyEqual,
     type SectionEventDelta,
@@ -353,46 +354,67 @@ const ProseMirrorBodyEditorImpl = ({
                     return;
                 }
                 const current = liveSection();
-                // Fast path: a single-step, same-block-count edit (ordinary
-                // typing) only touched a few top-level blocks, so convert and
-                // diff just those instead of re-deriving the whole section.
-                const scopedRange =
-                    tr.before.childCount === nextState.doc.childCount &&
-                    nextState.doc.childCount === current.elements.length
-                        ? changedTopLevelRange(tr)
-                        : null;
+                const before = tr.before;
+                const after = nextState.doc;
 
                 let delta: SectionEventDelta | null = null;
-                if (scopedRange) {
-                    const [fromIndex, toIndex] = scopedRange;
-                    const nextElements = current.elements.slice();
-                    for (let i = fromIndex; i <= toIndex; i += 1) {
-                        nextElements[i] = nodeToElement(nextState.doc.child(i));
-                    }
-                    if (
-                        !rangeSignificantlyEqual(
-                            current.elements,
-                            nextElements,
-                            fromIndex,
-                            toIndex,
-                        )
-                    ) {
-                        delta =
-                            diffChangedBlocks(
+                if (before.childCount === current.elements.length) {
+                    // Fast path: ProseMirror keeps the identity of top-level
+                    // nodes a transaction did not touch, so the edited window
+                    // is the span between the two docs' common prefix and
+                    // suffix. Only that window is converted and diffed, so
+                    // typing, Enter/Backspace, IME composition and paste cost
+                    // O(edit) instead of re-deriving the whole section.
+                    const { start, prevEnd, nextEnd } = changedBlockWindow(
+                        before,
+                        after,
+                    );
+                    if (start < prevEnd || start < nextEnd) {
+                        const nextElements = current.elements.slice(0, start);
+                        for (let i = start; i < nextEnd; i += 1) {
+                            nextElements.push(nodeToElement(after.child(i)));
+                        }
+                        for (let i = prevEnd; i < current.elements.length; i += 1) {
+                            nextElements.push(current.elements[i]);
+                        }
+                        if (prevEnd - start === nextEnd - start) {
+                            const toIndex = nextEnd - 1;
+                            if (
+                                !rangeSignificantlyEqual(
+                                    current.elements,
+                                    nextElements,
+                                    start,
+                                    toIndex,
+                                )
+                            ) {
+                                delta =
+                                    diffChangedBlocks(
+                                        current.id,
+                                        current.elements,
+                                        nextElements,
+                                        start,
+                                        toIndex,
+                                    ) ??
+                                    diffSectionElements(
+                                        current.id,
+                                        current.elements,
+                                        nextElements,
+                                    );
+                            }
+                        } else {
+                            // A block-count change is always significant.
+                            delta = diffSectionWindow(
                                 current.id,
                                 current.elements,
                                 nextElements,
-                                fromIndex,
-                                toIndex,
-                            ) ??
-                            diffSectionElements(
-                                current.id,
-                                current.elements,
-                                nextElements,
+                                start,
+                                prevEnd,
+                                nextEnd,
                             );
+                        }
                     }
                 } else {
-                    const nextElements = docToElements(nextState.doc);
+                    const nextElements = docToElements(after);
                     if (
                         !sectionSignificantlyEqual(current.elements, nextElements)
                     ) {

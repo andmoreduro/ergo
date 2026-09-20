@@ -5,6 +5,7 @@ import {
     applyElementEvents,
     diffChangedBlocks,
     diffSectionElements,
+    diffSectionWindow,
     rangeSignificantlyEqual,
 } from "./sectionDiff";
 
@@ -249,5 +250,73 @@ describe("rangeSignificantlyEqual", () => {
             },
         ];
         expect(rangeSignificantlyEqual(prev, next, 0, 0)).toBe(false);
+    });
+});
+
+describe("diffSectionWindow", () => {
+    /** Window deltas carry absolute indices, so they must replay on the full lists. */
+    const expectWindowRoundTrip = (
+        prev: DocumentElement[],
+        next: DocumentElement[],
+        start: number,
+        prevEnd: number,
+        nextEnd: number,
+    ) => {
+        const delta = diffSectionWindow(SECTION, prev, next, start, prevEnd, nextEnd);
+        expect(applyElementEvents(prev, delta.forward)).toEqual(next);
+        expect(applyElementEvents(next, delta.inverse)).toEqual(prev);
+        return delta;
+    };
+
+    it("maps an Enter split mid-section to update + insert at the absolute index", () => {
+        const next = [
+            paragraph("a", "A"),
+            paragraph("b", "hello"),
+            paragraph("b2", "world"),
+            paragraph("c", "C"),
+        ];
+        const delta = expectWindowRoundTrip(
+            [paragraph("a", "A"), paragraph("b", "helloworld"), paragraph("c", "C")],
+            next,
+            1,
+            2,
+            3,
+        );
+        expect(delta.forward).toEqual([
+            { type: "updateParagraphContent", element_id: "b", content: next[1].content },
+            { type: "insertElement", section_id: SECTION, index: 2, element: next[2] },
+        ]);
+    });
+
+    it("maps a Backspace merge to remove + survivor update", () => {
+        const delta = expectWindowRoundTrip(
+            [paragraph("a", "A"), paragraph("b", "hel"), paragraph("c", "lo"), paragraph("d", "D")],
+            [paragraph("a", "A"), paragraph("b", "hello"), paragraph("d", "D")],
+            1,
+            3,
+            2,
+        );
+        expect(delta.forward.map((e) => e.type)).toEqual([
+            "removeElement",
+            "updateParagraphContent",
+        ]);
+        expect(delta.inverse[1]).toMatchObject({ type: "restoreElement", index: 2 });
+    });
+
+    it("handles a pure multi-block insert at the end of the section", () => {
+        const delta = expectWindowRoundTrip(
+            [paragraph("a", "A")],
+            [paragraph("a", "A"), paragraph("b", "B"), paragraph("c", "C")],
+            1,
+            1,
+            3,
+        );
+        expect(delta.forward.map((e) => e.type === "insertElement" && e.index)).toEqual([1, 2]);
+    });
+
+    it("emits nothing when the window content is unchanged", () => {
+        const prev = [paragraph("a", "A"), paragraph("b", "B")];
+        const delta = diffSectionWindow(SECTION, prev, [...prev], 1, 2, 2);
+        expect(delta.forward).toEqual([]);
     });
 });

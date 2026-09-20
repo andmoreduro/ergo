@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Node as PMNode } from "prosemirror-model";
 import { EditorState } from "prosemirror-state";
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentElement } from "../../bindings/DocumentElement";
@@ -7,7 +8,7 @@ import { createListItem, createQuote, createRichText, createTable } from "../../
 import { bodySchema } from "./schema";
 import { tableSchema } from "./table/tableSchema";
 import {
-    changedTopLevelRange,
+    changedBlockWindow,
     docToElements,
     elementToNode,
     fieldCaretOffsetFromNode,
@@ -324,7 +325,7 @@ describe("ContentSection ↔ PM document round-trip", () => {
     });
 });
 
-describe("changedTopLevelRange", () => {
+describe("changedBlockWindow", () => {
     const para = (id: string, text: string): DocumentElement => ({
         type: "Paragraph",
         id,
@@ -341,33 +342,63 @@ describe("changedTopLevelRange", () => {
         return EditorState.create({ doc });
     };
 
-    const contentStartOf = (state: EditorState, index: number): number => {
+    const blockStartOf = (doc: PMNode, index: number): number => {
         let pos = 0;
         for (let i = 0; i < index; i += 1) {
-            pos += state.doc.child(i).nodeSize;
+            pos += doc.child(i).nodeSize;
         }
-        return pos + 1; // inside the block's content
+        return pos;
     };
+    const contentStartOf = (state: EditorState, index: number): number =>
+        blockStartOf(state.doc, index) + 1; // inside the block's content
 
-    it("reports the touched top-level block for in-place edits", () => {
-        const cases: Array<[number, readonly [number, number]]> = [
-            [1, [1, 1]],
-            [0, [0, 0]],
-        ];
-
-        for (const [index, expected] of cases) {
-            const state = threeParagraphState();
-            const tr = state.tr.insertText("x", contentStartOf(state, index) + 1);
-            expect(changedTopLevelRange(tr)).toEqual(expected);
-        }
+    it("isolates the edited block for an in-place edit", () => {
+        const state = threeParagraphState();
+        const tr = state.tr.insertText("x", contentStartOf(state, 1) + 1);
+        expect(changedBlockWindow(tr.before, tr.doc)).toEqual({
+            start: 1,
+            prevEnd: 2,
+            nextEnd: 2,
+        });
     });
 
-    it("returns null for multi-step transactions (caller re-derives all)", () => {
+    it("spans every touched block of a multi-step transaction", () => {
         const state = threeParagraphState();
         const tr = state.tr
             .insertText("x", contentStartOf(state, 2) + 1)
             .insertText("y", contentStartOf(state, 0) + 1);
         expect(tr.steps.length).toBeGreaterThan(1);
-        expect(changedTopLevelRange(tr)).toBeNull();
+        expect(changedBlockWindow(tr.before, tr.doc)).toEqual({
+            start: 0,
+            prevEnd: 3,
+            nextEnd: 3,
+        });
+    });
+
+    it("reports the block-count change of a split and of a join", () => {
+        const state = threeParagraphState();
+        const split = state.tr.split(contentStartOf(state, 1) + 1);
+        expect(changedBlockWindow(split.before, split.doc)).toEqual({
+            start: 1,
+            prevEnd: 2,
+            nextEnd: 3,
+        });
+
+        const splitState = state.apply(split);
+        const join = splitState.tr.join(blockStartOf(splitState.doc, 2));
+        expect(changedBlockWindow(join.before, join.doc)).toEqual({
+            start: 1,
+            prevEnd: 3,
+            nextEnd: 2,
+        });
+    });
+
+    it("yields an empty window for an unchanged document", () => {
+        const { doc } = threeParagraphState();
+        expect(changedBlockWindow(doc, doc)).toEqual({
+            start: 3,
+            prevEnd: 3,
+            nextEnd: 3,
+        });
     });
 });
