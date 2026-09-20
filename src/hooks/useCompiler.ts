@@ -8,13 +8,13 @@ import {
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import type { ProjectFile } from "../bindings/ProjectFile";
-import type { SourceMapEntry } from "../bindings/SourceMapEntry";
 import type { QueuedDocumentEvent } from "../state/DocumentContext";
 import type { DocumentOutline } from "../bindings/DocumentOutline";
 import type { DocumentResources } from "../bindings/DocumentResources";
 import type { PreviewPageFile } from "../bindings/PreviewPageFile";
 import { useDocumentCompilerSync } from "./useDocumentCompilerSync";
 import { notifyPreviewTelemetry } from "./previewDiagnostics";
+import { isDebugMenuEnabled } from "../config/debug";
 import {
     elapsedMs,
     nowMs,
@@ -28,9 +28,7 @@ export type ResourcePreviewRevisions = Record<string, SourceRevision>;
 
 export interface UseCompilerResult {
     previewPages: PreviewPageFile[];
-    isCompiling: boolean;
     error: string | null;
-    sourceMap: SourceMapEntry[];
     previewRevision: SourceRevision | null;
     outline: DocumentOutline | null;
     resources: DocumentResources | null;
@@ -53,9 +51,7 @@ export function useCompiler(
     bootstrapFiles: ProjectFile[] | null = null,
 ): UseCompilerResult {
     const [previewPages, setPreviewPages] = useState<PreviewPageFile[]>([]);
-    const [isCompiling, setIsCompiling] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [sourceMap, setSourceMap] = useState<SourceMapEntry[]>([]);
     const [previewRevision, setPreviewRevision] = useState<SourceRevision | null>(null);
     const [outline, setOutline] = useState<DocumentOutline | null>(null);
     const [resources, setResources] = useState<DocumentResources | null>(null);
@@ -189,7 +185,12 @@ export function useCompiler(
                 domWriteMs: paintInfo?.domWriteMs ?? 0,
                 rasterMs: elapsedMs(domWrittenAt, paintedAt),
             };
-            setPreviewTelemetry(telemetry);
+            // The telemetry state only feeds the debug overlay. Outside debug
+            // mode, skip the setState: it would otherwise change the memoized
+            // compiler object (and re-render the workspace) once per paint.
+            if (isDebugMenuEnabled()) {
+                setPreviewTelemetry(telemetry);
+            }
             notifyPreviewTelemetry(telemetry);
             if (rendered) {
                 renderedTelemetryRevisionRef.current = revision;
@@ -211,9 +212,7 @@ export function useCompiler(
         bootstrapFiles,
         preview: {
             setPreviewPages,
-            setIsCompiling,
             setError,
-            setSourceMap,
             setPreviewRevision,
             setOutline,
             setResources,
@@ -232,9 +231,7 @@ export function useCompiler(
     return useMemo(
         () => ({
             previewPages,
-            isCompiling,
             error,
-            sourceMap,
             previewRevision,
             outline,
             resources,
@@ -246,9 +243,7 @@ export function useCompiler(
         }),
         [
             previewPages,
-            isCompiling,
             error,
-            sourceMap,
             previewRevision,
             outline,
             resources,

@@ -1,10 +1,14 @@
-import { memo, useMemo } from "react";
+import { memo } from "react";
+import type { DocumentAST } from "../../../bindings/DocumentAST";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
 import type { ResourceEntry } from "../../../bindings/ResourceEntry";
 import type { ResourceKind } from "../../../bindings/ResourceKind";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
-import { useDocument } from "../../../state/DocumentContext";
+import {
+    useDocumentActions,
+    useDocumentAstStore,
+} from "../../../state/DocumentContext";
 import { ResourcesPanelContext } from "../../../actions/contexts/ResourcesPanelContext";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { defaultFieldIdForElement } from "../../../editor/fieldIds";
@@ -15,10 +19,22 @@ import { m } from "../../../paraglide/messages.js";
 import styles from "./Sidebar.module.css";
 
 const findElementById = (
-    elements: DocumentElement[],
+    ast: DocumentAST,
     elementId: string,
-): DocumentElement | null =>
-    elements.find((element) => element.id === elementId) ?? null;
+): DocumentElement | null => {
+    for (const section of ast.sections) {
+        if (section.type !== "Content") {
+            continue;
+        }
+        const match = section.elements.find(
+            (element) => element.id === elementId,
+        );
+        if (match) {
+            return match;
+        }
+    }
+    return null;
+};
 
 const resourceGroupLabel = (kind: ResourceKind): string => {
     switch (kind) {
@@ -48,16 +64,11 @@ export const SidebarResourcesPanel = memo(({
     mainPreviewPaintedRevision: number | null;
     previewRasterizationDebounceMs?: number;
 }) => {
-    const { state, dispatch } = useDocument();
+    // Elements are only needed at click time: read them from the live store
+    // instead of subscribing, so body typing never re-renders this panel.
+    const { dispatch } = useDocumentActions();
+    const astStore = useDocumentAstStore();
     const dispatchAction = useActionDispatcher();
-
-    const elements = useMemo(
-        () =>
-            state.sections.flatMap((section) =>
-                section.type === "Content" ? section.elements : [],
-            ),
-        [state.sections],
-    );
 
     const focusResourceElement = (element: DocumentElement) => {
         void dispatchAction({
@@ -74,7 +85,10 @@ export const SidebarResourcesPanel = memo(({
 
     const openResource = (entry: ResourceEntry) => {
         if (entry.source_element_id) {
-            const element = findElementById(elements, entry.source_element_id);
+            const element = findElementById(
+                astStore.getSnapshot(),
+                entry.source_element_id,
+            );
             if (element) {
                 focusResourceElement(element);
             }
@@ -85,7 +99,10 @@ export const SidebarResourcesPanel = memo(({
         if (!entry.source_element_id) {
             return;
         }
-        const element = findElementById(elements, entry.source_element_id);
+        const element = findElementById(
+            astStore.getSnapshot(),
+            entry.source_element_id,
+        );
         if (!element || element.type !== "Figure") {
             return;
         }

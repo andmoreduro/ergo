@@ -5,7 +5,7 @@ import { effectiveTableExtraFields } from "../../../editor/templateElementOverri
 import type { ExtraFieldSpec } from "../../../bindings/ExtraFieldSpec";
 import { wrapperFieldDraftValues } from "../../../editor/wrapperFields";
 import { useBlockUiState } from "../blockUiState";
-import { useDocumentAst } from "../../../state/DocumentContext";
+import { useDocumentAstSelector } from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { ElementExtrasAccordion } from "../../../components/organisms/ElementEditor/ElementExtrasAccordion";
 import { ElementAnnotationFields } from "../../../components/organisms/ElementEditor/fields/ElementAnnotationFields";
@@ -60,12 +60,9 @@ export const TableBlockSettingsCoordinator = ({
     elementId: string;
     settingsMount: HTMLElement;
 }) => {
-    const { state } = useDocumentAst();
     const settings = useElementSettingsShortcut(elementId);
-    const element = resolveTableElement(
-        elementFromNode,
-        elementId,
-        state.sections,
+    const element = useDocumentAstSelector((ast) =>
+        resolveTableElement(elementFromNode, elementId, ast.sections),
     );
 
     if (!element) {
@@ -95,14 +92,11 @@ export const TableBlockChromeCoordinator = ({
     chromeMount: HTMLElement;
     shellRef: RefObject<HTMLDivElement | null>;
 }) => {
-    const { state } = useDocumentAst();
     const { selected, editing } = useBlockUiState(elementId);
     const annotationFields = useTableAnnotationFields();
     const wrapperDraftRef = useRef<Record<string, string>>({});
-    const element = resolveTableElement(
-        elementFromNode,
-        elementId,
-        state.sections,
+    const element = useDocumentAstSelector((ast) =>
+        resolveTableElement(elementFromNode, elementId, ast.sections),
     );
 
     if ((!selected && !editing) || annotationFields.length === 0 || !element) {

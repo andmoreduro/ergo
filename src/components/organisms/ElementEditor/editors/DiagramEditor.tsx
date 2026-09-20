@@ -3,7 +3,7 @@ import { Image24Regular } from "@fluentui/react-icons";
 import { diagramSourceFieldId } from "../../../../editor/fieldIds";
 import { useDiagramMermaidAsset } from "../../../../editor/diagram/useDiagramMermaidAsset";
 import { useElementEnterInsertsParagraph } from "../../../../editor/useInsertParagraphAfterElement";
-import { useDocumentAst } from "../../../../state/DocumentContext";
+import { useDocumentAstSelector } from "../../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../../state/TemplateSpecContext";
 import { effectiveFigureAnnotationFields } from "../../../../editor/templateElementOverrides";
 import { wrapperFieldDraftValues } from "../../../../editor/wrapperFields";
@@ -21,7 +21,6 @@ import styles from "../ElementEditor.module.css";
 const FIGURE_SETTINGS_KEYS = new Set(["width"]);
 
 export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
-    const { state } = useDocumentAst();
     const { spec: templateSpec } = useTemplateSpecContext();
     const figureOverride = templateSpec?.typst.element_overrides?.figure ?? null;
     const extraFields = effectiveFigureAnnotationFields(figureOverride);
@@ -41,9 +40,13 @@ export const DiagramEditor = ({ element }: { element: DiagramElement }) => {
     );
     const settings = useElementSettingsShortcut(element.id);
 
-    const linkedAsset = element.asset_id
-        ? state.assets.find((asset) => asset.id === element.asset_id) ?? null
-        : null;
+    // Select just this element's asset (identity-stable while other parts of
+    // the AST change) instead of subscribing to the whole document.
+    const linkedAsset = useDocumentAstSelector((ast) =>
+        element.asset_id
+            ? ast.assets.find((asset) => asset.id === element.asset_id) ?? null
+            : null,
+    );
 
     const { previewUrl } = useDiagramMermaidAsset(
         element.id,

@@ -30,8 +30,8 @@ import {
 } from "../../../editor/find/documentFind";
 import {
     useDocumentActions,
-    useDocumentAstSelector,
-    useDocumentFocusSelector,
+    useDocumentAstStore,
+    useDocumentFocusStore,
 } from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import styles from "./FindBar.module.css";
@@ -50,8 +50,11 @@ export interface FindBarProps {
 
 export const FindBar = memo(
     forwardRef<FindBarHandle, FindBarProps>(({ open, onOpenChange }, ref) => {
-    const ast = useDocumentAstSelector((state) => state);
-    const focus = useDocumentFocusSelector((state) => state);
+    // Find/replace only needs the AST and focus at the moment a command runs:
+    // read them from the live stores instead of subscribing, so the find bar
+    // never re-renders on body typing (it used to select the whole AST).
+    const astStore = useDocumentAstStore();
+    const focusStore = useDocumentFocusStore();
     const { setDocumentFocus } = useDocumentActions();
     const { spec: templateSpec, variantId: templateVariantId } =
         useTemplateSpecContext();
@@ -80,13 +83,14 @@ export const FindBar = memo(
                     offset: direction > 0 ? last.end : last.start,
                 };
             }
+            const focus = focusStore.getSnapshot();
             return {
                 elementId: focus.elementId,
                 fieldId: focus.fieldId,
                 offset: focus.caretUtf16Offset ?? 0,
             };
         },
-        [focus.caretUtf16Offset, focus.elementId, focus.fieldId],
+        [focusStore],
     );
 
     const close = useCallback(() => {
@@ -106,7 +110,7 @@ export const FindBar = memo(
                 return;
             }
             const match = findInDocument(
-                ast,
+                astStore.getSnapshot(),
                 templateSpec,
                 templateVariantId,
                 query,
@@ -125,7 +129,7 @@ export const FindBar = memo(
             setStatus(match ? m.find_match_found() : m.find_no_matches());
         },
         [
-            ast,
+            astStore,
             findAnchor,
             query,
             setDocumentFocus,
@@ -186,7 +190,7 @@ export const FindBar = memo(
 
     const replaceCurrent = () => {
         const replaced = replaceInDocumentField(
-            ast,
+            astStore.getSnapshot(),
             templateSpec,
             templateVariantId,
             query,

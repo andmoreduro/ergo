@@ -1,10 +1,19 @@
-import { memo, useMemo, type CSSProperties, type RefObject } from "react";
+import {
+    memo,
+    useCallback,
+    useMemo,
+    useRef,
+    type CSSProperties,
+    type RefObject,
+} from "react";
+import type { DocumentAST } from "../../../bindings/DocumentAST";
 import type { DocumentOutline } from "../../../bindings/DocumentOutline";
-import { useDocument } from "../../../state/DocumentContext";
+import { useDocumentAstSelector } from "../../../state/DocumentContext";
 import { useActionDispatcher } from "../../../actions/runtime";
 import {
     buildTargetedOutlineEntries,
     collectHeadingTargets,
+    headingTargetsEqual,
     type TargetedOutlineEntry,
 } from "../../../editor/outlineMatching";
 import {
@@ -31,20 +40,27 @@ const isAbstractEntry = (text: string): boolean => {
     );
 };
 
-export function useSidebarOutline(
-    outline: DocumentOutline | null,
-    previewRevision: number | null,
-    previewScrollRef: RefObject<HTMLElement | null>,
-) {
-    const { state } = useDocument();
-    const dispatchAction = useActionDispatcher();
+const selectHeadingTargets = (ast: DocumentAST) =>
+    collectHeadingTargets(ast.sections);
 
-    const headingTargets = useMemo(
-        () => collectHeadingTargets(state.sections),
-        [state.sections],
+/**
+ * Compiled outline entries matched back to their AST heading elements.
+ *
+ * Subscribes only to the heading set (identity-compared), so body typing that
+ * doesn't touch a heading neither recomputes the mapping nor changes the
+ * returned array's identity — which keeps memoized consumers (Editor, the
+ * sidebar outline list) from re-rendering per keystroke. Compute it once in
+ * the workspace and pass the result down.
+ */
+export function useOutlineEntries(
+    outline: DocumentOutline | null,
+): TargetedOutlineEntry[] {
+    const headingTargets = useDocumentAstSelector(
+        selectHeadingTargets,
+        headingTargetsEqual,
     );
 
-    const outlineEntries = useMemo(
+    return useMemo(
         () =>
             buildTargetedOutlineEntries({
                 outline,
@@ -57,46 +73,47 @@ export function useSidebarOutline(
             }),
         [headingTargets, outline],
     );
-
-    const handleOutlineClick = (entry: TargetedOutlineEntry) => {
-        const scrollRoot = previewScrollRef.current;
-        if (scrollRoot) {
-            scrollPreviewToPage(scrollRoot, entry.page);
-        }
-
-        if (!entry.target) {
-            return;
-        }
-
-        void dispatchAction({
-            id: "editor::FocusField",
-            payload: {
-                elementId: entry.target.elementId,
-                fieldId: entry.target.fieldId,
-                caretUtf16Offset: 0,
-                anchorPageNumber: entry.page,
-                forcePreviewScroll: true,
-                sourceRevision: previewRevision,
-            },
-        });
-    };
-
-    return { outlineEntries, handleOutlineClick };
 }
 
 export const SidebarOutlinePanel = memo(({
-    outline,
+    outlineEntries,
     previewRevision,
     previewScrollRef,
 }: {
-    outline: DocumentOutline | null;
+    outlineEntries: TargetedOutlineEntry[];
     previewRevision: number | null;
     previewScrollRef: RefObject<HTMLElement | null>;
 }) => {
-    const { outlineEntries, handleOutlineClick } = useSidebarOutline(
-        outline,
-        previewRevision,
-        previewScrollRef,
+    const dispatchAction = useActionDispatcher();
+    // Read through refs so the click handler stays identity-stable across
+    // compiles; otherwise every compile would re-render the whole outline list.
+    const previewRevisionRef = useRef(previewRevision);
+    previewRevisionRef.current = previewRevision;
+
+    const handleOutlineClick = useCallback(
+        (entry: TargetedOutlineEntry) => {
+            const scrollRoot = previewScrollRef.current;
+            if (scrollRoot) {
+                scrollPreviewToPage(scrollRoot, entry.page);
+            }
+
+            if (!entry.target) {
+                return;
+            }
+
+            void dispatchAction({
+                id: "editor::FocusField",
+                payload: {
+                    elementId: entry.target.elementId,
+                    fieldId: entry.target.fieldId,
+                    caretUtf16Offset: 0,
+                    anchorPageNumber: entry.page,
+                    forcePreviewScroll: true,
+                    sourceRevision: previewRevisionRef.current,
+                },
+            });
+        },
+        [dispatchAction, previewScrollRef],
     );
 
     return (

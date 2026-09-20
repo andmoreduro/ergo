@@ -1,5 +1,5 @@
 import { useTemplateSpecContext } from "../../../../state/TemplateSpecContext";
-import { useDocumentAst } from "../../../../state/DocumentContext";
+import { useDocumentActions } from "../../../../state/DocumentContext";
 import type { CustomElementUnion } from "../types";
 import { CustomElementFieldInput } from "../fields/CustomElementFieldInput";
 import { useTemplateTranslation } from "../../../../hooks/useTemplateTranslation";
@@ -10,7 +10,7 @@ export const CustomElementEditor = ({
 }: {
     element: CustomElementUnion;
 }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const { spec: templateSpec } = useTemplateSpecContext();
     const t = useTemplateTranslation(templateSpec);
     const customElements = templateSpec?.editor?.custom_elements || [];

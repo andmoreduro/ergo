@@ -3,7 +3,7 @@ import { listItemFieldId } from "../../../../editor/fieldIds";
 import { normalizeRichTextContent } from "../../../../editor/textInput";
 import { useDeferredRichTextCommit } from "../../../../editor/useDeferredRichTextCommit";
 import { useEditorNavigation } from "../../../../editor/EditorNavigationContext";
-import { useDocumentAst } from "../../../../state/DocumentContext";
+import { useDocumentActions } from "../../../../state/DocumentContext";
 import { createRichText } from "../../../../state/ast/defaults";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
@@ -23,7 +23,7 @@ const ListItemEditor = ({
     itemIndex: number;
     content: RichText[];
 }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const { handleAdvanceKeyDown } = useEditorNavigation();
     const fieldId = listItemFieldId(element.id, itemIndex);
     const {
@@ -81,7 +81,7 @@ const ListItemEditor = ({
 };
 
 const ListLikeEditor = ({ element }: { element: ListLikeElement }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const addItem = () => {
         if (element.type === "List") {
             dispatch({

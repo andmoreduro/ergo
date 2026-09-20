@@ -3,7 +3,7 @@ import type { ExtraFieldSpec } from "../../../../bindings/ExtraFieldSpec";
 import { inputRichTextPlain } from "../../../../editor/richTextMarks";
 import { wrapperFieldValue, type WrapperHostElement } from "../../../../editor/wrapperFields";
 import { useDeferredTextCommit } from "../../../../editor/useDeferredTextCommit";
-import { useDocumentAst } from "../../../../state/DocumentContext";
+import { useDocumentActions } from "../../../../state/DocumentContext";
 import { ExtraFieldInput } from "./ExtraFieldInput";
 
 export const AnnotationFieldInput = ({
@@ -15,7 +15,7 @@ export const AnnotationFieldInput = ({
     field: ExtraFieldSpec;
     draftRef?: MutableRefObject<Record<string, string>>;
 }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const committed = wrapperFieldValue(element, field.key);
     const committedText =
         typeof committed === "string" ? committed : String(committed ?? "");

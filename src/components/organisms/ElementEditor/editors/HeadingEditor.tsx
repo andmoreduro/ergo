@@ -3,7 +3,7 @@ import { useDeferredRichTextCommit } from "../../../../editor/useDeferredRichTex
 import { useElementEnterInsertsParagraph } from "../../../../editor/useInsertParagraphAfterElement";
 import { normalizeRichTextContent } from "../../../../editor/textInput";
 import { useEditorNavigation } from "../../../../editor/EditorNavigationContext";
-import { useDocumentAst } from "../../../../state/DocumentContext";
+import { useDocumentActions } from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
 import { RichTextField } from "../../../molecules/RichTextField/RichTextField";
@@ -13,7 +13,7 @@ import type { HeadingElement } from "../types";
 import styles from "../ElementEditor.module.css";
 
 export const HeadingEditor = ({ element }: { element: HeadingElement }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const handleEnterKey = useElementEnterInsertsParagraph(element.id);
     const { handleAdvanceKeyDown } = useEditorNavigation();
     const fieldId = richTextFieldId(element.id);

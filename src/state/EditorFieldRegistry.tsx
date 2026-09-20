@@ -219,13 +219,7 @@ export const useEditorFieldBinding = <T extends EditorFieldElement>({
     const registry = useContext(EditorFieldRegistryContext);
     const { setDocumentFocus } = useDocumentActions();
     const programmaticFocus = useDocumentFocusSelector(
-        (focus) => ({
-            requestId: focus.requestId,
-            fieldId: focus.fieldId,
-            focusSource: focus.focusSource,
-            caretUtf16Offset: focus.caretUtf16Offset,
-            selectionEndUtf16Offset: focus.selectionEndUtf16Offset,
-        }),
+        selectProgrammaticFocus,
         programmaticFocusEqual,
     );
     const nodeRef = useRef<T | null>(null);
@@ -482,6 +476,33 @@ interface ProgrammaticFocusSlice {
     caretUtf16Offset: number | null;
     selectionEndUtf16Offset: number | null;
 }
+
+/**
+ * Native focus pushes (every keystroke/caret move in any field, including the
+ * ProseMirror body) are never applied programmatically, so they collapse to one
+ * shared sentinel. Without this, every bound field re-rendered on every body
+ * keystroke because `requestId` and `caretUtf16Offset` change each time.
+ */
+const NATIVE_FOCUS_SLICE: ProgrammaticFocusSlice = {
+    requestId: -1,
+    fieldId: null,
+    focusSource: "native",
+    caretUtf16Offset: null,
+    selectionEndUtf16Offset: null,
+};
+
+const selectProgrammaticFocus = (
+    focus: DocumentFocusState,
+): ProgrammaticFocusSlice =>
+    focus.focusSource === "native"
+        ? NATIVE_FOCUS_SLICE
+        : {
+              requestId: focus.requestId,
+              fieldId: focus.fieldId,
+              focusSource: focus.focusSource,
+              caretUtf16Offset: focus.caretUtf16Offset,
+              selectionEndUtf16Offset: focus.selectionEndUtf16Offset,
+          };
 
 const programmaticFocusEqual = (
     a: ProgrammaticFocusSlice,

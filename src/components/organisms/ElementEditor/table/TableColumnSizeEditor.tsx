@@ -1,5 +1,5 @@
 import { tableColumnSizeFieldId } from "../../../../editor/fieldIds";
-import { useDocumentAst } from "../../../../state/DocumentContext";
+import { useDocumentActions } from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
 import { TextInput } from "../../../atoms/TextInput/TextInput";
@@ -14,7 +14,7 @@ export const TableColumnSizeEditor = ({
     element: TableElement;
     size: string;
 }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const columnField = useEditorFieldBinding<HTMLInputElement>({
         elementId: element.id,
         fieldId: tableColumnSizeFieldId(element.id, colIndex),

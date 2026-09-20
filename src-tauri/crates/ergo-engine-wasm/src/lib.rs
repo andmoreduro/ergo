@@ -18,13 +18,16 @@ fn wasm_log(level: &str, message: &str) {
 }
 use ergo_core::document_session_types::{DocumentEvent, DocumentSessionStatus};
 
-/// Serialize a sync status for the main thread, dropping `field_source_map`.
+/// Serialize a sync status for the main thread, dropping both source maps.
 ///
-/// The field map is consumed inside the worker for backward preview sync
-/// (`jump_from_click`); the main thread reads `source_revision`, `source_map`, and
-/// `dirty_resource_ids` only.
+/// Both maps are consumed inside the worker for preview sync (`jump_from_click`,
+/// `positions_for_focus`); the main thread reads `source_revision` and
+/// `dirty_resource_ids` only. Shipping the per-element source map on every
+/// keystroke was an O(elements) structured clone plus deserialize on the main
+/// thread for data nothing there consumed.
 fn status_to_js(mut status: DocumentSessionStatus) -> Result<JsValue, JsValue> {
     status.field_source_map = Vec::new();
+    status.source_map = Vec::new();
     serde_wasm_bindgen::to_value(&status).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 

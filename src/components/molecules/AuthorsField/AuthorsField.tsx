@@ -6,7 +6,7 @@ import { InputEntryRemoveButton } from "../InputEntryControls/InputEntryRemoveBu
 import { FieldLabel } from "../../atoms/FieldLabel/FieldLabel";
 import { TextInput } from "../../atoms/TextInput/TextInput";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
-import { useDocumentAst } from "../../../state/DocumentContext";
+import { useDocumentActions } from "../../../state/DocumentContext";
 import {
     projectInputElementId,
     projectInputFieldId,
@@ -59,7 +59,7 @@ const AuthorReferenceCheckbox = ({
     checked: boolean;
     selectedReferences: string[];
 }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const path = `/authors/${authorIndex}/${field}`;
     const selectedIndex = selectedReferences.indexOf(referenceValue);
     const fieldPath =
@@ -175,7 +175,7 @@ const AuthorRow = ({
     showTitles: boolean;
     onInsertBelow: () => void;
 }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const { handleAdvanceKeyDown } = useEditorNavigation();
     const committedName = author.name ?? "";
     const { draft, setDraft, shouldCommit } = useDeferredTextCommit(committedName);
@@ -284,7 +284,7 @@ export const AuthorsField = ({
     titlesLabel,
     referenceStyle = "numeric",
 }: AuthorsFieldProps) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const { focusField } = useEditorNavigation();
     const showTitles = titles.length > 0 || referenceStyle === "lowercase-alpha";
 

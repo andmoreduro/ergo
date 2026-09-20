@@ -1,19 +1,21 @@
 import { useCallback } from "react";
-import { useDocument, useDocumentAst } from "../state/DocumentContext";
+import { useDocumentActions, useDocumentAstStore } from "../state/DocumentContext";
 import { insertParagraphAfterElement } from "./insertParagraphAfterElement";
 
 export const useInsertParagraphAfterElement = (afterElementId: string) => {
-    const { state, dispatch } = useDocumentAst();
-    const { setDocumentFocus } = useDocument();
+    // Read the AST imperatively at call time so element editors don't subscribe
+    // to (and re-render on) every AST commit just to hold a fresh snapshot.
+    const { dispatch, setDocumentFocus } = useDocumentActions();
+    const astStore = useDocumentAstStore();
 
     return useCallback(() => {
         insertParagraphAfterElement(
-            state,
+            astStore.getSnapshot(),
             dispatch,
             setDocumentFocus,
             afterElementId,
         );
-    }, [afterElementId, dispatch, setDocumentFocus, state]);
+    }, [afterElementId, astStore, dispatch, setDocumentFocus]);
 };
 
 export const useElementEnterInsertsParagraph = (afterElementId: string) => {

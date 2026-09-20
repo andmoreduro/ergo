@@ -7,7 +7,10 @@ import { normalizeRichTextContent } from "../../../../editor/textInput";
 import { useDeferredRichTextCommit } from "../../../../editor/useDeferredRichTextCommit";
 import { useElementEnterInsertsParagraph } from "../../../../editor/useInsertParagraphAfterElement";
 import { useEditorNavigation } from "../../../../editor/EditorNavigationContext";
-import { useDocumentAst } from "../../../../state/DocumentContext";
+import {
+    useDocumentActions,
+    useDocumentAstSelector,
+} from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
 import { QuoteAttributionField } from "../../../molecules/QuoteAttributionField/QuoteAttributionField";
@@ -18,7 +21,8 @@ import type { QuoteElement } from "../types";
 import styles from "../ElementEditor.module.css";
 
 export const QuoteEditor = ({ element }: { element: QuoteElement }) => {
-    const { state, dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
+    const references = useDocumentAstSelector((ast) => ast.references);
     const handleEnterKey = useElementEnterInsertsParagraph(element.id);
     const { handleAdvanceKeyDown } = useEditorNavigation();
     const fieldId = quoteContentFieldId(element.id);
@@ -40,7 +44,7 @@ export const QuoteEditor = ({ element }: { element: QuoteElement }) => {
                 onOpenChange={settings.setOpen}
             >
                 <QuoteAttributionField
-                    references={state.references}
+                    references={references}
                     value={attribution}
                     onChange={(next) => {
                         dispatch({
