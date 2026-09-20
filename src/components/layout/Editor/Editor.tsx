@@ -399,7 +399,7 @@ const EditorComponent = ({
                 void dispatchAction({ id: "editor::Italic", payload: null }),
             onUnderline: () =>
                 void dispatchAction({ id: "editor::Underline", payload: null }),
-            onInsertHeading: (level) =>
+            onInsertHeading: (level: number) =>
                 void dispatchAction({
                     id: "editor::InsertHeading",
                     payload: { level },

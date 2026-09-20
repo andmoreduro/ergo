@@ -8,7 +8,10 @@ import {
 } from "react";
 import type { RichText } from "../../../bindings/RichText";
 import { FieldLabel, type FieldImportance } from "../../atoms/FieldLabel/FieldLabel";
-import { InlineTextInput } from "../../atoms/InlineTextInput/InlineTextInput";
+import {
+    InlineTextInput,
+    type InlineTextInputElement,
+} from "../../atoms/InlineTextInput/InlineTextInput";
 import { RichTextField } from "../RichTextField/RichTextField";
 import { useEditorFieldBinding } from "../../../state/EditorFieldRegistry";
 import {
@@ -27,7 +30,7 @@ import { placeCaretAtEnd } from "../../../richText/richText";
 import styles from "./SimpleListField.module.css";
 
 const focusBootstrappedEntry = (
-    node: HTMLInputElement | HTMLDivElement | null,
+    node: InlineTextInputElement | HTMLDivElement | null,
 ) => {
     if (!node) {
         return;
@@ -35,7 +38,10 @@ const focusBootstrappedEntry = (
 
     node.focus();
 
-    if (node instanceof HTMLInputElement) {
+    if (
+        node instanceof HTMLInputElement ||
+        node instanceof HTMLTextAreaElement
+    ) {
         const length = node.value.length;
         node.setSelectionRange(length, length);
         return;
@@ -79,13 +85,13 @@ const InlineStringEntry = ({
     path: string;
     index: number;
     value: string;
-    entryRef: RefCallback<HTMLInputElement>;
+    entryRef: RefCallback<InlineTextInputElement>;
     onChange: (next: string) => void;
     onRemove: () => void;
     onEnter: () => void;
 }) => {
     const fieldId = projectInputFieldId(`${path}/${index}`);
-    const fieldBinding = useEditorFieldBinding<HTMLInputElement>({
+    const fieldBinding = useEditorFieldBinding<InlineTextInputElement>({
         elementId: projectInputElementId,
         fieldId,
     });
@@ -215,15 +221,15 @@ const SimpleListStringField = ({
     items: string[];
     onChange: (items: string[]) => void;
 }) => {
-    const composeInputRef = useRef<HTMLInputElement | null>(null);
-    const entryRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const composeInputRef = useRef<InlineTextInputElement | null>(null);
+    const entryRefs = useRef<(InlineTextInputElement | null)[]>([]);
     const pendingFocusIndexRef = useRef<number | null>(null);
     const pendingFocusComposerRef = useRef(false);
     const composerBootstrappingRef = useRef(false);
     const { handleAdvanceKeyDown } = useEditorNavigation();
 
     const composerFieldId = simpleListComposerFieldId(path);
-    const composeBinding = useEditorFieldBinding<HTMLInputElement>({
+    const composeBinding = useEditorFieldBinding<InlineTextInputElement>({
         elementId: projectInputElementId,
         fieldId: composerFieldId,
     });

@@ -7,7 +7,6 @@ import type { ListItem } from "../../bindings/ListItem";
 import { createListItem, createRichText } from "../../state/ast/defaults";
 import {
     quoteAttributionFromNodeAttrs,
-    quoteAttributionFromRichText,
     quoteElementFromQuoteNode,
     quoteNodeAttributionAttrs,
     richTextQuoteAttributionFields,

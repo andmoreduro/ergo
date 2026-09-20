@@ -94,7 +94,7 @@ const selectionPosInListItem = (
 /** Tab: nest the current item under the previous sibling (not allowed for item 0). */
 export const indentListItem: Command = (state, dispatch) => {
     const { $from, empty } = state.selection;
-    if (!empty && !state.selection.isTextSelection) {
+    if (!empty) {
         return false;
     }
 
@@ -151,7 +151,7 @@ export const indentListItem: Command = (state, dispatch) => {
 /** Shift+Tab: move a nested item up one list level. */
 export const liftListItem: Command = (state, dispatch) => {
     const { $from, empty } = state.selection;
-    if (!empty && !state.selection.isTextSelection) {
+    if (!empty) {
         return false;
     }
 

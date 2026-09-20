@@ -6,6 +6,7 @@ import {
     type HTMLAttributes,
     type KeyboardEvent,
     type ReactNode,
+    type RefObject,
 } from "react";
 import { Button } from "../../atoms/Button/Button";
 import { useFocusTrap } from "../../../hooks/useFocusTrap";
@@ -81,7 +82,9 @@ export const Dialog = memo((props: DialogProps) => {
 
     const cancelRef = useRef(cancelAction);
     const confirmRef = useRef(confirmAction);
-    const panelRef = useRef<HTMLElement | HTMLFormElement>(null);
+    // Holds the <section> or the <form> panel; narrowed with `instanceof` where
+    // form-only APIs are needed.
+    const panelRef = useRef<HTMLElement>(null);
     cancelRef.current = cancelAction;
     confirmRef.current = confirmAction;
 
@@ -91,7 +94,8 @@ export const Dialog = memo((props: DialogProps) => {
         onBackdropClick ?? cancelAction?.onClick ?? confirmAction?.onClick;
 
     useEffect(() => {
-        const onKeyDown = (event: KeyboardEvent) => {
+        // Native listener on `document`, so this is the DOM event, not React's.
+        const onKeyDown = (event: globalThis.KeyboardEvent) => {
             if (event.key === "Escape") {
                 const cancel = cancelRef.current;
                 const confirm = confirmRef.current;
@@ -201,7 +205,10 @@ export const Dialog = memo((props: DialogProps) => {
         const confirm = confirmRef.current;
         const cancel = cancelRef.current;
         if (as === "form" && confirm?.type === "submit") {
-            panelRef.current?.requestSubmit();
+            const panel = panelRef.current;
+            if (panel instanceof HTMLFormElement) {
+                panel.requestSubmit();
+            }
             return;
         }
         const handler = confirm?.onClick ?? cancel?.onClick;
@@ -211,7 +218,7 @@ export const Dialog = memo((props: DialogProps) => {
     const panel =
         as === "form" ? (
             <form
-                ref={panelRef}
+                ref={panelRef as RefObject<HTMLFormElement>}
                 aria-labelledby={titleId}
                 aria-modal="true"
                 className={panelClassName}

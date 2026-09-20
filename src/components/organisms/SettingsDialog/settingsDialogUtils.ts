@@ -41,6 +41,7 @@ export const upsertKeymapOverride = (
             action_id: binding.commandId,
             context: binding.context,
             sequence,
+            payload: binding.payload ?? null,
         },
     ]);
 };

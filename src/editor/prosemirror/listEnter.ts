@@ -146,7 +146,7 @@ const handleEmptyListItem = (
     mode: EmptyListItemMode,
 ): boolean => {
     const { $from, empty } = state.selection;
-    if (!empty && !state.selection.isTextSelection) {
+    if (!empty) {
         return false;
     }
 
@@ -202,7 +202,7 @@ export const deleteEmptyListItem: Command = (state, dispatch) =>
 /** Enter inside a list item: split or exit/remove an empty item. */
 export const splitListItem: Command = (state, dispatch) => {
     const { $from, empty } = state.selection;
-    if (!empty && !state.selection.isTextSelection) {
+    if (!empty) {
         return false;
     }
 
@@ -215,7 +215,7 @@ export const splitListItem: Command = (state, dispatch) => {
         return false;
     }
 
-    const { itemDepth, itemPos, item, list } = ctx;
+    const { itemPos, item } = ctx;
     const paragraph = listItemParagraph(item);
     if (!paragraph) {
         return false;

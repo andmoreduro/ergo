@@ -108,7 +108,10 @@ export function shouldUsePhysicalShortcutKey(
 }
 
 export function resolveShortcutKey(
-    event: Pick<KeyboardEvent, "key" | "code" | "ctrlKey" | "altKey" | "getModifierState">,
+    event: Pick<
+        KeyboardEvent,
+        "key" | "code" | "ctrlKey" | "altKey" | "shiftKey" | "getModifierState"
+    >,
 ): string {
     if (shouldUsePhysicalShortcutKey(event)) {
         const fromCode = keyFromKeyboardCode(event.code);

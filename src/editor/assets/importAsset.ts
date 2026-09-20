@@ -13,7 +13,6 @@ export const importAssetBytes = async (
     bytes: Uint8Array,
 ): Promise<ImportedAsset> => {
     const result = await TauriApi.importResourceBytes(fileName, bytes);
-    const normalized = new Uint8Array(result.bytes);
-    await CompilerClient.writeFile(result.asset.path, normalized);
-    return { asset: result.asset, bytes: normalized };
+    await CompilerClient.writeFile(result.asset.path, result.bytes);
+    return result;
 };
