@@ -138,11 +138,7 @@ export function loadDocumentFontsLazy(ast: DocumentAST): Promise<void> {
             const worker = await getWorker();
             const fonts = await TauriApi.loadFontsForDocument(ast);
             if (fonts.length > 0) {
-                const fontBuffers = fonts.map((buffer) => Array.from(buffer));
-                await callWorkerOn(
-                    worker,
-                    { type: "load_fonts", payload: fontBuffers },
-                );
+                await callWorkerOn(worker, { type: "load_fonts", payload: fonts });
             }
             loadedFontsKey = key;
         } catch (error) {

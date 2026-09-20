@@ -10,7 +10,7 @@ import type { CompilationResult } from "../bindings/CompilationResult";
 import type { DocumentOutline } from "../bindings/DocumentOutline";
 import type { DocumentResources } from "../bindings/DocumentResources";
 import type { PreviewPageFile } from "../bindings/PreviewPageFile";
-import type { ProjectFile } from "../bindings/ProjectFile";
+import type { BundledFile } from "../api/fileBundle";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import { TauriApi } from "../api/tauri";
 import {
@@ -18,7 +18,6 @@ import {
     documentEventsForCompile,
 } from "./documentAstForCompile";
 import { CompilerClient, loadDocumentFontsLazy } from "../workers/compilerClient";
-import { projectFilesToVfsEntries } from "../workers/compilerProtocol";
 import type { QueuedDocumentEvent } from "../state/DocumentContext";
 import {
     registerBackendMirrorFlush,
@@ -66,7 +65,7 @@ export interface UseDocumentCompilerSyncParams {
     sessionId: number;
     ackDocumentEvents?: (upToEventId: number) => void;
     eventsVersion: number;
-    bootstrapFiles: ProjectFile[] | null;
+    bootstrapFiles: BundledFile[] | null;
     preview: CompilerPreviewSetters;
 }
 
@@ -102,7 +101,7 @@ export function useDocumentCompilerSync({
     const desiredAstRef = useRef<DocumentAST | null>(null);
     const desiredEventsRef = useRef<QueuedDocumentEvent[]>([]);
     const desiredSessionIdRef = useRef(sessionId);
-    const desiredBootstrapFilesRef = useRef<ProjectFile[] | null>(null);
+    const desiredBootstrapFilesRef = useRef<BundledFile[] | null>(null);
     const bootstrappedSessionIdRef = useRef<number | null>(null);
     const syncedEventIdRef = useRef(0);
     const syncRunningRef = useRef(false);
@@ -204,11 +203,7 @@ export function useDocumentCompilerSync({
                 if (bootstrappedSessionIdRef.current !== currentSessionId) {
                     loadedDependencyPackagesRef.current = new Set();
                     resetBootstrapPhases();
-                    const vfsFiles = [
-                        ...projectFilesToVfsEntries(
-                            desiredBootstrapFilesRef.current ?? [],
-                        ),
-                    ];
+                    const vfsFiles = [...(desiredBootstrapFilesRef.current ?? [])];
 
                     try {
                         const templateId = currentAst.metadata.template_id;
@@ -239,10 +234,7 @@ export function useDocumentCompilerSync({
                             "dependencyPackageLoadMs",
                             elapsedMs(pkgStart, nowMs()),
                         );
-                        vfsFiles.push(
-                            ...projectFilesToVfsEntries(templatePackageFiles),
-                        );
-                        vfsFiles.push(...projectFilesToVfsEntries(mitexFiles));
+                        vfsFiles.push(...templatePackageFiles, ...mitexFiles);
                         loadedDependencyPackagesRef.current.add(
                             `${MITEX_PACKAGE.name}:${MITEX_PACKAGE.version}`,
                         );

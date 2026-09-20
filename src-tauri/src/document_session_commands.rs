@@ -1,6 +1,11 @@
+use std::sync::Arc;
+
+use tauri::ipc::{Request, Response};
 use tauri::State;
 
 use ergo_core::core_errors::ErgoError;
+
+use crate::ipc::{blocking, header_text, raw_body};
 
 use crate::app_state::TauriAppState;
 use crate::ast::{AssetEntry, DocumentAST};
@@ -8,12 +13,15 @@ use crate::document_session::{DocumentEvent, DocumentSessionStatus};
 use crate::generated_assets::is_generated_diagram_asset_path;
 use crate::path_utils::normalize_virtual_path;
 
+/// Mirrors a full AST snapshot into the backend session (O(document) source
+/// regeneration), off the main thread.
 #[tauri::command]
-pub fn sync_document_snapshot(
+pub async fn sync_document_snapshot(
     state: State<'_, TauriAppState>,
     ast: DocumentAST,
 ) -> Result<DocumentSessionStatus, ErgoError> {
-    Ok(state.document_session.sync_snapshot(ast)?)
+    let session = Arc::clone(&state.document_session);
+    blocking(move || Ok(session.sync_snapshot(ast)?)).await
 }
 
 #[tauri::command]
@@ -44,25 +52,24 @@ pub fn reset_project_session(state: State<'_, TauriAppState>) {
     state.document_session.reset_session();
 }
 
-#[derive(serde::Serialize, ts_rs::TS)]
-#[ts(export)]
-#[serde(rename_all = "camelCase")]
-pub struct ImportResourceResult {
-    pub asset: AssetEntry,
-    pub bytes: Vec<u8>,
-}
-
+/// Raw response: the file's bytes.
 #[tauri::command]
-pub fn read_vfs_file(state: State<'_, TauriAppState>, path: String) -> Result<Vec<u8>, ErgoError> {
-    state.vfs.read_file(&path)
-}
-
-#[tauri::command]
-pub fn write_generated_asset(
+pub async fn read_vfs_file(
     state: State<'_, TauriAppState>,
     path: String,
-    bytes: Vec<u8>,
+) -> Result<Response, ErgoError> {
+    let vfs = Arc::clone(&state.vfs);
+    blocking(move || Ok(Response::new(vfs.read_file(&path)?))).await
+}
+
+/// Raw request: body = asset bytes, `x-ergo-path` header = VFS path.
+#[tauri::command]
+pub async fn write_generated_asset(
+    state: State<'_, TauriAppState>,
+    request: Request<'_>,
 ) -> Result<(), ErgoError> {
+    let path = header_text(&request, "x-ergo-path")?;
+    let bytes = raw_body(&request)?;
     let path = normalize_virtual_path(&path);
     if !is_generated_diagram_asset_path(&path) {
         return Err(ErgoError::Operation {
@@ -74,28 +81,27 @@ pub fn write_generated_asset(
     Ok(())
 }
 
+/// Copies a file from disk into the VFS under `assets/`; read the stored bytes
+/// back with `read_vfs_file` when the worker needs them.
 #[tauri::command]
-pub fn import_resource_file(
+pub async fn import_resource_file(
     state: State<'_, TauriAppState>,
     source_path: String,
-) -> Result<ImportResourceResult, ErgoError> {
-    let asset = import_resource_file_into_vfs(&state.vfs, source_path)?;
-    let bytes = state.vfs.read_file(&asset.path)?;
-    Ok(ImportResourceResult { asset, bytes })
+) -> Result<AssetEntry, ErgoError> {
+    let vfs = Arc::clone(&state.vfs);
+    blocking(move || import_resource_file_into_vfs(&vfs, source_path)).await
 }
 
+/// Raw request: body = asset bytes, `x-ergo-file-name` header = original file name.
 #[tauri::command]
-pub fn import_resource_bytes(
+pub async fn import_resource_bytes(
     state: State<'_, TauriAppState>,
-    file_name: String,
-    bytes: Vec<u8>,
-) -> Result<ImportResourceResult, ErgoError> {
-    let asset = import_resource_bytes_into_vfs(&state.vfs, &file_name, bytes)?;
-    let stored = state.vfs.read_file(&asset.path)?;
-    Ok(ImportResourceResult {
-        asset,
-        bytes: stored,
-    })
+    request: Request<'_>,
+) -> Result<AssetEntry, ErgoError> {
+    let file_name = header_text(&request, "x-ergo-file-name")?;
+    let bytes = raw_body(&request)?;
+    let vfs = Arc::clone(&state.vfs);
+    blocking(move || import_resource_bytes_into_vfs(&vfs, &file_name, bytes)).await
 }
 
 

@@ -22,6 +22,7 @@ sequenceDiagram
     Preview-->>User: drawImage onto page canvas
 ```
 
+- Heavy Tauri commands (archive open/save, package and font loading, snapshot mirroring, byte writes) run off the main thread, so the window keeps painting and taking input while they work; the UI shows a loading veil while a project opens or is created, and a "preparing preview" indicator in the preview pane until the session's first page paints. Byte payloads cross IPC as raw bodies (single files or file bundles), never as JSON arrays.
 - Bootstrap (open/new project): `CompilerClient.bootstrap` clears the WASM VFS and `DocumentSession`, resets compiled preview state, resets WASM fonts, awaits lazy load of non-bundled project font families (all faces per family), then compiles once. `sync_document_snapshot` on the backend completes before the document sync barrier drains. The UI clears preview pages on `sessionId` change and ignores compile results from a prior session. Edits compile without reloading fonts.
 - Queued document events are acknowledged after WASM sync and compile succeed; events already folded into a bootstrap snapshot are acknowledged with the bootstrap and never replayed. The Tauri backend VFS is mirrored on bootstrap (`sync_document_snapshot`) and again before save via the document sync barrier, not on every keystroke. The barrier mirrors whenever the committed AST object differs from the one last mirrored (independent of worker success) and resolves with the mirrored AST; save marks exactly that AST as saved, so edits committed during an in-flight archive write keep the document dirty.
 - The WASM preview session materializes only the files Typst compiles (`main.typ`, `lib.typ`, per-element `elements/*.typ`, `references.bib`). The `.ergproj/*.json` sidecars are written only by the backend session, which owns archive I/O. Both source maps are worker-internal (they serve backward and forward preview sync inside the worker); the main thread consumes only `source_revision` and `dirty_resource_ids` from a sync.
@@ -92,7 +93,9 @@ sequenceDiagram
     participant API as Tauri API
     participant Worker as WASM Worker
     UI->>API: open_project
-    API-->>UI: DocumentAST + bootstrap files
+    API-->>UI: DocumentAST
+    UI->>API: read_worker_bootstrap_files
+    API-->>UI: file bundle (raw bytes)
     UI->>Worker: bootstrap
     UI->>API: sync_document_snapshot
 ```

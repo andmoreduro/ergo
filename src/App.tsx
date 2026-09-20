@@ -119,9 +119,11 @@ import {
     useGlobalSettings,
     useKeymap,
     useSettingsActions,
+    useSettingsReady,
     useThemeMode,
     useUiLocale,
 } from "./settings/SettingsProvider";
+import { LoadingIndicator } from "./components/molecules/LoadingIndicator/LoadingIndicator";
 import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
 import { usePerfReplay } from "./hooks/usePerfReplay";
 import {
@@ -159,6 +161,7 @@ const AppShellContent = () => {
     const { setThemeMode, rememberProject, forgetProject } = useSettingsActions();
     const {
         hasActiveProject,
+        projectLoading,
         currentProjectPath,
         newProjectInitialName,
         newProjectInitialLocation,
@@ -951,6 +954,17 @@ const AppShellContent = () => {
                         />
                     </ActionContextProvider>
                 )}
+                {projectLoading && (
+                    <div className={styles.loadingOverlay}>
+                        <LoadingIndicator
+                            label={
+                                projectLoading === "create"
+                                    ? m.project_creating()
+                                    : m.project_opening()
+                            }
+                        />
+                    </div>
+                )}
                 {isCommandPaletteOpen && (
                     <ActionContextProvider
                         id="command-palette"
@@ -1018,13 +1032,27 @@ const AppShellContent = () => {
     );
 };
 
-const AppShell = () => (
-    <ActionRuntimeProvider>
-        <ErrorBoundary>
-            <AppShellContent />
-        </ErrorBoundary>
-    </ActionRuntimeProvider>
-);
+const AppShell = () => {
+    // Render the shell only once settings are known, so the welcome screen and
+    // theme never appear half-configured and then jump.
+    const ready = useSettingsReady();
+    if (!ready) {
+        return (
+            <div className={styles.app}>
+                <div className={styles.bootScreen}>
+                    <LoadingIndicator label={m.app_loading()} />
+                </div>
+            </div>
+        );
+    }
+    return (
+        <ActionRuntimeProvider>
+            <ErrorBoundary>
+                <AppShellContent />
+            </ErrorBoundary>
+        </ActionRuntimeProvider>
+    );
+};
 
 /** Document state sits under settings so the undo depth follows `history_limit`. */
 const ConfiguredDocumentProvider = ({ children }: { children: ReactNode }) => {

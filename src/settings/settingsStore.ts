@@ -225,6 +225,7 @@ export const useSettingsStore = () => {
 
     return {
         locale,
+        settingsLoaded,
         globalSettings,
         keymapSettings,
         themeMode,

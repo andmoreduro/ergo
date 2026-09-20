@@ -24,7 +24,6 @@ fn export_typescript_bindings() {
     ergo_lib::core_errors::ErgoError::export_all(&config).unwrap();
     ergo_lib::document_outline::DocumentOutline::export_all(&config).unwrap();
     ergo_lib::document_resources::DocumentResources::export_all(&config).unwrap();
-    ergo_lib::document_session_commands::ImportResourceResult::export_all(&config).unwrap();
     ergo_lib::document_session_types::DocumentEvent::export_all(&config).unwrap();
     ergo_lib::document_session_types::DocumentSessionStatus::export_all(&config).unwrap();
     ergo_lib::font_availability::FontAvailability::export_all(&config).unwrap();
