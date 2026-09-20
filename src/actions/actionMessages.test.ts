@@ -1,14 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { formatActionCatalogLabel } from "./actionMessages";
 
+vi.mock("../paraglide/messages.js", () => ({
+    m: {
+        action_test_description: () => "Sentinel description",
+    },
+}));
+
 describe("formatActionCatalogLabel", () => {
-    it("formats namespace and localized description", () => {
+    it("joins the action namespace with the localized description", () => {
         expect(
-            formatActionCatalogLabel(
-                "workspace::OpenProject",
-                "action_workspace_open_project_description",
-            ),
-        ).toBe("workspace: Open an existing .ergproj archive.");
+            formatActionCatalogLabel("workspace::Test", "action_test_description"),
+        ).toBe("workspace: Sentinel description");
     });
 
     it("falls back to humanized command name when description is missing", () => {

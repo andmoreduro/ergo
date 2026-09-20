@@ -41,10 +41,11 @@ export const normalizeKeymapSettings = (
     const activeProfile = settings.profiles.find(
         (profile) => profile.id === settings.active_profile_id,
     );
-    const activeProfileId =
-        activeProfile?.id ??
-        settings.profiles[0]?.id ??
-        DEFAULT_KEYMAP_PROFILE_ID;
+    // A stale active id resets to the default profile — never to profiles[0] —
+    // matching ergo-core normalize_keymap_settings (Rust owns this rule).
+    const activeProfileId = activeProfile
+        ? activeProfile.id
+        : DEFAULT_KEYMAP_PROFILE_ID;
 
     return syncLegacyKeymapFields({
         ...settings,

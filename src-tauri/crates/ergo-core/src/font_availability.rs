@@ -173,7 +173,8 @@ mod tests {
     fn missing_family_uses_bundled_fallback() {
         assert_eq!(
             effective_font_family(Some("Definitely Not A Real Font 9000"), FontRole::Text),
-            bundled_fallback_for_role(FontRole::Text)
+            // Independent constant, not the same helper call under test.
+            "Libertinus Serif"
         );
     }
 
@@ -209,7 +210,8 @@ mod tests {
         assert!(!availability.text_font.available);
         assert_eq!(
             availability.text_font.fallback,
-            bundled_fallback_for_role(FontRole::Text),
+            // Independent constant, not the same helper call under test.
+            "Libertinus Serif",
         );
     }
 }

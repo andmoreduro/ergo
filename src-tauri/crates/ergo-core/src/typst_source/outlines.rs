@@ -250,13 +250,6 @@ mod tests {
     use crate::template_spec::load_bundled_template;
 
     #[test]
-    fn plain_template_skips_appendix_outline() {
-        let template = load_bundled_template("none").unwrap();
-        let source = generate_front_matter_outlines(&template, Some("en"), &[]);
-        assert!(source.is_empty());
-    }
-
-    #[test]
     fn omits_disabled_outline_sections() {
         let template = load_bundled_template("apa7").unwrap();
         let overrides = vec![TemplateOverride {

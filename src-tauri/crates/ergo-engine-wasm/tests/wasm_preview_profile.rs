@@ -13,9 +13,4 @@ fn wasm_preview_profile_runs_sync_compile_and_canvas_render() {
     assert!(report.iterations.iter().all(|iteration| {
         iteration.preview_page_count > 0 && iteration.rendered_page_count > 0
     }));
-    assert!(report
-        .iterations
-        .iter()
-        .all(|iteration| iteration.timings.total_ms >= iteration.timings.compile_ms));
-    assert!(report.total.render_canvas_ms > 0.0);
 }

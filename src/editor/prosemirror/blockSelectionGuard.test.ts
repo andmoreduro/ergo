@@ -33,6 +33,15 @@ const stateWith = (doc: PMNode) =>
         plugins: [blockEditModePlugin(), blockSelectionGuardPlugin()],
     });
 
+const editingTableState = (doc: PMNode) =>
+    stateWith(doc).apply(
+        setBlockEditing(
+            stateWith(doc).tr.setSelection(NodeSelection.create(doc, 0)),
+            "tbl1",
+            true,
+        ),
+    );
+
 describe("blockSelectionGuard", () => {
     it("leaves the selection alone when no block is editing", () => {
         const { doc, blockSize } = buildTableDoc();
@@ -44,16 +53,44 @@ describe("blockSelectionGuard", () => {
         expect(state.selection.from).toBe(outside);
     });
 
-    it("keeps a node selection on an editing table atom", () => {
+    it("keeps a selection that is inside the editing block", () => {
         const { doc } = buildTableDoc();
-        let state = stateWith(doc);
-        state = state.apply(
-            setBlockEditing(
-                state.tr.setSelection(NodeSelection.create(state.doc, 0)),
-                "tbl1",
-                true,
+        const state = editingTableState(doc);
+        expect(state.selection).toBeInstanceOf(NodeSelection);
+    });
+
+    it("clamps an escaped selection back onto the editing atom", () => {
+        const { doc, blockSize } = buildTableDoc();
+        const state = editingTableState(doc);
+
+        // Simulate Ctrl+End / caret drift: a transaction moving the selection
+        // into the paragraph after the editing table.
+        const escaped = state.apply(
+            state.tr.setSelection(
+                TextSelection.create(state.doc, blockSize + 1),
             ),
         );
-        expect(state.selection).toBeInstanceOf(NodeSelection);
+
+        expect(escaped.selection).toBeInstanceOf(NodeSelection);
+        expect(escaped.selection.from).toBe(0);
+    });
+
+    it("does not clamp when edit mode is turned off in the same transaction", () => {
+        const { doc, blockSize } = buildTableDoc();
+        const state = editingTableState(doc);
+
+        // Sanctioned exit: leaving fine-grained mode while moving the caret.
+        const exited = state.apply(
+            setBlockEditing(
+                state.tr.setSelection(
+                    TextSelection.create(state.doc, blockSize + 1),
+                ),
+                "tbl1",
+                false,
+            ),
+        );
+
+        expect(exited.selection).toBeInstanceOf(TextSelection);
+        expect(exited.selection.from).toBe(blockSize + 1);
     });
 });

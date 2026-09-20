@@ -71,6 +71,15 @@ pub fn patch_source(
     Ok(())
 }
 
+/// Canonical BibLaTeX export content (same normalization as the compiled
+/// in-VFS `references.bib`), so exported files parse wherever compiles do.
+#[tauri::command]
+pub fn generate_references_bib(
+    references: Vec<ergo_core::ast::ReferenceEntry>,
+) -> Result<String, ErgoError> {
+    Ok(ergo_core::generate_references_bib(&references))
+}
+
 #[tauri::command]
 pub fn write_bytes_to_path(path: String, bytes: Vec<u8>) -> Result<(), ErgoError> {
     if let Some(parent) = std::path::Path::new(&path).parent() {

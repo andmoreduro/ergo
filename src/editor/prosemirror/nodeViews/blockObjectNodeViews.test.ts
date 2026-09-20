@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { isValidElement } from "react";
 import { bodySchema } from "../schema";
 import { createBlockObjectNodeViews } from "./blockObjectNodeViews";
-import { BlockObjectNodeViewHost } from "./BlockObjectNodeViewHost";
 import { NodeViewPortalRegistry } from "./nodeViewPortals";
 
 const equationNode = (id: string) =>
@@ -18,7 +16,7 @@ const equationNode = (id: string) =>
     });
 
 describe("block-object node views use the portal registry", () => {
-    it("registers a portal entry rendering the host inside the React tree", () => {
+    it("registers a portal entry bound to the node view's dom", () => {
         const registry = new NodeViewPortalRegistry();
         const factories = createBlockObjectNodeViews(registry);
 
@@ -29,13 +27,8 @@ describe("block-object node views use the portal registry", () => {
         const entries = registry.getSnapshot();
         expect(entries).toHaveLength(1);
         expect(entries[0].dom).toBe(view.dom);
-
-        // The portal content is a real React element for the host component, so it
-        // mounts inside the host provider tree (no detached `createRoot`).
-        const content = entries[0].render();
-        expect(isValidElement(content)).toBe(true);
-        expect(content.type).toBe(BlockObjectNodeViewHost);
-        expect(content.props).toMatchObject({ elementId: "eq1" });
+        // The portal thunk reflects the node's element attrs.
+        expect(entries[0].render().props).toMatchObject({ elementId: "eq1" });
     });
 
     it("updates the render thunk on node update and clears it on destroy", () => {

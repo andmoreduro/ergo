@@ -6,6 +6,7 @@ import { bodyPlugins } from "./prosemirror/plugins";
 import { createParagraph } from "../state/ast/defaults";
 import { sectionToDoc } from "./prosemirror/astBridge";
 import { resolveBodyInsertAnchor } from "./bodyInsertAnchor";
+import { isActiveTableCellEditing } from "./prosemirror/table/tableCellInsertPolicy";
 
 vi.mock("./prosemirror/table/tableCellInsertPolicy", () => ({
     isActiveTableCellEditing: vi.fn(() => false),
@@ -46,5 +47,18 @@ describe("resolveBodyInsertAnchor", () => {
         view.destroy();
         mount.remove();
         toolbar.remove();
+    });
+
+    it("returns null without a body view", () => {
+        expect(resolveBodyInsertAnchor(null)).toBeNull();
+    });
+
+    it("returns null while a table cell editor holds the selection", () => {
+        vi.mocked(isActiveTableCellEditing).mockReturnValue(true);
+        try {
+            expect(resolveBodyInsertAnchor(null)).toBeNull();
+        } finally {
+            vi.mocked(isActiveTableCellEditing).mockReturnValue(false);
+        }
     });
 });

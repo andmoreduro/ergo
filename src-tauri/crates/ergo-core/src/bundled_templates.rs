@@ -237,7 +237,13 @@ mod tests {
         sync_bundled_template_spec(&vfs, "umb-apa").unwrap();
         let spec: TemplateSpec =
             serde_json::from_str(&vfs.read_source(TEMPLATE_SPEC_PATH).unwrap()).unwrap();
-        assert_eq!(spec.metadata.name, "UMB's APA7");
+        assert_eq!(
+            serde_json::to_value(&spec).unwrap(),
+            serde_json::to_value(
+                &crate::template_spec::load_bundled_template("umb-apa").unwrap(),
+            )
+            .unwrap()
+        );
     }
 
     #[test]

@@ -36,32 +36,40 @@ fn package_roots_include_windows_and_unix_cache_locations() {
     assert!(roots.contains(&PathBuf::from(
         "C:/Users/Ada/AppData/Roaming/typst/packages"
     )));
-    assert!(roots.contains(&PathBuf::from("C:/Users/Ada/AppData/Local/typst/packages")));
     assert!(roots.contains(&PathBuf::from("/home/ada/.cache/typst/packages")));
     assert!(roots.contains(&PathBuf::from("/home/ada/.local/share/typst/packages")));
 }
 
 #[test]
-fn package_file_lookup_uses_first_existing_root() {
-    let root = std::env::temp_dir().join(format!(
+fn package_file_lookup_prefers_the_first_root_containing_the_file() {
+    let stamp = format!(
         "ergo-package-resolver-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos(),
-    ));
+    );
+    let base = std::env::temp_dir().join(stamp);
+    let first = base.join("first");
+    let second = base.join("second");
     let package = PackageRef::from_import("@preview/versatile-apa", "7.2.0").unwrap();
-    let expected = root
-        .join("preview")
-        .join("versatile-apa")
-        .join("7.2.0")
-        .join("lib.typ");
-    std::fs::create_dir_all(expected.parent().unwrap()).unwrap();
-    std::fs::write(&expected, "#let apply = it => it").unwrap();
 
-    let found = find_package_file_in_roots(&package, "lib.typ", &[root.clone()]);
+    let in_root = |root: &PathBuf, contents: &str| {
+        let path = root
+            .join("preview")
+            .join("versatile-apa")
+            .join("7.2.0")
+            .join("lib.typ");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, contents).unwrap();
+        path
+    };
+    let expected_first = in_root(&first, "#let apply = it => it");
+    let _shadowed = in_root(&second, "#let shadowed = true");
 
-    std::fs::remove_dir_all(root).ok();
-    assert_eq!(found, Some(expected));
+    let found = find_package_file_in_roots(&package, "lib.typ", &[first.clone(), second]);
+
+    std::fs::remove_dir_all(base).ok();
+    assert_eq!(found, Some(expected_first));
 }

@@ -5,23 +5,22 @@ import type {
     KeymapProfile,
 } from "./types";
 
-const sequence = (keys: string) =>
-    keys.split(/\s+/).flatMap((chord) => {
-        if (!chord) {
-            return [];
-        }
+const MODIFIER_PREFIX = /^(Ctrl|Shift|Alt|Meta)\+/;
 
-        const parts = chord.split("+");
-        const key = parts.pop() ?? "";
-        return [
-            {
-                key: key.toLowerCase(),
-                modifiers: parts.map((part) =>
-                    part === "Ctrl" ? "Control" : part,
-                ),
-            },
-        ];
-    });
+const chordStroke = (chord: string) => {
+    let rest = chord;
+    const modifiers: string[] = [];
+    let match = rest.match(MODIFIER_PREFIX);
+    while (match) {
+        modifiers.push(match[1] === "Ctrl" ? "Control" : match[1]!);
+        rest = rest.slice(match[0].length);
+        match = rest.match(MODIFIER_PREFIX);
+    }
+    return { key: rest.toLowerCase(), modifiers };
+};
+
+const sequence = (keys: string) =>
+    keys.split(/\s+/).flatMap((chord) => (chord ? [chordStroke(chord)] : []));
 
 const defaultBinding = (
     commandId: ActionId,
@@ -73,6 +72,13 @@ const tableCellForbiddenBindings = (
     defaultBinding(commandId, keys, "editor", TABLE_CELL),
 ];
 
+/**
+ * Frontend fallback for the pre-IPC boot window (and IPC failure), mirroring
+ * the Rust-owned default keymap in `src-tauri/defaults/default_keymap.json`.
+ * Rust is the source of truth: keep both sides identical —
+ * `keymap.test.ts` asserts alignment, so drift fails the suite instead of
+ * shipping divergent default shortcuts.
+ */
 export const DEFAULT_KEYMAP: KeymapProfile = {
     name: "Default",
     bindings: [
@@ -159,12 +165,6 @@ export const DEFAULT_KEYMAP: KeymapProfile = {
             EDITOR_BODY,
         ),
         defaultBinding(
-            "editor::InsertBlockEquation",
-            "Ctrl+Alt+E",
-            "editor",
-            EDITOR_BODY,
-        ),
-        defaultBinding(
             "editor::InsertFigure",
             "Ctrl+Alt+F",
             "editor",
@@ -225,36 +225,6 @@ export const DEFAULT_KEYMAP: KeymapProfile = {
             "Ctrl+U",
             "editor",
             "editor || input",
-        ),
-        defaultBinding(
-            "editor::ConvertToParagraph",
-            "Ctrl+Alt+1",
-            "editor",
-            "element && !input",
-        ),
-        defaultBinding(
-            "editor::ConvertToHeading",
-            "Ctrl+Alt+2",
-            "editor",
-            "element && !input",
-        ),
-        defaultBinding(
-            "editor::ConvertToTable",
-            "Ctrl+Alt+3",
-            "editor",
-            "element && !input",
-        ),
-        defaultBinding(
-            "editor::ConvertToEquation",
-            "Ctrl+Alt+4",
-            "editor",
-            "element && !input",
-        ),
-        defaultBinding(
-            "editor::ConvertToFigure",
-            "Ctrl+Alt+5",
-            "editor",
-            "element && !input",
         ),
         defaultBinding(
             "editor::MoveTableCellLeft",

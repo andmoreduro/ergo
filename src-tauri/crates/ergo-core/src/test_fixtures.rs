@@ -1,4 +1,44 @@
 #![allow(irrefutable_let_patterns)]
+use crate::template_spec::{
+    EditorConfig, PackageSpec, TemplateMetadata, TemplateSpec, TypstConfig,
+};
+
+/// Minimal empty template spec for unit tests that only exercise editor
+/// input handling (labels, variants, fallbacks).
+pub fn basic_template_spec() -> TemplateSpec {
+    TemplateSpec {
+        metadata: TemplateMetadata {
+            id: "fixture-template".to_string(),
+            name: "Fixture Template".to_string(),
+            version: "1.0.0".to_string(),
+            description: None,
+        },
+        typst: TypstConfig {
+            package: PackageSpec {
+                name: "@preview/fixture".to_string(),
+                version: "1.0.0".to_string(),
+                imports: vec![],
+                dependencies: vec![],
+            },
+            show_rule: None,
+            sections: vec![],
+            element_overrides: None,
+            resource_policy: None,
+            default_template_overrides: vec![],
+        },
+        editor: EditorConfig {
+            inputs: vec![],
+            groups: vec![],
+            variants: vec![],
+            custom_elements: vec![],
+            defaults: None,
+            quote_policy: None,
+            options: vec![],
+        },
+        messages: std::collections::HashMap::new(),
+    }
+}
+
 use crate::ast::{
     ContentSection, DependencyManifest, DocumentAST, DocumentElement, DocumentSection, ListItem,
     Package, EquationSyntax, GlobalSettings, Heading, Paragraph, ProjectMetadata, ProjectSettings,
