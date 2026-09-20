@@ -1,5 +1,4 @@
 import { Fragment, type Node as PMNode, type Schema } from "prosemirror-model";
-import type { Transaction } from "prosemirror-state";
 import type { ContentSection } from "../../bindings/ContentSection";
 import type { DocumentElement } from "../../bindings/DocumentElement";
 import type { RichText } from "../../bindings/RichText";
@@ -435,42 +434,42 @@ export const docToElements = (doc: PMNode): DocumentElement[] => {
 };
 
 /**
- * The inclusive range of top-level block indices a transaction modified, in the
- * resulting document's coordinates — or null when it can't be derived safely as
- * an in-place edit. Restricted to single-step transactions so the step map's
- * positions are already in the final doc's coordinate space (multi-step
- * transactions, e.g. paste, return null and the caller re-derives the whole
- * section). Lets the body editor convert/diff only the blocks that changed.
+ * The span of top-level blocks that differ between two documents, as a common
+ * prefix/suffix split: `start` is the first differing index in both docs and
+ * `prevEnd`/`nextEnd` are the exclusive ends of the differing window in the
+ * before/after doc respectively. ProseMirror documents are persistent
+ * structures, so nodes a transaction did not touch keep their identity; a
+ * pointer comparison finds the window without converting any block. Works for
+ * multi-step transactions, block splits/merges and multi-block pastes alike; an
+ * unchanged document yields an empty window.
  */
-export const changedTopLevelRange = (
-    tr: Transaction,
-): [number, number] | null => {
-    if (tr.steps.length !== 1) {
-        return null;
+export interface ChangedBlockWindow {
+    start: number;
+    prevEnd: number;
+    nextEnd: number;
+}
+
+export const changedBlockWindow = (
+    before: PMNode,
+    after: PMNode,
+): ChangedBlockWindow => {
+    const beforeCount = before.childCount;
+    const afterCount = after.childCount;
+    let start = 0;
+    while (
+        start < beforeCount &&
+        start < afterCount &&
+        before.child(start) === after.child(start)
+    ) {
+        start += 1;
     }
-    const doc = tr.doc;
-    const map = tr.mapping.maps[0];
-    if (!map) {
-        return null;
+    let suffix = 0;
+    while (
+        suffix < beforeCount - start &&
+        suffix < afterCount - start &&
+        before.child(beforeCount - 1 - suffix) === after.child(afterCount - 1 - suffix)
+    ) {
+        suffix += 1;
     }
-    let from = Infinity;
-    let to = -Infinity;
-    map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
-        if (newStart < from) from = newStart;
-        if (newEnd > to) to = newEnd;
-    });
-    if (from === Infinity) {
-        return null;
-    }
-    const size = doc.content.size;
-    const lastIndex = Math.max(0, doc.childCount - 1);
-    const fromIndex = Math.min(
-        doc.resolve(Math.max(0, Math.min(from, size))).index(0),
-        lastIndex,
-    );
-    const toIndex = Math.min(
-        doc.resolve(Math.max(0, Math.min(to, size))).index(0),
-        lastIndex,
-    );
-    return [Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex)];
+    return { start, prevEnd: beforeCount - suffix, nextEnd: afterCount - suffix };
 };

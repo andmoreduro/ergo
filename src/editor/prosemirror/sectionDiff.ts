@@ -91,10 +91,15 @@ const contentUpdate = (
     return null;
 };
 
-/** Minimal applier for exactly the event variants `diffSectionElements` emits. */
+/**
+ * Minimal applier for exactly the event variants `diffSectionElements` emits.
+ * `indexOffset` lets a window of a section replay events whose element
+ * indices are absolute (see `diffSectionWindow`).
+ */
 export const applyElementEvents = (
     elements: DocumentElement[],
     events: DocumentEvent[],
+    indexOffset = 0,
 ): DocumentElement[] => {
     let next = [...elements];
     for (const event of events) {
@@ -104,7 +109,7 @@ export const applyElementEvents = (
                 break;
             case "insertElement":
             case "restoreElement":
-                next.splice(event.index, 0, event.element);
+                next.splice(event.index - indexOffset, 0, event.element);
                 break;
             case "updateParagraphContent":
                 next = next.map((el) =>
@@ -255,6 +260,7 @@ const granularDelta = (
     sectionId: string,
     prev: DocumentElement[],
     next: DocumentElement[],
+    indexOffset = 0,
 ): SectionEventDelta => {
     const forward: DocumentEvent[] = [];
     const inverse: DocumentEvent[] = [];
@@ -268,14 +274,17 @@ const granularDelta = (
 
     for (const { el, index } of prevById.values()) {
         if (!nextIds.has(el.id)) {
-            pushPair(remove(el.id), restore(sectionId, index, el));
+            pushPair(remove(el.id), restore(sectionId, indexOffset + index, el));
         }
     }
 
     next.forEach((nextEl, index) => {
         const prevEntry = prevById.get(nextEl.id);
         if (!prevEntry) {
-            pushPair(insert(sectionId, index, nextEl), remove(nextEl.id));
+            pushPair(
+                insert(sectionId, indexOffset + index, nextEl),
+                remove(nextEl.id),
+            );
             return;
         }
         const prevEl = prevEntry.el;
@@ -303,8 +312,14 @@ const granularDelta = (
         }
         // Type change or an element type without a dedicated content event:
         // replace it in place, keeping the id.
-        pushPair(remove(nextEl.id), restore(sectionId, index, prevEl));
-        pushPair(insert(sectionId, index, nextEl), remove(nextEl.id));
+        pushPair(
+            remove(nextEl.id),
+            restore(sectionId, indexOffset + index, prevEl),
+        );
+        pushPair(
+            insert(sectionId, indexOffset + index, nextEl),
+            remove(nextEl.id),
+        );
     });
 
     return { forward, inverse };
@@ -454,4 +469,42 @@ export const diffSectionElements = (
     }
 
     return fullReplace(sectionId, prev, next);
+};
+
+/**
+ * Diff restricted to the window of top-level blocks a transaction changed
+ * (`start` in both lists; exclusive `prevEnd` / `nextEnd`), for edits that
+ * change the block count: Enter split, Backspace merge, multi-block paste.
+ * Blocks outside the window are identical by construction, so only the window
+ * is diffed and replay-verified; the emitted element indices are absolute.
+ * Falls back to the full id-matched diff when the window delta does not verify.
+ */
+export const diffSectionWindow = (
+    sectionId: string,
+    prev: DocumentElement[],
+    next: DocumentElement[],
+    start: number,
+    prevEnd: number,
+    nextEnd: number,
+): SectionEventDelta => {
+    const prevWindow = prev.slice(start, prevEnd);
+    const nextWindow = next.slice(start, nextEnd);
+    if (deepEqual(prevWindow, nextWindow)) {
+        return { forward: [], inverse: [] };
+    }
+
+    const granular = granularDelta(sectionId, prevWindow, nextWindow, start);
+    const forwardOk = deepEqual(
+        applyElementEvents(prevWindow, granular.forward, start),
+        nextWindow,
+    );
+    const inverseOk = deepEqual(
+        applyElementEvents(nextWindow, granular.inverse, start),
+        prevWindow,
+    );
+    if (forwardOk && inverseOk) {
+        return granular;
+    }
+
+    return diffSectionElements(sectionId, prev, next);
 };
