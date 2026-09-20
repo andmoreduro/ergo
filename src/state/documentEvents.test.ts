@@ -3,12 +3,13 @@ import {
     applyDocumentEvents,
     createDocumentEventHistoryEntry,
 } from "./documentEvents";
-import { createRichText } from "./ast/defaults";
+import { createRichText, createTable } from "./ast/defaults";
 import { createTestDocumentAST } from "../test/documentAstFixture";
 import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { DocumentElement } from "../bindings/DocumentElement";
+import type { DocumentEvent } from "../bindings/DocumentEvent";
 
 const contentSectionId = (ast: DocumentAST): string => {
     const section = ast.sections.find((entry) => entry.type === "Content");
@@ -19,6 +20,14 @@ const contentSectionId = (ast: DocumentAST): string => {
 };
 
 describe("document event conversion", () => {
+    // The same DocumentEvent → DocumentAST mutation is implemented twice: this
+    // TypeScript applyDocumentEvents (React runtime authority) and Rust
+    // ergo-core::apply_document_event (WASM worker + backend session mirror).
+    // ts-rs guarantees structural agreement of the types; the high-risk
+    // mutations (input metadata mirroring, figure body replacement) have
+    // matching assertions in ergo-core `document_session_tests.rs`. When
+    // behavior changes, both sides must be updated in the same change.
+
     it("maps UPDATE_PROJECT_TITLE to forward and inverse sync events", () => {
         const previousAst = createTestDocumentAST();
         const action: ASTAction = {
@@ -379,6 +388,23 @@ describe("applyDocumentEventToAst round-trip parity", () => {
     it.each(contentRoundTrips)("$name round-trips", ({ setup }) => {
         const { ast, action } = setup();
         verifyRoundTrip(ast, action);
+    });
+
+    // Rust `remove_table_row` / `remove_table_column` refuse to empty a table;
+    // the TypeScript applier must leave the AST unchanged rather than drift to
+    // zero rows/columns the worker never accepted.
+    it.each<DocumentEvent>([
+        { type: "removeTableRow", table_id: "table-1", row_index: 0 },
+        { type: "removeTableColumn", table_id: "table-1", col_index: 0 },
+    ])("$type leaves a single-row, single-column table unchanged", (event) => {
+        const ast = createTestDocumentAST();
+        const section = ast.sections.find((entry) => entry.type === "Content");
+        if (!section || section.type !== "Content") {
+            throw new Error("content section missing");
+        }
+        section.elements.push(createTable(1, 1, "table-1"));
+
+        expect(applyDocumentEvents(ast, [event])).toEqual(ast);
     });
 
     it("round-trips reference add, update, and remove", () => {

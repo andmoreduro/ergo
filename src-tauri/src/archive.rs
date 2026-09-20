@@ -8,10 +8,13 @@ use ergo_core::bundled_templates::{
     is_path_under_template_mount,
 };
 use ergo_core::core_errors::ErgoError;
+use ergo_core::path_utils::normalize_virtual_path;
 use ergo_core::template_spec::load_bundled_template;
 
 use crate::app_state::TauriAppState;
 use crate::ast::DocumentAST;
+
+const DOCUMENT_STATE_PATH: &str = ".ergproj/document_state.json";
 
 #[tauri::command]
 pub fn save_project(state: State<'_, TauriAppState>, path: String) -> Result<(), ErgoError> {
@@ -130,45 +133,82 @@ pub fn open_project_from_path(
     state: &TauriAppState,
     path: impl AsRef<Path>,
 ) -> Result<DocumentAST, ErgoError> {
+    // Read and validate everything that can fail before touching the VFS, so a
+    // rejected archive leaves the currently open project (assets included)
+    // exactly as it was; otherwise its next autosave would pack an empty tree.
+    let entries = read_archive_entries(path)?;
+    let ast = document_state_from_entries(&entries)?;
+
+    let previous = state.vfs.snapshot();
+    state.vfs.clear();
+    for entry in entries {
+        match entry.content {
+            ArchiveContent::Text(text) => {
+                state.vfs.write_source(&entry.path, text);
+            }
+            ArchiveContent::Binary(bytes) => state.vfs.write_file(&entry.path, bytes),
+        }
+    }
+    if let Err(error) = state.document_session.sync_snapshot(ast.clone()) {
+        state.vfs.restore(previous);
+        return Err(error);
+    }
+
+    Ok(ast)
+}
+
+struct ArchiveEntry {
+    path: String,
+    content: ArchiveContent,
+}
+
+enum ArchiveContent {
+    Text(String),
+    Binary(Vec<u8>),
+}
+
+fn read_archive_entries(path: impl AsRef<Path>) -> Result<Vec<ArchiveEntry>, ErgoError> {
     let file = File::open(path).map_err(|e| ErgoError::Operation { message: e.to_string() })?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|e| ErgoError::Operation { message: e.to_string() })?;
 
-    state.vfs.clear();
-
-    for i in 0..archive.len() {
+    let mut entries = Vec::with_capacity(archive.len());
+    for index in 0..archive.len() {
         let mut file = archive
-            .by_index(i)
+            .by_index(index)
             .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
-        let name = file.name().to_string();
-        if file.is_file() {
-            let mut content = Vec::new();
-            file.read_to_end(&mut content)
-                .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
-            let is_text =
-                name.ends_with(".typ") || name.ends_with(".json") || name.ends_with(".bib");
-            if is_text {
-                match std::str::from_utf8(&content) {
-                    Ok(text) => {
-                        state.vfs.write_source(&name, text.to_owned());
-                    }
-                    Err(_) => state.vfs.write_file(&name, content),
-                }
-            } else {
-                state.vfs.write_file(&name, content);
-            }
+        if !file.is_file() {
+            continue;
         }
+        let path = file.name().to_string();
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)
+            .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
+        let is_text =
+            path.ends_with(".typ") || path.ends_with(".json") || path.ends_with(".bib");
+        let content = if is_text {
+            match String::from_utf8(bytes) {
+                Ok(text) => ArchiveContent::Text(text),
+                Err(error) => ArchiveContent::Binary(error.into_bytes()),
+            }
+        } else {
+            ArchiveContent::Binary(bytes)
+        };
+        entries.push(ArchiveEntry { path, content });
     }
+    Ok(entries)
+}
 
-    let json_ast = state
-        .vfs
-        .read_source(".ergproj/document_state.json")
-        .map_err(|_| ErgoError::DocumentStateRequired)?;
-    let ast: DocumentAST = serde_json::from_str(&json_ast)
-        .map_err(|e| ErgoError::Operation { message: e.to_string() })?;
-    let _status = state.document_session.sync_snapshot(ast.clone())?;
-
-    Ok(ast)
+fn document_state_from_entries(entries: &[ArchiveEntry]) -> Result<DocumentAST, ErgoError> {
+    let json = entries
+        .iter()
+        .find(|entry| normalize_virtual_path(&entry.path) == DOCUMENT_STATE_PATH)
+        .and_then(|entry| match &entry.content {
+            ArchiveContent::Text(text) => Some(text),
+            ArchiveContent::Binary(_) => None,
+        })
+        .ok_or(ErgoError::DocumentStateRequired)?;
+    serde_json::from_str(json).map_err(|e| ErgoError::Operation { message: e.to_string() })
 }
 
 fn project_files_for_worker_bootstrap(vfs: &crate::vfs::VirtualFileSystem) -> Vec<ProjectFile> {
@@ -509,27 +549,31 @@ mod tests {
     }
 
     #[test]
-    fn bundled_umb_apa_includes_lib_and_csl_but_not_starter() {
-        let files = bundled_package_files_for_template("umb-apa").expect("umb-apa package");
-        let paths: HashSet<String> = files.into_iter().map(|(path, _)| path).collect();
+    fn bundled_packages_include_lib_but_not_starter() {
+        // (template id, embedded package dir, extra expected file)
+        for (template_id, package_dir, extra) in [
+            ("umb-apa", "umb-apa", "umb-apa/assets/styles/apa.csl"),
+            ("apa7", "versatile-apa", "versatile-apa/typst.toml"),
+        ] {
+            let files =
+                bundled_package_files_for_template(template_id).expect("bundled package");
+            let paths: HashSet<String> = files.into_iter().map(|(path, _)| path).collect();
 
-        assert!(paths.contains("umb-apa/lib.typ"), "missing lib.typ: {paths:?}");
-        assert!(
-            paths.contains("umb-apa/assets/styles/apa.csl"),
-            "missing bundled CSL: {paths:?}"
-        );
-        assert!(paths.iter().any(|path| path.starts_with("umb-apa/utils/")));
-        assert!(!paths.iter().any(|path| path.starts_with("umb-apa/template/")));
-    }
-
-    #[test]
-    fn bundled_versatile_apa_includes_lib_but_not_starter() {
-        let files = bundled_package_files_for_template("apa7").expect("apa7 package");
-        let paths: HashSet<String> = files.into_iter().map(|(path, _)| path).collect();
-
-        assert!(paths.contains("versatile-apa/lib.typ"), "missing lib.typ: {paths:?}");
-        assert!(paths.iter().any(|path| path.starts_with("versatile-apa/utils/")));
-        assert!(!paths.iter().any(|path| path.starts_with("versatile-apa/template/")));
+            assert!(
+                paths.contains(&format!("{package_dir}/lib.typ")),
+                "{template_id} missing lib.typ: {paths:?}"
+            );
+            assert!(
+                paths.contains(extra),
+                "{template_id} missing {extra}: {paths:?}"
+            );
+            assert!(
+                !paths.iter().any(|path| path.starts_with(&format!(
+                    "{package_dir}/template/"
+                ))),
+                "{template_id} must not embed the starter template dir"
+            );
+        }
     }
 
     #[test]
@@ -548,6 +592,100 @@ mod tests {
 
         assert!(error.to_string().contains(".ergproj/document_state.json"));
         assert_eq!(error.to_string(), ".ergproj/document_state.json is required");
+    }
+
+    #[test]
+    fn open_project_rejects_corrupt_archive_bytes() {
+        let state = test_state();
+        let path = temp_project_path();
+        // Not a zip at all: truncated header garbage of the same length as a
+        // real EOCD scan window.
+        fs::write(&path, b"this is definitely not a zip archive").unwrap();
+
+        let error = open_project_from_path(&state, &path).unwrap_err();
+        fs::remove_file(&path).ok();
+
+        assert!(
+            !error.to_string().is_empty(),
+            "corrupt archive must surface an error, not panic or hang"
+        );
+    }
+
+    #[test]
+    fn rejected_archive_leaves_the_open_project_vfs_intact() {
+        // Regression guard: a failed open used to clear the VFS before
+        // validating the archive, so the still-open project silently lost
+        // every asset and its next autosave packed an archive without images.
+        fn write_archive(build: impl Fn(&mut zip::ZipWriter<File>)) -> PathBuf {
+            let path = temp_project_path();
+            let mut zip = zip::ZipWriter::new(File::create(&path).unwrap());
+            build(&mut zip);
+            zip.finish().unwrap();
+            path
+        }
+        let options = zip::write::SimpleFileOptions::default();
+
+        // Failures before and after the VFS is repopulated must both roll back.
+        let invalid_archives = [
+            (
+                "missing document state",
+                write_archive(|zip| {
+                    zip.start_file("main.typ", options).unwrap();
+                    zip.write_all(b"= Raw Typst").unwrap();
+                }),
+            ),
+            (
+                "malformed document state",
+                write_archive(|zip| {
+                    zip.start_file(".ergproj/document_state.json", options)
+                        .unwrap();
+                    zip.write_all(b"{ not json").unwrap();
+                }),
+            ),
+            (
+                "unknown template without an embedded spec (fails during sync)",
+                write_archive(|zip| {
+                    let mut ast = basic_document_ast("Otro", "");
+                    ast.metadata.template_id = "missing-template".to_string();
+                    zip.start_file(".ergproj/document_state.json", options)
+                        .unwrap();
+                    zip.write_all(serde_json::to_string(&ast).unwrap().as_bytes())
+                        .unwrap();
+                }),
+            ),
+        ];
+
+        for (case, archive_path) in invalid_archives {
+            let state = test_state();
+            state
+                .document_session
+                .sync_snapshot(basic_document_ast("Abierto", ""))
+                .unwrap();
+            state
+                .vfs
+                .write_file("assets/image.png", vec![137, 80, 78, 71]);
+            let before = state.vfs.get_all_files();
+
+            let result = open_project_from_path(&state, &archive_path);
+            fs::remove_file(&archive_path).ok();
+
+            assert!(result.is_err(), "{case}: open must fail");
+            assert_eq!(
+                state.vfs.get_all_files(),
+                before,
+                "{case}: VFS must be exactly as before the failed open"
+            );
+
+            // The still-open project keeps packing its assets on the next save.
+            let save_path = temp_project_path();
+            save_project_to_path(&state, &save_path).unwrap();
+            let names = zip_names(&save_path);
+            fs::remove_file(&save_path).ok();
+            assert!(
+                names.contains("assets/image.png"),
+                "{case}: save after a failed open lost the assets"
+            );
+        }
     }
 
     #[test]

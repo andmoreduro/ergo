@@ -46,7 +46,11 @@ export interface DocumentFocusState {
     requestId: number;
 }
 
-export type DocumentFocusInput = Omit<DocumentFocusState, "requestId">;
+/** Caller-side focus request; the reducer assigns `requestId` and defaults a missing selection end to `null`. */
+export type DocumentFocusInput = Omit<
+    DocumentFocusState,
+    "requestId" | "selectionEndUtf16Offset"
+> & { selectionEndUtf16Offset?: number | null };
 
 interface DocumentSessionState {
     ast: DocumentAST;
@@ -80,7 +84,17 @@ type DocumentSessionAction =
       }
     | { type: "UNDO" }
     | { type: "REDO" }
-    | { type: "MARK_SAVED" }
+    | {
+          type: "MARK_SAVED";
+          /**
+           * The AST object that was actually persisted. Edits committed while
+           * the async save was in flight produce a different `ast` identity,
+           * so they stay dirty instead of being silently marked clean (and
+           * then skipped by the close/autosave `isDirty` checks). `null`
+           * clears unconditionally (used before the workspace has mounted).
+           */
+          savedAst: DocumentAST | null;
+      }
     | { type: "ACK_DOCUMENT_EVENTS"; upToEventId: number }
     | { type: "SET_DOCUMENT_FOCUS"; focus: DocumentFocusInput };
 
@@ -101,7 +115,7 @@ interface DocumentAstContextType {
     canRedo: boolean;
     undo: () => void;
     redo: () => void;
-    markSaved: () => void;
+    markSaved: (savedAst: DocumentAST | null) => void;
 }
 
 interface DocumentSyncContextType {
@@ -160,7 +174,7 @@ interface DocumentActionsContextType {
     ) => void;
     undo: () => void;
     redo: () => void;
-    markSaved: () => void;
+    markSaved: (savedAst: DocumentAST | null) => void;
     setDocumentFocus: (focus: DocumentFocusInput) => void;
 }
 
@@ -200,7 +214,7 @@ interface DocumentProviderProps {
     historyLimit?: number;
 }
 
-const createInitialSessionState = (
+export const createInitialSessionState = (
     ast: DocumentAST = initialAST,
     sessionId = 1,
 ): DocumentSessionState => ({
@@ -262,7 +276,7 @@ const commitHistoryEntry = (
         : state.externalRevision,
 });
 
-const createSessionReducer =
+export const createSessionReducer =
     (historyLimit: number) =>
     (
         state: DocumentSessionState,
@@ -338,9 +352,14 @@ const createSessionReducer =
         }
 
         if (action.type === "MARK_SAVED") {
+            const isDirty =
+                action.savedAst !== null && state.ast !== action.savedAst;
+            if (isDirty === state.isDirty) {
+                return state;
+            }
             return {
                 ...state,
-                isDirty: false,
+                isDirty,
             };
         }
 
@@ -395,6 +414,18 @@ export const DocumentProvider = ({
     // after commit when the AST identity changes.
     const astRef = useRef(sessionState.ast);
     astRef.current = sessionState.ast;
+    // Forward events dispatched since the last render. Several synchronous
+    // `dispatch` calls in one handler (e.g. add figure → remove placeholder →
+    // link asset) must derive their events from each other's result, not from
+    // the stale committed AST. Applied lazily, so the body-typing hot path
+    // (one commit per keystroke) never pays for it; the reducer has caught up
+    // by the time this component renders, so the queue is cleared here.
+    const pendingForwardEventsRef = useRef<BackendDocumentEvent[]>([]);
+    pendingForwardEventsRef.current = [];
+    const astForNextDispatch = (): DocumentAST =>
+        pendingForwardEventsRef.current.length === 0
+            ? astRef.current
+            : applyDocumentEvents(astRef.current, pendingForwardEventsRef.current);
     const astListenersRef = useRef(new Set<() => void>());
     useEffect(() => {
         for (const listener of astListenersRef.current) {
@@ -438,11 +469,15 @@ export const DocumentProvider = ({
             return;
         }
 
-        const historyEntry = historyEntryForAstAction(astRef.current, action);
+        const historyEntry = historyEntryForAstAction(
+            astForNextDispatch(),
+            action,
+        );
         if (!historyEntry) {
             return;
         }
 
+        pendingForwardEventsRef.current.push(...historyEntry.forwardEvents);
         sessionDispatch({
             type: "COMMIT_EVENTS",
             forward: historyEntry.forwardEvents,
@@ -451,8 +486,10 @@ export const DocumentProvider = ({
         });
     }, []);
     const commitDocumentEvents = useCallback(
-        (forward: BackendDocumentEvent[], inverse: BackendDocumentEvent[]) =>
-            sessionDispatch({ type: "COMMIT_EVENTS", forward, inverse }),
+        (forward: BackendDocumentEvent[], inverse: BackendDocumentEvent[]) => {
+            pendingForwardEventsRef.current.push(...forward);
+            sessionDispatch({ type: "COMMIT_EVENTS", forward, inverse });
+        },
         [],
     );
     const undo = useCallback(() => {
@@ -464,7 +501,8 @@ export const DocumentProvider = ({
         sessionDispatch({ type: "REDO" });
     }, []);
     const markSaved = useCallback(
-        () => sessionDispatch({ type: "MARK_SAVED" }),
+        (savedAst: DocumentAST | null) =>
+            sessionDispatch({ type: "MARK_SAVED", savedAst }),
         [],
     );
     const setDocumentFocus = useCallback(

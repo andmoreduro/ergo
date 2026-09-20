@@ -11,7 +11,6 @@ import type { DocumentOutline } from "../bindings/DocumentOutline";
 import type { DocumentResources } from "../bindings/DocumentResources";
 import type { PreviewPageFile } from "../bindings/PreviewPageFile";
 import type { ProjectFile } from "../bindings/ProjectFile";
-import type { SourceMapEntry } from "../bindings/SourceMapEntry";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
 import { TauriApi } from "../api/tauri";
 import {
@@ -31,6 +30,7 @@ import {
     type PendingPreviewTelemetry,
 } from "./previewTelemetry";
 import { getInputTimestamp } from "../perf/inputTimestamp";
+import { outlineEqual, resourcesEqual } from "./compileResultEquality";
 import {
     resetBootstrapPhases,
     setBootstrapPhase,
@@ -46,9 +46,7 @@ const MITEX_PACKAGE: PackageDependency = {
 
 export interface CompilerPreviewSetters {
     setPreviewPages: Dispatch<SetStateAction<PreviewPageFile[]>>;
-    setIsCompiling: Dispatch<SetStateAction<boolean>>;
     setError: Dispatch<SetStateAction<string | null>>;
-    setSourceMap: Dispatch<SetStateAction<SourceMapEntry[]>>;
     setPreviewRevision: Dispatch<SetStateAction<SourceRevision | null>>;
     setOutline: Dispatch<SetStateAction<DocumentOutline | null>>;
     setResources: Dispatch<SetStateAction<DocumentResources | null>>;
@@ -89,9 +87,7 @@ export function useDocumentCompilerSync({
 }: UseDocumentCompilerSyncParams): void {
     const {
         setPreviewPages,
-        setIsCompiling,
         setError,
-        setSourceMap,
         setPreviewRevision,
         setOutline,
         setResources,
@@ -113,15 +109,19 @@ export function useDocumentCompilerSync({
     const syncFailedRef = useRef(false);
     const failedEventCountRef = useRef(0);
     const loadedDependencyPackagesRef = useRef(new Set<string>());
-    const backendMirrorDirtyRef = useRef(false);
+    // AST object last mirrored into the Tauri backend session (what
+    // `save_project` persists). Compared by identity against the latest
+    // committed AST, so the mirror is flushed whenever the document changed,
+    // whether or not the worker sync that followed succeeded.
+    const mirroredAstRef = useRef<DocumentAST | null>(null);
     const isMountedRef = useRef(false);
-    // Fingerprints of the last outline/resources applied, so a per-keystroke
-    // compile that didn't alter headings or the resource catalog can skip the
-    // setState that would otherwise bust every memoized Sidebar consumer. Body
-    // typing changes the source map and the edited page, but not the outline
-    // entries or the resource group list.
-    const lastOutlineFingerprintRef = useRef<string>("");
-    const lastResourcesGroupCountRef = useRef<number>(-1);
+    // Last outline/resources applied, so a per-keystroke compile that didn't
+    // alter headings or the resource catalog can skip the setState that would
+    // otherwise bust every memoized Sidebar consumer. Compared structurally
+    // (not by a partial fingerprint) so a renamed heading, a shifted page
+    // number, or a new resource inside an existing group still propagates.
+    const lastOutlineRef = useRef<DocumentOutline | null>(null);
+    const lastResourcesRef = useRef<DocumentResources | null>(null);
 
     const isNewerPreviewResult = (result: CompilationResult): boolean =>
         previewRevisionRef.current === null ||
@@ -143,48 +143,28 @@ export function useDocumentCompilerSync({
             latestRevisionRef.current = status.sourceRevision;
             previewRevisionRef.current = result.source_revision;
             updateResourcePreviewRevisions(status);
-            setSourceMap(status.sourceMap);
-            // Gate outline/resources on a cheap fingerprint: body typing
-            // changes the source map and the edited page, but the heading list
-            // and resource catalog are stable. Skipping the setState when the
-            // fingerprint is unchanged avoids busting every memoized Sidebar
-            // consumer (SidebarOutline.buildTargetedOutlineEntries,
-            // SidebarResources) on every keystroke.
+            // Body typing changes the source map and the edited page, but the
+            // heading list and resource catalog are usually stable. Skipping the
+            // setState when the content is unchanged keeps the memoized Sidebar
+            // consumers (outline list, resource thumbnails) from re-rendering
+            // on every keystroke.
             const outline = result.outline;
-            const entries = outline?.entries ?? [];
-            const lastEntry = entries[entries.length - 1];
-            const outlineFingerprint =
-                entries.length > 0 && lastEntry
-                    ? `${entries.length}:${lastEntry.text}:${lastEntry.page}`
-                    : `${entries.length}:`;
-            if (outlineFingerprint !== lastOutlineFingerprintRef.current) {
-                lastOutlineFingerprintRef.current = outlineFingerprint;
+            if (!outlineEqual(lastOutlineRef.current, outline)) {
+                lastOutlineRef.current = outline;
                 setOutline(outline);
             }
-            if (result.resources) {
-                const groupCount = result.resources.groups.length;
-                if (groupCount !== lastResourcesGroupCountRef.current) {
-                    lastResourcesGroupCountRef.current = groupCount;
-                    setResources(result.resources);
-                }
+            if (
+                result.resources &&
+                !resourcesEqual(lastResourcesRef.current, result.resources)
+            ) {
+                lastResourcesRef.current = result.resources;
+                setResources(result.resources);
             }
             setPreviewPages(result.preview_pages || []);
             setPreviewRevision(result.source_revision);
             setError(null);
-            if (
-                latestRevisionRef.current === null ||
-                result.source_revision >= latestRevisionRef.current
-            ) {
-                setIsCompiling(false);
-            }
         } else if (result.status === "failed") {
             setError(result.diagnostics.join("\n") || "Compilation failed");
-            if (
-                latestRevisionRef.current === null ||
-                result.source_revision >= latestRevisionRef.current
-            ) {
-                setIsCompiling(false);
-            }
         }
     };
 
@@ -214,6 +194,12 @@ export function useDocumentCompilerSync({
                 if (currentAst === null) {
                     break;
                 }
+                // Events already folded into `currentAst`; a bootstrap snapshot
+                // carries them, so they must not be replayed afterwards (a
+                // replayed insert would duplicate the element in the preview).
+                const currentEvents = desiredEventsRef.current;
+                const includedUpToEventId =
+                    currentEvents[currentEvents.length - 1]?.id ?? 0;
 
                 if (bootstrappedSessionIdRef.current !== currentSessionId) {
                     loadedDependencyPackagesRef.current = new Set();
@@ -290,7 +276,10 @@ export function useDocumentCompilerSync({
                     }
 
                     bootstrappedSessionIdRef.current = currentSessionId;
-                    syncedEventIdRef.current = 0;
+                    syncedEventIdRef.current = includedUpToEventId;
+                    if (includedUpToEventId > 0) {
+                        ackDocumentEvents?.(includedUpToEventId);
+                    }
                     if (result.status === "succeeded") {
                         setPendingPreviewTelemetry({
                             revision: result.source_revision,
@@ -308,7 +297,7 @@ export function useDocumentCompilerSync({
                     applyPreviewResult(status, result, currentSessionId);
 
                     await TauriApi.syncDocumentSnapshot(compileAst);
-                    backendMirrorDirtyRef.current = false;
+                    mirroredAstRef.current = currentAst;
                     continue;
                 }
 
@@ -365,8 +354,6 @@ export function useDocumentCompilerSync({
                 });
                 applyPreviewResult(status, compileOutput.result, currentSessionId);
 
-                backendMirrorDirtyRef.current = true;
-
                 syncedEventIdRef.current = lastEvent.id;
                 ackDocumentEvents?.(lastEvent.id);
             }
@@ -377,7 +364,6 @@ export function useDocumentCompilerSync({
                 setError(
                     syncError instanceof Error ? syncError.message : String(syncError),
                 );
-                setIsCompiling(false);
             }
         } finally {
             syncRunningRef.current = false;
@@ -406,22 +392,23 @@ export function useDocumentCompilerSync({
     }, []);
 
     useEffect(() => {
-        const flushBackendMirror = async () => {
-            if (!backendMirrorDirtyRef.current) {
-                return;
-            }
+        const flushBackendMirror = async (): Promise<DocumentAST | null> => {
             const mirrorAst = desiredAstRef.current;
-            const mirrorSessionId = desiredSessionIdRef.current;
-            if (
-                mirrorAst === null ||
-                bootstrappedSessionIdRef.current !== mirrorSessionId
-            ) {
-                return;
+            if (mirrorAst === null) {
+                return null;
             }
+            if (mirroredAstRef.current === mirrorAst) {
+                return mirrorAst;
+            }
+            // The backend session is independent of the worker: mirror whenever
+            // the committed AST moved past what the backend holds, even if the
+            // worker bootstrap/sync failed, so a save never persists a stale
+            // document.
             await TauriApi.syncDocumentSnapshot(
                 await documentAstForCompile(mirrorAst),
             );
-            backendMirrorDirtyRef.current = false;
+            mirroredAstRef.current = mirrorAst;
+            return mirrorAst;
         };
 
         registerBackendMirrorFlush(flushBackendMirror);
@@ -433,15 +420,14 @@ export function useDocumentCompilerSync({
             desiredAstRef.current = null;
             desiredEventsRef.current = [];
             desiredBootstrapFilesRef.current = null;
-            backendMirrorDirtyRef.current = false;
+            mirroredAstRef.current = null;
             setPreviewPages([]);
-            setSourceMap([]);
             setPreviewRevision(null);
             previewRevisionRef.current = null;
             setOutline(null);
             setResources(null);
-            lastOutlineFingerprintRef.current = "";
-            lastResourcesGroupCountRef.current = -1;
+            lastOutlineRef.current = null;
+            lastResourcesRef.current = null;
             latencyStartRef.current = null;
             resetPreviewRuntimeState();
             return;
@@ -459,7 +445,8 @@ export function useDocumentCompilerSync({
         ) {
             syncFailedRef.current = false;
             if (didSessionChange) {
-                backendMirrorDirtyRef.current = false;
+                // Unknown until the bootstrap (or a save) mirrors the loaded AST.
+                mirroredAstRef.current = null;
                 bootstrappedSessionIdRef.current = null;
                 setPreviewPages([]);
                 setPreviewRevision(null);
@@ -467,8 +454,8 @@ export function useDocumentCompilerSync({
                 latestRevisionRef.current = null;
                 setOutline(null);
                 setResources(null);
-                lastOutlineFingerprintRef.current = "";
-                lastResourcesGroupCountRef.current = -1;
+                lastOutlineRef.current = null;
+                lastResourcesRef.current = null;
                 latencyStartRef.current = null;
                 resetPreviewRuntimeState();
             }
@@ -476,7 +463,6 @@ export function useDocumentCompilerSync({
 
         setError(null);
         if (hasPendingSync()) {
-            setIsCompiling(true);
             startDocumentSync();
         }
     }, [ackDocumentEvents, sessionId, eventsVersion, bootstrapFiles]);

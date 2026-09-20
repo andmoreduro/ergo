@@ -23,6 +23,13 @@ struct RetainedTextFile {
     last_modified: u64,
 }
 
+/// Opaque copy of a [`VirtualFileSystem`]'s contents; see
+/// [`VirtualFileSystem::snapshot`].
+pub struct VfsSnapshot {
+    sources: HashMap<String, RetainedTextFile>,
+    files: HashMap<String, typst::foundations::Bytes>,
+}
+
 #[derive(Clone, Debug, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -243,6 +250,24 @@ impl VirtualFileSystem {
         self.memory_files.write().clear();
     }
 
+    /// Capture every file so a multi-step replacement (such as opening an
+    /// archive) can be rolled back with [`VirtualFileSystem::restore`] when a
+    /// later step fails.
+    pub fn snapshot(&self) -> VfsSnapshot {
+        let sources = self.memory_sources.read().clone();
+        let files = self.memory_files.read().clone();
+        VfsSnapshot { sources, files }
+    }
+
+    /// Replace the whole contents with a snapshot from
+    /// [`VirtualFileSystem::snapshot`], keeping the captured sources and their
+    /// revisions. The revision counter keeps advancing so later writes still
+    /// produce fresh revisions.
+    pub fn restore(&self, snapshot: VfsSnapshot) {
+        *self.memory_sources.write() = snapshot.sources;
+        *self.memory_files.write() = snapshot.files;
+    }
+
     pub fn remove_path(&self, path: &str) {
         let path = normalize_virtual_path(path);
         self.memory_sources.write().remove(&path);
@@ -367,5 +392,25 @@ mod tests {
         let result = vfs.apply_patch("main.typ", 0, 10, "No");
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().to_string(), "Invalid patch range");
+    }
+
+    #[test]
+    fn test_vfs_restore_round_trips_sources_binaries_and_revisions() {
+        let vfs = VirtualFileSystem::new();
+        let revision = vfs.write_source("main.typ", "Hello".to_string());
+        vfs.write_file("assets/image.png", vec![137, 80, 78, 71]);
+        let snapshot = vfs.snapshot();
+
+        vfs.clear();
+        vfs.write_source("other.typ", "Replacement".to_string());
+        vfs.restore(snapshot);
+
+        assert_eq!(vfs.read_source("main.typ").unwrap(), "Hello");
+        assert_eq!(vfs.source_revision("main.typ").unwrap(), revision);
+        assert_eq!(
+            vfs.read_file("assets/image.png").unwrap(),
+            vec![137, 80, 78, 71]
+        );
+        assert!(!vfs.has_file("other.typ"));
     }
 }
