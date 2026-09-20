@@ -10,7 +10,7 @@ import {
     type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { isDebugMenuEnabled } from "../../../config/debug";
+import { isDebugMenuEnabled } from "../../../settings/debug";
 import type { ActionId } from "../../../bindings/ActionId";
 import type { CommandContext } from "../../../commands/types";
 import type { CommandRegistry } from "../../../commands/registry";

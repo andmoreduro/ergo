@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { TemplateSpec } from "../bindings/TemplateSpec";
+import type { TemplateSpec } from "../../bindings/TemplateSpec";
 import {
     applyDefaultsSpec,
     defaultTemplateVariantId,
-    FALLBACK_PROJECT_SETTINGS,
+    DEFAULT_PROJECT_SETTINGS,
     projectSettingsFromTemplate,
-} from "./projectSettingsFromTemplate";
+} from "./defaults";
 
 const apa7LikeSpec = {
     editor: {
@@ -52,7 +52,7 @@ const umbApaLikeSpec = {
 
 describe("projectSettingsFromTemplate", () => {
     it("keeps fallback settings when spec is missing", () => {
-        expect(projectSettingsFromTemplate(null)).toEqual(FALLBACK_PROJECT_SETTINGS);
+        expect(projectSettingsFromTemplate(null)).toEqual(DEFAULT_PROJECT_SETTINGS);
     });
 
     it("applies editor.defaults from the template spec", () => {
@@ -81,7 +81,7 @@ describe("projectSettingsFromTemplate", () => {
 
 describe("applyDefaultsSpec", () => {
     it("only overrides fields present in the spec", () => {
-        const settings = applyDefaultsSpec(FALLBACK_PROJECT_SETTINGS, {
+        const settings = applyDefaultsSpec(DEFAULT_PROJECT_SETTINGS, {
             paper_size: null,
             language: "es",
             text_font: null,

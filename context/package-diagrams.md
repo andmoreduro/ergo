@@ -6,6 +6,7 @@ Source-module ownership and allowed dependency direction.
 flowchart TB
     subgraph Frontend ["Frontend (src/)"]
         AppRoot[App + layout]
+        SettingsFe[settings/]
         Hooks[hooks/]
         Workers[workers/]
         TauriApi[api/tauri]
@@ -21,6 +22,7 @@ flowchart TB
         PreviewPipe[preview pipeline]
         Vfs[vfs + world]
         Ast[ast + template_spec]
+        CoreSettings[settings]
     end
     subgraph TauriShell ["Tauri shell (src-tauri/src)"]
         Lib[lib + commands]
@@ -29,6 +31,8 @@ flowchart TB
         ActionsPkg[actions]
     end
     AppRoot --> Hooks
+    AppRoot --> SettingsFe
+    SettingsFe --> TauriApi
     Hooks --> Workers
     Hooks --> TauriApi
     Workers --> Bindings
@@ -43,6 +47,8 @@ flowchart TB
     Lib --> ArchivePkg
     Lib --> SettingsPkg
     Lib --> ActionsPkg
+    SettingsPkg --> CoreSettings
+    Ast --> CoreSettings
     ArchivePkg --> Vfs
     Workers == worker messages ==> WasmBindgen
     TauriApi == invoke ==> Lib
@@ -53,6 +59,8 @@ flowchart TB
 
 - `editor/prosemirror/` owns the content-body ProseMirror schema, AST bridge, section diff → `DocumentEvent` translation, plugins, and React NodeViews for block objects. It depends on `state/` and `bindings/` but not on layout components except through NodeView adapters.
 - `api/tauri` is the only frontend module that calls Tauri `invoke`.
+- `settings/` is the frontend configuration layer. `SettingsProvider` is the only place components read global or keymap settings from (`useGlobalSettings`, `useKeymap`, `useSettingsActions`, `usePreviewSettings`, `useDefaultEquationSyntax`); `settingsStore` loads and persists through `api/tauri`; `global/`, `keymap/` and `project/` hold defaults, merge/normalization and template-derived project defaults. `commands/` owns the command registry and types only.
+- `ergo-core::settings` defines `GlobalSettings` (defaults embedded from `defaults/default_settings.json`), `KeymapSettings` and `ProjectSettings`; `ast` re-exports them for the document model. The app-shell `settings` package persists them and exposes the IPC commands.
 - `workers/compiler.worker` loads `ergo-engine-wasm`; preview compiles never go through Tauri IPC.
 - `document_session_commands` mirrors AST to the backend session; architecture tests forbid `compile_document` on that path.
 - `ergo-core` also owns `preview_sync*`, `compile_artifacts`, `resource_watch`, `package_resolver`, and IPC DTO crates (`*_types`, `document_outline`, `document_resources`).

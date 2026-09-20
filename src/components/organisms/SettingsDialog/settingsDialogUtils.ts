@@ -6,7 +6,7 @@ import {
     ensureCustomProfileForEdit,
     normalizeKeymapSettings,
     updateActiveProfileOverrides,
-} from "../../../settings/keymapProfiles";
+} from "../../../settings/keymap/profiles";
 
 export const toOptionalNumber = (value: string): number | null => {
     const parsed = Number(value);

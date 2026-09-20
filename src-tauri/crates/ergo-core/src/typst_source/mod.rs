@@ -747,7 +747,7 @@ pub(crate) fn format_json_val(val: &serde_json::Value, param_type: &ParamType) -
 mod option_param_tests {
     use super::*;
     use crate::ast::{
-        DependencyManifest, DocumentAST, GlobalSettings, ProjectMetadata, ProjectSettings,
+        DependencyManifest, DocumentAST, ProjectMetadata, ProjectSettings,
         TemplateOverride,
     };
     use crate::template_spec::{ParamSpec, ParamType};
@@ -769,7 +769,6 @@ mod option_param_tests {
                     }],
                     ..ProjectSettings::default()
                 },
-                local_overrides: GlobalSettings::default(),
             },
             dependencies: DependencyManifest { packages: vec![] },
             references: vec![],

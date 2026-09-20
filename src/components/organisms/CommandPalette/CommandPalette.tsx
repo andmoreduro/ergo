@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { Command, CommandContext, KeymapProfile } from "../../../commands/types";
-import { lookupActionShortcut } from "../../../settings/keymap";
+import { lookupActionShortcut } from "../../../settings/keymap/profile";
 import { Dialog } from "../../molecules/Dialog/Dialog";
 import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
 import { TextInput } from "../../atoms/TextInput/TextInput";

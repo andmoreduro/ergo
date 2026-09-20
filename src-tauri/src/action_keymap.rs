@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::action_context::{contexts_may_overlap, parse_context_expression};
 use crate::action_types::{KeymapConflict, KeymapValidationResult};
-use crate::ast::{KeyBindingPreference, KeymapSettings, normalize_keymap_settings};
+use ergo_core::settings::{normalize_keymap_settings, KeyBindingPreference, KeymapSettings};
 
 fn active_overrides(settings: &KeymapSettings) -> Vec<KeyBindingPreference> {
     if settings.profiles.is_empty() {

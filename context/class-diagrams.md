@@ -19,15 +19,24 @@ classDiagram
         +String? template_variant_id
         +String title
         +ProjectSettings project_settings
-        +GlobalSettings local_overrides
     }
     class GlobalSettings {
         +String? locale
+        +String? theme_mode
+        +Int? history_limit
         +Int? autosave_interval_ms
         +Boolean? autosave_enabled
+        +EquationSyntax? default_equation_syntax
         +Boolean? zotero_translation_server_enabled
         +String? zotero_translation_server_url
+        +Float? preview_draft_render_factor
+        +WorkspaceColumnWidths? workspace_columns
     }
+    class WorkspaceColumnWidths {
+        +Float sidebar
+        +Float editor
+    }
+    GlobalSettings "1" o-- "0..1" WorkspaceColumnWidths
     class GlobalSettingsSaveReport {
         +String? translation_server_error
     }
@@ -268,6 +277,7 @@ classDiagram
 - `DocumentEvent` variants are defined in `document_session_types` and exported to TypeScript; class diagrams omit the full enum list.
 - `RichText.kind` distinguishes inline embeds: `"reference"` (uses `reference_id`) and `"inlineEquation"` (uses `equation_source` and `equation_syntax`). Plain prose uses `kind: null`.
 - `Figure`, `Diagram`, and `Table` elements emit inside a float wrapper Typst call. `ElementOverrides` may name a template-package wrapper function. Front-matter `#outline()` / `#pagebreak()` blocks are generated from `ProjectSettings.template_overrides`. `Diagram` stores Mermaid source and references a generated SVG under `assets/diagrams/{diagram-id}.svg`.
+- `GlobalSettings` defaults are defined once in `defaults/default_settings.json` (embedded into `GlobalSettings::default()`); every preference except the intentionally absent ones (`default_font`, `default_font_size`, `zotero_translation_server_url`, `workspace_columns`) has a shipped value, and the loader fills unset fields from it. `DocumentAST` carries no copy of global settings.
 - Project settings store template option values in `ProjectSettings.template_overrides` under keys `option.{id}`. `QuotePolicySpec` is serialized as a word threshold or `"block"` / `"inline"`; paragraph split/reconcile helpers exist in `quotePolicy.ts` but are not connected to the live editor.
 - `GeneratedFragment` is an in-memory cache entry, not a persisted archive file.
 - `FieldSourceMapEntry` maps Typst byte ranges to editor field IDs with UTF-16 segments for browser selection APIs.

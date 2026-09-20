@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import { TauriApi } from "../../../api/tauri";
 import type { EquationSyntax } from "../../../bindings/EquationSyntax";
-import type { GlobalSettings } from "../../../bindings/GlobalSettings";
 import type { TranslationServerStatus } from "../../../bindings/TranslationServerStatus";
 import { m } from "../../../paraglide/messages.js";
+import {
+    useGlobalSettings,
+    useSettingsActions,
+} from "../../../settings/SettingsProvider";
 import { locales } from "../../../paraglide/runtime.js";
 import type { Locale } from "../../../paraglide/runtime.js";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
@@ -67,15 +70,9 @@ const translationServerStatusClassName = (
     return `${styles.settingStatus} ${styles.settingStatusStopped}`;
 };
 
-export interface GlobalSettingsPanelProps {
-    settings: GlobalSettings;
-    onChange: (settings: GlobalSettings) => void;
-}
-
-export const GlobalSettingsPanel = ({
-    settings,
-    onChange,
-}: GlobalSettingsPanelProps) => {
+export const GlobalSettingsPanel = () => {
+    const settings = useGlobalSettings();
+    const { updateGlobalSettings: onChange } = useSettingsActions();
     const [translationServerStatus, setTranslationServerStatus] =
         useState<TranslationServerStatus | null>(null);
 

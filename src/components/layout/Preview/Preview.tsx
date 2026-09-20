@@ -24,7 +24,7 @@ import {
 } from "../../../preview/previewPointerAnchor";
 import { usePreviewPageMetrics } from "../../../hooks/usePreviewPageMetrics";
 import { nowMs, type PagePaintInfo } from "../../../hooks/previewTelemetry";
-import { isDebugMenuEnabled } from "../../../config/debug";
+import { isDebugMenuEnabled } from "../../../settings/debug";
 import type { useCompiler } from "../../../hooks/useCompiler";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { PreviewContext } from "../../../actions/contexts/PreviewContext";

@@ -1,9 +1,11 @@
+import type { KeymapSettings } from "../../bindings/KeymapSettings";
 import type {
     ActionId,
     CommandScope,
     KeyBinding,
     KeymapProfile,
-} from "./types";
+} from "../../commands/types";
+import { normalizeKeymapSettings } from "./profiles";
 
 const MODIFIER_PREFIX = /^(Ctrl|Shift|Alt|Meta)\+/;
 
@@ -294,32 +296,27 @@ export const DEFAULT_KEYMAP: KeymapProfile = {
     ],
 };
 
-export interface KeymapConflict {
-    keys: string;
-    scope: CommandScope;
-    commandIds: ActionId[];
-}
+/**
+ * Pre-IPC boot fallback for keymap settings; the bundled bindings arrive from
+ * `src-tauri/defaults/default_keymap.json` through `load_keymap_settings`.
+ */
+export const DEFAULT_KEYMAP_SETTINGS: KeymapSettings = normalizeKeymapSettings({
+    keymap_profile: "Default",
+    keymap_bindings: [],
+    keymap_overrides: [],
+    active_profile_id: "default",
+    profiles: [],
+});
 
-export const detectKeymapConflicts = (
-    bindings: KeyBinding[],
-): KeymapConflict[] => {
-    const grouped = new Map<string, KeyBinding[]>();
-
-    bindings.forEach((binding) => {
-        if (binding.keys.trim() === "") {
-            return;
-        }
-
-        const key = `${binding.scope}:${binding.keys}`;
-        grouped.set(key, [...(grouped.get(key) ?? []), binding]);
+export const mergeKeymapSettings = (
+    settings: Partial<KeymapSettings> | null | undefined,
+): KeymapSettings =>
+    normalizeKeymapSettings({
+        ...DEFAULT_KEYMAP_SETTINGS,
+        ...(settings ?? {}),
+        keymap_bindings: settings?.keymap_bindings ?? [],
+        keymap_overrides: settings?.keymap_overrides ?? [],
+        active_profile_id:
+            settings?.active_profile_id ?? DEFAULT_KEYMAP_SETTINGS.active_profile_id,
+        profiles: settings?.profiles ?? [],
     });
-
-    return Array.from(grouped.entries())
-        .filter(([, group]) => group.length > 1)
-        .map(([, group]) => ({
-            keys: group[0].keys,
-            scope: group[0].scope,
-            commandIds: group.map((binding) => binding.commandId),
-        }));
-};
-

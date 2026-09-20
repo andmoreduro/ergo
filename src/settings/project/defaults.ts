@@ -1,10 +1,13 @@
-import type { DefaultsSpec } from "../bindings/DefaultsSpec";
-import type { ProjectSettings } from "../bindings/ProjectSettings";
-import type { TemplateSpec } from "../bindings/TemplateSpec";
+import type { DefaultsSpec } from "../../bindings/DefaultsSpec";
+import type { ProjectSettings } from "../../bindings/ProjectSettings";
+import type { TemplateSpec } from "../../bindings/TemplateSpec";
 import { plainTemplateOutlineDisabledOverrides } from "./templateOverrides";
 
-/** Used when no template spec is available (tests, welcome placeholder). */
-export const FALLBACK_PROJECT_SETTINGS: ProjectSettings = {
+/**
+ * Project settings when no template spec supplies defaults (tests, welcome
+ * placeholder). Mirrors `ProjectSettings::default()` in ergo-core.
+ */
+export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
     paper_size: "us-letter",
     language: "en",
     text_font: "Libertinus Serif",
@@ -46,7 +49,7 @@ export const projectSettingsFromTemplate = (
     options?: { noneTemplate?: boolean },
 ): ProjectSettings => {
     let settings: ProjectSettings = {
-        ...FALLBACK_PROJECT_SETTINGS,
+        ...DEFAULT_PROJECT_SETTINGS,
         template_overrides: [],
     };
 

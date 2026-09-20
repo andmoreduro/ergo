@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { TemplateOptionSpec } from "../bindings/TemplateOptionSpec";
+import type { TemplateOptionSpec } from "../../bindings/TemplateOptionSpec";
 import {
     getTemplateOptionValue,
     setTemplateOptionValue,
     templateOptionOverrideKey,
 } from "./templateOptions";
-import type { ProjectSettings } from "../bindings/ProjectSettings";
+import type { ProjectSettings } from "../../bindings/ProjectSettings";
 
 const emptyProjectSettings = (): ProjectSettings => ({
     paper_size: null,

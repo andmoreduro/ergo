@@ -7,7 +7,7 @@ import {
     isTemplateOptionEnabled,
     setTemplateOptionValue,
     TEMPLATE_OPTION_COMBOBOX_THRESHOLD,
-} from "../../../settings/templateOptions";
+} from "../../../settings/project/templateOptions";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { Combobox } from "../../atoms/Combobox/Combobox";
 import { Select } from "../../atoms/Select/Select";

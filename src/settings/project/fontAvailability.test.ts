@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { ProjectFontAvailability } from "../bindings/ProjectFontAvailability";
-import { projectFontsUnavailableToastMessage } from "./projectFontNotifications";
+import type { ProjectFontAvailability } from "../../bindings/ProjectFontAvailability";
+import { projectFontsUnavailableToastMessage } from "./fontAvailability";
 
 describe("projectFontsUnavailableToastMessage", () => {
     it("returns null when every configured font is available", () => {

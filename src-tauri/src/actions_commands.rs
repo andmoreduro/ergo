@@ -7,7 +7,7 @@ use crate::actions::{
     ActionContextSnapshot, ActionDescriptor, ActionResolution, ActionResolverState,
     ContextDescriptor, KeymapValidationResult, LogicalKeyEvent,
 };
-use crate::ast::KeymapSettings;
+use ergo_core::settings::KeymapSettings;
 
 #[tauri::command]
 pub fn get_context_glossary() -> Vec<ContextDescriptor> {

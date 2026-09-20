@@ -16,9 +16,9 @@ fn export_typescript_bindings() {
     ergo_lib::action_types::ActionResolution::export_all(&config).unwrap();
     ergo_lib::archive::OpenProjectResult::export_all(&config).unwrap();
     ergo_lib::ast::DocumentAST::export_all(&config).unwrap();
-    ergo_lib::ast::GlobalSettings::export_all(&config).unwrap();
-    ergo_lib::ast::KeymapProfileRecord::export_all(&config).unwrap();
-    ergo_lib::ast::KeymapSettings::export_all(&config).unwrap();
+    ergo_core::settings::GlobalSettings::export_all(&config).unwrap();
+    ergo_core::settings::KeymapProfileRecord::export_all(&config).unwrap();
+    ergo_core::settings::KeymapSettings::export_all(&config).unwrap();
     ergo_lib::compilation_types::CompilationResult::export_all(&config).unwrap();
     ergo_lib::compilation_types::ExportFormat::export_all(&config).unwrap();
     ergo_lib::core_errors::ErgoError::export_all(&config).unwrap();

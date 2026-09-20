@@ -1,9 +1,9 @@
 import { createPortal } from "react-dom";
 import { useMemo, useRef, type RefObject } from "react";
 import type { DocumentAST } from "../../../bindings/DocumentAST";
-import { effectiveTableExtraFields } from "../../../editor/templateElementOverrides";
+import { effectiveTableExtraFields } from "../../templateElementOverrides";
 import type { ExtraFieldSpec } from "../../../bindings/ExtraFieldSpec";
-import { wrapperFieldDraftValues } from "../../../editor/wrapperFields";
+import { wrapperFieldDraftValues } from "../../wrapperFields";
 import { useBlockUiState } from "../blockUiState";
 import { useDocumentAstSelector } from "../../../state/DocumentContext";
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";

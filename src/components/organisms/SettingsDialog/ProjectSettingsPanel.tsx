@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FontAvailability } from "../../../bindings/FontAvailability";
 import type { ProjectSettings } from "../../../bindings/ProjectSettings";
 import type { ProjectFontAvailability } from "../../../bindings/ProjectFontAvailability";
@@ -6,14 +6,18 @@ import type { TemplateOptionSpec } from "../../../bindings/TemplateOptionSpec";
 import type { TemplateVariantSpec } from "../../../bindings/TemplateVariantSpec";
 import { m } from "../../../paraglide/messages.js";
 import {
+    useDocumentActions,
+    useDocumentAstSelector,
+} from "../../../state/DocumentContext";
+import {
     DOCUMENT_LOCALES,
     normalizeDocumentLanguage,
     type DocumentLocale,
-} from "../../../settings/documentLanguage";
+} from "../../../settings/project/documentLanguage";
 import {
     defaultOutlineTitle,
     type OutlineTitleKind,
-} from "../../../settings/outlineDefaults";
+} from "../../../settings/project/outlineDefaults";
 import {
     getOutlineInclude,
     getTemplateOverride,
@@ -23,7 +27,7 @@ import {
     setTemplateOverride,
     type OutlineIncludeOverrideKey,
     type OutlineTitleOverrideKey,
-} from "../../../settings/templateOverrides";
+} from "../../../settings/project/templateOverrides";
 import { Checkbox } from "../../atoms/Checkbox/Checkbox";
 import { Combobox } from "../../atoms/Combobox/Combobox";
 import { Select } from "../../atoms/Select/Select";
@@ -34,7 +38,7 @@ import styles from "./SettingsDialog.module.css";
 import {
     checkProjectFontAvailability,
     fontUnavailableMessage,
-} from "../../../settings/projectFontNotifications";
+} from "../../../settings/project/fontAvailability";
 import { toOptionalNumber } from "./settingsDialogUtils";
 
 import type { TemplateOverride } from "../../../bindings/TemplateOverride";
@@ -62,8 +66,6 @@ const PAPER_SIZES = [
 ];
 
 export interface ProjectSettingsPanelProps {
-    settings: ProjectSettings;
-    onChange: (settings: ProjectSettings) => void;
     templateDefaultOverrides?: TemplateOverride[];
     templateOptions?: TemplateOptionSpec[];
     templateVariants?: TemplateVariantSpec[];
@@ -124,8 +126,6 @@ const fontUnavailableNotice = (entry: FontAvailability | undefined) =>
     ) : null;
 
 export const ProjectSettingsPanel = ({
-    settings,
-    onChange,
     templateDefaultOverrides = [],
     templateOptions = [],
     templateVariants = [],
@@ -134,6 +134,15 @@ export const ProjectSettingsPanel = ({
     systemFonts = [],
     t,
 }: ProjectSettingsPanelProps) => {
+    // Project settings are document state: read the slice, commit through the
+    // AST action so the change is undoable and synced like any other edit.
+    const settings = useDocumentAstSelector((ast) => ast.metadata.project_settings);
+    const { dispatch } = useDocumentActions();
+    const onChange = useCallback(
+        (next: ProjectSettings) =>
+            dispatch({ type: "UPDATE_PROJECT_SETTINGS", payload: { settings: next } }),
+        [dispatch],
+    );
     const [fontAvailability, setFontAvailability] =
         useState<ProjectFontAvailability | null>(null);
 

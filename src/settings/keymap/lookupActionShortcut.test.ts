@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { KeymapProfile } from "../commands/types";
-import { lookupActionShortcut } from "./keymap";
+import type { KeymapProfile } from "../../commands/types";
+import { lookupActionShortcut } from "./profile";
 
 const fixtureKeymap: KeymapProfile = {
     bindings: [

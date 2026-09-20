@@ -89,8 +89,8 @@ Global settings outside project archives:
 
 Bundled install resources:
 
-- `defaults/default_settings.json`
-- `defaults/default_keymap.json`
+- `defaults/default_settings.json` — single source of global-settings defaults, embedded into the binary at build time and mirrored by the frontend boot fallback (guarded by a test)
+- `defaults/default_keymap.json` — bundled keymap bindings, read at runtime and merged under the user's `keymap.json` profiles
 
 Per-project overrides: `.ergproj/project_settings.json`.
 
@@ -104,6 +104,6 @@ Per-project overrides: `.ergproj/project_settings.json`.
 
 - VFS paths use `/` separators on all platforms.
 - Saves pack durable project state from the backend session VFS after worker sync and backend mirror sync drain.
-- Autosave defaults are controlled in global `settings.json` (`autosave_interval_ms`, blur/close toggles).
+- Autosave defaults are controlled in global `settings.json` (`autosave_interval_ms`, blur/close toggles). The workspace column layout (`workspace_columns`) is persisted there too, so split widths survive restarts. `settings.json` may omit any key; missing keys take the shipped default, and the legacy `keymap_profile` / `keymap_overrides` keys are ignored.
 - Bibliography lookup is controlled in global `settings.json` (`zotero_translation_server_enabled`, optional `zotero_translation_server_url`); the container lives in the user's Docker engine, outside app config.
 - Keymap schema: `active_profile_id`, `profiles[]` (`id`, `name`, `overrides`), plus bundled `keymap_bindings` (`action_id`, `context` expression, `sequence` of logical keys with modifiers). Legacy `keymap_overrides` migrates into a `custom` profile on load.

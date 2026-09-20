@@ -5,7 +5,7 @@ import {
     useState,
     type MutableRefObject,
 } from "react";
-import { logPreviewSyncError } from "../config/previewSync";
+import { logPreviewSyncError } from "../preview/previewSyncLog";
 import { backendFocusIdsForEditorField } from "../editor/fieldIds";
 import { useDocumentFocusSelector } from "../state/DocumentContext";
 import { CompilerClient } from "../workers/compilerClient";
