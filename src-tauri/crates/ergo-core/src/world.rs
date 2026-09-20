@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use typst::diag::{FileError, FileResult};
-use typst::foundations::{Bytes, Datetime};
+use typst::foundations::{Bytes, Datetime, Duration};
 use typst::syntax::{FileId, Source};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
@@ -206,7 +206,7 @@ impl World for ErgoWorld {
             .map_err(|_| FileError::NotFound(path.into()))
     }
 
-    fn today(&self, _offset: Option<i64>) -> Option<Datetime> {
+    fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
         None
     }
 
@@ -283,7 +283,7 @@ impl World for SnapshotWorld {
             .ok_or_else(|| FileError::NotFound(path.into()))
     }
 
-    fn today(&self, _offset: Option<i64>) -> Option<Datetime> {
+    fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
         None
     }
 
@@ -302,7 +302,7 @@ impl IdeWorld for SnapshotWorld {
 mod tests {
     use std::sync::Arc;
 
-    use typst::syntax::{package::PackageSpec, FileId, VirtualPath};
+    use typst::syntax::{package::PackageSpec, FileId, RootedPath, VirtualPath, VirtualRoot};
 
     use super::*;
     use crate::path_utils::file_id_for_virtual_path;
@@ -315,7 +315,10 @@ mod tests {
             "#let value = 1".to_string(),
         );
         let package: PackageSpec = "@preview/test-package:1.0.0".parse().unwrap();
-        let package_file = FileId::new(Some(package), VirtualPath::new("lib.typ"));
+        let package_file = FileId::new(RootedPath::new(
+            VirtualRoot::Package(package),
+            VirtualPath::new("lib.typ").unwrap(),
+        ));
         let world = ErgoWorld::new(vfs, file_id_for_virtual_path("main.typ"));
 
         let source = world.source(package_file).unwrap();

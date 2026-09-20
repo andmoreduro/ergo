@@ -2,7 +2,11 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use typst::diag::{Severity, SourceDiagnostic};
-use typst::layout::{Frame, FrameItem, Page, PagedDocument};
+use typst::layout::{Frame, FrameItem};
+use typst_layout::{Page, PagedDocument};
+use typst_svg::SvgOptions;
+
+const SVG_OPTIONS: SvgOptions = SvgOptions { render_bleed: false, pretty: false };
 
 use crate::compilation_types::PreviewPageFile;
 use crate::core_errors::ErgoError;
@@ -32,13 +36,13 @@ fn format_source_diagnostic(error: &SourceDiagnostic) -> String {
         Severity::Warning => "warning",
     };
     let mut lines = vec![format!("{severity}: {}", error.message)];
-    lines.extend(error.hints.iter().map(|hint| format!("hint: {hint}")));
+    lines.extend(error.hints.iter().map(|hint| format!("hint: {}", hint.v)));
     lines.join("\n")
 }
 
 pub fn render_svgs(document: &PagedDocument) -> Vec<String> {
     use rayon::prelude::*;
-    document.pages.par_iter().map(typst_svg::svg).collect()
+    document.pages().par_iter().map(|page| typst_svg::svg(page, &SVG_OPTIONS)).collect()
 }
 
 pub fn fingerprint_page(page: &Page) -> u64 {
@@ -102,7 +106,7 @@ impl SvgPageCache {
 pub fn render_svgs_incremental(document: &PagedDocument, cache: &mut SvgPageCache) -> Vec<String> {
     use rayon::prelude::*;
 
-    let fingerprints: Vec<u64> = document.pages.par_iter().map(fingerprint_page).collect();
+    let fingerprints: Vec<u64> = document.pages().par_iter().map(fingerprint_page).collect();
 
     let needs_render: Vec<bool> = fingerprints
         .iter()
@@ -110,11 +114,11 @@ pub fn render_svgs_incremental(document: &PagedDocument, cache: &mut SvgPageCach
         .map(|(i, fp)| cache.entries.get(i).map_or(true, |e| e.fingerprint != *fp))
         .collect();
 
-    let rendered: Vec<Option<String>> = (0..document.pages.len())
+    let rendered: Vec<Option<String>> = (0..document.pages().len())
         .into_par_iter()
         .map(|i| {
             if needs_render[i] {
-                Some(typst_svg::svg(&document.pages[i]))
+                Some(typst_svg::svg(&document.pages()[i], &SVG_OPTIONS))
             } else {
                 None
             }
@@ -629,7 +633,7 @@ mod tests {
             let warm_start = Instant::now();
             let document = compile_document(&world).unwrap();
             let warm_ms = warm_start.elapsed().as_secs_f64() * 1000.0;
-            let page_count = document.pages.len();
+            let page_count = document.pages().len();
             let svgs = render_svgs_incremental(&document, &mut cache);
             let total_svg_bytes: usize = svgs.iter().map(|s| s.len()).sum();
             let max_page_bytes = svgs.iter().map(|s| s.len()).max().unwrap_or(0);

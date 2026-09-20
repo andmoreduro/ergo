@@ -19,6 +19,15 @@ import styles from "./DropdownMenu.module.css";
 
 export type DropdownMenuAlign = "start" | "end" | "center";
 
+/** Props the trigger element must accept for the menu to attach to it. */
+export interface DropdownTriggerProps {
+    ref?: Ref<HTMLElement>;
+    onClick?: (event: React.MouseEvent<HTMLElement>) => void;
+    "aria-controls"?: string;
+    "aria-expanded"?: boolean;
+    "aria-haspopup"?: "menu";
+}
+
 export interface DropdownMenuProps {
     align?: DropdownMenuAlign;
     menuLabel?: string;
@@ -26,7 +35,8 @@ export interface DropdownMenuProps {
     open?: boolean;
     defaultOpen?: boolean;
     onOpenChange?: (open: boolean) => void;
-    trigger: ReactElement;
+    /** The element that toggles the menu; it receives the toggle handler and aria wiring. */
+    trigger: ReactElement<DropdownTriggerProps>;
     children: ReactNode;
 }
 
@@ -128,11 +138,9 @@ export const DropdownMenu = ({
         return () => window.removeEventListener("mousedown", handlePointerDown);
     }, [open, setOpen]);
 
+    // React 19 exposes an element's ref as a regular prop.
     const triggerElement = cloneElement(trigger, {
-        ref: mergeRefs(
-            triggerRef,
-            (trigger as ReactElement & { ref?: Ref<HTMLElement> }).ref,
-        ),
+        ref: mergeRefs(triggerRef, trigger.props.ref),
         "aria-controls": menuId,
         "aria-expanded": open,
         "aria-haspopup": "menu" as const,

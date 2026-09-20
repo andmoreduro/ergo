@@ -30,7 +30,9 @@ export const setAssetPreviewUrl = (
     }
 
     const url = URL.createObjectURL(
-        new Blob([bytes], { type: mimeTypeForPath(path) }),
+        // Bytes arrive from IPC/worker as a plain ArrayBuffer view; narrow the
+        // generic buffer type so it satisfies BlobPart without copying.
+        new Blob([bytes as Uint8Array<ArrayBuffer>], { type: mimeTypeForPath(path) }),
     );
     previewUrls.set(assetId, url);
     return url;

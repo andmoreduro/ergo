@@ -2,7 +2,7 @@
 name = "ergo-typst-render"
 version = "0.1.0"
 edition = "2024"
-description = "Vendored typst-render 0.14.2 plus a visible-band render_region for Ergo's canvas preview."
+description = "Vendored typst-render 0.15.1 plus a visible-band render_region for Ergo's canvas preview."
 license = "Apache-2.0"
 publish = false
 
@@ -10,19 +10,22 @@ publish = false
 name = "ergo_typst_render"
 path = "src/lib.rs"
 
-# Mirrors typst-render 0.14.2's dependency set (all already resolved in the
-# workspace lockfile). The crate is vendored verbatim so the private frame-walking
-# internals (`State`, `render_frame`) can back an added `render_region`.
+# Mirrors typst-render 0.15.1's dependency set. The crate is vendored verbatim
+# (see the upstream crate for the original sources) so the private frame-walking
+# internals (`State`, `render_frame`) can back the added `render_region`.
 [dependencies]
 bytemuck = "1"
-comemo = "0.5.0"
-hayro = { version = "0.4.0", default-features = false }
+comemo = "0.5.1"
+hayro = { version = "0.7.1", default-features = false }
 image = { version = "0.25.5", features = ["png", "jpeg", "gif", "webp"], default-features = false }
-pixglyph = "0.6"
-resvg = { version = "0.45", features = ["raster-images"], default-features = false }
-tiny-skia = "0.11"
+libm = "0.2.11"
+pixglyph = "0.6.1"
+resvg = { version = "0.47", features = ["raster-images"], default-features = false }
+tiny-skia = "0.12"
 ttf-parser = "0.25.0"
-typst-assets = "0.14.2"
-typst-library = "0.14.2"
-typst-macros = "0.14.2"
-typst-timing = "0.14.2"
+typst-assets = "0.15.1"
+typst-layout = "0.15.1"
+typst-library = "0.15.1"
+typst-macros = "0.15.1"
+typst-timing = "0.15.1"
+typst-utils = "0.15.1"

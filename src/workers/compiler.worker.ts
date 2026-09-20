@@ -72,7 +72,7 @@ const regionToBitmap = async (region: {
 }): Promise<ImageBitmap> => {
     const pixels = region.pixels;
     const clamped = new Uint8ClampedArray(
-        pixels.buffer,
+        pixels.buffer as ArrayBuffer,
         pixels.byteOffset,
         pixels.length,
     );

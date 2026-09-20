@@ -15,7 +15,7 @@
     white-space: nowrap;
 }
 
-@media (max-width: var(--breakpoint-sm)) {
+@media (max-width: 34rem) {
     .locationRow {
         grid-template-columns: 1fr;
     }

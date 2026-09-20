@@ -1,4 +1,4 @@
-use typst::layout::PagedDocument;
+use typst_layout::PagedDocument;
 
 use crate::ast::DocumentAST;
 use crate::compilation_types::PreviewPageFile;
@@ -104,7 +104,7 @@ pub fn compile_preview_success(
         }
     };
 
-    let preview_pages = canvas_preview_pages(document.pages.len());
+    let preview_pages = canvas_preview_pages(document.pages().len());
     Ok(PreviewCompileSuccess {
         document,
         resource_document,

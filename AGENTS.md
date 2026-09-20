@@ -64,7 +64,7 @@ The context files describe the intended current design. They are not a changelog
 
 ## Stack
 
-- **Frontend**: React 18 + TypeScript + Vite + CSS Modules
+- **Frontend**: React 19 + TypeScript + Vite + CSS Modules
 - **Backend**: Rust (Tauri v2) — Typst document compiler
 - **Package manager**: pnpm
 - **Testing**: Vitest (`*.test.ts`); RTL deferred until after next major UI pass

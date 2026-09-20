@@ -56,7 +56,7 @@ fn compile_preview(
     field_source_map: Vec<FieldSourceMapEntry>,
 ) -> PreviewSyncState {
     crate::test_fixtures::populate_versatile_apa(&vfs);
-    let main_id = FileId::new(None, VirtualPath::new("main.typ"));
+    let main_id = crate::path_utils::file_id_for_virtual_path("main.typ");
     let source_snapshot = WorldSourceSnapshot::from_vfs(&vfs);
     let world = SnapshotWorld::new(source_snapshot.clone(), main_id);
     let document = typst::compile::<PagedDocument>(&world).output.unwrap();

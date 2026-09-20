@@ -21,7 +21,16 @@ use ergo_core::world::{ErgoWorld, WorldSourceSnapshot};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use typst::foundations::Bytes;
-use typst::layout::PagedDocument;
+use typst_layout::PagedDocument;
+use typst_render::RenderOptions;
+use typst_utils::Scalar;
+
+const SVG_OPTIONS: typst_svg::SvgOptions =
+    typst_svg::SvgOptions { render_bleed: false, pretty: false };
+
+fn render_options(pixel_per_pt: f32) -> RenderOptions {
+    RenderOptions { pixel_per_pt: Scalar::new(pixel_per_pt as f64), render_bleed: false }
+}
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 
@@ -199,9 +208,9 @@ fn preview_pages_for_document(
     document: &PagedDocument,
     previous_fingerprints: &mut Vec<u64>,
 ) -> Vec<PreviewPageFile> {
-    let fingerprints: Vec<u64> = document.pages.iter().map(fingerprint_page).collect();
+    let fingerprints: Vec<u64> = document.pages().iter().map(fingerprint_page).collect();
     let pages = document
-        .pages
+        .pages()
         .iter()
         .enumerate()
         .map(|(index, page)| {
@@ -482,7 +491,7 @@ impl ErgoPreviewEngine {
             })?;
         let page_index = page_number.saturating_sub(1);
         let page = doc
-            .pages
+            .pages()
             .get(page_index)
             .ok_or_else(|| ErgoError::Operation {
                 message: format!("Page index out of bounds: {page_index}"),
@@ -519,7 +528,7 @@ impl ErgoPreviewEngine {
         })?;
 
         let page = doc
-            .pages
+            .pages()
             .get(page_index)
             .ok_or_else(|| ErgoError::Operation {
                 message: format!("Page index out of bounds: {page_index}"),
@@ -634,7 +643,7 @@ impl ErgoPreviewEngine {
             ),
         );
         if let Some(document) = resource_document {
-            let page_count = document.pages.len();
+            let page_count = document.pages().len();
             self.resource_document = Some(Arc::new(document));
             wasm_log_engine(
                 "info",
@@ -692,14 +701,14 @@ impl ErgoPreviewEngine {
         })?;
 
         let page = doc
-            .pages
+            .pages()
             .get(page_index)
             .ok_or_else(|| ErgoError::Operation {
                 message: format!("Page index out of bounds: {page_index}"),
             })?;
 
         let size = page.frame.size();
-        let pixmap = typst_render::render(page, pixel_per_pt);
+        let pixmap = typst_render::render(page, &render_options(pixel_per_pt));
 
         Ok(PageImage {
             width: pixmap.width(),
@@ -719,7 +728,7 @@ impl ErgoPreviewEngine {
         })?;
 
         let page = doc
-            .pages
+            .pages()
             .get(page_index)
             .ok_or_else(|| ErgoError::Operation {
                 message: format!("Page index out of bounds: {page_index}"),
@@ -729,7 +738,7 @@ impl ErgoPreviewEngine {
         Ok(PageSvg {
             width_pt: size.x.to_pt(),
             height_pt: size.y.to_pt(),
-            svg: typst_svg::svg(page),
+            svg: typst_svg::svg(page, &SVG_OPTIONS),
         })
     }
 
@@ -743,14 +752,14 @@ impl ErgoPreviewEngine {
         })?;
 
         let page = doc
-            .pages
+            .pages()
             .get(page_index)
             .ok_or_else(|| ErgoError::Operation {
                 message: format!("Page index out of bounds: {page_index}"),
             })?;
 
         let size = page.frame.size();
-        let pixmap = typst_render::render(page, pixel_per_pt);
+        let pixmap = typst_render::render(page, &render_options(pixel_per_pt));
         let png = pixmap
             .encode_png()
             .map_err(|e| ErgoError::Operation { message: format!("PNG encode failed: {e:?}") })?;
@@ -831,10 +840,10 @@ impl ErgoPreviewEngine {
         let document = self.compiled_document()?;
         use rayon::prelude::*;
         document
-            .pages
+            .pages()
             .par_iter()
             .map(|page| {
-                typst_render::render(page, pixel_per_pt)
+                typst_render::render(page, &render_options(pixel_per_pt))
                     .encode_png()
                     .map_err(|error| ErgoError::Operation {
                         message: format!("PNG export failed: {error:?}"),
