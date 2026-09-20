@@ -5,6 +5,7 @@ import {
     createFigure,
     createParagraph,
     createRichText,
+    createTable,
 } from "./defaults";
 import { createTestDocumentAST } from "../../test/documentAstFixture";
 import { shouldCommitAstAction, textSignificantlyEqual } from "./commitPolicy";
@@ -148,7 +149,36 @@ describe("commitPolicy", () => {
         const nextAst = applyAction(ast, action);
         expect(shouldCommitAstAction(ast, action, nextAst)).toBe(true);
     });
+
+    // Rust rejects removing the last row/column, so emitting the event would
+    // poison every later sync; the policy must drop it like the reducer does.
+    it.each<ASTAction>([
+        { type: "REMOVE_TABLE_ROW", payload: { tableId: "table-1", rowIndex: 0 } },
+        {
+            type: "REMOVE_TABLE_COLUMN",
+            payload: { tableId: "table-1", colIndex: 0 },
+        },
+    ])("emits no $type event when it would empty the table", (action) => {
+        const single = astWithTable(1, 1);
+        expect(
+            shouldCommitAstAction(single, action, applyAction(single, action)),
+        ).toBe(false);
+
+        const larger = astWithTable(2, 2);
+        expect(
+            shouldCommitAstAction(larger, action, applyAction(larger, action)),
+        ).toBe(true);
+    });
 });
+
+const astWithTable = (rows: number, cols: number): DocumentAST => {
+    const ast = createTestDocumentAST();
+    const section = ast.sections[0];
+    if (section.type === "Content") {
+        section.elements = [createTable(rows, cols, "table-1")];
+    }
+    return ast;
+};
 
 const astWithParagraph = (text: string): DocumentAST => {
     const ast = createTestDocumentAST();

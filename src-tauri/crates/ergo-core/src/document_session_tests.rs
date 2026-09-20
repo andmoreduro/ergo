@@ -1,7 +1,7 @@
 use super::*;
 use crate::ast::{
     AssetEntry, DocumentElement, DocumentSection, Equation, EquationSyntax, Figure, Paragraph,
-    ProjectSettings, ReferenceEntry, RichText, Table, TableCell,
+    ProjectSettings, ReferenceEntry, RichText, Table,
 };
 use crate::test_fixtures::{basic_document_ast, table_cell_from_text};
 
@@ -256,7 +256,6 @@ fn marks_only_changed_section_dirty_on_text_edit() {
 
     let status = session.sync_snapshot(ast).unwrap();
 
-    assert_eq!(status.dirty_element_ids, vec!["heading-1"]);
     assert_eq!(status.dirty_element_ids, vec!["heading-1"]);
     assert!(vfs
         .read_source("elements/heading-1.typ")
@@ -651,6 +650,42 @@ fn restore_element_round_trips_removed_content() {
 }
 
 #[test]
+fn unknown_element_events_error_without_mutating_the_document() {
+    use crate::document_session::DocumentEvent;
+
+    let vfs = Arc::new(VirtualFileSystem::new());
+    let session = DocumentSession::new(Arc::clone(&vfs));
+    session.sync_snapshot(basic_document_ast("Título con ñ", "")).unwrap();
+
+    for event in [
+        DocumentEvent::UpdateHeading {
+            element_id: "missing-element".to_string(),
+            text: Some("Replaced".to_string()),
+            level: None,
+        },
+        DocumentEvent::UpdateParagraphText {
+            element_id: "missing-element".to_string(),
+            text: "Replaced".to_string(),
+        },
+        DocumentEvent::RemoveElement {
+            element_id: "missing-element".to_string(),
+        },
+    ] {
+        let error = session.apply_event(event).unwrap_err();
+        assert!(
+            error.to_string().contains("missing-element"),
+            "error should name the unknown element: {error}"
+        );
+    }
+
+    // Nothing was applied: the generated heading source is untouched.
+    assert!(vfs
+        .read_source("elements/heading-1.typ")
+        .unwrap()
+        .contains("Introducción"));
+}
+
+#[test]
 fn impossible_restore_element_does_not_mutate_document() {
     let vfs = Arc::new(VirtualFileSystem::new());
     let session = DocumentSession::new(Arc::clone(&vfs));
@@ -673,6 +708,61 @@ fn impossible_restore_element_does_not_mutate_document() {
         .read_source("elements/heading-1.typ")
         .unwrap()
         .contains("Introducción"));
+}
+
+#[test]
+fn failed_event_batch_leaves_the_session_ast_unchanged() {
+    use crate::document_session::DocumentEvent;
+
+    let vfs = Arc::new(VirtualFileSystem::new());
+    let session = DocumentSession::new(Arc::clone(&vfs));
+    session
+        .sync_snapshot(basic_document_ast("Título con ñ", ""))
+        .unwrap();
+
+    let error = session
+        .apply_events(vec![
+            DocumentEvent::InsertElement {
+                section_id: "content-section".to_string(),
+                index: 0,
+                element: Box::new(DocumentElement::Paragraph(Paragraph {
+                    id: "paragraph-1".to_string(),
+                    content: rich_text("Borrador"),
+                })),
+            },
+            DocumentEvent::RemoveElement {
+                element_id: "missing-element".to_string(),
+            },
+        ])
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("missing-element"),
+        "error should name the unknown element: {error}"
+    );
+
+    // The frontend retries a failed batch as a whole, so the valid prefix must
+    // not survive in the session: a later sync would otherwise materialize the
+    // paragraph, and the retry would insert it a second time.
+    session
+        .apply_event(DocumentEvent::SetProjectTitle {
+            title: "Reintento".to_string(),
+        })
+        .unwrap();
+
+    let persisted = persisted_ast(&vfs);
+    let content = match &persisted.sections[0] {
+        DocumentSection::Content(content) => content,
+    };
+    assert_eq!(
+        content
+            .elements
+            .iter()
+            .map(DocumentElement::id)
+            .collect::<Vec<_>>(),
+        vec!["heading-1"]
+    );
+    assert_eq!(persisted.metadata.title, "Reintento");
+    assert!(vfs.read_source("elements/paragraph-1.typ").is_err());
 }
 
 #[test]

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, type Dispatch } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 
 import { TauriApi } from "../api/tauri";
+import type { DocumentAST } from "../bindings/DocumentAST";
 import { waitForDocumentSync } from "./documentSyncBarrier";
 import type { GlobalSettings } from "../bindings/GlobalSettings";
 import { m } from "../paraglide/messages.js";
@@ -18,7 +19,8 @@ import type { NewProjectDialogValues } from "../components/organisms/NewProjectD
 
 interface UseProjectLifecycleOptions {
     dispatch: Dispatch<ASTAction>;
-    markSaved: () => void;
+    /** Marks the given AST object (what was persisted) as saved; `null` clears unconditionally. */
+    markSaved: (savedAst: DocumentAST | null) => void;
     isDirty: boolean;
     globalSettings: GlobalSettings;
     rememberProject: (path: string) => void;
@@ -57,10 +59,12 @@ export const useProjectLifecycle = ({
             return false;
         }
 
-        await waitForDocumentSync();
+        // Mark exactly the mirrored AST as saved: keystrokes committed while the
+        // archive write is in flight keep the document dirty.
+        const savedAst = await waitForDocumentSync();
         await TauriApi.saveProject(projectPath);
         rememberProject(projectPath);
-        markSaved();
+        markSaved(savedAst);
         return true;
     }, [markSaved, rememberProject]);
 
@@ -135,8 +139,14 @@ export const useProjectLifecycle = ({
                 setHasActiveProject(true);
                 setNewProjectInitialName(null);
                 setNewProjectInitialLocation(null);
-                markSaved();
+                markSaved(null);
             } catch (error) {
+                // The backend session was already reset and now holds the new
+                // document, so the previous project path must not stay armed:
+                // an autosave would overwrite the old archive with this blank
+                // document. Drop back to the welcome screen instead.
+                setHasActiveProject(false);
+                setCurrentProjectPath(null);
                 window.alert(
                     m.project_save_failed({
                         message:
@@ -218,11 +228,11 @@ export const useProjectLifecycle = ({
         }
 
         try {
-            await waitForDocumentSync();
+            const savedAst = await waitForDocumentSync();
             await TauriApi.saveProject(projectPath);
             rememberProject(projectPath);
             setCurrentProjectPath(projectPath);
-            markSaved();
+            markSaved(savedAst);
         } catch (error) {
             window.alert(
                 m.project_save_failed({

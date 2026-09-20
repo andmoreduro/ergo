@@ -155,23 +155,40 @@ impl DocumentSession {
         if events.is_empty() {
             return Ok(self.status());
         }
+        // A single event cannot leave a partially applied prefix behind, so it
+        // takes the clone-free path.
+        let events = match <[DocumentEvent; 1]>::try_from(events) {
+            Ok([event]) => return self.apply_event(event),
+            Err(events) => events,
+        };
+
         let mut inner = self.inner.lock();
-        let mut ast = inner.ast.take().ok_or_else(|| ErgoError::Operation {
+        let original = inner.ast.take().ok_or_else(|| ErgoError::Operation {
             message: "Document session has not been initialized".to_string(),
         })?;
+        // The batch is transactional: the frontend retries a failed batch as a
+        // whole, so applying it to a working copy (and deferring VFS removals
+        // until every event succeeded) keeps a mid-batch error from leaving an
+        // already-applied prefix that the retry would apply a second time.
+        let mut ast = original.clone();
         let mut dirty_resource_ids = HashSet::new();
+        let mut vfs_removals = Vec::new();
         for event in events {
-            let vfs_removals = vfs_paths_for_generated_diagram_removal(&ast, &event);
+            vfs_removals.extend(vfs_paths_for_generated_diagram_removal(&ast, &event));
             dirty_resource_ids.extend(dirty_resource_ids_for_event(&ast, &event));
             if let Err(e) = apply_document_event(&mut ast, event) {
-                inner.ast = Some(ast);
+                inner.ast = Some(original);
                 return Err(e);
             }
-            for path in vfs_removals {
-                self.vfs.remove_path(&path);
-            }
         }
-        self.sync_ast_locked(&mut inner, ast, dirty_resource_ids)
+        for path in vfs_removals {
+            self.vfs.remove_path(&path);
+        }
+        let status = self.sync_ast_locked(&mut inner, ast, dirty_resource_ids);
+        if status.is_err() && inner.ast.is_none() {
+            inner.ast = Some(original);
+        }
+        status
     }
 
     fn sync_ast_locked(

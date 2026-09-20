@@ -307,11 +307,14 @@ export const applyDocumentEventToAst = (
             });
 
         case "removeTableRow":
-            return mapTable(ast, event.table_id, (table) => ({
-                ...table,
-                rows: Math.max(0, table.rows - 1),
-                cells: table.cells.filter((_, index) => index !== event.row_index),
-            }));
+            // Mirrors Rust `remove_table_row`: the last row cannot be removed.
+            return mapTable(ast, event.table_id, (table) => {
+                if (table.cells.length <= 1) {
+                    return table;
+                }
+                const cells = table.cells.filter((_, index) => index !== event.row_index);
+                return { ...table, rows: cells.length, cells };
+            });
 
         case "insertTableColumn":
         case "restoreTableColumn":
@@ -327,16 +330,23 @@ export const applyDocumentEventToAst = (
             }));
 
         case "removeTableColumn":
-            return mapTable(ast, event.table_id, (table) => ({
-                ...table,
-                cols: Math.max(0, table.cols - 1),
-                cells: table.cells.map((row) =>
-                    row.filter((_, index) => index !== event.col_index),
-                ),
-                column_sizes: table.column_sizes.filter(
+            // Mirrors Rust `remove_table_column`: the last column cannot be removed.
+            return mapTable(ast, event.table_id, (table) => {
+                if (table.column_sizes.length <= 1) {
+                    return table;
+                }
+                const column_sizes = table.column_sizes.filter(
                     (_, index) => index !== event.col_index,
-                ),
-            }));
+                );
+                return {
+                    ...table,
+                    cols: column_sizes.length,
+                    cells: table.cells.map((row) =>
+                        row.filter((_, index) => index !== event.col_index),
+                    ),
+                    column_sizes,
+                };
+            });
 
         case "updateTableColumnSize":
             return mapTable(ast, event.table_id, (table) => ({
