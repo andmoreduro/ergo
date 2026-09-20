@@ -6,8 +6,8 @@ import { createId } from "../../../state/ast/defaults";
 import { fileNameForPastedImage, readClipboardImageFile } from "../clipboardImage";
 import type { ClipboardPasteContext, ClipboardPasteHandler } from "../types";
 
-const pastedImageBehavior = (ctx: ClipboardPasteContext): string | null =>
-    ctx.templateSpec?.typst.resources?.pasted_image?.behavior ?? "figure";
+const pastedImageBehavior = (ctx: ClipboardPasteContext): string =>
+    ctx.templateSpec?.typst.resource_policy?.pasted_image?.behavior ?? "figure";
 
 export const pasteImageFigureHandler: ClipboardPasteHandler = {
     priority: 10,

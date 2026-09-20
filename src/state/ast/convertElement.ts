@@ -40,7 +40,7 @@ const richTextFromElement = (element: DocumentElement): RichText[] => {
 
     if (element.type === "List" || element.type === "Enumeration") {
         return element.items.flatMap((item, index) =>
-            index === 0 ? item : [createRichText("\n"), ...item],
+            index === 0 ? item.content : [createRichText("\n"), ...item.content],
         );
     }
 
@@ -96,12 +96,14 @@ export const convertElement = (
         }
         case "List": {
             const list = createList(id);
-            return list.type === "List" ? { ...list, items: [content] } : list;
+            return list.type === "List"
+                ? { ...list, items: [{ content, children: [] }] }
+                : list;
         }
         case "Enumeration": {
             const enumeration = createEnumeration(id);
             return enumeration.type === "Enumeration"
-                ? { ...enumeration, items: [content] }
+                ? { ...enumeration, items: [{ content, children: [] }] }
                 : enumeration;
         }
         default:

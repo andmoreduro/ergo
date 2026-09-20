@@ -116,18 +116,13 @@ export const quoteNodeAttributionAttrs = (
     };
 };
 
+/** Build the `Quote` element for a ProseMirror `quote` node (its `attrs` are untyped). */
 export const quoteElementFromQuoteNode = (
-    node: {
-        attrs: {
-            elementId: string;
-            attributionText?: unknown;
-            attributionReferenceId?: unknown;
-        };
-    },
-    content: import("../bindings/RichText").RichText[],
-): import("../bindings/Quote").Quote & { type: "Quote" } => ({
+    node: { attrs: { readonly [attr: string]: unknown } },
+    content: RichText[],
+): Quote & { type: "Quote" } => ({
     type: "Quote",
-    id: node.attrs.elementId,
+    id: String(node.attrs.elementId ?? ""),
     content,
     ...quoteElementAttributionFields(quoteAttributionFromNodeAttrs(node.attrs)),
 });

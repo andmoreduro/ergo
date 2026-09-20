@@ -373,7 +373,8 @@ const findBlockInCell = (
     if (itemMatch) {
         const listId = itemMatch[1];
         const path = itemMatch[2].split(":").map(Number);
-        let match: PMNode | null = null;
+        // Assigned inside the callback; `null as` keeps the post-loop type widened.
+        let match = null as PMNode | null;
         cellNode.forEach((block) => {
             if (block.type.name === "list" && block.attrs.elementId === listId) {
                 match = block;

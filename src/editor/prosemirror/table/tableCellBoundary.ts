@@ -67,7 +67,7 @@ export const shouldSwallowCellBoundaryArrow = (
     }
 };
 
-const isModArrow = (event: KeyboardEvent) =>
+const isModArrow = (event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "metaKey">) =>
     (event.ctrlKey || event.metaKey) && !event.altKey;
 
 /**

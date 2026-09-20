@@ -158,7 +158,8 @@ export const locateListItemField = (
             }
             return { fieldNode: paragraph, contentStart: pos + 2 };
         }
-        let nestedList: PMNode | null = null;
+        // Assigned inside the callback; `null as` keeps the post-loop type widened.
+        let nestedList = null as PMNode | null;
         itemNode.forEach((child) => {
             if (child.type.name === "list") {
                 nestedList = child;

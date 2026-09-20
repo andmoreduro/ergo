@@ -40,6 +40,8 @@ export const createReferenceSpan = (
     reference_id: referenceId,
     equation_source: null,
     equation_syntax: "typst",
+    quote_attribution_text: null,
+    quote_attribution_reference_id: null,
 });
 
 export const isReferenceSpan = (span: RichText): boolean =>

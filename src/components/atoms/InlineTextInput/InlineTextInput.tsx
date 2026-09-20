@@ -12,14 +12,22 @@ type SharedProps = {
     className?: string;
 };
 
+/** Element handed to `ref`: an `<input>` unless `wrap` selects the `<textarea>` branch. */
+export type InlineTextInputElement = HTMLInputElement | HTMLTextAreaElement;
+
+// `wrap` is the discriminant between the two branches. The native textarea
+// `wrap` attribute is omitted so it cannot collide with the boolean.
 export type InlineTextInputProps = SharedProps &
     (
         | ({ wrap?: false } & InputHTMLAttributes<HTMLInputElement>)
-        | ({ wrap: true } & TextareaHTMLAttributes<HTMLTextAreaElement>)
+        | ({ wrap: true } & Omit<
+              TextareaHTMLAttributes<HTMLTextAreaElement>,
+              "wrap"
+          >)
     );
 
 export const InlineTextInput = memo(
-    forwardRef<HTMLInputElement | HTMLTextAreaElement, InlineTextInputProps>(
+    forwardRef<InlineTextInputElement, InlineTextInputProps>(
         ({ variant = "chip", wrap = false, className = "", ...props }, ref) => {
             const classNames = [
                 styles.input,
