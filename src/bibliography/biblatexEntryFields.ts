@@ -53,6 +53,8 @@ const ARTICLE_LIKE: ReferenceFieldSpec[] = [
     { key: "issue", importance: "optional" },
     { key: "pages", importance: "optional" },
     ...IDENTIFIERS,
+    { key: "urldate", importance: "optional" },
+    { key: "note", importance: "optional" },
 ];
 
 const BOOK_LIKE: ReferenceFieldSpec[] = [
@@ -213,8 +215,8 @@ export const validationCodeForField = (
     }
 };
 
-export const FORM_MANAGED_BIBLATEX_FIELDS = new Set<string>([
-    "author",
+/** Every field the structured form can hold, in serialization order. */
+export const REFERENCE_FIELD_KEYS: ReferenceFieldKey[] = [
     "title",
     "year",
     "date",
@@ -233,4 +235,16 @@ export const FORM_MANAGED_BIBLATEX_FIELDS = new Set<string>([
     "institution",
     "edition",
     "note",
-]);
+];
+
+/**
+ * BibLaTeX fields the form owns for one entry type: the author list plus the
+ * type's fields. Everything else parsed from an entry is carried as extra fields.
+ */
+export const formManagedFieldsForEntryType = (
+    entryType: BibliographyEntryType,
+): Set<string> =>
+    new Set<string>([
+        "author",
+        ...referenceFieldsForEntryType(entryType).map((spec) => spec.key),
+    ]);

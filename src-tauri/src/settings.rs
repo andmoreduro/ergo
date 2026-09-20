@@ -1,11 +1,28 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
+use ts_rs::TS;
 
 use ergo_core::core_errors::ErgoError;
 
 use crate::ast::{GlobalSettings, KeymapSettings, normalize_keymap_settings};
 use crate::template_spec::{load_bundled_template, resolve_template_variant, TemplateSpec};
+use crate::translation_server::{self, TranslationServerConfig, TranslationServerStatus};
+
+/// Serializes global settings saves so concurrent async commands cannot interleave
+/// the file write with the container sync.
+static GLOBAL_SETTINGS_SAVE_LOCK: Mutex<()> = Mutex::new(());
+
+/// Result of `save_global_settings`. The settings file is always written; a failure
+/// to reconcile the Zotero translation-server container is reported here instead of
+/// failing the save, so the user's preference stands and the UI can surface it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct GlobalSettingsSaveReport {
+    pub translation_server_error: Option<String>,
+}
 
 const GLOBAL_SETTINGS_FILE_NAME: &str = "settings.json";
 const KEYMAP_SETTINGS_FILE_NAME: &str = "keymap.json";
@@ -150,50 +167,77 @@ pub fn load_global_settings(app: AppHandle) -> Result<GlobalSettings, ErgoError>
     )
 }
 
-#[tauri::command]
-pub fn save_global_settings(app: AppHandle, settings: GlobalSettings) -> Result<(), ErgoError> {
-    let path = global_settings_path(&app)?;
+fn save_global_settings_blocking(
+    app: &AppHandle,
+    settings: GlobalSettings,
+) -> Result<GlobalSettingsSaveReport, ErgoError> {
+    let _guard = GLOBAL_SETTINGS_SAVE_LOCK.lock();
+
+    let path = global_settings_path(app)?;
     let previous = load_global_settings_from_paths(
         &path,
-        default_global_settings_path(&app).as_deref(),
+        default_global_settings_path(app).as_deref(),
     )
     .unwrap_or_default();
 
     save_global_settings_to_path(&path, &settings)?;
 
-    let was_enabled = previous
-        .zotero_translation_server_enabled
-        .unwrap_or(false);
-    let is_enabled = settings
-        .zotero_translation_server_enabled
-        .unwrap_or(false);
+    let translation_server_error = translation_server::sync(
+        &TranslationServerConfig::from_settings(&previous),
+        &TranslationServerConfig::from_settings(&settings),
+    )
+    .err()
+    .map(|error| error.to_string());
 
-    if was_enabled != is_enabled {
-        crate::translation_server::sync_enabled(is_enabled)?;
-    }
+    Ok(GlobalSettingsSaveReport {
+        translation_server_error,
+    })
+}
 
-    Ok(())
+/// Writes the settings file, then reconciles the managed translation-server
+/// container off the main thread (Docker may pull an image).
+#[tauri::command]
+pub async fn save_global_settings(
+    app: AppHandle,
+    settings: GlobalSettings,
+) -> Result<GlobalSettingsSaveReport, ErgoError> {
+    tauri::async_runtime::spawn_blocking(move || save_global_settings_blocking(&app, settings))
+        .await
+        .map_err(translation_server::blocking_task_error)?
+}
+
+pub fn load_translation_server_config(
+    app: &AppHandle,
+) -> Result<TranslationServerConfig, ErgoError> {
+    let settings = load_global_settings(app.clone())?;
+    Ok(TranslationServerConfig::from_settings(&settings))
 }
 
 #[tauri::command]
-pub fn get_translation_server_status(app: AppHandle) -> Result<crate::translation_server::TranslationServerStatus, ErgoError> {
-    let settings = load_global_settings(app)?;
-    Ok(crate::translation_server::status(
-        settings.zotero_translation_server_enabled.unwrap_or(false),
-    ))
+pub async fn get_translation_server_status(
+    app: AppHandle,
+) -> Result<TranslationServerStatus, ErgoError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let config = load_translation_server_config(&app)?;
+        Ok(translation_server::status(&config))
+    })
+    .await
+    .map_err(translation_server::blocking_task_error)?
 }
 
+/// Starts the managed container at app start when the preference asks for it.
+/// Callers run this off the main thread; a failure is left for the next settings
+/// save to report.
 pub fn ensure_translation_server_if_enabled(app: &AppHandle) {
-    let settings = match load_global_settings(app.clone()) {
-        Ok(settings) => settings,
-        Err(_) => return,
+    let Ok(config) = load_translation_server_config(app) else {
+        return;
     };
 
-    if !settings.zotero_translation_server_enabled.unwrap_or(false) {
+    if !config.wants_managed_container() {
         return;
     }
 
-    let _ = crate::translation_server::ensure_running();
+    let _ = translation_server::ensure_running();
 }
 
 #[tauri::command]

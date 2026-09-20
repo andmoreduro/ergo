@@ -25,6 +25,7 @@ Each file has one abstraction level. Use this index to find a topic without read
 | 5 | Export PDF/PNG/SVG via WASM |
 | 6 | Keymap resolution |
 | 7 | Preview ↔ editor sync (backward and forward) |
+| 8 | Bibliography metadata lookup (settings, translation server, sidebar form) |
 
 Save, export, open, and keymap are **not** in `collaboration-diagrams.md` (only the edit/preview collaboration graph lives there).
 

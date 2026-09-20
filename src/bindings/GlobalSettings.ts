@@ -12,6 +12,11 @@ default_equation_syntax: EquationSyntax | null,
  */
 zotero_translation_server_enabled: boolean | null, 
 /**
+ * Base URL of a translation server the user runs themselves. When set, lookups
+ * target it and Érgo manages no Docker container.
+ */
+zotero_translation_server_url: string | null, 
+/**
  * Scale factor applied to preview page rasterization while the user is typing.
  * Full resolution (1.0) is used after an idle window.
  */

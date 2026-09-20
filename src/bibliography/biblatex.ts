@@ -8,7 +8,8 @@ import {
     type ReferenceAuthor,
 } from "./biblatexAuthors";
 import {
-    FORM_MANAGED_BIBLATEX_FIELDS,
+    REFERENCE_FIELD_KEYS,
+    formManagedFieldsForEntryType,
     referenceFieldsForEntryType,
     type BibliographyValidationCode,
     type ReferenceFieldKey,
@@ -19,6 +20,7 @@ import {
     type BibliographyEntryType,
 } from "./biblatexEntryTypes";
 import { parseBiblatexEntry, serializeBiblatexEntry } from "./biblatexParse";
+import { sanitizeLookupFields } from "./lookupBiblatex";
 
 export type { BibliographyEntryType } from "./biblatexEntryTypes";
 export type { ReferenceAuthor } from "./biblatexAuthors";
@@ -100,22 +102,36 @@ export const referenceFormFieldImportance = (
     return "required";
 };
 
-const extraFieldsFromMap = (fields: Map<string, string>): Record<string, string> => {
+/** Parsed fields the current entry type's form does not show; kept verbatim. */
+const extraFieldsFromMap = (
+    entryType: BibliographyEntryType,
+    fields: Map<string, string>,
+): Record<string, string> => {
+    const managed = formManagedFieldsForEntryType(entryType);
     const extra: Record<string, string> = {};
     for (const [key, value] of fields) {
-        if (!FORM_MANAGED_BIBLATEX_FIELDS.has(key)) {
+        if (!managed.has(key)) {
             extra[key] = value;
         }
     }
     return extra;
 };
 
-const fieldsMapFromForm = (form: ReferenceFormValue): Map<string, string> => {
-    const fields = new Map<string, string>(Object.entries(form.extraFields));
+/**
+ * Serialization order: the current type's fields as shown in the form, then any
+ * other known field still carrying a value (populated under a different type).
+ */
+const serializedFieldKeys = (entryType: BibliographyEntryType): ReferenceFieldKey[] => {
+    const specKeys = referenceFieldsForEntryType(entryType).map((spec) => spec.key);
+    return [
+        ...specKeys,
+        ...REFERENCE_FIELD_KEYS.filter((key) => !specKeys.includes(key)),
+    ];
+};
 
-    for (const key of FORM_MANAGED_BIBLATEX_FIELDS) {
-        fields.delete(key);
-    }
+const fieldsMapFromForm = (form: ReferenceFormValue): Map<string, string> => {
+    // Extra fields first so form-managed values override them.
+    const fields = new Map<string, string>(Object.entries(form.extraFields));
 
     const author = authorsToBiblatex(form.authors);
     if (author) {
@@ -125,13 +141,13 @@ const fieldsMapFromForm = (form: ReferenceFormValue): Map<string, string> => {
     const year = fieldValue(form, "year");
     const date = fieldValue(form, "date");
 
-    for (const spec of referenceFieldsForEntryType(form.entryType)) {
-        const value = fieldValue(form, spec.key);
+    for (const key of serializedFieldKeys(form.entryType)) {
+        const value = fieldValue(form, key);
         if (!value) {
             continue;
         }
 
-        if (spec.key === "year") {
+        if (key === "year") {
             if (date) {
                 fields.set("date", updateDateYear(date, value));
             } else {
@@ -140,12 +156,12 @@ const fieldsMapFromForm = (form: ReferenceFormValue): Map<string, string> => {
             continue;
         }
 
-        if (spec.key === "date") {
+        if (key === "date") {
             fields.set("date", value);
             continue;
         }
 
-        fields.set(spec.key, value);
+        fields.set(key, value);
     }
 
     if (date && !fields.has("date")) {
@@ -237,11 +253,14 @@ const formValueFromParsedBiblatex = (
         entryType,
         authors: author ? authorsFromBiblatex(author) : [],
         fields: formFieldsFromMap(entryType, fields),
-        extraFields: extraFieldsFromMap(fields),
+        extraFields: extraFieldsFromMap(entryType, fields),
     };
 };
 
-/** Converts BibTeX/BibLaTeX returned by the translation server into a form draft. */
+/**
+ * Converts BibLaTeX returned by the translation server into a form draft. LaTeX
+ * escapes are decoded and Zotero's library-local fields dropped here only.
+ */
 export const formValueFromLookupBiblatex = (
     biblatex: string,
 ): ReferenceFormValue | null => {
@@ -250,7 +269,33 @@ export const formValueFromLookupBiblatex = (
         return null;
     }
 
-    return formValueFromParsedBiblatex(parsed.entryType, parsed.fields);
+    return formValueFromParsedBiblatex(
+        parsed.entryType,
+        sanitizeLookupFields(parsed.fields),
+    );
+};
+
+/**
+ * Applies a lookup result to a draft being edited: the lookup's entry type,
+ * authors, and every field it provides win; fields it does not provide are kept.
+ */
+export const mergeLookupIntoForm = (
+    current: ReferenceFormValue,
+    lookup: ReferenceFormValue,
+): ReferenceFormValue => {
+    const providedFields: ReferenceFormFields = {};
+    for (const [key, value] of Object.entries(lookup.fields)) {
+        if (value && value.trim().length > 0) {
+            providedFields[key as ReferenceFieldKey] = value;
+        }
+    }
+
+    return {
+        entryType: lookup.entryType,
+        authors: lookup.authors.length > 0 ? lookup.authors : current.authors,
+        fields: { ...current.fields, ...providedFields },
+        extraFields: { ...current.extraFields, ...lookup.extraFields },
+    };
 };
 
 const citationContainer = (form: ReferenceFormValue): string =>

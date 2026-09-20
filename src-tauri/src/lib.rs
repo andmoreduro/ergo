@@ -79,7 +79,11 @@ pub fn run() {
                 let _ = window.with_webview(disable_windows_default_context_menu);
             }
 
-            settings::ensure_translation_server_if_enabled(app.handle());
+            // Off the main thread: starting the container may pull a Docker image.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                settings::ensure_translation_server_if_enabled(&handle);
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -90,6 +94,7 @@ pub fn run() {
             actions_commands::validate_keymap_settings,
             compiler::write_bytes_to_path,
             compiler::write_zip_export,
+            compiler::generate_references_bib,
             compiler::load_fonts_for_families,
             compiler::load_fonts_for_document,
             compiler::check_project_fonts,
@@ -111,6 +116,7 @@ pub fn run() {
             settings::save_global_settings,
             settings::get_translation_server_status,
             translation_server::lookup_bibliography_metadata,
+            translation_server::select_bibliography_lookup_candidate,
             settings::load_keymap_settings,
             settings::save_keymap_settings,
             settings::get_template_spec,
