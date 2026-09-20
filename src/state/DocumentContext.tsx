@@ -14,7 +14,7 @@ import { astReducer } from "./ast/reducer";
 import type { ASTAction } from "./ast/actions";
 import { historyEntryForAstAction } from "./commitAstAction";
 import type { DocumentAST } from "../bindings/DocumentAST";
-import type { ProjectFile } from "../bindings/ProjectFile";
+import type { BundledFile } from "../api/fileBundle";
 import type { DocumentEvent as BackendDocumentEvent } from "../bindings/DocumentEvent";
 import { createDefaultDocumentAST } from "./ast/defaults";
 import {
@@ -59,7 +59,7 @@ interface DocumentSessionState {
     events: QueuedDocumentEvent[];
     nextEventId: number;
     sessionId: number;
-    bootstrapFiles: ProjectFile[] | null;
+    bootstrapFiles: BundledFile[] | null;
     isDirty: boolean;
     documentFocus: DocumentFocusState;
     /**
@@ -121,7 +121,7 @@ interface DocumentAstContextType {
 interface DocumentSyncContextType {
     events: QueuedDocumentEvent[];
     sessionId: number;
-    bootstrapFiles: ProjectFile[] | null;
+    bootstrapFiles: BundledFile[] | null;
     ackDocumentEvents: (upToEventId: number) => void;
     eventsVersion: number;
     lastEventId: number;

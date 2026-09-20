@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -17,8 +18,9 @@ use crate::ast::DocumentAST;
 const DOCUMENT_STATE_PATH: &str = ".ergproj/document_state.json";
 
 #[tauri::command]
-pub fn save_project(state: State<'_, TauriAppState>, path: String) -> Result<(), ErgoError> {
-    save_project_to_path(&state, &path)
+pub async fn save_project(state: State<'_, TauriAppState>, path: String) -> Result<(), ErgoError> {
+    let app_state = state.inner().clone();
+    crate::ipc::blocking(move || save_project_to_path(&app_state, &path)).await
 }
 
 pub fn save_project_to_path(state: &TauriAppState, path: impl AsRef<Path>) -> Result<(), ErgoError> {
@@ -116,17 +118,36 @@ pub struct ProjectFile {
 #[serde(rename_all = "camelCase")]
 pub struct OpenProjectResult {
     pub ast: DocumentAST,
-    pub files: Vec<ProjectFile>,
 }
 
+/// Opens an archive into the backend session. The files the WASM worker needs
+/// to bootstrap follow through `read_worker_bootstrap_files` as a raw bundle.
 #[tauri::command]
-pub fn open_project(
+pub async fn open_project(
     state: State<'_, TauriAppState>,
     path: String,
 ) -> Result<OpenProjectResult, ErgoError> {
-    let ast = open_project_from_path(&state, path)?;
-    let files = project_files_for_worker_bootstrap(&state.vfs);
-    Ok(OpenProjectResult { ast, files })
+    let app_state = state.inner().clone();
+    crate::ipc::blocking(move || {
+        let ast = open_project_from_path(&app_state, path)?;
+        Ok(OpenProjectResult { ast })
+    })
+    .await
+}
+
+/// The current backend VFS files the worker bootstrap needs, as a file bundle.
+#[tauri::command]
+pub async fn read_worker_bootstrap_files(
+    state: State<'_, TauriAppState>,
+) -> Result<tauri::ipc::Response, ErgoError> {
+    let vfs = Arc::clone(&state.vfs);
+    crate::ipc::blocking(move || {
+        let files = project_files_for_worker_bootstrap(&vfs);
+        Ok(crate::ipc::file_bundle_response(
+            files.iter().map(|file| (file.path.as_str(), file.bytes.as_slice())),
+        ))
+    })
+    .await
 }
 
 pub fn open_project_from_path(
@@ -252,41 +273,64 @@ fn mirror_project_files_to_vfs(state: &TauriAppState, files: &[ProjectFile]) {
     }
 }
 
-#[tauri::command]
-pub fn load_template_package_files(
-    state: State<'_, TauriAppState>,
-    template_id: String,
+fn project_files_bundle(files: &[ProjectFile]) -> tauri::ipc::Response {
+    crate::ipc::file_bundle_response(
+        files.iter().map(|file| (file.path.as_str(), file.bytes.as_slice())),
+    )
+}
+
+fn template_package_files(
+    state: &TauriAppState,
+    template_id: &str,
 ) -> Result<Vec<ProjectFile>, ErgoError> {
     use ergo_core::package_resolver::PackageRef;
 
-    if let Some(files) = bundled_package_files_for_template(&template_id) {
+    if let Some(files) = bundled_package_files_for_template(template_id) {
         let project_files: Vec<ProjectFile> = files
             .into_iter()
             .map(|(path, bytes)| ProjectFile { path, bytes })
             .collect();
-        mirror_project_files_to_vfs(&state, &project_files);
+        mirror_project_files_to_vfs(state, &project_files);
         return Ok(project_files);
     }
 
-    let spec = load_bundled_template(&template_id)?;
+    let spec = load_bundled_template(template_id)?;
     let package = PackageRef::from_import(&spec.typst.package.name, &spec.typst.package.version)?;
     let files = crate::package_download::collect_package_files_with_deps(&package)?;
-    mirror_project_files_to_vfs(&state, &files);
+    mirror_project_files_to_vfs(state, &files);
     Ok(files)
 }
 
+/// Template Typst package files as a file bundle (also mirrored into the backend VFS).
 #[tauri::command]
-pub fn load_package_files(
+pub async fn load_template_package_files(
+    state: State<'_, TauriAppState>,
+    template_id: String,
+) -> Result<tauri::ipc::Response, ErgoError> {
+    let app_state = state.inner().clone();
+    crate::ipc::blocking(move || {
+        Ok(project_files_bundle(&template_package_files(&app_state, &template_id)?))
+    })
+    .await
+}
+
+/// A registry package's files (with dependencies) as a file bundle.
+#[tauri::command]
+pub async fn load_package_files(
     state: State<'_, TauriAppState>,
     name: String,
     version: String,
-) -> Result<Vec<ProjectFile>, ErgoError> {
+) -> Result<tauri::ipc::Response, ErgoError> {
     use ergo_core::package_resolver::PackageRef;
 
-    let package = PackageRef::from_import(&name, &version)?;
-    let files = crate::package_download::collect_package_files_with_deps(&package)?;
-    mirror_project_files_to_vfs(&state, &files);
-    Ok(files)
+    let app_state = state.inner().clone();
+    crate::ipc::blocking(move || {
+        let package = PackageRef::from_import(&name, &version)?;
+        let files = crate::package_download::collect_package_files_with_deps(&package)?;
+        mirror_project_files_to_vfs(&app_state, &files);
+        Ok(project_files_bundle(&files))
+    })
+    .await
 }
 
 #[cfg(test)]

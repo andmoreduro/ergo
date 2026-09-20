@@ -5,9 +5,10 @@ import type { CompilationResult } from "../bindings/CompilationResult";
 import type { PreviewJumpResult } from "../bindings/PreviewJumpResult";
 import type { PreviewElementPositionsResult } from "../bindings/PreviewElementPositionsResult";
 import type { PreviewFocusTarget } from "../bindings/PreviewFocusTarget";
-import type { ProjectFile } from "../bindings/ProjectFile";
 
-export type VfsFileEntry = { path: string; bytes: Uint8Array };
+import type { BundledFile } from "../api/fileBundle";
+
+export type VfsFileEntry = BundledFile;
 
 export type BootstrapPreviewPayload = {
     ast: DocumentAST;
@@ -22,7 +23,7 @@ export type BootstrapPreviewResult = {
 export type WorkerRequest =
     | { type: "init"; payload: { wasmUrl: string } }
     | { type: "reset_fonts" }
-    | { type: "load_fonts"; payload: number[][] }
+    | { type: "load_fonts"; payload: Uint8Array[] }
     | { type: "sync_snapshot"; payload: DocumentAST }
     | { type: "sync_events"; payload: DocumentEvent[] }
     | { type: "compile"; payload: { svgPageIndices: number[] } }
@@ -214,10 +215,3 @@ export const REQUEST_REPLY_TYPES = {
 } satisfies Record<WorkerRequest["type"], WorkerResponse["type"]>;
 
 export type RequestReplyMap = typeof REQUEST_REPLY_TYPES;
-
-export function projectFilesToVfsEntries(files: ProjectFile[]): VfsFileEntry[] {
-    return files.map((file) => ({
-        path: file.path,
-        bytes: new Uint8Array(file.bytes),
-    }));
-}

@@ -5,14 +5,12 @@ import type { GlobalSettings } from "../bindings/GlobalSettings";
 import type { KeymapSettings } from "../bindings/KeymapSettings";
 import type { ActionContextSnapshot } from "../bindings/ActionContextSnapshot";
 import type { AssetEntry } from "../bindings/AssetEntry";
-import type { ImportResourceResult } from "../bindings/ImportResourceResult";
 import type { OpenProjectResult } from "../bindings/OpenProjectResult";
 import type { ActionDescriptor } from "../bindings/ActionDescriptor";
 import type { ContextDescriptor } from "../bindings/ContextDescriptor";
 import type { ActionResolution } from "../bindings/ActionResolution";
 import type { KeymapValidationResult } from "../bindings/KeymapValidationResult";
 import type { LogicalKeyEvent } from "../bindings/LogicalKeyEvent";
-import type { ProjectFile } from "../bindings/ProjectFile";
 import type { ProjectFontAvailability } from "../bindings/ProjectFontAvailability";
 import type { ProjectSettings } from "../bindings/ProjectSettings";
 import type { ReferenceEntry } from "../bindings/ReferenceEntry";
@@ -25,10 +23,25 @@ import type { PerfHarnessConfig } from "../bindings/PerfHarnessConfig";
 import type { PerfHarnessReport } from "../bindings/PerfHarnessReport";
 import type { TemplateSpec } from "../bindings/TemplateSpec";
 
+import { decodeFileBundle, encodeFileBundle, type BundledFile } from "./fileBundle";
+
 export type { DocumentOutline } from "../bindings/DocumentOutline";
 
-/** `ImportResourceResult` with the IPC `number[]` payload decoded into bytes. */
-export type ImportedResource = { asset: AssetEntry; bytes: Uint8Array };
+/**
+ * Byte payloads cross IPC as raw bodies, never as JSON number arrays: responses
+ * come back as an ArrayBuffer (decoded as views, no copy) and requests send the
+ * bytes with metadata in percent-encoded headers. See `src-tauri/src/ipc.rs`.
+ */
+const rawHeaders = (headers: Record<string, string>) => ({
+    headers: Object.fromEntries(
+        Object.entries(headers).map(([key, value]) => [key, encodeURIComponent(value)]),
+    ),
+});
+
+const invokeBundle = async (
+    command: string,
+    args?: Record<string, unknown>,
+): Promise<BundledFile[]> => decodeFileBundle(await invoke<ArrayBuffer>(command, args));
 
 export const TauriApi = {
     async openDevTools(): Promise<void> {
@@ -36,20 +49,18 @@ export const TauriApi = {
     },
 
     async writeBytesToPath(path: string, bytes: Uint8Array): Promise<void> {
-        return invoke("write_bytes_to_path", { path, bytes: Array.from(bytes) });
+        return invoke("write_bytes_to_path", bytes, rawHeaders({ "x-ergo-path": path }));
     },
 
     async writeZipExport(
         path: string,
         entries: Array<{ name: string; bytes: Uint8Array }>,
     ): Promise<void> {
-        return invoke("write_zip_export", {
-            path,
-            entries: entries.map((entry) => ({
-                name: entry.name,
-                bytes: Array.from(entry.bytes),
-            })),
-        });
+        return invoke(
+            "write_zip_export",
+            encodeFileBundle(entries.map((entry) => ({ path: entry.name, bytes: entry.bytes }))),
+            rawHeaders({ "x-ergo-path": path }),
+        );
     },
 
     async generateReferencesBib(
@@ -59,8 +70,8 @@ export const TauriApi = {
     },
 
     async loadFontsForDocument(ast: DocumentAST): Promise<Uint8Array[]> {
-        const buffers = await invoke<number[][]>("load_fonts_for_document", { ast });
-        return buffers.map((buf) => new Uint8Array(buf));
+        const fonts = await invokeBundle("load_fonts_for_document", { ast });
+        return fonts.map((font) => font.bytes);
     },
 
     async checkProjectFonts(
@@ -91,34 +102,25 @@ export const TauriApi = {
         return invoke("sync_document_events", { events });
     },
 
-    async importResourceFile(sourcePath: string): Promise<ImportResourceResult> {
+    /** Copies a file from disk into the project VFS; read its bytes back with `readVfsFile`. */
+    async importResourceFile(sourcePath: string): Promise<AssetEntry> {
         return invoke("import_resource_file", { sourcePath });
     },
 
-    async importResourceBytes(
-        fileName: string,
-        bytes: Uint8Array,
-    ): Promise<ImportedResource> {
-        const result = await invoke<ImportResourceResult>("import_resource_bytes", {
-            fileName,
-            bytes: Array.from(bytes),
-        });
-        return {
-            asset: result.asset,
-            bytes: new Uint8Array(result.bytes),
-        };
+    async importResourceBytes(fileName: string, bytes: Uint8Array): Promise<AssetEntry> {
+        return invoke(
+            "import_resource_bytes",
+            bytes,
+            rawHeaders({ "x-ergo-file-name": fileName }),
+        );
     },
 
     async readVfsFile(path: string): Promise<Uint8Array> {
-        const bytes = await invoke<number[]>("read_vfs_file", { path });
-        return new Uint8Array(bytes);
+        return new Uint8Array(await invoke<ArrayBuffer>("read_vfs_file", { path }));
     },
 
     async writeGeneratedAsset(path: string, bytes: Uint8Array): Promise<void> {
-        return invoke("write_generated_asset", {
-            path,
-            bytes: Array.from(bytes),
-        });
+        return invoke("write_generated_asset", bytes, rawHeaders({ "x-ergo-path": path }));
     },
 
     async saveProject(path: string): Promise<void> {
@@ -127,6 +129,11 @@ export const TauriApi = {
 
     async openProject(path: string): Promise<OpenProjectResult> {
         return invoke("open_project", { path });
+    },
+
+    /** Files the WASM worker needs to bootstrap the project just opened. */
+    async readWorkerBootstrapFiles(): Promise<BundledFile[]> {
+        return invokeBundle("read_worker_bootstrap_files");
     },
 
     async loadGlobalSettings(): Promise<GlobalSettings> {
@@ -210,12 +217,12 @@ export const TauriApi = {
         });
     },
 
-    async loadTemplatePackageFiles(templateId: string): Promise<ProjectFile[]> {
-        return invoke("load_template_package_files", { templateId });
+    async loadTemplatePackageFiles(templateId: string): Promise<BundledFile[]> {
+        return invokeBundle("load_template_package_files", { templateId });
     },
 
-    async loadPackageFiles(name: string, version: string): Promise<ProjectFile[]> {
-        return invoke("load_package_files", { name, version });
+    async loadPackageFiles(name: string, version: string): Promise<BundledFile[]> {
+        return invokeBundle("load_package_files", { name, version });
     },
 
     async getPerfConfig(): Promise<PerfHarnessConfig> {

@@ -29,6 +29,8 @@ interface GlobalSettingsContextValue {
     settings: GlobalSettings;
     themeMode: ThemeMode;
     locale: Locale;
+    /** False until the persisted settings have been read (or found absent). */
+    ready: boolean;
 }
 
 export interface KeymapContextValue {
@@ -95,8 +97,9 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
             settings: store.globalSettings,
             themeMode: store.themeMode,
             locale: store.locale,
+            ready: store.settingsLoaded,
         }),
-        [store.globalSettings, store.themeMode, store.locale],
+        [store.globalSettings, store.themeMode, store.locale, store.settingsLoaded],
     );
 
     const keymapValue = useMemo<KeymapContextValue>(
@@ -154,6 +157,9 @@ export const useGlobalSettings = (): GlobalSettings =>
 export const useThemeMode = (): ThemeMode => useGlobalSettingsContext().themeMode;
 
 export const useUiLocale = (): Locale => useGlobalSettingsContext().locale;
+
+/** Whether persisted settings have loaded; gates the shell so it never renders half-configured. */
+export const useSettingsReady = (): boolean => useGlobalSettingsContext().ready;
 
 export const useKeymap = (): KeymapContextValue => {
     const value = useContext(KeymapContext);

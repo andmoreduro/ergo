@@ -122,6 +122,7 @@ pub fn run() {
             settings::get_template_spec,
             archive::save_project,
             archive::open_project,
+            archive::read_worker_bootstrap_files,
             archive::load_template_package_files,
             archive::load_package_files,
             perf_commands::get_perf_config,
@@ -144,6 +145,7 @@ pub mod archive;
 pub mod compile_events;
 pub mod compiler;
 pub mod document_session_commands;
+pub mod ipc;
 pub mod logging;
 pub mod package_download;
 pub mod perf_commands;

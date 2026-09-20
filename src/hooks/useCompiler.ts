@@ -7,7 +7,7 @@ import {
 } from "react";
 import type { DocumentAST } from "../bindings/DocumentAST";
 import type { DocumentSessionStatus } from "../bindings/DocumentSessionStatus";
-import type { ProjectFile } from "../bindings/ProjectFile";
+import type { BundledFile } from "../api/fileBundle";
 import type { QueuedDocumentEvent } from "../state/DocumentContext";
 import type { DocumentOutline } from "../bindings/DocumentOutline";
 import type { DocumentResources } from "../bindings/DocumentResources";
@@ -48,7 +48,7 @@ export function useCompiler(
     sessionId = 1,
     ackDocumentEvents?: (upToEventId: number) => void,
     eventsVersion = 0,
-    bootstrapFiles: ProjectFile[] | null = null,
+    bootstrapFiles: BundledFile[] | null = null,
 ): UseCompilerResult {
     const [previewPages, setPreviewPages] = useState<PreviewPageFile[]>([]);
     const [error, setError] = useState<string | null>(null);

@@ -262,23 +262,24 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
 
 
-            const result = await TauriApi.importResourceFile(selected);
+            const asset = await TauriApi.importResourceFile(selected);
+            const bytes = await TauriApi.readVfsFile(asset.path);
 
             await CompilerClient.writeFile(
 
-                result.asset.path,
+                asset.path,
 
-                new Uint8Array(result.bytes),
+                bytes,
 
             );
 
             if (
                 !astStore
                     .getSnapshot()
-                    .assets.some((entry) => entry.id === result.asset.id)
+                    .assets.some((entry) => entry.id === asset.id)
             ) {
 
-                dispatch({ type: "ADD_ASSET", payload: { asset: result.asset } });
+                dispatch({ type: "ADD_ASSET", payload: { asset } });
 
             }
 
@@ -290,7 +291,7 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
                     figureId: element.id,
 
-                    assetId: result.asset.id,
+                    assetId: asset.id,
 
                 },
 
@@ -298,11 +299,11 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
             updatePreviewUrl(
 
-                result.asset.id,
+                asset.id,
 
-                new Uint8Array(result.bytes),
+                bytes,
 
-                result.asset.path,
+                asset.path,
 
             );
 

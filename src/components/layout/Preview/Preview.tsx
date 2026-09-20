@@ -29,6 +29,7 @@ import type { useCompiler } from "../../../hooks/useCompiler";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { PreviewContext } from "../../../actions/contexts/PreviewContext";
 import { PreviewPageCanvas } from "./PreviewPageCanvas";
+import { LoadingIndicator } from "../../molecules/LoadingIndicator/LoadingIndicator";
 import { PreviewToolbar } from "./PreviewToolbar";
 import { m } from "../../../paraglide/messages.js";
 import {
@@ -349,6 +350,13 @@ const PreviewComponent = forwardRef<PreviewHandle, PreviewProps>(
                 dispatchAction={dispatchAction}
             />
             <div className={styles.viewport}>
+                {compiler.mainPreviewPaintedRevision === null && (
+                    // Bootstrap only (resets per session): absolutely positioned so
+                    // the preview never shifts while the first compile runs.
+                    <div className={styles.preparingOverlay}>
+                        <LoadingIndicator label={m.preview_preparing()} />
+                    </div>
+                )}
                 <div
                     className={styles.scrollArea}
                     ref={previewScrollRef as RefObject<HTMLDivElement>}

@@ -318,12 +318,8 @@ workerScope.onmessage = async (event: MessageEvent<WorkerMessage>) => {
             }
             case "write_files": {
                 if (!compiler) return;
-                compiler.write_files(
-                    message.payload.map((file) => ({
-                        path: file.path,
-                        bytes: Array.from(file.bytes),
-                    })),
-                );
+                // Typed arrays deserialize straight into Vec<u8> (see bootstrap).
+                compiler.write_files(message.payload);
                 reply({ type: "write_files_done", id });
                 break;
             }

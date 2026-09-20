@@ -54,6 +54,8 @@ The context files describe the intended current design. They are not a changelog
 - **Keep preview layout stable.** No visible compile-status text that shifts the preview while typing.
 - **Sanitize user input in generated Typst.** User text must not inject raw Typst markup (unless explicitly a trusted-raw feature).
 - **No branches for unreleased formats.** Érgo is pre-release; keep current schemas strict instead of preserving old JSON/archive shapes.
+- **Never block the main thread from IPC.** Tauri runs a non-`async` command on the main thread, which drives the WebView on Linux; any command doing file, archive, font or document-sized work is `async fn` and runs its body through `crate::ipc::blocking`. Only trivial lookups (key resolution, catalog reads) stay synchronous.
+- **Bytes cross IPC raw, never as JSON number arrays.** Responses return `tauri::ipc::Response` (single file, or a file bundle via `crate::ipc`), requests send a raw body with metadata in percent-encoded `x-ergo-*` headers; the frontend decodes with `src/api/fileBundle.ts`. Worker messages carry `Uint8Array`s, never `Array.from(bytes)`.
 
 ## Template naming
 

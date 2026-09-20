@@ -34,6 +34,8 @@ export const useProjectLifecycle = ({
     rememberProject,
 }: UseProjectLifecycleOptions) => {
     const [hasActiveProject, setHasActiveProject] = useState(false);
+    /** Non-null while a project is being opened or created (drives the loading overlay). */
+    const [projectLoading, setProjectLoading] = useState<"open" | "create" | null>(null);
     const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
     const [newProjectInitialName, setNewProjectInitialName] = useState<
         string | null
@@ -124,6 +126,7 @@ export const useProjectLifecycle = ({
                 projectFileName,
             );
 
+            setProjectLoading("create");
             try {
                 await TauriApi.resetProjectSession();
                 dispatch({
@@ -153,6 +156,8 @@ export const useProjectLifecycle = ({
                             error instanceof Error ? error.message : String(error),
                     }),
                 );
+            } finally {
+                setProjectLoading(null);
             }
         },
         [dispatch, markSaved, rememberProject, saveBeforeProjectBoundary],
@@ -188,11 +193,16 @@ export const useProjectLifecycle = ({
                 return;
             }
 
+            setProjectLoading("open");
             try {
-                const result = await TauriApi.openProject(projectPath);
+                // The archive is read and mirrored into the backend session off the
+                // main thread; the worker's bootstrap files follow as one raw
+                // bundle (typed-array views, no JSON parse on the UI thread).
+                const { ast } = await TauriApi.openProject(projectPath);
+                const projectFiles = await TauriApi.readWorkerBootstrapFiles();
                 dispatch({
                     type: "LOAD_DOCUMENT",
-                    payload: { ast: result.ast, projectFiles: result.files },
+                    payload: { ast, projectFiles },
                 });
                 rememberProject(projectPath);
                 setCurrentProjectPath(projectPath);
@@ -204,6 +214,8 @@ export const useProjectLifecycle = ({
                             error instanceof Error ? error.message : String(error),
                     }),
                 );
+            } finally {
+                setProjectLoading(null);
             }
         },
         [dispatch, rememberProject, saveBeforeProjectBoundary],
@@ -276,6 +288,7 @@ export const useProjectLifecycle = ({
 
     return {
         hasActiveProject,
+        projectLoading,
         currentProjectPath,
         newProjectInitialName,
         newProjectInitialLocation,
