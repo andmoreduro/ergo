@@ -29,7 +29,11 @@ import {
 
 } from "../../../../state/ast/commitPolicy";
 
-import { useDocumentAst } from "../../../../state/DocumentContext";
+import {
+    useDocumentActions,
+    useDocumentAstSelector,
+    useDocumentAstStore,
+} from "../../../../state/DocumentContext";
 
 import { useTemplateSpecContext } from "../../../../state/TemplateSpecContext";
 
@@ -61,7 +65,8 @@ const FIGURE_SETTINGS_KEYS = new Set(["width"]);
 
 export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
-    const { state, dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
+    const astStore = useDocumentAstStore();
 
     const { spec: templateSpec } = useTemplateSpecContext();
 
@@ -73,11 +78,13 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
     const hasAsset = figureHasLinkedAsset(element.asset_id);
 
-    const linkedAsset = element.asset_id
-
-        ? state.assets.find((asset) => asset.id === element.asset_id) ?? null
-
-        : null;
+    // Select just this element's asset (identity-stable while other parts of
+    // the AST change) instead of subscribing to the whole document.
+    const linkedAsset = useDocumentAstSelector((ast) =>
+        element.asset_id
+            ? ast.assets.find((asset) => asset.id === element.asset_id) ?? null
+            : null,
+    );
 
     const { previewUrl, updatePreviewUrl } = useFigureImagePreview(
 
@@ -265,7 +272,11 @@ export const FigureEditor = ({ element }: { element: FigureElement }) => {
 
             );
 
-            if (!state.assets.some((entry) => entry.id === result.asset.id)) {
+            if (
+                !astStore
+                    .getSnapshot()
+                    .assets.some((entry) => entry.id === result.asset.id)
+            ) {
 
                 dispatch({ type: "ADD_ASSET", payload: { asset: result.asset } });
 

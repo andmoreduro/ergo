@@ -4,7 +4,7 @@ import {
     ActionContextProvider,
     type ActionHandlerMap,
 } from "../../../actions/runtime";
-import { useDocumentAst } from "../../../state/DocumentContext";
+import { useDocumentActions } from "../../../state/DocumentContext";
 import {
     parseRemoveTableColumnPayload,
     parseRemoveTableRowPayload,
@@ -19,7 +19,7 @@ export interface ElementEditorProps {
 export const ElementEditor = memo(function ElementEditor({
     element,
 }: ElementEditorProps) {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const tableRows = element.type === "Table" ? element.rows : 0;
     const tableCols = element.type === "Table" ? element.cols : 0;
 

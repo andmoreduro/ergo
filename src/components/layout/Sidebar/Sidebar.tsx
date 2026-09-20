@@ -1,6 +1,6 @@
 import { memo, useRef, type RefObject } from "react";
-import type { DocumentOutline } from "../../../bindings/DocumentOutline";
 import type { DocumentResources } from "../../../bindings/DocumentResources";
+import type { TargetedOutlineEntry } from "../../../editor/outlineMatching";
 import type { ResourcePreviewRevisions } from "../../../hooks/useCompiler";
 import {
     Book24Regular,
@@ -16,7 +16,7 @@ import { SidebarResourcesPanel } from "./SidebarResources";
 import styles from "./Sidebar.module.css";
 
 export interface SidebarProps {
-    outline?: DocumentOutline | null;
+    outlineEntries?: TargetedOutlineEntry[];
     resources?: DocumentResources | null;
     previewRevision?: number | null;
     resourcePreviewRevisions?: ResourcePreviewRevisions;
@@ -26,8 +26,10 @@ export interface SidebarProps {
     previewRasterizationDebounceMs?: number;
 }
 
+const EMPTY_OUTLINE_ENTRIES: TargetedOutlineEntry[] = [];
+
 const SidebarComponent = ({
-    outline = null,
+    outlineEntries = EMPTY_OUTLINE_ENTRIES,
     resources = null,
     previewRevision = null,
     resourcePreviewRevisions = {},
@@ -56,7 +58,7 @@ const SidebarComponent = ({
                         panel: (
                             <div className={styles.tabSection}>
                                 <SidebarOutlinePanel
-                                    outline={outline}
+                                    outlineEntries={outlineEntries}
                                     previewRevision={previewRevision}
                                     previewScrollRef={previewScrollRef}
                                 />

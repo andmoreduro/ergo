@@ -6,14 +6,19 @@ import { paragraphHasText } from "../../../../editor/fieldNavigation";
 import { normalizeRichTextContent } from "../../../../editor/textInput";
 import { useDeferredRichTextCommit } from "../../../../editor/useDeferredRichTextCommit";
 import { useEditorNavigation } from "../../../../editor/EditorNavigationContext";
-import { useDocument, useDocumentAst } from "../../../../state/DocumentContext";
+import {
+    useDocumentActions,
+    useDocumentAstStore,
+} from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { RichTextField } from "../../../molecules/RichTextField/RichTextField";
 import type { ParagraphElement } from "../types";
 
 export const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
-    const { state, dispatch } = useDocumentAst();
-    const { setDocumentFocus } = useDocument();
+    // Stable actions + imperative AST reads: this editor must not re-render on
+    // every body keystroke elsewhere in the document.
+    const { dispatch, setDocumentFocus } = useDocumentActions();
+    const astStore = useDocumentAstStore();
     const { removeContentElement, handleAdvanceKeyDown } = useEditorNavigation();
     const fieldId = richTextFieldId(element.id);
     const { content, setDraft, shouldCommit } = useDeferredRichTextCommit(
@@ -31,7 +36,7 @@ export const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
         }
 
         insertParagraphAfterElement(
-            state,
+            astStore.getSnapshot(),
             dispatch,
             setDocumentFocus,
             element.id,
@@ -55,7 +60,7 @@ export const ParagraphEditor = ({ element }: { element: ParagraphElement }) => {
         }
 
         event.preventDefault();
-        removeContentElement(state, element.id);
+        removeContentElement(astStore.getSnapshot(), element.id);
     };
 
     return (

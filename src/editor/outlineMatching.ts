@@ -69,6 +69,49 @@ export const collectHeadingTargets = (
     return targets;
 };
 
+/**
+ * Identity-based equality for `collectHeadingTargets` output. Untouched
+ * elements keep their object identity across AST commits (the reducer only
+ * replaces the edited element), so comparing element references is enough to
+ * tell whether the heading set changed, and it lets a selector skip re-renders
+ * on body keystrokes that did not touch a heading.
+ */
+export const headingTargetsEqual = (
+    a: HeadingTarget[],
+    b: HeadingTarget[],
+): boolean =>
+    a.length === b.length &&
+    a.every((target, index) => target.element === b[index]?.element);
+
+const headingIndexKey = (level: number, normalizedText: string): string =>
+    `${level} ${normalizedText}`;
+
+/**
+ * Index heading targets by (level, normalized text) so matching outline
+ * entries costs O(outline + headings) instead of O(outline * headings). The
+ * first heading in document order wins, matching the linear-scan semantics.
+ * An empty heading is also indexed under the generated placeholder text,
+ * mirroring `headingMatchesOutline`.
+ */
+const indexHeadingTargets = (
+    headingTargets: HeadingTarget[],
+): Map<string, HeadingTarget> => {
+    const index = new Map<string, HeadingTarget>();
+    const placeholder = normalizeOutlineText(GENERATED_EMPTY_HEADING_TEXT);
+    for (const target of headingTargets) {
+        const keys = [headingIndexKey(target.level, target.text)];
+        if (target.text === "") {
+            keys.push(headingIndexKey(target.level, placeholder));
+        }
+        for (const key of keys) {
+            if (!index.has(key)) {
+                index.set(key, target);
+            }
+        }
+    }
+    return index;
+};
+
 export const buildTargetedOutlineEntries = (options: {
     outline: DocumentOutline | null;
     headingTargets: HeadingTarget[];
@@ -78,8 +121,11 @@ export const buildTargetedOutlineEntries = (options: {
     const { outline, headingTargets, isAbstractEntry, abstractTarget } = options;
 
     const entries: TargetedOutlineEntry[] = [];
+    const outlineEntries = outline?.entries ?? [];
+    const headingIndex =
+        outlineEntries.length > 0 ? indexHeadingTargets(headingTargets) : null;
 
-    for (const [index, entry] of (outline?.entries ?? []).entries()) {
+    for (const [index, entry] of outlineEntries.entries()) {
         if (isAbstractEntry(entry.text)) {
             entries.push({
                 key: `abstract-${index}`,
@@ -91,10 +137,8 @@ export const buildTargetedOutlineEntries = (options: {
             continue;
         }
 
-        const match = headingTargets.find(
-            ({ level, text }) =>
-                level === entry.level &&
-                headingMatchesOutline(text, entry.text),
+        const match = headingIndex?.get(
+            headingIndexKey(entry.level, normalizeOutlineText(entry.text)),
         );
 
         if (match) {

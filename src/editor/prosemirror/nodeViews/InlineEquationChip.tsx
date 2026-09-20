@@ -13,7 +13,7 @@ import { InlineTextInput } from "../../../components/atoms/InlineTextInput/Inlin
 import { EquationSyntaxField } from "../../../components/molecules/EquationSyntaxField/EquationSyntaxField";
 import { InlineChipConfig } from "../../../components/molecules/InlineChipConfig/InlineChipConfig";
 import { registerActiveElementSettingsToggle } from "../../elementSettingsBridge";
-import { useDocument } from "../../../state/DocumentContext";
+import { useDocumentActions } from "../../../state/DocumentContext";
 import {
     exitAfterInlineEquation,
     focusTargetForInlineEquationAtPos,
@@ -38,7 +38,7 @@ export const InlineEquationChip = ({
     getPos,
     tableId = null,
 }: InlineEquationChipProps) => {
-    const { setDocumentFocus } = useDocument();
+    const { setDocumentFocus } = useDocumentActions();
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const hostRef = useRef<HTMLSpanElement>(null);
     const source = (node.attrs.source as string) ?? "";

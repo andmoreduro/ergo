@@ -19,7 +19,7 @@ import {
 } from "../../quoteAttribution";
 import { registerActiveElementSettingsToggle } from "../../elementSettingsBridge";
 import {
-    useDocument,
+    useDocumentActions,
     useDocumentAstSelector,
 } from "../../../state/DocumentContext";
 import { m } from "../../../paraglide/messages.js";
@@ -47,7 +47,7 @@ export const InlineQuoteChip = ({
     getPos,
     tableId = null,
 }: InlineQuoteChipProps) => {
-    const { setDocumentFocus } = useDocument();
+    const { setDocumentFocus } = useDocumentActions();
     const references = useDocumentAstSelector(
         (ast) => ast.references,
         (left, right) =>

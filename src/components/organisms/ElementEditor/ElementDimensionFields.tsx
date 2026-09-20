@@ -4,7 +4,7 @@ import {
     getPlacementOptions,
     DEFAULT_PLACEMENT,
 } from "../../../editor/placementOptions";
-import { useDocumentAst } from "../../../state/DocumentContext";
+import { useDocumentActions } from "../../../state/DocumentContext";
 import { m } from "../../../paraglide/messages.js";
 import { Select } from "../../atoms/Select/Select";
 import { TextInput } from "../../atoms/TextInput/TextInput";
@@ -31,7 +31,7 @@ export const ElementDimensionFields = ({
 }: {
     element: DimensionElement;
 }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const [placement, setPlacement] = useState(
         element.placement || DEFAULT_PLACEMENT,
     );

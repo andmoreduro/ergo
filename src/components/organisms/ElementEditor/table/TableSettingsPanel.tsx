@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { elementExtraFieldFieldId } from "../../../../editor/fieldIds";
 import { getPlacementOptions, tablePlacementValue } from "../../../../editor/placementOptions";
 import { tableEditorSupportsPlacement } from "../../../../editor/templateElementOverrides";
-import { useDocumentAst } from "../../../../state/DocumentContext";
+import { useDocumentActions } from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { useTemplateSpecContext } from "../../../../state/TemplateSpecContext";
 import { m } from "../../../../paraglide/messages.js";
@@ -22,7 +22,7 @@ export const TableSettingsPanel = ({
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
 }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const { spec: templateSpec } = useTemplateSpecContext();
     const tableOverride = templateSpec?.typst.element_overrides?.table ?? null;
     const showPlacement = tableEditorSupportsPlacement(tableOverride);

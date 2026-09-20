@@ -1,5 +1,6 @@
 import {
     forwardRef,
+    memo,
     useCallback,
     useEffect,
     useImperativeHandle,
@@ -24,7 +25,6 @@ import {
 import { usePreviewPageMetrics } from "../../../hooks/usePreviewPageMetrics";
 import { nowMs, type PagePaintInfo } from "../../../hooks/previewTelemetry";
 import { isDebugMenuEnabled } from "../../../config/debug";
-import { useDocumentFocusSelector } from "../../../state/DocumentContext";
 import type { useCompiler } from "../../../hooks/useCompiler";
 import { useActionDispatcher } from "../../../actions/runtime";
 import { PreviewContext } from "../../../actions/contexts/PreviewContext";
@@ -76,7 +76,7 @@ export interface PreviewProps {
     multiCaret: boolean;
 }
 
-export const Preview = forwardRef<PreviewHandle, PreviewProps>(
+const PreviewComponent = forwardRef<PreviewHandle, PreviewProps>(
     (
         {
             compiler,
@@ -98,7 +98,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(
     const dispatchAction = useActionDispatcher();
     const {
         previewPages,
-        sourceMap,
         previewRevision,
         markMainPreviewPainted,
     } = compiler;
@@ -167,11 +166,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(
     const horizontalScrollRef = useRef<HTMLDivElement>(null);
     const previewColumnRef = useRef<HTMLElement>(null);
     const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
-    const focusElementId = useDocumentFocusSelector((focus) => focus.elementId);
-    const activeSource = useMemo(
-        () => sourceMap.find((entry) => entry.elementId === focusElementId),
-        [focusElementId, sourceMap],
-    );
 
     // Forward sync — editor caret → preview cue, viewport anchor tracking, and
     // follow/click-to-source scrolling — coordinated by a single hook so this
@@ -337,7 +331,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(
         <aside
             ref={previewColumnRef}
             className={styles.preview}
-            data-active-source-label={activeSource?.label}
             data-editor-focus-lose-exempt=""
             onClick={handlePreviewClick}
             onFocusCapture={() => setPreviewFocused(true)}
@@ -429,7 +422,15 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(
     },
 );
 
-Preview.displayName = "Preview";
+PreviewComponent.displayName = "Preview";
+
+/**
+ * Memoized: the workspace re-renders on every keystroke (it drives the compiler
+ * off the live AST), but Preview's props only change per compile result or on
+ * zoom/settings changes. Caret cues arrive through the focus store selector
+ * inside the forward-sync hook, not through props.
+ */
+export const Preview = memo(PreviewComponent);
 
 /** Shared stable empty caret list so cue-free pages never re-render. */
 const NO_CARETS: PreviewCaret[] = [];

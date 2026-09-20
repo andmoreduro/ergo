@@ -3,7 +3,7 @@ import type { AssetEntry } from "../../bindings/AssetEntry";
 import { TauriApi } from "../../api/tauri";
 import { CompilerClient } from "../../workers/compilerClient";
 import { useFigureImagePreview } from "../../components/organisms/ElementEditor/figure/useFigureImagePreview";
-import { useDocumentAst } from "../../state/DocumentContext";
+import { useDocumentActions, useDocumentAstStore } from "../../state/DocumentContext";
 import { m } from "../../paraglide/messages.js";
 import { diagramAssetPath } from "./diagramAsset";
 import { renderMermaidSvg } from "./renderMermaidSvg";
@@ -17,16 +17,14 @@ export const useDiagramMermaidAsset = (
     assetId: string | null,
     linkedAsset: AssetEntry | null,
 ) => {
-    const { state, dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
+    const astStore = useDocumentAstStore();
     const { previewUrl, updatePreviewUrl } = useFigureImagePreview(
         assetId,
         linkedAsset,
     );
     const renderGenerationRef = useRef(0);
     const lastRenderedSourceRef = useRef<string | null>(null);
-    const assetsRef = useRef(state.assets);
-    assetsRef.current = state.assets;
-
     useEffect(() => {
         const source = mermaidSource.trim();
         if (!source) {
@@ -71,7 +69,8 @@ export const useDiagramMermaidAsset = (
                         caption: null,
                     };
 
-                    if (assetsRef.current.some((entry) => entry.id === diagramId)) {
+                    const assets = astStore.getSnapshot().assets;
+                    if (assets.some((entry) => entry.id === diagramId)) {
                         dispatch({
                             type: "UPDATE_ASSET",
                             payload: { asset },
@@ -90,7 +89,7 @@ export const useDiagramMermaidAsset = (
         }, DIAGRAM_RENDER_DEBOUNCE_MS);
 
         return () => window.clearTimeout(timeout);
-    }, [assetId, diagramId, dispatch, mermaidSource, updatePreviewUrl]);
+    }, [assetId, astStore, diagramId, dispatch, mermaidSource, updatePreviewUrl]);
 
     return { previewUrl };
 };

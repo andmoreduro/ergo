@@ -14,7 +14,7 @@ import { EditorFieldRegistryProvider } from "../../../state/EditorFieldRegistry"
 import { TemplateSpecProvider } from "../../../state/TemplateSpecContext";
 import { useDocumentAst, useDocumentSync } from "../../../state/DocumentContext";
 import { useCompiler } from "../../../hooks/useCompiler";
-import { useSidebarOutline } from "../Sidebar/SidebarOutline";
+import { useOutlineEntries } from "../Sidebar/SidebarOutline";
 import { useContextMenuTrigger } from "../../organisms/ContextMenu/ContextMenuProvider";
 import { ColumnResizeHandle } from "./ColumnResizeHandle";
 import { useWorkspaceColumns } from "./useWorkspaceColumns";
@@ -79,11 +79,9 @@ export const Workspace = ({
     // Tracks whether the toast currently on screen is the compile-error one, so a
     // later successful compile can dismiss it without wiping unrelated toasts.
     const compileErrorToastActiveRef = useRef(false);
-    const { outlineEntries } = useSidebarOutline(
-        compiler.outline,
-        compiler.previewRevision,
-        previewScrollRef,
-    );
+    // Computed once here (heading-set selector, identity-stable while typing)
+    // and shared by the sidebar outline and the editor's reference dialog.
+    const outlineEntries = useOutlineEntries(compiler.outline);
     const contextMenu = useContextMenuTrigger("workspace");
     const {
         rootRef: workspaceRef,
@@ -173,7 +171,7 @@ export const Workspace = ({
                 <div ref={workspaceRef} className={styles.workspace} {...contextMenu}>
                     <div className={styles.column} style={sidebarStyle}>
                         <Sidebar
-                            outline={compiler.outline}
+                            outlineEntries={outlineEntries}
                             resources={compiler.resources}
                             previewRevision={compiler.previewRevision}
                             resourcePreviewRevisions={

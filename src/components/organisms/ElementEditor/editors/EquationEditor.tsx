@@ -4,7 +4,7 @@ import { useDeferredTextCommit } from "../../../../editor/useDeferredTextCommit"
 import { useElementEnterInsertsParagraph } from "../../../../editor/useInsertParagraphAfterElement";
 import { normalizeEditableText } from "../../../../editor/textInput";
 import { useEditorNavigation } from "../../../../editor/EditorNavigationContext";
-import { useDocumentAst } from "../../../../state/DocumentContext";
+import { useDocumentActions } from "../../../../state/DocumentContext";
 import { useEditorFieldBinding } from "../../../../state/EditorFieldRegistry";
 import { m } from "../../../../paraglide/messages.js";
 import { FieldLabel } from "../../../atoms/FieldLabel/FieldLabel";
@@ -17,7 +17,7 @@ import type { EquationElement } from "../types";
 import styles from "./EquationEditor.module.css";
 
 export const EquationEditor = ({ element }: { element: EquationElement }) => {
-    const { dispatch } = useDocumentAst();
+    const { dispatch } = useDocumentActions();
     const { draft, setDraft, shouldCommit } = useDeferredTextCommit(
         element.latex_source,
     );

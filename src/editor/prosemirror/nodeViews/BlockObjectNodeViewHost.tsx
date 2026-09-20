@@ -1,7 +1,6 @@
-import { useMemo } from "react";
 import type { DocumentElement } from "../../../bindings/DocumentElement";
 import type { DocumentAST } from "../../../bindings/DocumentAST";
-import { useDocumentAst } from "../../../state/DocumentContext";
+import { useDocumentAstSelector } from "../../../state/DocumentContext";
 import { ElementEditor } from "../../../components/organisms/ElementEditor/ElementEditor";
 import styles from "./blockObjectNodeViews.module.css";
 
@@ -31,13 +30,12 @@ export const BlockObjectNodeViewHost = ({
     elementFromNode: DocumentElement | null;
     elementId: string;
 }) => {
-    const { state } = useDocumentAst();
-    const element = useMemo(() => {
-        if (elementFromNode) {
-            return elementFromNode;
-        }
-        return findElementById(state.sections, elementId);
-    }, [elementFromNode, elementId, state.sections]);
+    // The node attrs normally carry the element; only fall back to an AST scan
+    // when they don't. Selecting (rather than subscribing to the whole AST)
+    // keeps every block-object host from re-rendering on each body keystroke.
+    const element = useDocumentAstSelector((ast) =>
+        elementFromNode ?? findElementById(ast.sections, elementId),
+    );
 
     if (!element) {
         return <div className={styles.placeholder} aria-hidden="true" />;
