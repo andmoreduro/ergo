@@ -140,6 +140,23 @@ describe("applyDocumentEventToAst round-trip parity", () => {
 
     const projectRoundTrips: RoundTripCase[] = [
         {
+            // The inverse must restore "no variant", not a hardcoded default.
+            name: "UPDATE_TEMPLATE_VARIANT from unset",
+            setup: () => {
+                const base = createTestDocumentAST();
+                return {
+                    ast: {
+                        ...base,
+                        metadata: { ...base.metadata, template_variant_id: null },
+                    },
+                    action: {
+                        type: "UPDATE_TEMPLATE_VARIANT",
+                        payload: { variantId: "professional" },
+                    },
+                };
+            },
+        },
+        {
             name: "UPDATE_PROJECT_TITLE",
             setup: () => ({
                 ast: createTestDocumentAST(),
@@ -211,6 +228,44 @@ describe("applyDocumentEventToAst round-trip parity", () => {
     ];
 
     const contentRoundTrips: RoundTripCase[] = [
+        {
+            // Undoing an attach must detach: a null asset_id alone means
+            // "unchanged" for both the TS and Rust appliers (clear_asset).
+            name: "UPDATE_FIGURE attaches an asset",
+            setup: () => {
+                const base = createTestDocumentAST();
+                const sectionId = contentSectionId(base);
+                const ast = astReducer(base, {
+                    type: "ADD_FIGURE",
+                    payload: { sectionId, figureId: "figure-1" },
+                });
+                return {
+                    ast,
+                    action: {
+                        type: "UPDATE_FIGURE",
+                        payload: { figureId: "figure-1", assetId: "asset-1" },
+                    },
+                };
+            },
+        },
+        {
+            name: "UPDATE_DIAGRAM attaches an asset",
+            setup: () => {
+                const base = createTestDocumentAST();
+                const sectionId = contentSectionId(base);
+                const ast = astReducer(base, {
+                    type: "ADD_DIAGRAM",
+                    payload: { sectionId, diagramId: "diagram-1" },
+                });
+                return {
+                    ast,
+                    action: {
+                        type: "UPDATE_DIAGRAM",
+                        payload: { diagramId: "diagram-1", assetId: "asset-1" },
+                    },
+                };
+            },
+        },
         {
             name: "UPDATE_PARAGRAPH_TEXT",
             setup: () => {

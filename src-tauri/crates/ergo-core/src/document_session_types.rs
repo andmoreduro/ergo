@@ -101,7 +101,9 @@ pub enum DocumentEvent {
         settings: ProjectSettings,
     },
     SetTemplateVariant {
-        variant_id: String,
+        /// `None` restores the template's default variant (the inverse of the
+        /// first variant change).
+        variant_id: Option<String>,
     },
     InsertElement {
         section_id: String,
@@ -186,14 +188,24 @@ pub enum DocumentEvent {
         caption: Option<String>,
         placement: Option<String>,
         body_text: Option<String>,
+        /// `None` leaves the asset unchanged; detaching is expressed by `clear_asset`.
         asset_id: Option<String>,
+        /// Detach the linked asset (the inverse of attaching one). Takes precedence
+        /// over `asset_id`.
+        #[serde(default)]
+        clear_asset: bool,
     },
     UpdateDiagram {
         element_id: String,
         mermaid_source: Option<String>,
+        /// `None` leaves the asset unchanged; detaching is expressed by `clear_asset`.
         asset_id: Option<String>,
         caption: Option<String>,
         placement: Option<String>,
+        /// Detach the generated asset (the inverse of attaching one). Takes
+        /// precedence over `asset_id`.
+        #[serde(default)]
+        clear_asset: bool,
     },
     UpdateInput {
         path: String,
