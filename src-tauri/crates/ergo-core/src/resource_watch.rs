@@ -404,7 +404,7 @@ mod tests {
             file_id_for_virtual_path(RESOURCE_WATCH_MAIN),
         );
         let document = compile_document(&world).expect("figure resource preview should compile");
-        let page = &document.pages[0];
+        let page = &document.pages()[0];
         let width_pt = page.frame.size().x.to_pt();
         let height_pt = page.frame.size().y.to_pt();
         assert!(

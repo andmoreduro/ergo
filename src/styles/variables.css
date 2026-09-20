@@ -173,6 +173,8 @@
     --shadow-ring-inset: inset 0 0 0 var(--border-width-md) var(--color-primary);
 
     /* Breakpoints */
+    /* Reference only: custom properties cannot be used inside @media
+       conditions, so media queries repeat these values literally. */
     --breakpoint-sm: 34rem;
     --breakpoint-md: 38rem;
 

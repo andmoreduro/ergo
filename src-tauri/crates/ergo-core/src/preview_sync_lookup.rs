@@ -1,11 +1,11 @@
-use typst::layout::Position;
+use typst::introspection::PagedPosition;
 
 use crate::compilation_types::SourceRevision;
 use crate::document_session::{FieldSourceMapEntry, SourceMapEntry};
 use crate::preview_sync_types::{PreviewElementPosition, PreviewFocusTarget};
 
 pub(crate) fn preview_position(
-    position: Position,
+    position: PagedPosition,
     element_id: Option<String>,
     field_id: Option<String>,
     caret_utf16_offset: Option<usize>,

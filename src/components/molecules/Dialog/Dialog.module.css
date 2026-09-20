@@ -137,7 +137,7 @@
     border: 0;
 }
 
-@media (max-width: var(--breakpoint-sm)) {
+@media (max-width: 34rem) {
     .footer {
         flex-direction: column-reverse;
     }

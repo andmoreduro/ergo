@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use typst::syntax::FileId;
+use typst::syntax::{FileId, VirtualRoot};
 
 use crate::core_errors::ErgoError;
 
@@ -32,7 +32,9 @@ impl PackageRef {
     }
 
     pub fn from_file_id(file_id: FileId) -> Option<Self> {
-        let package = file_id.package()?;
+        let VirtualRoot::Package(package) = file_id.root() else {
+            return None;
+        };
         Some(Self {
             namespace: package.namespace.as_str().to_string(),
             name: package.name.as_str().to_string(),
@@ -59,7 +61,7 @@ pub fn package_virtual_path_from_file_id(file_id: FileId) -> Option<String> {
     let package = PackageRef::from_file_id(file_id)?;
     Some(package_vfs_path(
         &package,
-        file_id.vpath().as_rootless_path(),
+        Path::new(file_id.vpath().get_without_slash()),
     ))
 }
 
@@ -138,7 +140,7 @@ pub fn find_package_file(file_id: FileId) -> Option<PathBuf> {
     let package = PackageRef::from_file_id(file_id)?;
     find_package_file_in_roots(
         &package,
-        file_id.vpath().as_rootless_path(),
+        Path::new(file_id.vpath().get_without_slash()),
         &package_roots(),
     )
 }

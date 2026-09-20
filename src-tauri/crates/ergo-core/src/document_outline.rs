@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use typst::foundations::NativeElement;
-use typst::layout::PagedDocument;
+use typst::introspection::Introspector;
+use typst_layout::PagedDocument;
 use typst_library::model::HeadingElem;
 
 /// A single heading entry in the sidebar navigation outline.
@@ -33,7 +34,7 @@ pub fn extract_outline(document: &PagedDocument) -> DocumentOutline {
     use typst::foundations::Selector;
 
     let selector = Selector::Elem(HeadingElem::ELEM, None);
-    let headings = document.introspector.query(&selector);
+    let headings = document.introspector().query(&selector);
 
     let entries = headings
         .iter()
@@ -51,7 +52,7 @@ pub fn extract_outline(document: &PagedDocument) -> DocumentOutline {
             }
 
             let text = heading.body.plain_text().trim().to_string();
-            let page = document.introspector.page(loc).get();
+            let page = document.introspector().page(loc)?.get();
             Some(OutlineEntry { level, text, page })
         })
         .collect();
@@ -73,13 +74,13 @@ mod tests {
     use crate::vfs::VirtualFileSystem;
     use crate::world::{SnapshotWorld, WorldSourceSnapshot};
     use std::sync::Arc;
-    use typst::syntax::{FileId, VirtualPath};
+    use crate::path_utils::file_id_for_virtual_path;
 
     fn compile_with_source(source: &str) -> PagedDocument {
         let vfs = Arc::new(VirtualFileSystem::new());
         vfs.write_source("main.typ", source.to_string());
         let snapshot = WorldSourceSnapshot::from_vfs(&vfs);
-        let main_id = FileId::new(None, VirtualPath::new("main.typ"));
+        let main_id = file_id_for_virtual_path("main.typ");
         let world = SnapshotWorld::new(snapshot, main_id);
         typst::compile::<PagedDocument>(&world)
             .output

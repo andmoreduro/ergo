@@ -1,12 +1,15 @@
 use parking_lot::Mutex;
 use std::sync::Arc;
-use typst::layout::{Abs, Frame, FrameItem, PagedDocument, Point};
-use typst::syntax::{FileId, Source, SyntaxKind, VirtualPath};
+use std::num::NonZeroUsize;
+use typst::introspection::PagedPosition;
+use typst::layout::{Abs, Frame, FrameItem, Point};
+use typst_layout::PagedDocument;
+use typst::syntax::{Source, SyntaxKind};
 use typst_ide::{jump_from_click, jump_from_cursor, Jump};
 
 use crate::compilation_types::SourceRevision;
 use crate::document_session::{FieldSourceMapEntry, SourceMapEntry};
-use crate::path_utils::path_from_file_id;
+use crate::path_utils::{file_id_for_virtual_path, path_from_file_id};
 use crate::preview_sync_lookup::{
     candidate_offsets, field_entries_for_target, field_entry_for_content_blocks_caret,
     field_entry_for_offset,
@@ -44,7 +47,7 @@ impl PreviewSyncState {
         source_snapshot: WorldSourceSnapshot,
     ) {
         let pages = document
-            .pages
+            .pages()
             .iter()
             .enumerate()
             .map(|(index, page)| {
@@ -93,18 +96,27 @@ impl PreviewSyncState {
             Err(result) => return result,
         };
 
-        let Some(page) = preview.document.pages.get(page_number.saturating_sub(1)) else {
+        let Some(page) = preview.document.pages().get(page_number.saturating_sub(1)) else {
             return PreviewJumpResult::NoMatch {
                 source_revision: Some(preview.source_revision),
                 reason: "Preview page is not available".to_string(),
             };
         };
 
-        let main_id = FileId::new(None, VirtualPath::new("main.typ"));
+        let main_id = file_id_for_virtual_path("main.typ");
         let world = SnapshotWorld::new(preview.source_snapshot.clone(), main_id);
         let point = Point::new(Abs::pt(x_pt), Abs::pt(y_pt));
 
-        match jump_from_click(&world, &preview.document, &page.frame, point) {
+        let Some(page_index) = NonZeroUsize::new(page_number) else {
+            return PreviewJumpResult::NoMatch {
+                source_revision: Some(preview.source_revision),
+                reason: "Preview page is not available".to_string(),
+            };
+        };
+        let _ = page;
+        let position = PagedPosition { page: page_index, point };
+
+        match jump_from_click(&world, &*preview.document, &position) {
             Some(Jump::File(file_id, offset)) => {
                 let file_path = path_from_file_id(file_id);
                 if let Some(entry) =
@@ -208,7 +220,7 @@ impl PreviewSyncState {
 
         let mut positions = Vec::new();
         for offset in candidate_offsets(source.text(), entry.byte_start, entry.byte_end) {
-            let next = jump_from_cursor(&preview.document, &source, offset)
+            let next = jump_from_cursor(&*preview.document, &source, offset)
                 .into_iter()
                 .map(|position| {
                     preview_position(
@@ -453,7 +465,7 @@ fn positions_for_field_entry(
     let mut candidates = Vec::new();
     for offset in offsets {
         candidates.extend(
-            jump_from_cursor(&preview.document, source, offset)
+            jump_from_cursor(&*preview.document, source, offset)
                 .into_iter()
                 .map(|position| {
                     (
@@ -508,11 +520,11 @@ fn roundtrip_positions_for_field_caret(
         return Vec::new();
     }
 
-    let main_id = FileId::new(None, VirtualPath::new("main.typ"));
+    let main_id = file_id_for_virtual_path("main.typ");
     let world = SnapshotWorld::new(preview.source_snapshot.clone(), main_id);
     let mut candidates = Vec::new();
 
-    for (index, page) in preview.document.pages.iter().enumerate() {
+    for (index, page) in preview.document.pages().iter().enumerate() {
         let page_number = index + 1;
         for target in &source_targets {
             for candidate in click_candidates_for_source_targets(
@@ -804,12 +816,17 @@ fn candidate_roundtrips_to_focus(
     field_id: &str,
     caret_utf16_offset: usize,
 ) -> bool {
-    let Some(page) = preview.document.pages.get(page_number.saturating_sub(1)) else {
+    let Some(page) = preview.document.pages().get(page_number.saturating_sub(1)) else {
         return false;
     };
 
+    let _ = page;
+    let Some(page_index) = NonZeroUsize::new(page_number) else {
+        return false;
+    };
+    let position = PagedPosition { page: page_index, point };
     let Some(Jump::File(file_id, offset)) =
-        jump_from_click(world, &preview.document, &page.frame, point)
+        jump_from_click(world, &*preview.document, &position)
     else {
         return false;
     };
