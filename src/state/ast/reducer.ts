@@ -688,7 +688,7 @@ export function astReducer(state: DocumentAST, action: ASTAction): DocumentAST {
                     ...element,
                     caption: caption ?? element.caption,
                     placement: placement ?? element.placement,
-                    asset_id: assetId ?? element.asset_id,
+                    asset_id: assetId === undefined ? element.asset_id : assetId,
                     content,
                 };
             });

@@ -381,7 +381,9 @@ export const applyDocumentEventToAst = (
                     ...element,
                     caption: event.caption ?? element.caption,
                     placement: event.placement ?? element.placement,
-                    asset_id: event.asset_id ?? element.asset_id,
+                    asset_id: event.clear_asset
+                        ? null
+                        : (event.asset_id ?? element.asset_id),
                     content,
                 };
             });
@@ -395,7 +397,9 @@ export const applyDocumentEventToAst = (
                     mermaid_source: event.mermaid_source ?? element.mermaid_source,
                     caption: event.caption ?? element.caption,
                     placement: event.placement ?? element.placement,
-                    asset_id: event.asset_id ?? element.asset_id,
+                    asset_id: event.clear_asset
+                        ? null
+                        : (event.asset_id ?? element.asset_id),
                 };
             });
         case "updateElementExtraField":
@@ -605,6 +609,7 @@ const documentEventFromAction = (
                 asset_id: action.payload.assetId ?? null,
                 caption: action.payload.caption ?? null,
                 placement: action.payload.placement ?? null,
+                clear_asset: action.payload.assetId === null,
             };
 
         case "UPDATE_LIST_ITEM":
@@ -683,6 +688,7 @@ const documentEventFromAction = (
                 placement: action.payload.placement ?? null,
                 body_text: action.payload.bodyText ?? null,
                 asset_id: action.payload.assetId ?? null,
+                clear_asset: action.payload.assetId === null,
             };
 
         case "UPDATE_ELEMENT_EXTRA_FIELD": {
@@ -805,7 +811,7 @@ const inverseDocumentEventFromAction = (
         case "UPDATE_TEMPLATE_VARIANT":
             return {
                 type: "setTemplateVariant",
-                variant_id: previousAst.metadata.template_variant_id ?? "student",
+                variant_id: previousAst.metadata.template_variant_id,
             };
 
         case "UPDATE_INPUT": {
@@ -951,6 +957,11 @@ const inverseDocumentEventFromAction = (
                     action.payload.placement === undefined
                         ? null
                         : diagram.placement,
+                // Undoing an attach must detach: a null asset_id alone means
+                // "unchanged" on both the TS and Rust appliers.
+                clear_asset:
+                    action.payload.assetId !== undefined &&
+                    diagram.asset_id === null,
             };
         }
 
@@ -1047,6 +1058,9 @@ const inverseDocumentEventFromAction = (
                           : "",
                 asset_id:
                     action.payload.assetId === undefined ? null : figure.asset_id,
+                clear_asset:
+                    action.payload.assetId !== undefined &&
+                    figure.asset_id === null,
             };
         }
 

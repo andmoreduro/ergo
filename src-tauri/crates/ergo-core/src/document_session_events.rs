@@ -19,7 +19,7 @@ pub(crate) fn apply_document_event(
             Ok(())
         }
         DocumentEvent::SetTemplateVariant { variant_id } => {
-            ast.metadata.template_variant_id = Some(variant_id);
+            ast.metadata.template_variant_id = variant_id;
             Ok(())
         }
         DocumentEvent::UpdateInput { path, value } => {
@@ -230,6 +230,7 @@ pub(crate) fn apply_document_event(
             placement,
             body_text,
             asset_id,
+            clear_asset,
         } => {
             let element = element_mut(ast, &element_id)?;
             match element {
@@ -243,7 +244,9 @@ pub(crate) fn apply_document_event(
                     if let Some(body_text) = body_text {
                         update_figure_body(figure, body_text);
                     }
-                    if let Some(asset_id) = asset_id {
+                    if clear_asset {
+                        figure.asset_id = None;
+                    } else if let Some(asset_id) = asset_id {
                         figure.asset_id = Some(asset_id);
                     }
                     Ok(())
@@ -260,6 +263,7 @@ pub(crate) fn apply_document_event(
             asset_id,
             caption,
             placement,
+            clear_asset,
         } => {
             let element = element_mut(ast, &element_id)?;
             match element {
@@ -267,7 +271,9 @@ pub(crate) fn apply_document_event(
                     if let Some(source) = mermaid_source {
                         diagram.mermaid_source = source;
                     }
-                    if let Some(asset_id) = asset_id {
+                    if clear_asset {
+                        diagram.asset_id = None;
+                    } else if let Some(asset_id) = asset_id {
                         diagram.asset_id = Some(asset_id);
                     }
                     if let Some(caption) = caption {

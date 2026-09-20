@@ -298,7 +298,8 @@ export type UpdateFigureAction = {
     caption?: string;
     placement?: string;
     bodyText?: string;
-    assetId?: string;
+    /** `null` detaches the linked asset; `undefined` leaves it unchanged. */
+    assetId?: string | null;
   };
 };
 

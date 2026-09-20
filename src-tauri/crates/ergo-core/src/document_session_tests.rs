@@ -483,6 +483,7 @@ fn applies_document_event_variants_to_backend_ast() {
             placement: Some("top".to_string()),
             body_text: Some("Contenido de figura".to_string()),
             asset_id: None,
+            clear_asset: false,
         })
         .unwrap();
 
@@ -599,6 +600,7 @@ fn update_figure_body_text_replaces_non_paragraph_content() {
             placement: None,
             body_text: Some("Caption text".to_string()),
             asset_id: None,
+            clear_asset: false,
         })
         .unwrap();
 
