@@ -40,8 +40,18 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+
+      # The worker module imports the wasm-pack output (gitignored), which the
+      # editor tests load transitively.
+      - name: Build the WASM compiler
+        run: pnpm build:wasm:dev
 
       - name: Frontend tests
         run: pnpm test
