@@ -266,7 +266,10 @@ export const findNextEditorField = (
 
     const index = order.findIndex((entry) => entry.fieldId === currentFieldId);
     if (index === -1) {
-        return order[0] ?? null;
+        // A field outside the navigation order (a block's own annotation
+        // inputs, cycled by the block) has no neighbour here; jumping to the
+        // document's first field would tear focus away from the block.
+        return null;
     }
 
     return order[index + 1] ?? null;
@@ -286,7 +289,7 @@ export const findPreviousEditorField = (
 
     const index = order.findIndex((entry) => entry.fieldId === currentFieldId);
     if (index === -1) {
-        return order[order.length - 1] ?? null;
+        return null;
     }
 
     return order[index - 1] ?? null;

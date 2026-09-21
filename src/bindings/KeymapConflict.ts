@@ -2,4 +2,8 @@
 import type { ActionId } from "./ActionId";
 import type { KeyStroke } from "./KeyStroke";
 
-export type KeymapConflict = { action_id: ActionId, conflicting_action_id: ActionId, context: string, sequence: Array<KeyStroke>, };
+export type KeymapConflict = { action_id: ActionId, conflicting_action_id: ActionId, context: string, 
+/**
+ * Context of the conflicting binding (needed to unbind it precisely).
+ */
+conflicting_context: string, sequence: Array<KeyStroke>, payload: unknown | null, conflicting_payload: unknown | null, };

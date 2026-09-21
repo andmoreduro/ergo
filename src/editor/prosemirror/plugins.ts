@@ -24,6 +24,7 @@ import {
     blockSelectionGuardPlugin,
     clickBelowLastBlockPlugin,
 } from "./blockSelectionGuard";
+import { blockFocusInvariantPlugin } from "./blockFocusInvariant";
 import { findPlugin } from "../find/prosemirrorFindPlugin";
 import { textMarkStatePlugin } from "./textMarkStatePlugin";
 import { activeBlockPlugin } from "./activeBlockPlugin";
@@ -212,6 +213,9 @@ export const bodyPlugins = () => [
     blockOutsidePointerPlugin(),
     clickBelowLastBlockPlugin(),
     blockSelectionGuardPlugin(),
+    // After the guard: once the selection is settled, edit mode ends if focus
+    // is not inside the block (see blockFocusInvariant.ts).
+    blockFocusInvariantPlugin(),
     elementPointerSelectPlugin(),
     tableBlockFocusPlugin(),
     selectionKeymap,

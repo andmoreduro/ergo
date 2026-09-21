@@ -57,7 +57,7 @@ import {
     createTableBlockNodeView,
     TABLE_ATTR_SYNC_META,
 } from "../../../editor/prosemirror/nodeViews/tableBlockNodeView";
-import { bodySchema } from "../../../editor/prosemirror/schema";
+import { ATOM_BLOCK_NODES, TABLE_BLOCK_NODE, bodySchema } from "../../../editor/prosemirror/schema";
 import { insertParagraphAfterElement } from "../../../editor/insertParagraphAfterElement";
 import { insertParagraphBeforeElement } from "../../../editor/insertParagraphBeforeElement";
 import {
@@ -142,6 +142,22 @@ const reconcileDocInPlace = (view: EditorView, target: PMNode): boolean => {
  * originate here is reconciled back into the doc. Preview ↔ editor caret sync
  * flows through the unchanged `documentFocus` tuple.
  */
+/** Ids of the atom block elements (equation, figure, diagram, custom) in `doc`. */
+const atomBlockElementIds = (doc: PMNode): Set<string> => {
+    const ids = new Set<string>();
+    doc.forEach((node) => {
+        if (ATOM_BLOCK_NODES.has(node.type.name) && node.type.name !== TABLE_BLOCK_NODE) {
+            const id =
+                (node.attrs.element as { id?: string } | null)?.id ??
+                (node.attrs.elementId as string);
+            if (id) {
+                ids.add(id);
+            }
+        }
+    });
+    return ids;
+};
+
 const initialBodyTextSelection = (doc: PMNode): Selection | undefined => {
     let selection: Selection | undefined;
     doc.forEach((node, offset) => {
@@ -595,6 +611,19 @@ const ProseMirrorBodyEditorImpl = ({
                     caretUtf16Offset: target.caretUtf16Offset,
                 })
             ) {
+                return;
+            }
+
+            // A field of an atom block (equation source, diagram caption, …)
+            // lives in the block's own React editor: open the block in edit
+            // mode and let that field's binding take focus. Node-selecting the
+            // block and focusing ProseMirror here would end edit mode at once
+            // (blockFocusInvariant) and leave the field unfocused.
+            if (
+                target.fieldId !== null &&
+                atomBlockElementIds(view.state.doc).has(target.elementId)
+            ) {
+                enterBlockEditById(view, target.elementId);
                 return;
             }
 

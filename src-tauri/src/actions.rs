@@ -16,8 +16,9 @@ pub use crate::action_catalog::action_catalog;
 pub use crate::context_glossary::context_glossary;
 pub use crate::action_keymap::validate_keymap;
 pub use crate::action_types::{
-    ActionContextNode, ActionContextSnapshot, ActionDescriptor, ActionInvocation, ActionResolution,
-    ContextDescriptor, KeymapConflict, KeymapValidationResult, LogicalKeyEvent,
+    ActionAvailability, ActionContextNode, ActionContextSnapshot, ActionDescriptor,
+    ActionInvocation, ActionResolution, ContextDescriptor, KeymapConflict,
+    KeymapValidationResult, LogicalKeyEvent,
 };
 
 #[derive(Default)]
@@ -125,6 +126,42 @@ pub fn resolve_key_event_with_settings(
         (None, false) if pending.is_some() => ActionResolution::Cancelled,
         (None, false) => ActionResolution::NoMatch,
     }
+}
+
+/// For every catalog action: does its default context hold in `context_snapshot`,
+/// and which effective binding (most specific matching context) would fire it
+/// there. Actions that never take a keybinding still report availability.
+pub fn action_availability_with_settings(
+    settings: &KeymapSettings,
+    context_snapshot: &ActionContextSnapshot,
+) -> Vec<ActionAvailability> {
+    let active_context = ActiveContext::from_snapshot(context_snapshot);
+    let bindings = effective_bindings(settings);
+
+    action_catalog()
+        .into_iter()
+        .map(|descriptor| {
+            let available = parse_context_expression(&descriptor.default_context)
+                .map(|expression| expression.evaluate(&active_context))
+                .unwrap_or(false);
+            let shortcut = bindings
+                .iter()
+                .filter(|binding| binding.action_id == descriptor.id && !binding.sequence.is_empty())
+                .filter_map(|binding| {
+                    let expression = parse_context_expression(&binding.context).ok()?;
+                    expression
+                        .evaluate(&active_context)
+                        .then(|| (expression.specificity(), binding.sequence.clone()))
+                })
+                .max_by_key(|(specificity, _)| *specificity)
+                .map(|(_, sequence)| sequence);
+            ActionAvailability {
+                id: descriptor.id,
+                available,
+                shortcut,
+            }
+        })
+        .collect()
 }
 
 fn normalize_logical_event(event: &LogicalKeyEvent) -> KeyStroke {
@@ -666,5 +703,82 @@ mod tests {
         let validation = validate_keymap(&settings);
 
         assert_eq!(validation.conflicts.len(), 1);
+    }
+
+    fn bundled_keymap() -> KeymapSettings {
+        serde_json::from_str(include_str!("../defaults/default_keymap.json"))
+            .expect("default keymap parses")
+    }
+
+    fn workspace_editor_snapshot() -> ActionContextSnapshot {
+        snapshot(
+            "body",
+            vec![
+                node("app", None, &["app"], &[]),
+                node("workspace", Some("app"), &["workspace"], &[]),
+                node("editor", Some("workspace"), &["editor"], &[]),
+                node("body", Some("editor"), &["body", "editor"], &[]),
+            ],
+        )
+    }
+
+    /// Regression: the bundled keymap has several bindings per action and
+    /// context (heading levels, zoom alternatives). Every one must resolve.
+    #[test]
+    fn bundled_alternatives_all_resolve() {
+        let state = ActionResolverState::default();
+        let settings = bundled_keymap();
+
+        for level in 1..=6u32 {
+            let event = LogicalKeyEvent {
+                window_id: "main".to_string(),
+                key: level.to_string(),
+                modifiers: vec![KeyModifier::Control, KeyModifier::Alt, KeyModifier::Shift],
+            };
+            match resolve_key_event_with_settings(&state, &settings, event, workspace_editor_snapshot()) {
+                ActionResolution::Matched { invocation } => {
+                    assert_eq!(invocation.id, ActionId::EditorInsertHeading);
+                    assert_eq!(invocation.payload, Some(serde_json::json!({ "level": level })));
+                }
+                other => panic!("Ctrl+Alt+Shift+{level} did not match: {other:?}"),
+            }
+        }
+
+        for key in ["=", "+"] {
+            let event = LogicalKeyEvent {
+                window_id: "main".to_string(),
+                key: key.to_string(),
+                modifiers: vec![KeyModifier::Control],
+            };
+            match resolve_key_event_with_settings(&state, &settings, event, workspace_editor_snapshot()) {
+                ActionResolution::Matched { invocation } => assert_eq!(invocation.id, ActionId::ViewZoomIn),
+                other => panic!("Ctrl+{key} did not match: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn availability_reports_context_and_matching_shortcut() {
+        let settings = bundled_keymap();
+        let availability = action_availability_with_settings(&settings, &workspace_editor_snapshot());
+        let by_id: std::collections::HashMap<_, _> =
+            availability.into_iter().map(|entry| (entry.id, entry)).collect();
+
+        let zoom = &by_id[&ActionId::ViewZoomIn];
+        assert!(zoom.available, "zoom applies anywhere in the workspace");
+        assert!(zoom.shortcut.is_some(), "zoom has a bundled shortcut");
+
+        let new_project = &by_id[&ActionId::WorkspaceNewProject];
+        assert!(new_project.available);
+
+        let add_row = &by_id[&ActionId::EditorAddTableRow];
+        assert!(!add_row.available, "table actions need a table context");
+
+        let welcome_only = action_availability_with_settings(
+            &settings,
+            &snapshot("welcome", vec![node("app", None, &["app"], &[]), node("welcome", Some("app"), &["welcome"], &[])]),
+        );
+        let save = welcome_only.iter().find(|entry| entry.id == ActionId::WorkspaceSaveProject).unwrap();
+        assert!(!save.available, "save needs a workspace");
     }
 }

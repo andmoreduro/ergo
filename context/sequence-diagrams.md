@@ -146,6 +146,30 @@ sequenceDiagram
 
 Mouse commands use `dispatchAction` with the same action IDs. Keymap persistence: bundled defaults under app resources; user profiles and overrides in `%APPDATA%/Ergo/keymap.json` (or XDG equivalent). Document undo/redo uses AST history (`edit::Undo`, `edit::Redo`), not ProseMirror history. Resolution is deferred via microtask so synchronous ProseMirror handlers run first.
 
+Effective bindings are the bundled keymap merged with the active profile's overrides by binding identity (action + context + payload): alternatives sharing an identity all stay live, an override replaces the whole identity, an empty override unbinds it. The command palette asks `list_action_availability` with the context snapshot captured when it opened, lists only actions whose default context holds there (with the shortcut effective in that context), and dispatches with that context as the handler-walk start. The keymap panel records in place (`data-ergo-key-capture` makes the runtime, dialog and focus trap ignore the keys), validates the candidate keymap and refuses conflicting shortcuts.
+
+### Block edit mode and focus
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Runtime as Action Runtime
+    participant PM as Body editor (ProseMirror)
+    participant Block as Block node view (React fields)
+    User->>Runtime: Tab on a locked block
+    Runtime->>PM: runBodyTab → enterAtomBlock
+    PM->>PM: setBlockEditing(id, true)
+    PM->>Block: focus primary field
+    Note over PM,Block: entry fails (mode reverted) if no field took focus
+    User->>Block: Tab / Shift+Tab
+    Block->>Block: wrapper field cycle
+    User->>PM: focus leaves the block (Escape, click, preview, navigation)
+    PM->>PM: blockFocusInvariantPlugin: focusin outside → setBlockEditing(id, false)
+    Note over PM: block is a locked whole again; selection unchanged
+```
+
+Fine-grained ("editing") mode for a block element is defined by focus: it holds only while DOM focus is inside the block's own fields (or, for tables, on the editor root that hosts the cells). Every consumer — outline decorations, extras panel, selection clamp, action contexts — derives from the mode; nothing else keeps a separate "focused block" state. Programmatic focus on a block's field (`setDocumentFocus` with that field id) opens the block in edit mode without focusing the root, and the field's registry binding takes focus.
+
 ## 7. Preview And Editor Sync
 
 Backward (preview click → editor):

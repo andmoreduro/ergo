@@ -41,6 +41,11 @@ const shouldIgnoreDialogConfirm = (target: EventTarget | null): boolean => {
     return target.tagName === "TEXTAREA";
 };
 
+/** A key recorder inside the dialog owns Escape / Enter while it is focused. */
+const isKeyCaptureTarget = (target: EventTarget | null): boolean =>
+    target instanceof Element &&
+    Boolean(target.closest('[data-ergo-key-capture="true"]'));
+
 type DialogPanelProps = {
     title: string;
     titleId: string;
@@ -96,6 +101,9 @@ export const Dialog = memo((props: DialogProps) => {
     useEffect(() => {
         // Native listener on `document`, so this is the DOM event, not React's.
         const onKeyDown = (event: globalThis.KeyboardEvent) => {
+            if (isKeyCaptureTarget(event.target)) {
+                return;
+            }
             if (event.key === "Escape") {
                 const cancel = cancelRef.current;
                 const confirm = confirmRef.current;

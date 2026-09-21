@@ -129,19 +129,43 @@ export const enterBlockEditById = (
     if (blockPos === -1) {
         return false;
     }
-    let tr = view.state.tr.setSelection(NodeSelection.create(doc, blockPos));
-    tr = setBlockEditing(tr, elementId, true);
-    view.dispatch(tr.scrollIntoView());
-    view.focus();
-    if (!isTable) {
-        // The atom's React field only becomes editable once edit mode renders;
-        // focus its primary field on the next frame.
-        const pos = blockPos;
+    if (isTable) {
+        // Table cells are ProseMirror content: the root keeps the caret.
+        let tr = view.state.tr.setSelection(NodeSelection.create(doc, blockPos));
+        tr = setBlockEditing(tr, elementId, true);
+        view.dispatch(tr.scrollIntoView());
+        view.focus();
+        return true;
+    }
+    // Atoms: edit mode follows focus (blockFocusInvariant.ts), so select the
+    // block first (its extras render), focus its primary field, and only then
+    // mark it editing. If no field can take focus yet, retry once the block has
+    // rendered; if it still cannot, the block simply stays a locked whole.
+    view.dispatch(
+        view.state.tr.setSelection(NodeSelection.create(doc, blockPos)).scrollIntoView(),
+    );
+    const pos = blockPos;
+    const tryEnter = (): boolean => {
+        const dom = view.nodeDOM(pos);
+        if (!(dom instanceof HTMLElement)) {
+            return false;
+        }
+        // A field inside may already hold focus (a programmatic focus on the
+        // caption, say): keep it; otherwise focus the primary field.
+        const focusInside =
+            dom.contains(document.activeElement) ||
+            (focusWrapperPrimary(dom) && dom.contains(document.activeElement));
+        if (!focusInside) {
+            return false;
+        }
+        if (!isBlockEditing(view.state, elementId)) {
+            view.dispatch(setBlockEditing(view.state.tr, elementId, true));
+        }
+        return true;
+    };
+    if (!tryEnter()) {
         requestAnimationFrame(() => {
-            const dom = view.nodeDOM(pos);
-            if (dom instanceof HTMLElement) {
-                focusWrapperPrimary(dom);
-            }
+            tryEnter();
         });
     }
     return true;
@@ -197,10 +221,13 @@ export const enterAtomBlock = (view: EditorView): boolean => {
     }
     view.dispatch(setBlockEditing(view.state.tr, elementId, true).scrollIntoView());
     const dom = view.nodeDOM(pos);
-    if (dom instanceof HTMLElement) {
-        focusWrapperPrimary(dom);
+    if (dom instanceof HTMLElement && focusWrapperPrimary(dom) && dom.contains(document.activeElement)) {
+        return true;
     }
-    return true;
+    // Editing means "focus is inside the block"; if no field could take
+    // focus the block stays a locked whole rather than a half-open one.
+    view.dispatch(setBlockEditing(view.state.tr, elementId, false));
+    return false;
 };
 
 const topLevelBlockAt = (

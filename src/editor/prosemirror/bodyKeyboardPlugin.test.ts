@@ -13,6 +13,7 @@ import {
     setActiveBodyView,
     setBodyParagraphInsert,
 } from "./activeView";
+import { stubBlockNodeViews } from "./testing/stubBlockNodeViews";
 
 const diagramBlockDoc = () => {
     const diagram = createDiagram("diag1");
@@ -57,6 +58,7 @@ describe("bodyKeyboardPlugin locked block entry", () => {
         document.body.appendChild(mount);
         const view = new EditorView(mount, {
             state,
+            nodeViews: stubBlockNodeViews(),
             dispatchTransaction(tr) {
                 state = state.apply(tr);
                 view.updateState(state);
@@ -100,6 +102,7 @@ describe("bodyKeyboardPlugin locked block entry", () => {
         document.body.appendChild(mount);
         const view = new EditorView(mount, {
             state,
+            nodeViews: stubBlockNodeViews(),
             dispatchTransaction(tr) {
                 state = state.apply(tr);
                 view.updateState(state);
@@ -140,6 +143,7 @@ describe("bodyKeyboardPlugin locked block entry", () => {
         document.body.appendChild(mount);
         const view = new EditorView(mount, {
             state,
+            nodeViews: stubBlockNodeViews(),
             dispatchTransaction(tr) {
                 state = state.apply(tr);
                 view.updateState(state);
@@ -195,6 +199,7 @@ describe("bodyKeyboardPlugin Shift+Arrow", () => {
         document.body.appendChild(mount);
         const view = new EditorView(mount, {
             state,
+            nodeViews: stubBlockNodeViews(),
             dispatchTransaction(tr) {
                 state = state.apply(tr);
                 view.updateState(state);
@@ -244,6 +249,7 @@ describe("bodyKeyboardPlugin Shift+Arrow", () => {
         document.body.appendChild(mount);
         const view = new EditorView(mount, {
             state,
+            nodeViews: stubBlockNodeViews(),
             dispatchTransaction(tr) {
                 state = state.apply(tr);
                 view.updateState(state);
@@ -296,6 +302,7 @@ describe("bodyKeyboardPlugin Shift+Arrow", () => {
         document.body.appendChild(mount);
         const view = new EditorView(mount, {
             state,
+            nodeViews: stubBlockNodeViews(),
             dispatchTransaction(tr) {
                 state = state.apply(tr);
                 view.updateState(state);
@@ -347,6 +354,7 @@ describe("bodyKeyboardPlugin Shift+Arrow", () => {
         document.body.appendChild(mount);
         const view = new EditorView(mount, {
             state,
+            nodeViews: stubBlockNodeViews(),
             dispatchTransaction(tr) {
                 state = state.apply(tr);
                 view.updateState(state);

@@ -108,3 +108,18 @@ describe("isSimpleListEntryField", () => {
         expect(isSimpleListEntryField(spec, null)).toBe(false);
     });
 });
+
+describe("field navigation outside the order", () => {
+    it("does not jump to the document edges from an unknown field", async () => {
+        const { findNextEditorField, findPreviousEditorField } = await import("./fieldNavigation");
+        const order = [
+            { elementId: "a", fieldId: "a:text" },
+            { elementId: "b", fieldId: "b:text" },
+        ];
+        expect(findNextEditorField(order, "diag:caption")).toBeNull();
+        expect(findPreviousEditorField(order, "diag:caption")).toBeNull();
+        expect(findNextEditorField(order, null)).toEqual(order[0]);
+        expect(findPreviousEditorField(order, "b:text")).toEqual(order[0]);
+    });
+});
+

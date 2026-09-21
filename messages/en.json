@@ -450,7 +450,7 @@
   "settings_keymap_profile": "Keymap profile",
   "settings_keymap_bindings": "Key Bindings",
   "settings_keymap_shortcut_for": "Shortcut for {action}",
-  "settings_keymap_recording": "Press shortcut — Ctrl+Enter to save",
+  "settings_keymap_recording": "Press the shortcut…",
   "settings_keymap_unbound": "Unbound",
   "settings_keymap_clear": "Clear",
   "settings_keymap_clear_for": "Clear shortcut for {action}",
@@ -462,7 +462,7 @@
   "settings_keymap_conflicts": "{count} shortcut conflict(s) detected",
   "settings_keymap_no_conflicts": "No shortcut conflicts detected",
   "settings_keymap_requires_project": "Open a project to customize this shortcut.",
-  "settings_keymap_capture_banner": "Press a shortcut. Esc cancels. Enter adds another stroke. Ctrl+Enter saves.",
+  "settings_keymap_capture_banner": "Press the keys for the shortcut. Click ✓ or anywhere else to save it, Esc to cancel. Every key counts, so Enter and Tab can be bound too.",
   "settings_keymap_rename_profile": "Rename keymap profile",
   "settings_keymap_rename_save": "Save name",
   "settings_keymap_rename_cancel": "Cancel",
@@ -557,5 +557,13 @@
   "action_settings_open_project_description": "Open project settings.",
   "action_settings_open_keymap_description": "Open keymap settings.",
   "action_help_open_documentation_description": "Open Érgo documentation.",
-  "action_help_open_about_description": "Open the about dialog."
+  "action_help_open_about_description": "Open the about dialog.",
+  "settings_keymap_save": "Save",
+  "settings_keymap_cancel": "Cancel",
+  "settings_keymap_unbind": "Unbind",
+  "settings_keymap_unbind_for": "Unbind shortcut for {action}",
+  "settings_keymap_conflict_with": "{keys} is already used by {action} in {context}.",
+  "settings_keymap_replace": "Replace",
+  "settings_keymap_save_failed": "The keymap could not be saved.",
+  "settings_keymap_alternatives_note": "Several shortcuts trigger this action; recording a new one replaces them all."
 }

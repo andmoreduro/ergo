@@ -1,6 +1,6 @@
 import { memo } from "react";
-import type { Command, CommandContext, KeymapProfile } from "../../../commands/types";
-import { lookupActionShortcut } from "../../../settings/keymap/profile";
+import type { Command, CommandContext } from "../../../commands/types";
+import type { PaletteCommand } from "../../../hooks/useCommandPalette";
 import { Dialog } from "../../molecules/Dialog/Dialog";
 import { MenuItemButton } from "../../atoms/MenuItemButton/MenuItemButton";
 import { TextInput } from "../../atoms/TextInput/TextInput";
@@ -10,8 +10,7 @@ import styles from "./CommandPalette.module.css";
 export interface CommandPaletteProps {
     query: string;
     onQueryChange: (query: string) => void;
-    commands: Command[];
-    keymap: KeymapProfile;
+    commands: PaletteCommand[];
     commandContext: CommandContext;
     onRunCommand: (commandId: Command["id"]) => void;
     onClose: () => void;
@@ -22,7 +21,6 @@ export const CommandPalette = memo(
         query,
         onQueryChange,
         commands,
-        keymap,
         commandContext,
         onRunCommand,
         onClose,
@@ -50,7 +48,7 @@ export const CommandPalette = memo(
             <div className={styles.commandList}>
                 {commands.length > 0 ? (
                     commands.map((command) => {
-                        const shortcut = lookupActionShortcut(keymap, command.id);
+                        const shortcut = command.shortcut;
                         return (
                             <MenuItemButton
                                 key={command.id}

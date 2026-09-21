@@ -7,6 +7,7 @@ import type { ActionContextSnapshot } from "../bindings/ActionContextSnapshot";
 import type { AssetEntry } from "../bindings/AssetEntry";
 import type { OpenProjectResult } from "../bindings/OpenProjectResult";
 import type { ActionDescriptor } from "../bindings/ActionDescriptor";
+import type { ActionAvailability } from "../bindings/ActionAvailability";
 import type { ContextDescriptor } from "../bindings/ContextDescriptor";
 import type { ActionResolution } from "../bindings/ActionResolution";
 import type { KeymapValidationResult } from "../bindings/KeymapValidationResult";
@@ -205,6 +206,13 @@ export const TauriApi = {
         settings: KeymapSettings,
     ): Promise<KeymapValidationResult> {
         return invoke("validate_keymap_settings", { settings });
+    },
+
+    /** Which catalog actions apply to `contextSnapshot`, with their effective shortcut there. */
+    async listActionAvailability(
+        contextSnapshot: ActionContextSnapshot,
+    ): Promise<ActionAvailability[]> {
+        return invoke("list_action_availability", { contextSnapshot });
     },
 
     async getTemplateSpec(

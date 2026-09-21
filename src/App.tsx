@@ -108,6 +108,7 @@ import {
     ActionContextProvider,
     ActionRuntimeProvider,
     useActionDispatcher,
+    useActiveActionContext,
 } from "./actions/runtime";
 import { ContextMenuProvider } from "./components/organisms/ContextMenu/ContextMenuProvider";
 import { useCommandPalette } from "./hooks/useCommandPalette";
@@ -204,6 +205,16 @@ const AppShellContent = () => {
         ),
     });
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
+    // `view::OpenCommandPalette` runs from the command list, which is built
+    // before the palette hook exists; the ref closes that loop.
+    const openPaletteRef = useRef<() => void>(() => setCommandPaletteOpen(true));
+    const setCommandPaletteOpenViaContext = useCallback((open: boolean) => {
+        if (open) {
+            openPaletteRef.current();
+        } else {
+            setCommandPaletteOpen(false);
+        }
+    }, []);
     const [isFindBarOpen, setFindBarOpen] = useState(false);
     const findBarRef = useRef<FindBarHandle>(null);
     const previewRef = useRef<PreviewHandle>(null);
@@ -211,6 +222,7 @@ const AppShellContent = () => {
     const [commandQuery, setCommandQuery] = useState("");
     const [systemFonts, setSystemFonts] = useState<string[]>([]);
     const dispatchAction = useActionDispatcher();
+    const getActionContextSnapshot = useActiveActionContext();
     const recentProjects = globalSettings.recent_projects;
 
     const showOpenRecentProjectsDialog = useCallback(() => {
@@ -826,7 +838,7 @@ const AppShellContent = () => {
                 applyRichTextMark,
             }),
             ...viewCommands({
-                setCommandPaletteOpen,
+                setCommandPaletteOpen: setCommandPaletteOpenViaContext,
                 zoomPreviewIn,
                 zoomPreviewOut,
                 fitPreviewWidth,
@@ -844,7 +856,7 @@ const AppShellContent = () => {
             }),
             ...settingsCommands({
                 setSettingsPanel,
-                setCommandPaletteOpen,
+                setCommandPaletteOpen: setCommandPaletteOpenViaContext,
             }),
             ...helpCommands(),
             ...bibliographyCommands({ exportBibliography }),
@@ -855,6 +867,7 @@ const AppShellContent = () => {
             }),
         ],
         [
+            setCommandPaletteOpenViaContext,
             handleCloseProject,
             canRedo,
             canUndo,
@@ -883,13 +896,17 @@ const AppShellContent = () => {
     const {
         filteredCommands,
         runCommand,
+        openPalette,
     } = useCommandPalette({
         commandRegistry,
         dispatchAction,
+        getSnapshot: getActionContextSnapshot,
+        open: isCommandPaletteOpen,
         setOpen: setCommandPaletteOpen,
         query: commandQuery,
         setQuery: setCommandQuery,
     });
+    openPaletteRef.current = openPalette;
     const appActionHandlers = useAppActionHandlers({
         getState,
         commandRegistry,
@@ -974,7 +991,6 @@ const AppShellContent = () => {
                             query={commandQuery}
                             onQueryChange={setCommandQuery}
                             commands={filteredCommands}
-                            keymap={keymap}
                             commandContext={commandContext}
                             onRunCommand={runCommand}
                             onClose={() => runCommand("settings::Close")}

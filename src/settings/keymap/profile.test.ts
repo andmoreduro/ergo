@@ -131,15 +131,70 @@ describe("createKeymapProfile", () => {
 
         const { keymap, conflicts } = createKeymapProfile(settings);
 
-        expect(keymap.bindings).toEqual([
-            expect.objectContaining({
-                commandId: "workspace::OpenProject",
-                context: "app",
-                keys: "",
-                scope: "global",
-                sequence: [],
-            }),
-        ]);
+        // An empty override unbinds the identity: no effective binding is left
+        // (the settings panel still lists the action from the catalog).
+        expect(keymap.bindings).toEqual([]);
         expect(conflicts).toEqual([]);
+    });
+
+    it("keeps bundled alternatives and replaces all of them with one override", () => {
+        const bundled: KeymapSettings["keymap_bindings"] = [
+            {
+                action_id: "view::ZoomIn",
+                context: "workspace",
+                sequence: [{ key: "=", modifiers: ["Control"] }],
+            },
+            {
+                action_id: "view::ZoomIn",
+                context: "workspace",
+                sequence: [{ key: "+", modifiers: ["Control"] }],
+            },
+            {
+                action_id: "editor::InsertHeading",
+                context: "editor",
+                sequence: [{ key: "1", modifiers: ["Control", "Alt", "Shift"] }],
+                payload: { level: 1 },
+            },
+            {
+                action_id: "editor::InsertHeading",
+                context: "editor",
+                sequence: [{ key: "2", modifiers: ["Control", "Alt", "Shift"] }],
+                payload: { level: 2 },
+            },
+        ];
+
+        const untouched = createKeymapProfile({
+            keymap_profile: "Default",
+            keymap_bindings: bundled,
+            keymap_overrides: [],
+        });
+        expect(untouched.keymap.bindings).toHaveLength(4);
+        expect(untouched.conflicts).toEqual([]);
+
+        const overridden = createKeymapProfile({
+            keymap_profile: "Custom",
+            keymap_bindings: bundled,
+            keymap_overrides: [
+                {
+                    action_id: "view::ZoomIn",
+                    context: "workspace",
+                    sequence: [{ key: "z", modifiers: ["Control", "Shift"] }],
+                },
+                {
+                    action_id: "editor::InsertHeading",
+                    context: "editor",
+                    sequence: [],
+                    payload: { level: 2 },
+                },
+            ],
+        });
+        const zoom = overridden.keymap.bindings.filter((b) => b.commandId === "view::ZoomIn");
+        expect(zoom).toHaveLength(1);
+        expect(zoom[0]?.keys).toBe("Ctrl+Shift+Z");
+        const headings = overridden.keymap.bindings.filter(
+            (b) => b.commandId === "editor::InsertHeading",
+        );
+        expect(headings).toHaveLength(1);
+        expect(headings[0]?.payload).toEqual({ level: 1 });
     });
 });

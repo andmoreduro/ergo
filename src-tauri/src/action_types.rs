@@ -88,7 +88,26 @@ pub struct KeymapConflict {
     pub action_id: ActionId,
     pub conflicting_action_id: ActionId,
     pub context: String,
+    /// Context of the conflicting binding (needed to unbind it precisely).
+    pub conflicting_context: String,
     pub sequence: Vec<KeyStroke>,
+    #[serde(default)]
+    #[ts(type = "unknown | null")]
+    pub payload: Option<Value>,
+    #[serde(default)]
+    #[ts(type = "unknown | null")]
+    pub conflicting_payload: Option<Value>,
+}
+
+/// Whether an action applies to a given context snapshot, and the shortcut that
+/// would trigger it there (the most specific effective binding whose context
+/// matches). Drives the command palette and shortcut labels.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct ActionAvailability {
+    pub id: ActionId,
+    pub available: bool,
+    pub shortcut: Option<Vec<KeyStroke>>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

@@ -17,28 +17,56 @@ fn active_overrides(settings: &KeymapSettings) -> Vec<KeyBindingPreference> {
         .unwrap_or_else(|| settings.keymap_overrides.clone())
 }
 
+/// A binding's identity for customization: the action it triggers, the context
+/// expression it applies in, and the payload it carries (`InsertHeading` level 1
+/// and level 2 are different bindings). Several bundled bindings may share one
+/// identity — they are alternatives (`Ctrl+=` and `Ctrl++` both zoom in). A user
+/// override replaces every alternative of its identity; an empty override
+/// sequence unbinds the identity.
+pub(crate) fn binding_identity(binding: &KeyBindingPreference) -> String {
+    let payload = binding
+        .payload
+        .as_ref()
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    format!("{}\u{1f}{}\u{1f}{}", binding.action_id, binding.context, payload)
+}
+
 pub(crate) fn effective_bindings(settings: &KeymapSettings) -> Vec<KeyBindingPreference> {
     let settings = normalize_keymap_settings(settings.clone());
     let overrides = active_overrides(&settings);
-    let mut by_action_and_context = HashMap::new();
+
+    // Ordered groups keep the bundled keymap's order (deterministic output for
+    // settings rows and shortcut labels).
+    let mut order: Vec<String> = Vec::new();
+    let mut groups: HashMap<String, Vec<KeyBindingPreference>> = HashMap::new();
 
     for binding in &settings.keymap_bindings {
-        by_action_and_context.insert(
-            (binding.action_id, binding.context.clone()),
-            binding.clone(),
-        );
+        let identity = binding_identity(binding);
+        let group = groups.entry(identity.clone()).or_insert_with(|| {
+            order.push(identity.clone());
+            Vec::new()
+        });
+        group.push(binding.clone());
     }
 
     for binding in &overrides {
-        let key = (binding.action_id, binding.context.clone());
+        let identity = binding_identity(binding);
         if binding.sequence.is_empty() {
-            by_action_and_context.remove(&key);
-        } else {
-            by_action_and_context.insert(key, binding.clone());
+            groups.remove(&identity);
+            continue;
         }
+        if !groups.contains_key(&identity) {
+            order.push(identity.clone());
+        }
+        groups.insert(identity, vec![binding.clone()]);
     }
 
-    by_action_and_context.into_values().collect()
+    order
+        .into_iter()
+        .filter_map(|identity| groups.remove(&identity))
+        .flatten()
+        .collect()
 }
 
 pub fn validate_keymap(settings: &KeymapSettings) -> KeymapValidationResult {
@@ -58,14 +86,22 @@ pub fn validate_keymap(settings: &KeymapSettings) -> KeymapValidationResult {
         }
 
         for right in bindings.iter().skip(index + 1) {
-            if left.sequence == right.sequence
+            // Alternatives of one identity (same action, context and payload)
+            // are not conflicts; anything else sharing a sequence in an
+            // overlapping context is ambiguous.
+            let same_identity = binding_identity(left) == binding_identity(right);
+            if !same_identity
+                && left.sequence == right.sequence
                 && contexts_may_overlap(&left.context, &right.context)
             {
                 conflicts.push(KeymapConflict {
                     action_id: left.action_id,
                     conflicting_action_id: right.action_id,
                     context: left.context.clone(),
+                    conflicting_context: right.context.clone(),
                     sequence: left.sequence.clone(),
+                    payload: left.payload.clone(),
+                    conflicting_payload: right.payload.clone(),
                 });
             }
         }
@@ -133,5 +169,100 @@ mod tests {
             "default keymap has binding conflicts: {:?}",
             validation.conflicts,
         );
+    }
+
+    use crate::ast::{parse_key_sequence, ActionId};
+    use ergo_core::settings::KeymapProfileRecord;
+
+    fn binding(action_id: ActionId, context: &str, keys: &str, payload: Option<serde_json::Value>) -> KeyBindingPreference {
+        // `parse_key_sequence` cannot spell a literal "+" key; build it by hand.
+        let sequence = if keys == "Ctrl++" {
+            vec![crate::ast::KeyStroke {
+                key: "+".to_string(),
+                modifiers: vec![crate::ast::KeyModifier::Control],
+            }]
+        } else {
+            parse_key_sequence(keys).unwrap()
+        };
+        KeyBindingPreference {
+            action_id,
+            context: context.to_string(),
+            sequence,
+            payload,
+        }
+    }
+
+    fn settings_with(bundled: Vec<KeyBindingPreference>, overrides: Vec<KeyBindingPreference>) -> KeymapSettings {
+        KeymapSettings {
+            keymap_profile: Some("Custom".to_string()),
+            keymap_bindings: bundled,
+            keymap_overrides: vec![],
+            active_profile_id: "custom".to_string(),
+            profiles: vec![
+                KeymapProfileRecord { id: "default".to_string(), name: "Default".to_string(), overrides: vec![] },
+                KeymapProfileRecord { id: "custom".to_string(), name: "Custom".to_string(), overrides },
+            ],
+        }
+    }
+
+    /// The bundled keymap ships alternatives (`Ctrl+=` and `Ctrl++` zoom in) and
+    /// payload variants (heading levels). Merging must keep all of them.
+    #[test]
+    fn effective_bindings_keep_alternatives_and_payload_variants() {
+        let settings = settings_with(
+            vec![
+                binding(ActionId::ViewZoomIn, "workspace", "Ctrl+=", None),
+                binding(ActionId::ViewZoomIn, "workspace", "Ctrl++", None),
+                binding(ActionId::EditorInsertHeading, "editor", "Ctrl+Alt+Shift+1", Some(serde_json::json!({"level": 1}))),
+                binding(ActionId::EditorInsertHeading, "editor", "Ctrl+Alt+Shift+2", Some(serde_json::json!({"level": 2}))),
+            ],
+            vec![],
+        );
+        let effective = effective_bindings(&settings);
+        assert_eq!(effective.len(), 4);
+        assert!(validate_keymap(&settings).conflicts.is_empty());
+    }
+
+    /// An override replaces every alternative of its identity; an empty override
+    /// removes the identity; other identities of the same action are untouched.
+    #[test]
+    fn overrides_replace_or_remove_whole_identity() {
+        let settings = settings_with(
+            vec![
+                binding(ActionId::ViewZoomIn, "workspace", "Ctrl+=", None),
+                binding(ActionId::ViewZoomIn, "workspace", "Ctrl++", None),
+                binding(ActionId::EditorInsertHeading, "editor", "Ctrl+Alt+Shift+1", Some(serde_json::json!({"level": 1}))),
+                binding(ActionId::EditorInsertHeading, "editor", "Ctrl+Alt+Shift+2", Some(serde_json::json!({"level": 2}))),
+            ],
+            vec![
+                binding(ActionId::ViewZoomIn, "workspace", "Ctrl+Shift+Z", None),
+                KeyBindingPreference {
+                    action_id: ActionId::EditorInsertHeading,
+                    context: "editor".to_string(),
+                    sequence: vec![],
+                    payload: Some(serde_json::json!({"level": 2})),
+                },
+            ],
+        );
+        let effective = effective_bindings(&settings);
+        let zoom: Vec<_> = effective.iter().filter(|b| b.action_id == ActionId::ViewZoomIn).collect();
+        assert_eq!(zoom.len(), 1);
+        assert_eq!(zoom[0].sequence, parse_key_sequence("Ctrl+Shift+Z").unwrap());
+        let headings: Vec<_> = effective.iter().filter(|b| b.action_id == ActionId::EditorInsertHeading).collect();
+        assert_eq!(headings.len(), 1);
+        assert_eq!(headings[0].payload, Some(serde_json::json!({"level": 1})));
+    }
+
+    /// Two payload variants bound to the same chord are a real conflict.
+    #[test]
+    fn same_action_different_payload_conflicts() {
+        let settings = settings_with(
+            vec![
+                binding(ActionId::EditorInsertHeading, "editor", "Ctrl+Alt+Shift+1", Some(serde_json::json!({"level": 1}))),
+                binding(ActionId::EditorInsertHeading, "editor", "Ctrl+Alt+Shift+1", Some(serde_json::json!({"level": 2}))),
+            ],
+            vec![],
+        );
+        assert_eq!(validate_keymap(&settings).conflicts.len(), 1);
     }
 }
