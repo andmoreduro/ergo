@@ -31,6 +31,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     preview_draft_promote_ms: 180,
     preview_multi_caret: true,
     workspace_columns: null,
+    editor_virtualize_offscreen_blocks: true,
 };
 
 export const normalizeThemeMode = (value: string | null): ThemeMode => {

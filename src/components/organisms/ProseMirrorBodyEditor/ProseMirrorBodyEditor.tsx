@@ -72,7 +72,10 @@ import {
 import { useTemplateSpecContext } from "../../../state/TemplateSpecContext";
 import { contentSectionFromAst } from "../../../editor/prosemirror/sectionReconcileGuard";
 import { elementIdOf } from "../../../state/documentEvents/helpers";
-import { useDefaultEquationSyntax } from "../../../settings/SettingsProvider";
+import {
+    useDefaultEquationSyntax,
+    useGlobalSettings,
+} from "../../../settings/SettingsProvider";
 import { bodyEditorActionHandlers } from "../../../editor/prosemirror/bodyEditorActions";
 import { enterBlockEditById } from "../../../editor/prosemirror/bodyTableCommands";
 import { getActiveInlineEquationFocus } from "../../../editor/prosemirror/inlineEquationFocus";
@@ -167,6 +170,8 @@ const ProseMirrorBodyEditorImpl = ({
     const templateSpecRef = useRef(templateSpec);
     templateSpecRef.current = templateSpec;
     const defaultEquationSyntax = useDefaultEquationSyntax();
+    const virtualizeOffscreenBlocks =
+        useGlobalSettings().editor_virtualize_offscreen_blocks ?? true;
     // React only to EXTERNAL focus requests (preview click, sidebar nav). The
     // native focus this editor pushes on every keystroke is filtered out here so
     // it never re-renders the editor.
@@ -636,7 +641,7 @@ const ProseMirrorBodyEditorImpl = ({
             contexts={["body", "editor"]}
             handlers={bodyHandlers}
         >
-            <ProseMirrorSurface ref={mountRef} />
+            <ProseMirrorSurface ref={mountRef} virtualized={virtualizeOffscreenBlocks} />
             {portals.map((entry) =>
                 createPortal(entry.render(), entry.dom, entry.key),
             )}

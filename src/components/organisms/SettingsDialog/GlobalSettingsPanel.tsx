@@ -331,6 +331,21 @@ export const GlobalSettingsPanel = () => {
                         }
                     />
                 </FormField>
+                <div className={styles.fieldCheckbox}>
+                    <Checkbox
+                        checked={settings.editor_virtualize_offscreen_blocks ?? true}
+                        label={m.settings_editor_virtualize_blocks()}
+                        onChange={(event) =>
+                            onChange({
+                                ...settings,
+                                editor_virtualize_offscreen_blocks: event.target.checked,
+                            })
+                        }
+                    />
+                </div>
+                <p className={styles.settingHint}>
+                    {m.settings_editor_virtualize_blocks_hint()}
+                </p>
                 <FormField label={m.settings_preview_draft_render_factor()}>
                     <Select
                         aria-label={m.settings_preview_draft_render_factor()}

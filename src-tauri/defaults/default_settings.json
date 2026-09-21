@@ -20,5 +20,6 @@
   "preview_forward_sync_debounce_ms": 0,
   "preview_draft_promote_ms": 180,
   "preview_multi_caret": true,
-  "workspace_columns": null
+  "workspace_columns": null,
+  "editor_virtualize_offscreen_blocks": true
 }

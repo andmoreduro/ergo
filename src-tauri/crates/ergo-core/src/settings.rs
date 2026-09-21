@@ -103,6 +103,11 @@ pub struct GlobalSettings {
     /// Last workspace column layout; `None` until the user resizes a column.
     #[serde(default)]
     pub workspace_columns: Option<WorkspaceColumnWidths>,
+    /// Skip layout and paint of body blocks that are off-screen
+    /// (`content-visibility: auto`), so per-keystroke layout cost follows the
+    /// visible region rather than the whole document.
+    #[serde(default)]
+    pub editor_virtualize_offscreen_blocks: Option<bool>,
 }
 
 fn shipped_global_settings() -> &'static GlobalSettings {
@@ -171,6 +176,9 @@ impl GlobalSettings {
                 .or(defaults.preview_draft_promote_ms),
             preview_multi_caret: self.preview_multi_caret.or(defaults.preview_multi_caret),
             workspace_columns: self.workspace_columns.or(defaults.workspace_columns),
+            editor_virtualize_offscreen_blocks: self
+                .editor_virtualize_offscreen_blocks
+                .or(defaults.editor_virtualize_offscreen_blocks),
         }
     }
 }

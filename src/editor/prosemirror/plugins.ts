@@ -26,6 +26,7 @@ import {
 } from "./blockSelectionGuard";
 import { findPlugin } from "../find/prosemirrorFindPlugin";
 import { textMarkStatePlugin } from "./textMarkStatePlugin";
+import { activeBlockPlugin } from "./activeBlockPlugin";
 
 /**
  * Flag set on the transaction `idNormalizer` appends when it reassigns one or
@@ -221,4 +222,5 @@ export const bodyPlugins = () => [
     atomElementIdSync,
     findPlugin(),
     textMarkStatePlugin(),
+    activeBlockPlugin(),
 ];

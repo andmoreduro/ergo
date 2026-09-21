@@ -43,6 +43,39 @@
     margin: 0;
 }
 
+/*
+ * Off-screen virtualization: top-level text blocks that are not near the
+ * viewport skip layout and paint, so per-keystroke layout (and any forced
+ * reflow) is bounded by the visible region instead of the whole document. The
+ * DOM stays complete, so ProseMirror's model, selection and find still see
+ * every node. `contain-intrinsic-size: auto <fallback>` remembers a block's
+ * real height once it has rendered, keeping the scrollbar stable; the fallback
+ * only sizes blocks that have never been on screen. Node-view blocks (tables,
+ * figures, equations, diagrams) are excluded: they measure their own layout.
+ * The wrapper's `data-ergo-virtualized` attribute follows the
+ * `editor_virtualize_offscreen_blocks` setting.
+ */
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(p),
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(h1),
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(h2),
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(h3),
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(h4),
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(h5),
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(h6),
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(blockquote),
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(ul),
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(ol) {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 4em;
+}
+
+/* The block(s) holding the selection are always laid out (decorated by
+   activeBlockPlugin), so caret placement, find navigation and scrollIntoView
+   measure real geometry rather than a skipped subtree. */
+:global([data-ergo-virtualized="true"]) > .bodyPaper > :global(.ergo-active-block) {
+    content-visibility: visible;
+}
+
 .bodyPaper > :global(p) {
     font-size: var(--heading-size-6);
     font-weight: var(--font-weight-normal);
