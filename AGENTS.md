@@ -50,7 +50,15 @@ The context files describe the intended current design. They are not a changelog
 - **All user-facing text must use typed Paraglide messages.** Spanish strings must use correct spelling (accents, ñ).
 - **Never mutate React state directly.** Dispatch `ASTAction` through the reducer.
 - **Actions must be routed through the action runtime.** Clicking a button and pressing a shortcut must dispatch the same `ActionInvocation`.
-- **Do not start a dev server automatically.** User runs `pnpm tauri dev` manually.
+- **Block edit mode is a consequence of focus, never a separate state to keep in sync.** A block element (table, figure, equation, diagram) is in fine-grained mode only while DOM focus is inside it; `blockFocusInvariantPlugin` ends the mode the moment focus lands elsewhere, and entering the mode fails (block stays a locked whole) when no field inside can take focus. Do not add new "sanctioned exit" paths or focus bookkeeping — route focus changes through document focus (`setDocumentFocus`) or the field registry and let the invariant follow.
+- **Agents run the app themselves to verify work.** Start `pnpm tauri dev`, the perf harness or a
+  built binary in the background when a change needs a live check; do not ask the user to do it.
+  Rules: check for an instance already listening on port 1420 first (Vite uses a strict port; reuse
+  it instead of failing), stop every process you started before finishing, and never leave a
+  stray app or Vite process behind. The harness (`scripts/run-realistic-perf-harness.sh`) needs a
+  display: use `xvfb-run` when installed, otherwise a window opens on the user's desktop and that
+  is acceptable for short runs. Point harness runs at a copy of a project, never the user's
+  working copy.
 - **Keep preview layout stable.** No visible compile-status text that shifts the preview while typing.
 - **Sanitize user input in generated Typst.** User text must not inject raw Typst markup (unless explicitly a trusted-raw feature).
 - **No branches for unreleased formats.** Érgo is pre-release; keep current schemas strict instead of preserving old JSON/archive shapes.
@@ -159,6 +167,10 @@ Available scenarios are `small-document`, `typing-title`, `large-document`, and 
 - Multi-stroke sequences supported (e.g. `Ctrl+O Ctrl+O` opens, `Ctrl+O Ctrl+R` opens recent)
 - No frontend fallback shortcut resolver
 - The default keymap lives in `src-tauri/defaults/default_keymap.json` (Rust-owned, validated). The frontend `DEFAULT_KEYMAP` (`src/settings/keymap/defaults.ts`) is only the pre-IPC boot fallback and must stay binding-for-binding identical to the JSON — `src/settings/keymap/defaults.test.ts` guards the alignment
+- A binding's customization identity is action + context expression + payload (`binding_identity` in `src-tauri/src/action_keymap.rs`, `bindingIdentity` in `src/settings/keymap/profile.ts`). Bundled bindings sharing an identity are alternatives (`Ctrl+=` / `Ctrl++` zoom in; heading levels are separate identities by payload); a user override replaces every alternative of its identity, an empty override unbinds it. Never merge by (action, context) alone — that drops alternatives.
+- Conflicts are rejected at the source: the keymap panel validates the candidate keymap (`validate_keymap_settings`) before applying a recording and refuses ambiguous shortcuts (offering to unbind the other side). Rust keeps loading hand-edited files with conflicts; the resolver picks the most specific context.
+- Shortcut recording owns the keyboard: the recorder carries `data-ergo-key-capture="true"` and the action runtime, `Dialog` (Escape / Ctrl+Enter) and `useFocusTrap` (Tab) skip such targets. Recording commits on ✓ or when focus leaves the recorder; Escape cancels.
+- The command palette lists only actions whose default context holds in the context captured when it opened (`list_action_availability`), shows the shortcut effective there, and dispatches with `fromContextId` so the command runs against that context, not the palette dialog.
 - Body undo/redo (`edit::Undo`, `edit::Redo`) resolve through the action runtime; the capture listener suppresses native contenteditable history in the ProseMirror body surface
 - ProseMirror-owned synchronous shortcuts (body navigation arrows, Tab, Shift+arrow block selection) stay in `bodyKeyboardPlugin.ts` and are not user-bindable
 - Table cell merge/split (`editor::MergeTableCells`, `editor::SplitTableCell`) and Alt+arrow cell navigation resolve through the action runtime; `tableCellBoundary` swallows plain/Ctrl arrows at the grid rim but defers Alt+arrow to `editor::MoveTableCell*`

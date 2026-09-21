@@ -92,6 +92,7 @@ pub fn run() {
             actions_commands::resolve_key_event,
             actions_commands::reset_key_sequence,
             actions_commands::validate_keymap_settings,
+            actions_commands::list_action_availability,
             compiler::write_bytes_to_path,
             compiler::write_zip_export,
             compiler::generate_references_bib,

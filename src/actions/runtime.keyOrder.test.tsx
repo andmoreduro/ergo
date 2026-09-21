@@ -14,6 +14,7 @@ import {
     clearActiveBodyView,
 } from "../editor/prosemirror/activeView";
 import { runBodyTab } from "../editor/prosemirror/bodyTabCommand";
+import { stubBlockNodeViews } from "../editor/prosemirror/testing/stubBlockNodeViews";
 
 vi.mock("../api/tauri", () => ({
     TauriApi: {
@@ -48,6 +49,7 @@ describe("action runtime key order", () => {
         document.body.appendChild(mount);
         const view = new EditorView(mount, {
             state,
+            nodeViews: stubBlockNodeViews(),
             dispatchTransaction(tr) {
                 state = state.apply(tr);
                 view.updateState(state);
@@ -112,6 +114,7 @@ describe("action runtime key order", () => {
         document.body.appendChild(mount);
         const view = new EditorView(mount, {
             state,
+            nodeViews: stubBlockNodeViews(),
             dispatchTransaction(tr) {
                 state = state.apply(tr);
                 view.updateState(state);

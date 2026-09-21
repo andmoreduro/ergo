@@ -11,7 +11,6 @@ import {
     focusWrapperAtCoords,
     focusWrapperPrimary,
 } from "../../wrapperTabCycle";
-import { runBodyTab } from "../bodyTabCommand";
 import { BlockObjectNodeViewHost } from "./BlockObjectNodeViewHost";
 import type { NodeViewPortalRegistry } from "./nodeViewPortals";
 import styles from "./blockObjectNodeViews.module.css";
@@ -104,10 +103,13 @@ export const createBlockObjectNodeViews = (
                 tr = setBlockEditing(tr, elementId(), true);
                 view.dispatch(tr);
                 requestAnimationFrame(() => {
-                    if (coords) {
-                        focusWrapperAtCoords(dom, coords.clientX, coords.clientY);
-                    } else {
-                        focusWrapperPrimary(dom);
+                    const focused = coords
+                        ? focusWrapperAtCoords(dom, coords.clientX, coords.clientY)
+                        : focusWrapperPrimary(dom);
+                    if (!focused || !dom.contains(document.activeElement)) {
+                        // No field took focus: editing would be a lie (see
+                        // blockFocusInvariant.ts). Stay a locked whole.
+                        view.dispatch(setBlockEditing(view.state.tr, elementId(), false));
                     }
                 });
             };
@@ -144,17 +146,9 @@ export const createBlockObjectNodeViews = (
                 }
             };
 
+            // Tab is owned by the action runtime (window capture) and the body
+            // keyboard plugin, both through `runBodyTab`; no third copy here.
             const onKeyDown = (event: KeyboardEvent) => {
-                if (event.key === "Tab") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    runBodyTab(view, {
-                        shiftKey: event.shiftKey,
-                        ctrlKey: event.ctrlKey,
-                        metaKey: event.metaKey,
-                    });
-                    return;
-                }
                 const pos = getPos();
                 const mod = event.ctrlKey || event.metaKey;
                 if (

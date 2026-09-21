@@ -55,6 +55,12 @@ export const useFocusTrap = (
         requestAnimationFrame(focusFirst);
 
         const onKeyDown = (event: KeyboardEvent) => {
+            if (
+                event.target instanceof Element &&
+                event.target.closest('[data-ergo-key-capture="true"]')
+            ) {
+                return;
+            }
             if (event.key !== "Tab") {
                 return;
             }

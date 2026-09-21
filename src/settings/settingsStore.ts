@@ -138,7 +138,10 @@ export const useSettingsStore = () => {
             return;
         }
 
-        void TauriApi.saveKeymapSettings(keymapSettings).catch(() => undefined);
+        void TauriApi.saveKeymapSettings(keymapSettings).catch((error: unknown) => {
+            console.error("Failed to save keymap settings:", error);
+            showToast(m.settings_keymap_save_failed(), "error");
+        });
     }, [keymapSettings, settingsLoaded]);
 
     useEffect(() => {

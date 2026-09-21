@@ -73,8 +73,20 @@ interface RegisteredContextNode extends ActionContextNode {
     handlers: ActionHandlerMap;
 }
 
+export interface DispatchActionOptions {
+    /**
+     * Start the handler walk at this context instead of the focused one. The
+     * command palette uses it so a command runs against the context that was
+     * focused before the palette opened, not against the palette dialog.
+     */
+    fromContextId?: string | null;
+}
+
 interface ActionRuntimeValue {
-    dispatchAction: (invocation: ActionInvocation) => Promise<boolean>;
+    dispatchAction: (
+        invocation: ActionInvocation,
+        options?: DispatchActionOptions,
+    ) => Promise<boolean>;
     registerContext: (node: RegisteredContextNode) => void;
     unregisterContext: (id: string) => void;
     setFocusedContext: (id: string) => void;
@@ -97,6 +109,16 @@ const isEditableTarget = (target: EventTarget | null): boolean => {
         ),
     );
 };
+
+/**
+ * Elements that consume raw keystrokes (the keymap recorder) opt out of the
+ * runtime with this attribute: no shortcut resolves while they have focus.
+ */
+export const KEY_CAPTURE_ATTRIBUTE = "data-ergo-key-capture";
+
+export const isKeyCaptureTarget = (target: EventTarget | null): boolean =>
+    target instanceof Element &&
+    Boolean(target.closest(`[${KEY_CAPTURE_ATTRIBUTE}="true"]`));
 
 /** Content column (`ActionContextProvider` id `editor`). Tab must not leave via browser focus navigation. */
 const EDITOR_COLUMN_SELECTOR = '[data-action-context-id="editor"]';
@@ -163,9 +185,11 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
     );
 
     const dispatchAction = useCallback(
-        async (invocation: ActionInvocation) => {
+        async (invocation: ActionInvocation, options?: DispatchActionOptions) => {
             let currentId: string | null =
-                getSnapshot().focused_context_id ?? focusedContextId;
+                options?.fromContextId ??
+                getSnapshot().focused_context_id ??
+                focusedContextId;
 
             while (currentId) {
                 const node = nodesRef.current.get(currentId);
@@ -198,6 +222,12 @@ export const ActionRuntimeProvider = ({ children }: { children: ReactNode }) => 
             const isRedoShortcut = isHistoryRedoShortcut(event, markKey);
 
             if (typeof TauriApi.resolveKeyEvent !== "function") {
+                return;
+            }
+
+            // A key recorder owns every keystroke while focused; resolving
+            // shortcuts here would fire the very action being rebound.
+            if (isKeyCaptureTarget(event.target)) {
                 return;
             }
 

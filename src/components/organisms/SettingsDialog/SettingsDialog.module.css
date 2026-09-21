@@ -199,3 +199,22 @@
         grid-template-columns: 1fr;
     }
 }
+
+.keymapPayload {
+    margin-left: var(--space-1);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+}
+
+.keymapRecorderRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.keymapRecorderError {
+    flex-basis: 100%;
+    color: var(--color-danger, #b42318);
+    font-size: var(--font-size-xs);
+}
