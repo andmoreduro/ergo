@@ -150,7 +150,13 @@ Available scenarios are `small-document`, `typing-title`, `large-document`, and 
 5. WASM worker compiles the main document and resource previews; backend mirrors AST for archive I/O only
 6. Backend `DocumentSession` mirrors AST via IPC for archive I/O and resource previews
 
-### Configuration
+### Releases
+
+- `.github/workflows/release.yml` builds Windows artifacts on a `windows-latest` runner: the frontend and Rust test suites run there first, then `tauri-action` builds the NSIS installer (`Ergo_<version>_x64-setup.exe`) and publishes a GitHub Release tagged `v<version>` (version from `src-tauri/tauri.conf.json`), plus `Ergo-portable-windows-x64.zip` with the bare `Ergo.exe`. Trigger with a `v*` tag or `gh workflow run release.yml`.
+- The bare executable must work without a resource directory: defaults (`default_settings.json`, `default_keymap.json`) and the bundled template specs and Typst packages are compiled in (`include_str!` / `include_dir!`); resource files only override them when present. Keep new resources on the same footing.
+- Windows specifics to keep: `mainBinaryName` is ASCII (`Ergo`), the CSP carries `'wasm-unsafe-eval'` (WebView2 refuses WebAssembly without it) and `connect-src ipc: http://ipc.localhost` (without them packaged builds silently fall back to JSON postMessage IPC, which breaks the raw-byte commands; dev never applies the CSP, `csp_contract_tests` in `lib.rs` guards it), spawned console tools use `CREATE_NO_WINDOW`, and paths from dialogs may use backslashes (`src/project/paths.ts` handles both). `scripts/check-windows-target.sh` type-checks the Windows-only code from Linux (stubs the C compiler and resource tools; no MinGW needed).
+
+## Configuration
 - Three kinds: global settings (`~/.config/Ergo/settings.json`), keymap settings (`keymap.json`), and project settings (inside the `.ergproj`, mirrored in `DocumentAST.metadata.project_settings`). Rust types live in `ergo-core/src/settings.rs`; the app shell's `src-tauri/src/settings.rs` loads and saves them.
 - `src-tauri/defaults/default_settings.json` is the single source of truth for global defaults: Rust embeds it (`GlobalSettings::default()`), and `src/settings/global/defaults.test.ts` asserts the frontend boot fallback matches it. Add a setting in the Rust struct + the JSON + `DEFAULT_GLOBAL_SETTINGS`, then regenerate bindings.
 - Components read settings only through `src/settings/SettingsProvider.tsx` hooks; never thread settings values through props from `App`, and never read `DEFAULT_GLOBAL_SETTINGS` directly for a live value.

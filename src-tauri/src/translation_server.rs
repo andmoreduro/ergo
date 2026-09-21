@@ -109,6 +109,13 @@ pub(crate) enum ContainerSyncAction {
 
 fn docker_command() -> Command {
     let mut command = Command::new("docker");
+    // A GUI process spawning a console tool would flash a console window.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
     command.env("DOCKER_CLI_HINTS", "false");
     command
 }
