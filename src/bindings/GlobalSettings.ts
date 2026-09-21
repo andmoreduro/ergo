@@ -60,4 +60,10 @@ preview_multi_caret: boolean | null,
 /**
  * Last workspace column layout; `None` until the user resizes a column.
  */
-workspace_columns: WorkspaceColumnWidths | null, };
+workspace_columns: WorkspaceColumnWidths | null, 
+/**
+ * Skip layout and paint of body blocks that are off-screen
+ * (`content-visibility: auto`), so per-keystroke layout cost follows the
+ * visible region rather than the whole document.
+ */
+editor_virtualize_offscreen_blocks: boolean | null, };
