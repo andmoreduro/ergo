@@ -162,3 +162,40 @@ pub use ergo_core::{
     preview_pipeline, preview_sync, preview_sync_lookup, preview_sync_types, resource_watch,
     template_spec, vfs, world,
 };
+
+/// The production CSP is applied only to assets served by the Tauri protocol,
+/// so `pnpm tauri dev` never exercises it. These entries are what a packaged
+/// build needs: the IPC origins (`ipc:` on Linux/macOS, `http://ipc.localhost`
+/// on Windows) keep the raw-byte IPC on the custom protocol instead of the
+/// JSON postMessage fallback, and WebView2 refuses WebAssembly without
+/// `'wasm-unsafe-eval'`.
+#[cfg(test)]
+mod csp_contract_tests {
+    fn directive(csp: &str, name: &str) -> String {
+        csp.split(';')
+            .map(str::trim)
+            .find(|part| part.starts_with(name))
+            .unwrap_or_else(|| panic!("CSP has no {name} directive"))
+            .to_string()
+    }
+
+    #[test]
+    fn packaged_csp_allows_ipc_and_wasm() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json parses");
+        let csp = config["app"]["security"]["csp"]
+            .as_str()
+            .expect("csp is a string");
+        let connect = directive(csp, "connect-src");
+        assert!(connect.contains(" ipc:"), "connect-src must allow ipc: (Linux/macOS IPC)");
+        assert!(
+            connect.contains("http://ipc.localhost"),
+            "connect-src must allow http://ipc.localhost (Windows IPC)"
+        );
+        let script = directive(csp, "script-src");
+        assert!(
+            script.contains("'wasm-unsafe-eval'"),
+            "script-src must allow WebAssembly for WebView2"
+        );
+    }
+}

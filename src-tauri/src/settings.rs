@@ -107,14 +107,24 @@ fn read_keymap_settings_from_path(path: &Path) -> Result<KeymapSettings, ErgoErr
         .map_err(|error| ErgoError::Operation { message: error.to_string() })
 }
 
+/// The bundled keymap compiled into the binary, so a bare executable (no
+/// resource directory next to it) still ships every default shortcut.
+const EMBEDDED_DEFAULT_KEYMAP: &str = include_str!("../defaults/default_keymap.json");
+
+fn embedded_default_keymap_settings() -> KeymapSettings {
+    serde_json::from_str(EMBEDDED_DEFAULT_KEYMAP).unwrap_or_default()
+}
+
 fn load_keymap_settings_from_paths(
     path: &Path,
     default_path: Option<&Path>,
 ) -> Result<KeymapSettings, ErgoError> {
-    let default_settings = if let Some(default_path) = default_path.filter(|path| path.exists()) {
-        read_keymap_settings_from_path(default_path)?
-    } else {
-        KeymapSettings::default()
+    // A resource file wins when present (packaged builds may ship an updated
+    // keymap); otherwise the embedded copy applies.
+    let default_settings = match default_path.filter(|path| path.exists()) {
+        Some(default_path) => read_keymap_settings_from_path(default_path)
+            .unwrap_or_else(|_| embedded_default_keymap_settings()),
+        None => embedded_default_keymap_settings(),
     };
 
     if path.exists() {
@@ -571,7 +581,14 @@ mod tests {
 
         assert!(!contents.contains("keymap_bindings"));
         assert_eq!(loaded.keymap_profile.as_deref(), Some("Custom"));
-        assert!(loaded.keymap_bindings.is_empty());
+        // No resource file was given, so the keymap compiled into the binary
+        // supplies the bundled bindings (a bare executable must still have
+        // every default shortcut); the user's own bindings are never persisted.
+        assert!(!loaded.keymap_bindings.is_empty());
+        assert!(loaded
+            .keymap_bindings
+            .iter()
+            .any(|binding| binding.action_id == ActionId::WorkspaceSaveProject));
         assert_eq!(loaded.keymap_overrides.len(), 1);
         assert_eq!(
             loaded.keymap_overrides[0].action_id,

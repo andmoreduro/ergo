@@ -1,0 +1,123 @@
+# Windows release: the test suites run on a Windows runner first (path handling,
+# archive I/O, keymap merge, settings, the whole frontend suite), then the
+# Tauri bundle is built and published to a GitHub Release together with a
+# portable single-executable zip. Trigger by pushing a `v*` tag or manually.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-windows:
+    name: Tests (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend tests
+        run: pnpm test
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test -p ergo -p ergo-core -- --skip export_typescript_bindings
+
+  build-windows:
+    name: Build and publish (Windows)
+    needs: test-windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "value=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Builds the frontend (`pnpm build` via beforeBuildCommand), the Rust app
+      # and the NSIS installer, then creates or updates the release.
+      - name: Build installer and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v${{ steps.version.outputs.value }}
+          releaseName: "Érgo v${{ steps.version.outputs.value }}"
+          releaseBody: |
+            Windows build of Érgo.
+
+            - `Ergo_*_x64-setup.exe`: installer (per-user, no admin rights needed; installs the WebView2 runtime if missing).
+            - `Ergo-portable-windows-x64.zip`: the bare executable; unzip and run. Needs the WebView2 runtime, which Windows 10/11 ship.
+          releaseDraft: false
+          prerelease: false
+
+      - name: Package portable executable
+        shell: pwsh
+        run: |
+          # Cargo names the binary after the package (ergo.exe); the Tauri CLI
+          # renames it to mainBinaryName (Ergo.exe) before bundling. Accept both.
+          $candidates = @("src-tauri/target/release/Ergo.exe", "src-tauri/target/release/ergo.exe")
+          $exe = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $exe) { throw "release executable not found" }
+          New-Item -ItemType Directory -Force portable | Out-Null
+          Copy-Item $exe portable/Ergo.exe
+          Compress-Archive -Path portable/Ergo.exe -DestinationPath "Ergo-portable-windows-x64.zip" -Force
+
+      - name: Upload portable executable to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "v${{ steps.version.outputs.value }}" Ergo-portable-windows-x64.zip --clobber
